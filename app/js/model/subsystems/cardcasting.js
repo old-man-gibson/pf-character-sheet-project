@@ -217,7 +217,7 @@ export function deckSquad(model) {
     // Its own deck feats: Rainbow Efficiency among its feats or its bought-off drawbacks.
     const feats = [...(b.feats || []).map((f) => String(typeof f === 'object' ? f?.name ?? '' : f ?? '')), ...(b.tradition.boughtOff || []).map((x) => String(typeof x === 'object' ? x?.name ?? '' : x ?? ''))];
     const rainbow = rainbowLevel(feats);
-    // Its deck feats, for the manipulations it may take: one each, plus one for Card Shark.
+    // Its deck feats, for the manipulations it may take: one each, and two for Card Shark.
     const deckFeats = feats.filter((f) => /\[[^\]]*deck/i.test(f));
     const casting = b.calc?.casting || null;
     const mod = Number(b.calc?.scores?.cha?.mod) || 0;
@@ -226,7 +226,7 @@ export function deckSquad(model) {
       id: String(b.id), kind, name: String(b.name || '').trim() || String(b.id),
       cardCasting, mismatch, ok: cardCasting && !mismatch.length,
       why: !cardCasting ? 'its tradition does not list Card Casting' : mismatch.length ? `switches differ: ${mismatch.join(', ')}` : '',
-      namedColors: named, rainbow, deckFeats, switches: theirs, casts: !!casting, cl, mod, level: Number(b.calc?.level) || 0,
+      namedColors: named, rainbow, deckFeats, feats, switches: theirs, casts: !!casting, cl, mod, level: Number(b.calc?.level) || 0,
       dc: 10 + Math.floor(cl / 2) + mod, msb: cl, msd: 11 + cl,
       pool: `sp:${b.id}`,
     };
@@ -444,9 +444,9 @@ export function importCardcasting(tab, drawbacks = [], magicClasses = [], deckFe
     }
   }
   const taken = block.manipulations.reduce((n, m) => n + (Number(m.count) || 0), 0);
-  // One manipulation per deck feat, plus Card Shark's extra: when the sheet's
+  // One manipulation per deck feat, two for Card Shark: when the sheet's
   // total is exactly that, leave it automatic so a new deck feat raises it.
-  const auto = deckFeats.length + (deckFeats.some((f) => /card shark/i.test(f)) ? 1 : 0);
+  const auto = manipulationsGranted(deckFeats);
   block.manipulationsAvailable = taken + remaining === auto ? null : taken + remaining;
 
   // ---- land-attuned magic: a colour, five spheres, a tick each ----
@@ -831,9 +831,9 @@ export function recomputeCardcasting(model) {
   const loadedHand = mine
     .filter((m) => isManipulation(m, 'Loaded Hand'))
     .reduce((n, m) => n + m.count, 0);
-  // Available: one per deck feat, plus one for Card Shark -- unless a
-  // number or a formula is written over it.
-  const autoAvailable = deckFeats.length + (deckFeats.some((f) => /card shark/i.test(f)) ? 1 : 0);
+  // Available: one per deck feat, two for Card Shark -- unless a number or
+  // a formula is written over it.
+  const autoAvailable = manipulationsGranted(deckFeats, [...featNames(c, { granted: false }), ...(c.training?.magic?.tradition?.boughtOff || []).map((x) => String(x || ''))]);
   const written = p.manipulationsAvailable !== null && p.manipulationsAvailable !== undefined
     && String(p.manipulationsAvailable).trim() !== '';
   const typed = written ? evaluateAmount(p.manipulationsAvailable, model.scope()) : null;
@@ -857,11 +857,11 @@ export function recomputeCardcasting(model) {
     if (unmet.length) (owner ? memberIssues(owner) || issues : issues).push(`${m.name} needs ${unmet.map((r) => ({ cooldown: 'Cooldown', manaPool: 'Mana Pool', coloredMana: 'Colored Mana', singleton: 'Singleton', gradualRamp: 'Gradual Ramp', notManaGraveyard: 'no Mana Graveyard' })[r]).join(' and ')}.`);
     if (overMax) issues.push(`${m.name} can only be taken ${entry.max} times.`);
   }
-  // A member's own count: one per deck feat of its own, plus one for Card Shark.
+  // A member's own count: one per deck feat of its own, two for Card Shark.
   for (const m of squad) {
     const rows = ownRows(m.id);
     m.manipulationsTaken = rows.reduce((n, r) => n + r.count, 0);
-    m.manipulationsAvailable = m.deckFeats.length + (m.deckFeats.some((f) => /card shark/i.test(f)) ? 1 : 0);
+    m.manipulationsAvailable = manipulationsGranted(m.deckFeats, m.feats);
     m.manipulationsLeft = m.manipulationsAvailable - m.manipulationsTaken;
     if (m.manipulationsLeft < 0) m.deck.issues.push(`${m.name} has ${m.manipulationsTaken} manipulations taken of ${m.manipulationsAvailable} available.`);
   }
@@ -1258,6 +1258,17 @@ export function recomputeTable(model) {
     manaOk: Object.fromEntries(t.hand.map((id) => [id, manaPlayCheck(model, id, manaBlocked)])),
     trapCard: hasDeckFeat(model, /trap card/i),
   };
+}
+
+/**
+ * The deck manipulations a set of feats grants: one per deck feat (tagged
+ * [Deck]), and two for Card Shark, tagged or not, since the feat itself
+ * grants them. `allFeats` is where Card Shark is looked for; the deck feats
+ * when it is left out.
+ */
+export function manipulationsGranted(deckFeats, allFeats = null) {
+  const shark = (f) => /card shark/i.test(String(f || ''));
+  return (deckFeats || []).filter((f) => !shark(f)).length + ((allFeats || deckFeats || []).some(shark) ? 2 : 0);
 }
 
 /** Is a deck feat by that name on the character? */

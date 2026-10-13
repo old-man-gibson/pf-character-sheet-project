@@ -3135,7 +3135,7 @@ function deckManipulationsHead(model, p, k) {
     // Blank is automatic, so an emptied box has to store nothing rather than 0.
     kind: 'expr-or-null',
     width: '7rem', value: k.manipulationsAvailable, error: k.manipulationsError, placeholder: `auto: ${k.autoAvailable ?? 0}`,
-    title: 'Blank: one per deck feat, plus one for Card Shark. Or a number, or a formula.',
+    title: 'Blank: one per deck feat, and two for Card Shark. Or a number, or a formula.',
   }))}
         ${field('Add from the list', `<span class="pair"><select class="manip-pick" aria-label="Add a deck manipulation">
           <option value="">— pick a manipulation —</option>
@@ -3147,7 +3147,7 @@ function deckManipulationsHead(model, p, k) {
           ${[['', me], ...squad.map((m) => [m.id, m.name])].map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}
         </select>` : ''}</span>`)}
       </div>
-      <p class="hint">One manipulation per deck feat (a feat or bought-off drawback tagged [Deck]), plus one
+      <p class="hint">One manipulation per deck feat (a feat or bought-off drawback tagged [Deck]), and two
         for Card Shark. The Available field overrides that.${squad.length ? ' A squad member takes its own picks against its own deck feats, and may use them at the table while it is there; the picker says whose a pick is, and so does each row.' : ''} Hover a name for its rule. Readable as
         <code>deck.manip.&lt;name&gt;</code> (<code>deck.manip.loaded_hand</code>, <code>deck.manip.fused_cards</code>) and <code>deck.feats</code>.</p>
     </section>`;
