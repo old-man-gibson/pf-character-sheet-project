@@ -1002,6 +1002,16 @@ from* can point it at a class's levels instead, and the override pins it as on e
 other tab; the *level* badge's working says which source it read and what the
 master-level penalty took off.
 
+**A conjured companion's casting tradition** follows the character's rule once it casts
+(the Magical Companion talent or the mage archetype): every drawback is a boon ("x2"
+counts two), and a boon taken as spell points is worth its step on the boon ladder, read
+at the companion's Hit Dice, and added to its pool. **Boons as spell points** sets how
+many; blank means every drawback without a boon written in the list. The boons written
+are kept as written, and a line can forward what it grants.
+
+**Portraits.** Every companion kind has a **Portrait URL** field on its head panel; the
+picture shows beside the identity fields, the way the character's own portrait does.
+
 ### Equipment, and what it does
 
 Every companion has an **Items** panel: the slots its body type allows (the animal

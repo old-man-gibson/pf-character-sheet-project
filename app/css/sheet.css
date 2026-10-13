@@ -376,6 +376,9 @@
   object-fit: cover; background: var(--cs-panel-2); border: 1px solid var(--cs-line);
 }
 .head-main { flex: 1 1 20rem; min-width: min(18rem, 60vw); }
+/* A companion's picture beside its identity fields, the character's size. */
+.cportrait { display: flex; gap: 12px; align-items: flex-start; }
+.cportrait .fieldgrid { flex: 1 1 0; min-width: 0; }
 .name { font-family: var(--cs-display); font-size: 1.35rem; font-weight: 650; letter-spacing: 0.2px; }
 .subtitle { color: var(--cs-muted); font-size: 0.85rem; margin-top: 2px; }
 /* The session view's standing line: the numbers a table asks for mid-fight,

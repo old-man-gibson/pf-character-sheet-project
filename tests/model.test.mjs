@@ -1591,6 +1591,28 @@ console.log('companions -- a casting conjured companion keeps its own spell poin
     [k().casting.cl, k().casting.spellPoints, pool().max], [6, 9 + cha, 9 + cha]);
   check('one pool still', c.trackers.filter((t) => t.pool === 'sp:conjured').length, 1);
 
+  // Its tradition: every drawback is a boon; one not written as a boon is
+  // spell points, on the ladder read at its 9 Hit Dice (2, then 4 in all).
+  c.listAdd('conjured.0.tradition.drawbacks', 'Somatic Casting');
+  c.listAdd('conjured.0.tradition.drawbacks', 'Verbal Casting');
+  check('two drawbacks, no boons written: both as spell points',
+    [k().casting.boons, k().casting.boonSteps, k().casting.boonSP, k().casting.spellPoints, pool().max],
+    [2, 2, 4, 9 + cha + 4, 9 + cha + 4]);
+  c.listAdd('conjured.0.tradition.boons', 'Easy Focus');
+  check('a boon written in the list takes one back', [k().casting.boonSteps, k().casting.boonSP, k().casting.spellPoints], [1, 2, 9 + cha + 2]);
+  c.set('conjured.0.tradition.boonSP', '0');
+  check('the box overrides the default', [k().casting.boonSteps, k().casting.spellPoints], [0, 9 + cha]);
+  c.set('conjured.0.tradition.boonSP', '5');
+  check('and is capped at the boons there are', [k().casting.boonSteps, k().casting.boonSP], [2, 4]);
+  c.set('conjured.0.tradition.boonSP', '');
+  check('blank is the default again', k().casting.boonSteps, 1);
+  check('a picture is kept by address', (c.set('conjured.0.image', 'https://example.test/orb.png'), c.toJSON().conjured[0].image), 'https://example.test/orb.png');
+  // Back to a bare tradition for the checks below.
+  c.listRemove('conjured.0.tradition.boons', 0);
+  c.listRemove('conjured.0.tradition.drawbacks', 1);
+  c.listRemove('conjured.0.tradition.drawbacks', 0);
+  check('cleared again', [k().casting.boons, k().casting.spellPoints], [0, 9 + cha]);
+
   c.stepTracker(pool().id, 3);
   check('spent like any tracker', pool().current, 3);
   c.companionRest('conjured', 0);
@@ -1624,7 +1646,7 @@ console.log('companions -- a casting conjured companion keeps its own spell poin
 
   // Its own casting tradition: a name, and drawbacks and boons as prose.
   check('a companion starts with no tradition: natural casting', c.data.conjured[0].tradition,
-    { name: '', drawbacks: [], boons: [] });
+    { name: '', drawbacks: [], boons: [], boonSP: '' });
   const chaBefore = k().scores.cha.total;
   c.set('conjured.0.tradition.name', 'Fey Magic');
   c.listAdd('conjured.0.tradition.drawbacks', 'Verbal Casting');
@@ -1637,10 +1659,10 @@ console.log('companions -- a casting conjured companion keeps its own spell poin
   const saved = JSON.parse(JSON.stringify(c.toJSON()));
   check('saved and reopened, tradition and all',
     new Character(saved).data.conjured[0].tradition,
-    { name: 'Fey Magic', drawbacks: ['Verbal Casting'], boons: ['Easy Focus {conjured.cha.score += 2}'] });
+    { name: 'Fey Magic', drawbacks: ['Verbal Casting'], boons: ['Easy Focus {conjured.cha.score += 2}'], boonSP: '' });
   delete saved.conjured[0].tradition;
   check('a companion saved before traditions grows an empty one',
-    new Character(saved).data.conjured[0].tradition, { name: '', drawbacks: [], boons: [] });
+    new Character(saved).data.conjured[0].tradition, { name: '', drawbacks: [], boons: [], boonSP: '' });
   c.set('conjured.0.archetypes.mage', false);
   c.setItem('conjured.0.talents', 0, 'name', 'Not yet chosen');
   check('the tradition goes quiet when the companion stops casting', k().scores.cha.total, chaBefore);
