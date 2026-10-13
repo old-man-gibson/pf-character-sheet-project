@@ -13784,6 +13784,18 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   check('the scope reads the character\'s picks alone', c.scope().deck.manip.mulligan, undefined);
   c.listAdd('cardcasting.manipulations', { group: 'General', name: 'Mulligan', note: '', count: 1, owner: '' });
   check('the character\'s own Mulligan counts, present member or not', [hasManipulation(c, 'Mulligan'), c.scope().deck.manip.mulligan], [true, 1]);
+  // Each copy of a pick is given on its own: one Fused Cards to the member, two kept.
+  c.listAdd('cardcasting.manipulations', { group: 'General', name: 'Fused Cards', note: '', count: 3, owner: '' });
+  const fused = () => p.manipulations.map((m, i) => ({ m, i })).filter(({ m }) => m.name === 'Fused Cards');
+  c.moveManipulationPick(fused()[0].i, cc.id);
+  check('moving one copy splits the row: two stay, one goes', fused().map(({ m }) => [m.owner, m.count]), [['', 2], [cc.id, 1]]);
+  c.moveManipulationPick(fused()[0].i, cc.id);
+  check('a second copy joins the member\'s row', fused().map(({ m }) => [m.owner, m.count]), [['', 1], [cc.id, 2]]);
+  c.moveManipulationPick(fused()[1].i, '');
+  check('and one back again', fused().map(({ m }) => [m.owner, m.count]), [['', 2], [cc.id, 1]]);
+  c.moveManipulationPick(fused()[1].i, '');
+  check('the last copy of a row joins the owner\'s row and the row goes', fused().map(({ m }) => [m.owner, m.count]), [['', 3]]);
+  check('the member\'s count follows its copies', member().manipulationsTaken, 2);
 }
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

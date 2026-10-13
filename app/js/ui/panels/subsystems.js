@@ -3148,7 +3148,7 @@ function deckManipulationsHead(model, p, k) {
         </select>` : ''}</span>`)}
       </div>
       <p class="hint">One manipulation per deck feat (a feat or bought-off drawback tagged [Deck]), and two
-        for Card Shark. The Available field overrides that.${squad.length ? ' A squad member takes its own picks against its own deck feats, and may use them at the table while it is there; the picker says whose a pick is, and so does each row.' : ''} Hover a name for its rule. Readable as
+        for Card Shark. The Available field overrides that.${squad.length ? ' A squad member takes its own picks against its own deck feats, and may use them at the table while it is there; the picker says whose a pick is, and each row has an owner pick per copy, so one copy can be given away and the rest kept.' : ''} Hover a name for its rule. Readable as
         <code>deck.manip.&lt;name&gt;</code> (<code>deck.manip.loaded_hand</code>, <code>deck.manip.fused_cards</code>) and <code>deck.feats</code>.</p>
     </section>`;
     return collapsible(model, 'deck-manipulations', head);
@@ -3209,7 +3209,7 @@ function deckManipulationsPanel(model, p, k) {
             </td>
             <td>${itemNum(list, i, 'count', m.count)}</td>
             <td class="tools"><span class="pair">
-              ${squad.length ? `<span title="Whose pick this is">${itemSelect(list, i, 'owner', m.owner || '', owners.map((o) => [o.id, o.name]), null)}</span>` : ''}
+              ${squad.length ? Array.from({ length: Math.max(1, Number(m.count) || 0) }, (_, n) => `<select class="movesel" data-manip-owner="${i}" aria-label="Whose copy ${n + 1} is" title="${esc(`Copy ${n + 1} of ${Math.max(1, Number(m.count) || 0)}: whose it is. Moving one copy leaves the others where they are.`)}">${owners.map((o) => `<option value="${esc(o.id)}"${o.id === ownerOf(m) ? ' selected' : ''}>${esc(o.name)}</option>`).join('')}</select>`).join('') : ''}
               ${removeButton(list, i, { what: 'manipulation' })}
             </span></td>
           </tr>`;

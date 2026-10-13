@@ -5108,6 +5108,15 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
       });
     });
+    // One copy of a manipulation pick given to someone else: the row loses
+    // one and the new owner's row of the same name gains it, so each copy is
+    // moved on its own.
+    root.querySelectorAll('select[data-manip-owner]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        this.#model.moveManipulationPick(Number(sel.dataset.manipOwner), sel.value);
+        this.#render();
+      });
+    });
 
     root.querySelectorAll('[data-add]').forEach((b) => {
       b.addEventListener('click', () => {

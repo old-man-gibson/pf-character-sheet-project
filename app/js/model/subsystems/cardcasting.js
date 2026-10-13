@@ -2382,6 +2382,33 @@ export function moveCard(model, from, index, to, { copy = false } = {}) {
 }
 
 /**
+ * Give one copy of a manipulation pick to `owner` ('' is the character). A
+ * row taken once just changes hands; a row taken several times loses one
+ * copy, and the owner's own row of the same name and group gains it -- made
+ * beside the source if there is none -- so each copy is given on its own
+ * and the others stay where they were.
+ */
+export function moveManipulationPick(model, index, owner) {
+  const list = model.data.cardcasting?.manipulations;
+  const row = list?.[index];
+  if (!row) return model;
+  const to = String(owner ?? '');
+  if (String(row.owner ?? '') === to) return model;
+  const count = Math.max(0, Math.floor(Number(row.count) || 0));
+  const group = String(row.group || 'General');
+  const twin = list.find((m, i) => i !== index && String(m.owner ?? '') === to && isManipulation(m, row.name) && String(m.group || 'General') === group);
+  if (twin) twin.count = Math.max(0, Number(twin.count) || 0) + 1;
+  if (count <= 1) {
+    // The last copy: the row changes hands, or joins the owner's row and goes.
+    if (twin) list.splice(index, 1); else row.owner = to;
+    return model.recompute();
+  }
+  row.count = count - 1;
+  if (!twin) list.splice(index + 1, 0, { group: row.group, name: row.name, note: '', count: 1, owner: to });
+  return model.recompute();
+}
+
+/**
  * Give this card's Dice field, and its stat line, to every card that shares
  * its effect. Returns how many took it. Cards with one effect have one save,
  * range and damage type as surely as they have one set of dice.
