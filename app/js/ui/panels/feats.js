@@ -349,8 +349,10 @@ export function renderFeaturesPanel(model, ctx) {
           </p>`, 'mythladder')}
       </section>`)}
 
-      ${rows.collapsible(model, 'mythic-base', mythicTierGrantsPanel(model, tier))}
-      ${rows.collapsible(model, 'mythic-tradition', mythicTraditionPanel(model, ctx, m))}
+      <div class="band lead">
+        ${rows.collapsible(model, 'mythic-tradition', mythicTraditionPanel(model, ctx, m))}
+        ${rows.collapsible(model, 'mythic-base', mythicTierGrantsPanel(model, tier))}
+      </div>
     </div>`;
 }
 
@@ -365,10 +367,12 @@ export function renderFeaturesPanel(model, ctx) {
  * table for reading without hovering.
  */
 function mythicTierGrantsPanel(model, tier) {
+    // The rule opens in the sheet's popover on hover (data-tip); the title
+    // is the fallback for a browser without one.
     const chip = (name, t) => {
       const a = MYTHIC_BASE_ABILITIES[name] || {};
       const value = a.value ? ` ${a.value(t)}` : '';
-      return `<span class="badge" title="${esc(a.text || '')}">${esc(name)}${esc(value)}</span>`;
+      return `<span class="badge" tabindex="0" data-tip="${esc(a.text || '')}" data-tiphead="${esc(name)}" title="${esc(a.text || '')}">${esc(name)}${esc(value)}</span>`;
     };
     const row = (t) => `<tr class="${t > tier ? 'future' : ''}">
       <td class="num">${t}</td>
@@ -382,7 +386,7 @@ function mythicTierGrantsPanel(model, tier) {
       'Death at −(2 × Con)',
     ].filter(Boolean).join(' · ') : 'No mythic tier yet.';
     const names = [...new Set(Object.values(MYTHIC_TIER_GRANTS).flat())];
-    return `<section class="panel">
+    return `<section class="panel mythgrants">
       <h3>What each tier grants <span class="badge">tier ${tier}</span></h3>
       <p class="mythnow">${esc(now)}</p>
       <table class="mythtiers">
@@ -400,7 +404,7 @@ function mythicTierGrantsPanel(model, tier) {
 function mythicTraditionPanel(model, ctx, m) {
     const tr = m.tradition || {};
     const filled = (k) => !!(tr[k] && String(tr[k]).trim());
-    return `<section class="panel span2">
+    return `<section class="panel wide">
       <h3>Mythic tradition
         ${!filled('drawback1') ? '<span class="badge err">Drawback 1 is mandatory</span>' : ''}
         <label class="chk" style="margin-left:auto">

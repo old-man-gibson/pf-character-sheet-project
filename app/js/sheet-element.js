@@ -2378,7 +2378,7 @@ export class CharacterSheetElement extends HTMLElement {
       // A sphere talent's ✦, a folded talent note and a forwarded bonus's
       // badge open the same panel: it wraps and scrolls, which a native
       // tooltip holding a page of rules text does neither of.
-      return t?.closest?.('[data-bd], [data-tpop], [data-fwd]') ?? null;
+      return t?.closest?.('[data-bd], [data-tpop], [data-fwd], [data-tip]') ?? null;
     };
     root.addEventListener('pointerover', (e) => {
       if (e.pointerType !== 'mouse' || this.#bdPinned) return;
@@ -2467,10 +2467,14 @@ export class CharacterSheetElement extends HTMLElement {
     // bonus to where its badge sits. All are asked for now.
     const talent = el.dataset.tpop !== undefined;
     const fwd = el.dataset.fwd;
-    const b = talent || fwd ? null : this.#model?.breakdown?.(el.dataset.bd);
+    // A plain rule on a chip (`data-tip`, with `data-tiphead` as its name):
+    // the text the markup already carries, in the panel instead of a title.
+    const tip = el.dataset.tip;
+    const b = talent || fwd || tip !== undefined ? null : this.#model?.breakdown?.(el.dataset.bd);
     const html = talent ? talentPopHtml(this.#model, el.dataset.tpop)
       : fwd ? badges.forwardedPop(this.#model, fwd, el.dataset.fwdx || '')
-        : (b ? breakdownHtml(b, el.dataset.bdx || '') : '');
+        : tip !== undefined ? (tip ? `${el.dataset.tiphead ? `<div class="bdhead"><span class="bdname">${esc(el.dataset.tiphead)}</span></div>` : ''}<div class="peektext">${esc(tip)}</div>` : '')
+          : (b ? breakdownHtml(b, el.dataset.bdx || '') : '');
     if (!html) { this.#closeBreakdown(); return; }
     const pop = this.#breakdownPanel();
     if (typeof pop.showPopover !== 'function') return;
