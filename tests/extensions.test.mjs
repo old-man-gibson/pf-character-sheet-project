@@ -22,6 +22,7 @@ import {
   veilDetails, veilOwn, veilIsWritten,
 } from '../app/js/model.js';
 import { storageMedium, indexedDbMedium, packMedium, PACK_STORE } from '../app/js/pack-storage.js';
+import { LIBRARY_FORMAT, buildLibrary, looksLikeLibrary, planLibrary } from '../app/js/extensions.js';
 import { convertPack, liftClassAccess } from '../tools/veils-to-table.mjs';
 import { isBasePick } from '../app/js/rules.js';
 import { splitBaseAbilities } from '../app/js/paste-import.js';
@@ -2125,6 +2126,41 @@ console.log('veils -- a pack of blocks converted into the table it should have b
 
   const untouched = convertPack({ format: EXTENSION_FORMAT, id: 'x', name: 'X', blocks: [{ kind: 'note', name: 'n' }] });
   check('a pack with no veils is left alone', [untouched.moved, untouched.ext.revision], [0, 1]);
+}
+
+console.log('library -- every local pack and the switches as one file, imported elsewhere');
+{
+  const a = extensionStore(fakeStorage());
+  await a.open();
+  await a.save({ format: EXTENSION_FORMAT, name: 'Pack A', blocks: [{ kind: 'note', name: 'n' }] });
+  await a.save({ format: EXTENSION_FORMAT, name: 'Pack B', revision: 3 }, { enabled: false });
+  const enabled = { 'bundled-x': false };
+  for (const row of a.list()) enabled[row.id] = row.enabled !== false;
+  const lib = buildLibrary({ packs: a.list().map((r) => a.read(r.id)), enabled, from: 'laptop' });
+  check('a library says what it is', [looksLikeLibrary(lib), lib.format, lib.from, lib.packs.length], [true, LIBRARY_FORMAT, 'laptop', 2]);
+  check('and carries every switch', lib.enabled, { 'bundled-x': false, 'pack-a': true, 'pack-b': false });
+  check('a pack is not a library', looksLikeLibrary(a.read('pack-a')), false);
+
+  // Another browser: has Pack A already (same content, saved another day) and a pack of its own.
+  const b = extensionStore(fakeStorage());
+  await b.open();
+  await b.save({ format: EXTENSION_FORMAT, name: 'Pack A', blocks: [{ kind: 'note', name: 'n' }] });
+  await b.save({ format: EXTENSION_FORMAT, name: 'Pack C' });
+  const against = () => ({ bundledIds: ['bundled-x'], local: b.list(), read: (id) => b.read(id) });
+  const plan = planLibrary(lib, against());
+  check('what is here and the same is left alone', plan.unchanged, ['pack-a']);
+  check('what is missing is added', plan.add.map((d) => d.id), ['pack-b']);
+  check('nothing is updated', plan.update, []);
+  check('switches are limited to packs this browser will have', plan.enabled, { 'bundled-x': false, 'pack-a': true, 'pack-b': false });
+  for (const doc of plan.add) await b.save(doc, { origin: 'import', enabled: plan.enabled[doc.id] ?? null });
+  check('after the import the other browser holds both, with the switch', b.list().map((e) => [e.id, e.enabled]), [['pack-a', true], ['pack-c', true], ['pack-b', false]]);
+  const again = planLibrary(lib, against());
+  check('importing the same library again changes nothing', [again.add.length, again.update.length, again.unchanged], [0, 0, ['pack-a', 'pack-b']]);
+  const changed = { ...lib, packs: [{ ...lib.packs[0], revision: 2 }, { format: EXTENSION_FORMAT, id: 'bundled-x', name: 'X' }, { nope: 1 }] };
+  const p3 = planLibrary(changed, against());
+  check('a changed pack is an update', p3.update.map((d) => d.id), ['pack-a']);
+  check('a bundled id and junk are skipped', p3.skipped.map((s) => s.id), ['bundled-x', '?']);
+  check('not a library, no plan', planLibrary({ format: 'x' }).add, []);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
