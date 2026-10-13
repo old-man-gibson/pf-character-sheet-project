@@ -2457,6 +2457,7 @@
   "flowingPower": false,
   "basePathAbility": null,
   "tierOverride": 0,
+  "paths": [],
   "paragon": false,
   "flowing": {
    "increase": 0,

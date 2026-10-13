@@ -6436,6 +6436,20 @@ console.log('flowing power -- the increase, its damage, the free rounds and the 
   check('a new day heals the strain and ends the effect', [c.hpMax, c.hpState.current, c.data.hp.strain, c.data.mythic.flowing.increase, c.data.mythic.flowing.freeLeft], [max, max, 0, 0, 0]);
 }
 
+console.log('mythic paths -- a second path, kept with the character');
+{
+  const c = new Character(blankDocument({ name: 'Dual', level: 20 }));
+  check('no extra paths to start', c.data.mythic.paths, []);
+  c.set('mythic.path', 'Champion');
+  c.listAdd('mythic.paths', { path: 'Trickster', basePathAbility: 'Trickster Attack', grantedBy: 'Dual Path' });
+  const back = new Character(c.toJSON());
+  check('the path, its base ability and its source are saved',
+    back.data.mythic.paths, [{ path: 'Trickster', basePathAbility: 'Trickster Attack', grantedBy: 'Dual Path' }]);
+  check('bonus hit points per tier still follow the first path', back.data.mythic.path, 'Champion');
+  check('a malformed entry is dropped on load', new Character({ ...c.toJSON(), mythic: { ...c.toJSON().mythic, paths: ['x', null, { path: 'Marshal' }] } }).data.mythic.paths,
+    [{ path: 'Marshal', basePathAbility: '', grantedBy: '' }]);
+}
+
 console.log('training values reach the formula scope');
 {
   const c = new Character(load('angou'));
