@@ -15,7 +15,7 @@ import {
   WEAPON_HANDEDNESS, conditionInfo, performCategory, skillVariantKind, tierAtLevel,
 } from '../rules.js';
 import {
-  COMPANION_KINDS, COMPANION_TABS, companionInUse, normalizeCompanionList, uniqueCompanionIds,
+  COMPANION_KINDS, companionInUse, companionTabNumber, normalizeCompanionList, uniqueCompanionIds,
 } from '../companions.js';
 import { FEATURE_GROUP_COLORS, normalizeHex } from '../tracker-style.js';
 import { Character } from './character.js';
@@ -24,7 +24,13 @@ import { importAkashic, splitVeilName } from './subsystems/akashic.js';
 import {
   deckFeatNames, importCardcasting,
 } from './subsystems/cardcasting.js';
-import { importAnimalCompanion } from './subsystems/companions.js';
+import { importAnimalCompanion, importConjuredCompanion } from './subsystems/companions.js';
+
+/** The companion kinds whose worksheet is read into a block, and how. */
+const COMPANION_IMPORTERS = {
+  animalCompanion: importAnimalCompanion,
+  conjured: importConjuredCompanion,
+};
 import { importCooking, normalizeDish } from './subsystems/cooking.js';
 import { importCrafting } from './subsystems/crafting.js';
 import { GUILE_DERIVED, normalizeGuileTraining } from './subsystems/guile.js';
@@ -663,39 +669,48 @@ export function normalise(model) {
   }
 
   /*
-   * The three companion sheets -- Familiar, Animal Companion, Eidolon -- were
-   * template worksheets on every workbook, each a grid of formulas against
-   * `dataSheet` that the export left frozen at whatever they last worked out.
-   * They become structured blocks worked out afresh from the tables in
-   * `companions.js`.
+   * The companion sheets -- Familiar, Animal Companion, Eidolon on every
+   * template workbook, and a Conjuration Companion tab built to the same
+   * pattern -- are grids of formulas against `dataSheet` that the export left
+   * frozen at whatever they last worked out. They become structured blocks
+   * worked out afresh from the tables in `companions.js`.
    *
-   * The Animal Companion tab is read into its block and then retired like any
-   * other imported worksheet. The other two are not read yet, so an unfilled
-   * copy is dropped and a filled one -- a tab that carries a name -- is kept
-   * beside the empty block rather than losing what somebody typed on it.
+   * A workbook may carry more than one of a kind, numbered the way the app
+   * numbers them: "Conjuration Companion" is the first block of its kind and
+   * "Conjuration Companion 2" the second (companionTabNumber). The Animal
+   * Companion and Conjuration Companion tabs are read into their blocks and
+   * then retired like any other imported worksheet. The other two are not
+   * read yet, so an unfilled copy is dropped and a filled one -- a tab that
+   * carries a name -- is kept beside the empty block rather than losing what
+   * somebody typed on it.
    *
-   * It is read again when a document saved before it was read still carries
-   * the grid beside a block nobody has touched: that pair is exactly what the
-   * older import left behind, and reading it is what recovers the companion.
+   * A tab is read again when a document saved before it was read still
+   * carries the grid beside a block nobody has touched: that pair is exactly
+   * what the older import left behind, and reading it is what recovers the
+   * companion.
    */
   for (const kind of COMPANION_KINDS) {
-    const index = d.sheetTabs.findIndex((t) => t.name === COMPANION_TABS[kind]);
-    const tab = index < 0 ? null : d.sheetTabs[index];
+    const tabs = d.sheetTabs
+      .map((tab) => ({ tab, n: companionTabNumber(kind, tab.name) }))
+      .filter((x) => x.n > 0)
+      .sort((a, b) => a.n - b.n);
     // A document from before a character could keep several holds one block
-    // where the list now goes; normalizeCompanionList folds it in. The
-    // worksheet import and the stranded-import recovery only ever concern the
-    // first of a kind -- no workbook could hold a second.
-    const first = Array.isArray(d[kind]) ? d[kind][0] : d[kind];
-    const stranded = tab && first && !companionInUse(kind, first);
-    if (kind === 'animalCompanion' && (!first || stranded)) {
-      const imported = importAnimalCompanion(tab);
-      d[kind] = Array.isArray(d[kind]) ? [imported, ...d[kind].slice(1)] : imported;
+    // where the list now goes; normalizeCompanionList folds it in.
+    const list = Array.isArray(d[kind]) ? [...d[kind]]
+      : d[kind] && typeof d[kind] === 'object' ? [d[kind]] : [];
+    const importer = COMPANION_IMPORTERS[kind];
+    for (const { tab, n } of tabs) {
+      const i = n - 1;
+      if (!importer || (list[i] && companionInUse(kind, list[i]))) continue;
+      while (list.length < i) list.push(null);
+      list[i] = importer(tab);
     }
-    d[kind] = normalizeCompanionList(kind, d[kind]);
-    if (index < 0) continue;
-    const g = sheetReader(tab);
-    const named = kind !== 'animalCompanion' && g.text(g.take('Name')) !== '';
-    if (!named) d.sheetTabs.splice(index, 1);
+    d[kind] = normalizeCompanionList(kind, list);
+    for (const { tab } of tabs) {
+      const g = sheetReader(tab);
+      const named = !importer && g.text(g.take('Name')) !== '';
+      if (!named) d.sheetTabs.splice(d.sheetTabs.indexOf(tab), 1);
+    }
   }
   uniqueCompanionIds(d);
 

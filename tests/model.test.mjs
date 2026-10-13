@@ -50,6 +50,8 @@ import {
 import { zoneAt, barLayout, normalizeStyle, squareLayout } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
+import { importConjuredCompanion } from '../app/js/model/subsystems/companions.js';
+import { companionTabNumber } from '../app/js/companions.js';
 import { featNames } from '../app/js/model/feats.js';
 import { emptyMonster } from '../app/js/monster/block.js';
 import { subsystems } from '../app/js/model/subsystems/registry.js';
@@ -420,6 +422,170 @@ console.log('companions -- a filled Animal Companion tab is read, not left as a 
   check('and it is the whole companion either way',
     [withoutRows.name, withoutRows.tricks.length, withoutRows.attacks.length, withoutRows.feats.length],
     ['Rustle', 3, 2, 3]);
+}
+
+console.log('companions -- a Conjuration Companion tab is read into the conjured block');
+{
+  // A Conjuration Companion tab laid out after the Eidolon worksheet, with a
+  // companion on it. As with the Animal Companion tab, the numbers the sheet
+  // worked out for itself are left where they were and only what a player
+  // typed is read.
+  const row = (r, cells) => ({
+    r,
+    cells: Object.entries(cells).reduce((out, [col, v]) => {
+      const i = col.charCodeAt(0) - 65;
+      while (out.length < i) out.push(null);
+      out[i] = v;
+      return out;
+    }, []),
+  });
+  const rows = [
+    row(1, { B: 'Name', C: 'Wisp' }),
+    row(2, { I: 'Talents', L: 'Kind', O: 'Conjured Skills', Q: 'Skill Bonus', R: 'Class Skill', S: 'Ranks', T: 'Race', U: 'Base Ability', V: 'Requires Training' }),
+    row(3, { B: 'Conjuration Companion', D: 'Master Class', I: 'Magical Companion', L: 'Form', O: 'Acrobatics', Q: 2, R: 0, S: 0, T: 0, U: 'Dex', V: 'No' }),
+    row(4, { B: 'HP', C: 165, D: 'Size', E: 'Medium', F: 18, I: 'Improved Companion', L: 'Other', O: 'Appraise', Q: -2, R: 0, S: 0, U: 'Int', V: 'No' }),
+    row(5, { B: 'HD', C: 14, D: 'Ability Score', E: 'Con', F: 'Bonus HP', G: 5, O: 'Climb', Q: 9, R: 3, S: 2, T: 0, U: 'Str', V: 'No' }),
+    row(6, { B: 'Master Lvl Penalty', C: 0, D: 'Alignment', E: 'Neutral', O: 'Craft (Sphere)', P: 'Alchemy', Q: -1, R: 0, S: 1, U: 'Int', V: 'No' }),
+    row(7, { B: 'Base Form', C: 'Biped', O: 'Fly', Q: 2, R: 3, S: 0, T: 1, U: 'Dex', V: 'No' }),
+    row(8, { B: 'Level', C: 18, D: 'Level Override', E: 18 }),
+    row(9, { B: 'BAB', C: 7, D: 'Ability', E: 'Str', F: 'Misc Attack', G: 1 }),
+    row(10, { B: 'Attack Bonus', C: 4, D: 'Total Attack', E: 12 }),
+    row(11, { B: 'Special Qualities', C: 'Darkvision 60 ft.' }),
+    row(12, { B: 'Link to master' }),
+    row(13, { B: 'Form', C: 'Speed 30 ft.; 2 slams 1d4' }),
+    row(14, { B: 'Archetypes', C: 'Taken', D: 'Hit Dice' }),
+    row(15, { B: 'Aquatic', C: false, D: 'Table HD', E: 14 }),
+    row(16, { B: 'Beast', C: false, D: 'Own HD', E: 14 }),
+    row(17, { B: 'Distinct Kin', C: true, D: 'Bonus HD', E: 0 }),
+    row(18, { B: 'Familiar', C: false, D: 'Hit Die', E: 'd6' }),
+    row(19, { B: 'Guileful Companion', C: false, D: 'Feat Slots', E: 8 }),
+    row(20, { B: 'Mage', C: true, D: 'Bonus Feats', E: 1 }),
+    row(21, { B: 'Martial Companion', C: false, D: 'Skill Points', E: 14, I: 'Form / Type', J: 1, K: 'Other', L: 1 }),
+    row(22, { B: 'Mindless', C: false, D: 'Summon Cost', E: 1 }),
+    row(23, { B: 'Puppet', C: false }),
+    row(24, { B: 'Unwilling', C: false, I: 'HD', J: 'Feat' }),
+    row(25, { B: 'Warrior', C: false, I: 1, J: 'Toughness' }),
+    row(26, { I: 3, J: 'Multiattack' }),
+    row(27, { I: 5 }),
+    row(28, { B: 'Scores', C: 'Base', D: 'Misc Bonus', E: 'Lvl up Bonus', F: 'Total', G: 'Modifier', I: 7 }),
+    row(29, { B: 'Str', D: 2, E: 2, F: 20, G: 5, I: 9 }),
+    row(30, { B: 'Dex', C: 14, D: 0, E: 0, F: 14, G: 2, I: 11 }),
+    row(31, { B: 'Con', D: 0, E: 0, F: 13, G: 1, I: 13 }),
+    row(32, { B: 'Int', D: 0, E: 0, F: 7, G: -2, I: 15 }),
+    row(33, { B: 'Wis', D: 0, E: 0, F: 10, G: 0, I: 17 }),
+    row(34, { B: 'Cha', D: 4, E: 1, F: 16, G: 3, I: 19 }),
+    row(35, { I: 21 }),
+    row(36, { B: 'Defenses', D: 'Ability', E: 'Other Bonus AC', G: 'UnDodge', I: 23 }),
+    row(37, { B: 'AC', C: 21, D: 'Dex', E: 'To AC (All)', F: 1, I: 25 }),
+    row(38, { B: 'Touch', C: 15, D: 'Dex', E: 'To Touch', F: 2, G: false, I: 27 }),
+    row(39, { B: 'Flat-Footed', C: 19, D: 'Dex', E: 'Natural & other FF', F: 3, I: 29 }),
+    row(40, { B: 'DR', C: '5/cold iron', E: 'Natural Armor', F: 9, I: 'Bonus', J: 'Iron Will' }),
+    row(41, { B: 'Resistances', C: 'fire 10', E: 'To Armor', F: 4, I: 'Bonus' }),
+    row(42, { B: 'Immunities', C: 'sleep', E: 'To Natural Armor', F: 0 }),
+    row(43, { I: 'CMD', J: 'Other Bonus', K: 'Total' }),
+    row(44, { B: 'Speed', E: 'Saves', G: 'Ability', I: 'CMD', J: 2, K: 26 }),
+    row(45, { B: 'Base', C: 30, E: 'Fort', F: 8, G: 'Con', I: 'FF CMD', K: 24 }),
+    row(46, { B: 'Fly', C: '60 (good)', E: 'Ref', F: 6, G: 'Dex', I: 'Initiative', J: 3, K: 5 }),
+    row(47, { E: 'Will', F: 10, G: 'Wis' }),
+    row(48, { E: 'Good Fort', F: 'Good Ref', G: 'Good Will', I: 'Casting', J: 'Granted By', L: 'CL', M: 'SP' }),
+    row(49, { E: true, F: false, G: true, I: 'Caster', J: 'Mage archetype', L: 10, M: 17, P: 'Skill Ranks', Q: 14, R: 'Total Skill Ranks', S: 3 }),
+    row(50, { I: 'SP Left', J: 12, L: 'Ability', M: 'Cha' }),
+    row(51, { B: 'Ability Score Increase', I: 'Tradition', J: 'Blood magic', O: 'Attacks', Q: 'CMB', R: 12, S: 'CMB Bonus', T: 1 }),
+    row(52, { B: 4, C: 'Str', I: 'Drawback', J: 'Somatic Casting', O: 'Type', P: 'Slam', Q: 'Damage Type', R: 'B', S: 'Attack Type', T: 'Primary' }),
+    row(53, { B: 8, C: 'Str', I: 'Drawback', O: 'Qualities', P: 'Grab' }),
+    row(54, { B: 12, C: 'Cha', I: 'Boon', J: 'Easy Focus', O: 'To-Hit Bonus', P: 12, Q: 'Damage', R: '1d4+5', S: 'Crit', T: '20/', U: 'x2' }),
+    row(55, { B: 16, I: 'Boon' }),
+    row(56, { B: 20, O: 'Type', P: 'Bite', Q: 'Damage Type', R: 'B, P, and S', S: 'Attack Type', T: 'Secondary' }),
+    row(57, { B: 24, O: 'Qualities' }),
+    row(58, { B: 28, I: 'HD', J: 'Special', O: 'To-Hit Bonus', P: 10, Q: 'Damage', R: '1d6', S: 'Crit', T: '19-20/', U: 'x2' }),
+    row(59, { I: 2, J: 'Evasion' }),
+    row(60, { I: 5, J: 'Devotion' }),
+  ];
+  const raw = blankDocument({ id: 'wisp', name: 'Wisp’s Caster', level: 20 });
+  raw.extraTabs['Conjuration Companion'] = { hidden: false, rows };
+  const gridRows = JSON.parse(JSON.stringify(rows));
+  const c = new Character(raw);
+  const b = c.data.conjured[0];
+  check('the grid retires once it has been read',
+    (c.data.sheetTabs || []).some((t) => /Companion/.test(t.name)), false);
+  check('name, form, alignment, size',
+    [b.name, b.baseForm, b.alignment, b.size], ['Wisp', 'Biped', 'Neutral', 'Medium']);
+  check('the level: the sphere’s caster level unless a class is named, with the override and penalty',
+    [b.levelSource, b.masterClass, b.levelOverride, b.masterLevelPenalty], ['casterLevel', '', 18, 0]);
+  check('the archetypes ticked', b.archetypes, { distinctKin: true, mage: true });
+  check('the typed bonuses',
+    [b.hp.bonus, b.hpAbility, b.attackAbility, b.attackBonus, b.bonusFeats, b.ac.all, b.ac.touch, b.ac.ff, b.cmdOther, b.cmbOther, b.initBonus],
+    [5, 'Con', 'Str', 1, 1, 1, 2, 7, 2, 1, 3]);
+  check('special qualities are both lines, and the Form line beneath them is not one',
+    b.specialQualities, 'Darkvision 60 ft.\nLink to master');
+  check('DR, resistances, immunities', [b.dr, b.resistances, b.immunities], ['5/cold iron', 'fire 10', 'sleep']);
+  check('the good saves as ticked', b.goodSaves, { fort: true, ref: false, will: true });
+  check('scores: a blank Base stays the form’s, a typed one pins it, Misc is the player’s',
+    [b.scores.str.base, b.scores.str.misc, b.scores.dex.base, b.scores.cha.misc], [null, 2, 14, 4]);
+  check('the ability increases by Hit Dice',
+    b.abilityIncreases.map((x) => `${x.level}:${x.ability}`), ['4:Str', '8:Str', '12:Cha', '16:', '20:', '24:', '28:']);
+  check('speeds: the base and a picked type',
+    b.speeds.map((s) => [s.type, s.base]), [['Land', 30], ['Fly (good)', 60]]);
+  check('talents in their two groups',
+    b.talents.map((t) => [t.name, t.source, t.group || '']),
+    [['Magical Companion', '(form)', ''], ['Improved Companion', '', 'other']]);
+  check('feats by the die that grants them, then the bonus slots',
+    b.feats.map((f) => [f.source, f.name]), [['1 HD', 'Toughness'], ['3 HD', 'Multiattack'], ['Bonus', 'Iron Will']]);
+  check('skills: ranks, class-skill ticks, the racial column and a variant',
+    b.skills.map((s) => [s.name, s.spec, s.ranks, s.classSkill, s.misc]),
+    [['Acrobatics', '', 0, false, 0], ['Appraise', '', 0, false, 0], ['Climb', '', 2, true, 0],
+      ['Craft (Sphere)', 'Alchemy', 1, false, 0], ['Fly', '', 0, true, 1]]);
+  check('attacks: the type, its role, qualities, damage and crit',
+    b.attacks.map((a) => [a.type, a.primary, a.qualities, a.damage, a.crit]),
+    [['Slam', true, 'Grab', '1d4+5', '20/×2'], ['Bite', false, '', '1d6', '19-20/×2']]);
+  check('the tradition with its drawbacks and boons',
+    [b.tradition.name, b.tradition.drawbacks, b.tradition.boons], ['Blood magic', ['Somatic Casting'], ['Easy Focus']]);
+  // And the sums are worked out afresh from what was read: the mage
+  // archetype at the pinned 18th level is 14 d6 Hit Dice on a poor BAB,
+  // casting at three quarters of its dice.
+  const k = b.calc;
+  check('the block is in use and its numbers come from the tables',
+    [k.level, k.hd, k.hitDie, k.bab, k.casting?.cl, k.featSlots], [18, 14, 6, 7, 10, 8]);
+
+  // A second of a kind comes from a numbered tab, and the number is its place
+  // in the list -- for the animal companion as much as the conjured one.
+  check('tab numbers', [
+    companionTabNumber('conjured', 'Conjuration Companion'), companionTabNumber('conjured', 'Conjuration Companion 2'),
+    companionTabNumber('conjured', 'Conjured Companion'), companionTabNumber('animalCompanion', 'Animal Companion 3'),
+    companionTabNumber('animalCompanion', 'Animal Companions'), companionTabNumber('eidolon', 'Eidolon'),
+  ], [1, 2, 1, 3, 0, 1]);
+  const several = JSON.parse(JSON.stringify(raw));
+  several.extraTabs['Conjuration Companion 2'] = { hidden: false, rows: [row(1, { B: 'Name', C: 'Second' }), row(7, { B: 'Base Form', C: 'Orb' })] };
+  several.extraTabs['Animal Companion 2'] = {
+    hidden: false,
+    rows: [row(1, { B: 'Name', C: 'Rex' }), row(3, { B: 'Animal Companion', D: 'Master Class', E: 'Druid' })],
+  };
+  const two = new Character(several);
+  check('a numbered tab is the second block of its kind, under the id a formula reads it by',
+    [two.data.conjured.map((x) => [x.id, x.name, x.baseForm]), two.data.animalCompanion.map((x) => [x.id, x.name])],
+    [[['conjured', 'Wisp', 'Biped'], ['conjured2', 'Second', 'Orb']], [['animalCompanion', ''], ['animalCompanion2', 'Rex']]]);
+  check('and every one of those grids retires', (two.data.sheetTabs || []).length, 0);
+
+  // The app's own name for the tab reads the same as the sphere's.
+  const alias = JSON.parse(JSON.stringify(raw));
+  alias.extraTabs = { 'Conjured Companion': raw.extraTabs['Conjuration Companion'] };
+  check('the tab answers to either name', new Character(alias).data.conjured[0].name, 'Wisp');
+
+  // A grid stranded beside an untouched block by an older build is read into
+  // it; one somebody has since shaped is left alone.
+  const stranded = JSON.parse(JSON.stringify(raw));
+  stranded.conjured = defaultCompanion('conjured');
+  stranded.sheetTabs = [{ name: 'Conjuration Companion', hidden: false, rows: gridRows }];
+  check('a companion stranded on the grid is recovered',
+    [new Character(stranded).data.conjured[0].name, (new Character(stranded).data.sheetTabs || []).length], ['Wisp', 0]);
+  const typed = JSON.parse(JSON.stringify(stranded));
+  typed.conjured = { ...defaultCompanion('conjured'), baseForm: 'Ooze' };
+  check('and one already shaped is left alone', new Character(typed).data.conjured[0].baseForm, 'Ooze');
+
+  // Row numbers are gone before the grid is read; the tab reads the same.
+  const withRows = importConjuredCompanion({ rows: gridRows });
+  const withoutRows = importConjuredCompanion({ rows: gridRows.map((r) => ({ cells: r.cells })) });
+  check('row numbers on the grid change nothing', withoutRows, withRows);
 }
 
 console.log('a class’s own unarmed progression -- rungs, and the die chain they sit on');

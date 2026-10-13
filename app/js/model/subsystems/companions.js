@@ -6,9 +6,9 @@
  */
 
 import {
-  COMPANION_KINDS, COMPANION_TARGETS, companionAttackKey, companionEntries, companionFormulas, companionSkillKey,
-  computeCompanion, defaultCompanion, emptyCompanionFeat, LEGACY_SPEED_TYPES, legacySpeedRows, seedSkills,
-  withTypedNumbers,
+  COMPANION_KINDS, COMPANION_TARGETS, CONJURED_ARCHETYPES, companionAttackKey, companionEntries, companionFormulas,
+  companionSkillKey, computeCompanion, defaultCompanion, emptyCompanionFeat, LEGACY_SPEED_TYPES, legacySpeedRows,
+  seedSkills, withTypedNumbers,
 } from '../../companions.js';
 import { ABILITIES, abilityOf } from '../../rules.js';
 import { sheetReader } from '../document.js';
@@ -27,6 +27,38 @@ export const COMPANION_DERIVED = [
 ];
 
 const abilityKey = abilityOf;
+
+/**
+ * The ways the companion worksheets are read, over a `sheetReader`: a cell's
+ * text, a tick, a label's column in a row, the value beside a label in a
+ * row, and the value under one.
+ */
+function gridTools(g) {
+  const { rows, at, text, find } = g;
+  const t = (ri, ci) => text(at(ri, ci));
+  const ticked = (v) => v === true || /^(true|yes|y|x)$/i.test(String(v ?? '').trim());
+  /** The column a label occupies in one row, at or after `from`. */
+  const columnOf = (ri, label, from = 0) => {
+    const cells = rows[ri] || [];
+    for (let ci = from; ci < cells.length; ci++) if (text(cells[ci]) === label) return ci;
+    return -1;
+  };
+  /** The first value to the right of a label inside one row. */
+  const after = (ri, label, from = 0) => {
+    const ci = columnOf(ri, label, from);
+    const cells = rows[ri] || [];
+    for (let k = ci + 1; ci >= 0 && k <= ci + 4 && k < cells.length; k++) {
+      if (text(cells[k]) !== '') return cells[k];
+    }
+    return null;
+  };
+  /** The cell under a label -- where the tab keeps its ticks and bonuses. */
+  const under = (label, dc = 0) => {
+    const hit = find(label);
+    return hit ? at(hit[0] + 1, hit[1] + dc) : null;
+  };
+  return { t, ticked, columnOf, after, under };
+}
 
 /**
  * Read the workbook's Animal Companion tab into a companion block.
@@ -57,28 +89,7 @@ export function importAnimalCompanion(tab) {
   if (!tab) return b;
   const g = sheetReader(tab);
   const { rows, at, text, num, find } = g;
-  const t = (ri, ci) => text(at(ri, ci));
-  const ticked = (v) => v === true || /^(true|yes|y|x)$/i.test(String(v ?? '').trim());
-  /** The column a label occupies in one row, at or after `from`. */
-  const columnOf = (ri, label, from = 0) => {
-    const cells = rows[ri] || [];
-    for (let ci = from; ci < cells.length; ci++) if (text(cells[ci]) === label) return ci;
-    return -1;
-  };
-  /** The first value to the right of a label inside one row. */
-  const after = (ri, label, from = 0) => {
-    const ci = columnOf(ri, label, from);
-    const cells = rows[ri] || [];
-    for (let k = ci + 1; ci >= 0 && k <= ci + 4 && k < cells.length; k++) {
-      if (text(cells[k]) !== '') return cells[k];
-    }
-    return null;
-  };
-  /** The cell under a label -- where the tab keeps its ticks and bonuses. */
-  const under = (label, dc = 0) => {
-    const hit = find(label);
-    return hit ? at(hit[0] + 1, hit[1] + dc) : null;
-  };
+  const { t, ticked, columnOf, after, under } = gridTools(g);
 
   b.name = text(g.take('Name', 1));
   b.masterClass = text(g.take('Master Class', 1));
@@ -257,6 +268,214 @@ export function importAnimalCompanion(tab) {
       });
     }
   }
+
+  return b;
+}
+
+/**
+ * Read a Conjuration Companion tab into a conjured companion block.
+ *
+ * The tab is laid out after the Eidolon worksheet, so it reads the way the
+ * Animal Companion one does: labels are found rather than addressed, and the
+ * numbers the tab works out for itself -- the level, the Hit Dice, the BAB,
+ * the AC line, the saves, the skill totals, the form's own scores -- are not
+ * read, because `computeCompanion` works them out again from what was typed.
+ * What is read is the player's part: the name, the base form, the archetypes
+ * ticked, where the level comes from, the score overrides and increases, the
+ * typed bonuses, the talents, feats, skill ranks, attacks and tradition.
+ */
+export function importConjuredCompanion(tab) {
+  const b = defaultCompanion('conjured');
+  if (!tab) return b;
+  const g = sheetReader(tab);
+  const { rows, at, text, num, find, findAll } = g;
+  const { t, ticked, columnOf, after, under } = gridTools(g);
+  const taken = (label) => text(g.take(label, 1));
+  const takenNum = (label) => num(g.take(label, 1));
+
+  b.name = taken('Name');
+  b.masterClass = taken('Master Class');
+  b.levelSource = b.masterClass ? 'class' : 'casterLevel';
+  const override = g.take('Level Override', 1);
+  b.levelOverride = text(override) === '' || !Number.isFinite(Number(override)) ? null : Number(override);
+  b.masterLevelPenalty = Math.abs(takenNum('Master Lvl Penalty'));
+  b.size = taken('Size') || b.size;
+  b.alignment = taken('Alignment');
+  b.baseForm = taken('Base Form');
+  b.hpAbility = taken('Ability Score') || b.hpAbility;
+  b.hp.bonus = takenNum('Bonus HP');
+  b.attackBonus = takenNum('Misc Attack');
+  b.bonusFeats = takenNum('Bonus Feats');
+  b.dr = taken('DR');
+  b.resistances = taken('Resistances');
+  b.immunities = taken('Immunities');
+
+  // The attack ability is the "Ability" a row above "Total Attack"; the
+  // saves and the AC lines are labelled "Ability" too.
+  const attack = find('Total Attack');
+  if (attack && t(attack[0] - 1, attack[1]) === 'Ability') {
+    b.attackAbility = t(attack[0] - 1, attack[1] + 1) || b.attackAbility;
+  }
+
+  // Special qualities are two merged lines, the second starting back in the
+  // label's own column -- when there is a second: an empty worksheet row is
+  // gone by now, and the next label down must not be read as one.
+  const quality = find('Special Qualities');
+  if (quality) {
+    const second = t(quality[0] + 1, quality[1]);
+    b.specialQualities = [t(quality[0], quality[1] + 1), second === 'Form' ? '' : second]
+      .filter(Boolean).join('\n');
+  }
+
+  // The archetypes run down a column of labels with a tick beside each.
+  const archetypes = find('Archetypes');
+  if (archetypes) {
+    for (let ri = archetypes[0] + 1; ri < rows.length; ri++) {
+      const label = t(ri, archetypes[1]).toLowerCase();
+      const arch = CONJURED_ARCHETYPES.find((a) => a.label.toLowerCase() === label);
+      if (!arch) break;
+      if (ticked(at(ri, archetypes[1] + 1))) b.archetypes[arch.id] = true;
+    }
+  }
+
+  for (const [key, label] of [['fort', 'Good Fort'], ['ref', 'Good Ref'], ['will', 'Good Will']]) {
+    const hit = find(label);
+    if (hit) b.goodSaves[key] = ticked(at(hit[0] + 1, hit[1]));
+  }
+  b.ac.all = takenNum('To AC (All)');
+  b.ac.touch = takenNum('To Touch');
+  b.ac.ff = takenNum('Natural & other FF') + takenNum('To Armor') + takenNum('To Natural Armor');
+  b.cmdOther = num(under('Other Bonus'));
+  b.cmbOther = takenNum('CMB Bonus');
+  b.initBonus = takenNum('Initiative');
+
+  // Scores: a typed Base pins the score (blank leaves it to the form), and
+  // the Misc column is the player's. Everything beside them is worked out.
+  const scores = find('Scores');
+  if (scores) {
+    for (let ri = scores[0] + 1; ri < rows.length; ri++) {
+      const key = abilityKey(t(ri, scores[1]));
+      if (!key) break;
+      const base = at(ri, scores[1] + 1);
+      if (text(base) !== '') b.scores[key].base = num(base);
+      b.scores[key].misc = num(at(ri, scores[1] + 2));
+    }
+  }
+
+  const increases = find('Ability Score Increase');
+  if (increases) {
+    const picks = [];
+    for (let ri = increases[0] + 1; ri < rows.length; ri++) {
+      const level = at(ri, increases[1]);
+      if (text(level) === '' || !Number.isFinite(Number(level))) break;
+      picks.push({ level: Number(level), ability: t(ri, increases[1] + 1) });
+    }
+    if (picks.length) b.abilityIncreases = picks;
+  }
+
+  // Speed: a Base row, then rows whose type the player picked from the
+  // movement list.
+  const speed = find('Speed');
+  if (speed) {
+    const boxes = {};
+    for (let ri = speed[0] + 1; ri <= speed[0] + 4 && ri < rows.length; ri++) {
+      const type = t(ri, speed[1]).toLowerCase();
+      if (!type) continue;
+      const key = type === 'base' || type === 'land' ? 'base' : type;
+      if (Object.hasOwn(LEGACY_SPEED_TYPES, key)) boxes[key] = t(ri, speed[1] + 1);
+    }
+    b.speeds = legacySpeedRows(boxes);
+  }
+
+  // Talents: a name with its kind beside it -- (form) and (type) talents
+  // shape the companion, the others are the master's that bear on it.
+  const talents = find('Talents');
+  if (talents) {
+    const [tr, tc] = talents;
+    const kindCol = columnOf(tr, 'Kind', tc);
+    for (let ri = tr + 1; ri < rows.length; ri++) {
+      const name = t(ri, tc);
+      if (/^(Form \/ Type|HD)$/.test(name)) break;
+      if (!name) continue;
+      const kind = kindCol < 0 ? '' : t(ri, kindCol).toLowerCase();
+      const row = { ...emptyCompanionFeat(), name, source: kind === 'form' || kind === 'type' ? `(${kind})` : '' };
+      if (kind === 'other') row.group = 'other';
+      b.talents.push(row);
+    }
+  }
+
+  // Feats sit beside the Hit Die that grants each, then the bonus slots.
+  const feat = find('Feat');
+  if (feat) {
+    for (let ri = feat[0] + 1; ri < rows.length; ri++) {
+      const slot = at(ri, feat[1] - 1);
+      const bonus = /^bonus$/i.test(text(slot));
+      if (!bonus && (text(slot) === '' || !Number.isFinite(Number(slot)))) break;
+      const name = t(ri, feat[1]);
+      if (name) b.feats.push({ source: bonus ? 'Bonus' : `${Number(slot)} HD`, name, notes: '' });
+    }
+  }
+
+  // Skills: the ranks, the class-skill tick and the racial column are the
+  // player's; a Craft, Perform or Profession carries its variant beside the
+  // name. The bonus column is only their sum.
+  const skills = find('Conjured Skills') || find('Conjuration Skills');
+  if (skills) {
+    const [sr, sc] = skills;
+    const col = (label) => columnOf(sr, label, sc);
+    const cls = col('Class Skill');
+    const ranks = col('Ranks');
+    const race = col('Race');
+    const ability = Math.max(col('Base Ability'), col('Ability'));
+    const misc = col('Misc');
+    const seeded = new Map(seedSkills('conjured').map((s) => [s.name.toLowerCase(), s]));
+    const numAt = (ri, ci) => (ci < 0 ? 0 : num(at(ri, ci)));
+    const list = [];
+    for (let ri = sr + 1; ri < rows.length; ri++) {
+      const name = t(ri, sc);
+      if (!name) break;
+      const seed = seeded.get(name.toLowerCase());
+      list.push({
+        name,
+        spec: t(ri, sc + 1),
+        ability: (ability < 0 ? '' : t(ri, ability)) || seed?.ability || 'Int',
+        trained: !!seed?.trained,
+        classSkill: cls < 0 ? !!seed?.classSkill : numAt(ri, cls) > 0,
+        ranks: numAt(ri, ranks),
+        misc: numAt(ri, race) + numAt(ri, misc),
+      });
+    }
+    if (list.length) b.skills = list;
+  }
+
+  // An attack is three rows: the natural attack and whether it is primary,
+  // its qualities, then the damage and crit beside a to-hit already summed.
+  const attacks = find('Attacks');
+  if (attacks) {
+    const [ar, ac] = attacks;
+    for (let ri = ar + 1; ri < rows.length; ri++) {
+      if (t(ri, ac) !== 'Type') continue;
+      const type = t(ri, ac + 1);
+      if (!type) continue;
+      const role = text(after(ri, 'Attack Type', ac));
+      const critAt = columnOf(ri + 2, 'Crit', ac);
+      b.attacks.push({
+        type,
+        damage: text(after(ri + 2, 'Damage', ac)),
+        crit: critAt < 0 ? '' : `${t(ri + 2, critAt + 1)}${t(ri + 2, critAt + 2)}`.replace(/x/i, '×'),
+        primary: /^p/i.test(role) ? true : /^s/i.test(role) ? false : null,
+        bonus: 0,
+        qualities: t(ri + 1, ac + 1),
+      });
+    }
+  }
+
+  // The casting tradition: a name, and each drawback and boon a line.
+  b.tradition.name = taken('Tradition');
+  const lines = (label) => findAll(label)
+    .map(([ri, ci]) => text(g.rightOf(ri, ci, 1))).filter(Boolean);
+  b.tradition.drawbacks = lines('Drawback');
+  b.tradition.boons = lines('Boon');
 
   return b;
 }
