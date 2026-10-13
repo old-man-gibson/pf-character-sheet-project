@@ -1,7 +1,8 @@
 # What a Cloudflare deploy leaves out of the static files. The site is the
 # repository root, so this keeps the Worker's own sources, the test suites and
 # tooling, and anything a checkout may hold that is not the site -- above all
-# private/, the players' real characters -- off the public address.
+# private/, the players' real characters -- off the public address. The
+# Homebrew Workbench (forge/) is a page of the site and stays in.
 .git
 .github
 .claude
@@ -13,5 +14,4 @@ worker.js
 wrangler.jsonc
 tests
 tools
-forge
 gm-module
