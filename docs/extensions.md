@@ -134,6 +134,14 @@ is how something built by hand gets shared. A pack imported with the same id as 
 already here replaces it (that is how a friend's rev 2 lands); a local pack cannot take
 a bundled pack's id.
 
+**Moving the whole set.** **Export library** writes every pack under *Mine* and which
+packs are on (bundled ones included) as one `.json` (`format:
+`character-sheet-extension-library`). Import it in another browser or on the deployed
+site the same way as a pack: drop it on the page, or **Import packs…**. Packs not there
+yet are added, packs that differ are updated, packs already current are left alone, and
+the switches are applied; the notice says which browser the library came from, when,
+and the counts. Each pack under *Mine* also shows when it was last imported or saved.
+
 ### Disciplines
 
 The one shared table with a form of its own, because it is the one a player writes by

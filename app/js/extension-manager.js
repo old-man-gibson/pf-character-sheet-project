@@ -26,7 +26,8 @@ import { downloadFile } from './download.js';
 import { runtime } from './extension-runtime.js';
 import {
   BLOCK_KINDS, TABLE_KINDS, inspectExtension, normalizeExtension, normalizeBlock, blankExtension,
-  describeSummary, summarize, slugId, looksLikeExtension, blocksFromCharacter, mergeSphere, catalogueEntryKey,
+  describeSummary, summarize, slugId, looksLikeExtension, looksLikeLibrary, buildLibrary, planLibrary,
+  blocksFromCharacter, mergeSphere, catalogueEntryKey,
   splitAbilityType,
 } from './extensions.js';
 import { parsePaste, readStructured, splitChunk } from './paste-import.js';
@@ -271,7 +272,8 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
         </label>
         <div class="main">
           <div class="name">${esc(s.name)} <span style="opacity:.55;font-weight:400">rev ${esc(s.revision)}${s.author ? ` · ${esc(s.author)}` : ''}</span></div>
-          <div class="meta">${esc(describeSummary(s))}${s.description ? ` — ${esc(s.description)}` : ''}${sourceLink(s.source)}</div>
+          <div class="meta">${esc(describeSummary(s))}${s.description ? ` — ${esc(s.description)}` : ''}${sourceLink(s.source)}${
+  isBundled || !s.updatedAt ? '' : ` · ${s.origin === 'import' ? 'imported' : 'saved'} ${esc(String(s.updatedAt).slice(0, 10))}`}</div>
         </div>
         <div class="acts">
           ${isBundled
@@ -336,12 +338,14 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
 
       <h3>Mine, in this browser${tally(localItems)}</h3>
       ${localItems.length
-    ? section('local', localItems)
+    ? `<p class="hint">${libraryLine(localItems)}</p>${section('local', localItems)}`
     : '<p class="hint">Nothing yet. Start one below, or import a pack somebody sent you.</p>'}
 
       <div class="actions">
         <button class="primary" data-action="new">+ New extension</button>
-        <button data-action="import" title="One .json extension pack, or as many as you select at once">Import packs…</button>
+        <button data-action="import" title="One .json extension pack, as many as you select at once, or a library">Import packs…</button>
+        <button data-action="export-library" ${localItems.length ? '' : 'disabled'}
+          title="Every pack under Mine, and which packs are on, as one .json to import in another browser or on the site">Export library</button>
         <button data-action="paste" aria-pressed="${showPaste}">Paste JSON</button>
         <button data-action="from-character" title="Lift the open character's classes, race, feature groups and trackers into a new pack"
           ${currentCharacter() ? '' : 'disabled'}>From this character…</button>
@@ -353,6 +357,14 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
         <textarea rows="6" data-paste placeholder='{"format": "character-sheet-extension", "name": "…", …}'></textarea>
         <div class="actions" style="margin-top:6px"><button class="primary" data-action="paste-go">Import pasted JSON</button></div>
       </div>` : ''}`;
+  }
+
+  /** What this browser holds, in one line: how many, how many on, when the last one changed. */
+  function libraryLine(items) {
+    const on = items.filter((it) => it.enabled).length;
+    const latest = items.map((it) => String(it.s.updatedAt || '')).sort().pop();
+    return `${items.length} pack${items.length === 1 ? '' : 's'}, ${on} on${latest ? `. Last changed ${esc(latest.slice(0, 10))}` : ''}.
+      Export library writes them all, with the switches, as one file to import in another browser.`;
   }
 
   const packFiltering = () => !!lower(packQuery) || packShow !== 'all';
@@ -1367,6 +1379,7 @@ Hit Die: d12.
       applyPackFilter();
       q('[data-action="new"]')?.addEventListener('click', () => startEdit(blankExtension({ name: 'My extension' }), true));
       q('[data-action="import"]')?.addEventListener('click', () => q('[data-file]').click());
+      q('[data-action="export-library"]')?.addEventListener('click', () => exportLibrary());
       q('[data-file]')?.addEventListener('change', (e) => {
         // Copied out before the box is cleared: `files` is live, and clearing
         // the box (so that choosing the same files twice still fires) empties it.
@@ -1682,7 +1695,61 @@ Hit Die: d12.
 
   /* ---------------- bringing a pack in ---------------- */
 
+  /**
+   * A library: every pack it holds that is new or changed here is stored,
+   * and the switches it carries are applied to the packs this browser then
+   * has. Nothing is refreshed or drawn; the caller does that once.
+   */
+  async function applyLibrary(lib) {
+    const store = runtime.store;
+    const plan = planLibrary(lib, {
+      bundledIds: runtime.bundled.map((e) => e.id), local: store.list(), read: (id) => store.read(id),
+    });
+    const rows = [];
+    const failed = plan.skipped.map((s) => `${s.id}: ${s.why}`);
+    for (const doc of [...plan.add, ...plan.update]) {
+      try {
+        rows.push(await store.save(doc, { origin: 'import', enabled: plan.enabled[doc.id] ?? null }));
+      } catch (err) {
+        failed.push(err.name === 'QuotaExceededError' ? `${doc.id}: this browser is out of space` : `${doc.id}: ${err.message}`);
+        if (err.name === 'QuotaExceededError') break;
+      }
+    }
+    const bundledIds = new Set(runtime.bundled.map((e) => e.id));
+    const localIds = new Set(store.list().map((e) => e.id));
+    for (const [id, on] of Object.entries(plan.enabled)) {
+      try {
+        if (bundledIds.has(id)) await store.setEnabled(id, on, { bundled: true });
+        else if (localIds.has(id)) await store.setEnabled(id, on);
+      } catch (err) { failed.push(`${id}: could not switch — ${err.message}`); }
+    }
+    return {
+      rows, failed, added: plan.add.length, updated: plan.update.length, unchanged: plan.unchanged.length,
+    };
+  }
+
+  /** The import notice for a library: where it came from, and what it changed here. */
+  function libraryNotice(lib, r) {
+    const origin = [lib.from ? `from ${lib.from}` : '', lib.exportedAt ? `exported ${String(lib.exportedAt).slice(0, 10)}` : '']
+      .filter(Boolean).join(', ');
+    const parts = [`${r.added} added`, `${r.updated} updated`, `${r.unchanged} already current`];
+    return `Library${origin ? ` (${origin})` : ''}: ${parts.join(', ')}; switches applied.`;
+  }
+
+  async function importLibrary(lib, label = 'the library') {
+    const r = await applyLibrary(lib);
+    runtime.refresh();
+    notice = libraryNotice(lib, r);
+    error = r.failed.length ? `${label}: ${r.failed.length} pack${r.failed.length === 1 ? ' was' : 's were'} not imported — ${r.failed.slice(0, 6).join('; ')}.` : null;
+    showPaste = false;
+    say('ok', notice);
+    if (error) say('err', error);
+    render();
+    return { ok: !r.failed.length, error, library: r };
+  }
+
   async function importDoc(doc, label = 'the pack') {
+    if (looksLikeLibrary(doc)) return importLibrary(doc, label);
     const verdict = inspectExtension(doc);
     if (!verdict.ok) { error = `${label}: ${verdict.error}`; notice = null; render(); return verdict; }
     if (runtime.bundled.some((e) => e.id === verdict.summary.id)) {
@@ -1736,6 +1803,12 @@ Hit Die: d12.
     for (const file of files) {
       let doc;
       try { doc = JSON.parse(await file.text()); } catch (err) { failed.push(`${file.name} is not valid JSON`); continue; }
+      if (looksLikeLibrary(doc)) {
+        const r = await applyLibrary(doc);
+        done.push(...r.rows);
+        failed.push(...r.failed.map((f) => `${file.name}: ${f}`));
+        continue;
+      }
       const verdict = inspectExtension(doc);
       if (!verdict.ok) { failed.push(`${file.name}: ${verdict.error}`); continue; }
       if (runtime.bundled.some((e) => e.id === verdict.summary.id)) {
@@ -1775,6 +1848,26 @@ Hit Die: d12.
 
   function download(doc) {
     downloadFile(`${doc.id || 'extension'}.json`, JSON.stringify(doc, null, 1));
+  }
+
+  /** Every local pack and every switch, as one file named for the day. */
+  function exportLibrary() {
+    const store = runtime.store;
+    if (!store) return;
+    const off = store.disabledBundled();
+    const enabled = {};
+    for (const e of runtime.bundled) enabled[e.id] = !off.has(e.id);
+    const packs = [];
+    for (const row of store.list()) {
+      enabled[row.id] = row.enabled !== false;
+      const doc = store.read(row.id);
+      if (doc) packs.push(doc);
+    }
+    const lib = buildLibrary({ packs, enabled, from: globalThis.location?.host || '' });
+    downloadFile(`extension-library-${lib.exportedAt.slice(0, 10)}.json`, JSON.stringify(lib));
+    notice = `Exported ${packs.length} pack${packs.length === 1 ? '' : 's'} and the switches as one library file.`;
+    error = null;
+    render();
   }
 
   return {
@@ -1865,4 +1958,4 @@ export function parseNamedLines(text) {
   return out;
 }
 
-export { looksLikeExtension };
+export { looksLikeExtension, looksLikeLibrary };

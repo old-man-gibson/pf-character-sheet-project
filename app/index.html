@@ -334,7 +334,7 @@
   import { zip, safeName } from './js/zip.js';
   import { downloadFile } from './js/download.js';
   import { runtime as extensions } from './js/extension-runtime.js';
-  import { mountExtensionManager, looksLikeExtension } from './js/extension-manager.js';
+  import { mountExtensionManager, looksLikeExtension, looksLikeLibrary } from './js/extension-manager.js';
   import { mountMonsterTool } from './js/monster/picker.js';
   import { normalizeHex, readableOn } from './js/tracker-style.js';
 
@@ -966,7 +966,7 @@
     if (/\.json$/i.test(file.name || '')) {
       let doc = null;
       try { doc = JSON.parse(await file.text()); } catch { /* the sheet's importer will say why */ }
-      if (looksLikeExtension(doc)) { extManager.importDoc(doc); return; }
+      if (looksLikeExtension(doc) || looksLikeLibrary(doc)) { extManager.importDoc(doc); return; }
     }
     if (/\.xls[xm]$/i.test(file.name || '')) {
       say('info', `Converting ${file.name} — this runs in your browser; the workbook is not uploaded anywhere.`);

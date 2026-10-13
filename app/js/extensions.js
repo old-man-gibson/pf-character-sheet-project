@@ -617,6 +617,76 @@ export function looksLikeExtension(doc) {
   return !!doc && typeof doc === 'object' && doc.format === EXTENSION_FORMAT;
 }
 
+/* ---------------- a library: every local pack, as one file ---------------- */
+
+/**
+ * A library is the packs a browser holds under "Mine" and which packs are
+ * switched on, as one JSON file. Exported from one browser and imported in
+ * another (a second machine, the deployed site), it brings the whole set
+ * across in one drop, and importing it again later brings only what changed.
+ */
+export const LIBRARY_FORMAT = 'character-sheet-extension-library';
+
+export function looksLikeLibrary(doc) {
+  return !!doc && typeof doc === 'object' && doc.format === LIBRARY_FORMAT;
+}
+
+/**
+ * Build one. `packs` are the local packs' full documents; `enabled` maps
+ * every pack id this browser knows, bundled ones included, to whether it is
+ * on; `from` says where it was exported (a host name), for the import notice.
+ */
+export function buildLibrary({ packs = [], enabled = {}, from = '' } = {}) {
+  return {
+    format: LIBRARY_FORMAT,
+    formatVersion: 1,
+    exportedAt: new Date().toISOString().slice(0, 19),
+    from: str(from),
+    packs: arr(packs).filter(looksLikeExtension).map((p) => normalizeExtension(p)),
+    enabled: Object.fromEntries(Object.entries(obj(enabled)).map(([id, on]) => [id, !!on])),
+  };
+}
+
+/** A pack's content with the timestamps the store rewrites on every save left out. */
+const packFingerprint = (ext) => {
+  const { createdAt, updatedAt, ...rest } = normalizeExtension(ext);
+  return JSON.stringify(rest);
+};
+
+/**
+ * What importing a library would do here, before anything is written.
+ *
+ * `bundledIds` are the deployment's packs, which a local pack may not shadow;
+ * `local` is the store's `list()`; `read(id)` returns a stored pack's document.
+ * Each pack in the library lands in one of four lists: `add` (not here),
+ * `update` (here, and different), `unchanged` (here, and the same apart from
+ * the timestamps), `skipped` (not a pack, or a bundled id). `enabled` is the
+ * library's switch map limited to ids this browser will have.
+ */
+export function planLibrary(lib, { bundledIds = [], local = [], read = () => null } = {}) {
+  const plan = { add: [], update: [], unchanged: [], skipped: [], enabled: {} };
+  if (!looksLikeLibrary(lib)) return plan;
+  const bundled = new Set(arr(bundledIds).map(str));
+  const here = new Map(arr(local).map((row) => [row.id, row]));
+  for (const doc of arr(lib.packs)) {
+    const verdict = inspectExtension(doc);
+    if (!verdict.ok) { plan.skipped.push({ id: str(doc?.id || doc?.name || '?'), why: verdict.error }); continue; }
+    const { id } = verdict.summary;
+    if (bundled.has(id)) { plan.skipped.push({ id, why: 'the same id as a bundled pack' }); continue; }
+    if (!here.has(id)) { plan.add.push(doc); continue; }
+    const current = read(id);
+    if (current && packFingerprint(current) === packFingerprint(doc)) plan.unchanged.push(id);
+    else plan.update.push(doc);
+  }
+  const willHave = new Set([...bundled, ...here.keys(), ...plan.add.map((d) => str(d.id)), ...plan.update.map((d) => str(d.id))]);
+  for (const [id, on] of Object.entries(obj(lib.enabled))) {
+    // Ids a normalized pack would take, so a library written by hand still matches.
+    const key = slugId(id) || id;
+    if (willHave.has(key)) plan.enabled[key] = !!on;
+  }
+  return plan;
+}
+
 /**
  * Vet a pack before it is stored. Returns `{ok, error, summary}` the way
  * `inspectDocument` does for a character, so a host page can treat both alike.

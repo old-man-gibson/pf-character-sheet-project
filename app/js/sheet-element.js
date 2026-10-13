@@ -60,7 +60,7 @@ import {
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
 import { COMPANION_KINDS, COMPANION_LABELS } from './companions.js';
-import { applyBlock, looksLikeExtension, removeArchetype } from './extensions.js';
+import { applyBlock, looksLikeExtension, looksLikeLibrary, removeArchetype } from './extensions.js';
 import { describePublish, publishDocument } from './publish.js';
 import { SHEET_LINK, adoptSheetStyles } from './styles.js';
 import {
@@ -1805,10 +1805,11 @@ export class CharacterSheetElement extends HTMLElement {
     } catch (err) {
       return fail(`${name} is not valid JSON — ${err.message}`);
     }
-    // An extension pack is not a character. The sheet cannot store one, but a
-    // host page with an extension manager can, so it is handed up rather than
-    // refused; without a listener the player is told what the file was.
-    if (looksLikeExtension(doc)) {
+    // An extension pack (or a library of them) is not a character. The sheet
+    // cannot store one, but a host page with an extension manager can, so it
+    // is handed up rather than refused; without a listener the player is told
+    // what the file was.
+    if (looksLikeExtension(doc) || looksLikeLibrary(doc)) {
       const event = new CustomEvent('extension-import', {
         detail: { extension: doc }, bubbles: true, composed: true, cancelable: true,
       });
