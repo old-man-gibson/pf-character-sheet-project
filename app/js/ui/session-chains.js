@@ -9,7 +9,7 @@ import { sessionRolls } from '../model/session-rolls.js';
 export function linkEditor(model, owner, ref) {
   const targets = chainTargets(model);
   return `<details class="session-links" open><summary>Linked follow-ups (${owner.links?.length || 0})</summary>
-    <p class="hint">After using this ability, offer another ability or a choice group. Links can lead to further links. Describe the feat or rule granting the link.</p>
+    <p class="hint">After this ability is used, offer another ability or a choice group. A link can lead to further links. Describe the feat or rule that grants the link.</p>
     ${(owner.links || []).map((link,i)=>{
       const attr = field=>`data-link-owner="${ref}" data-link-index="${i}" data-link-field="${field}"`;
       return `<div class="session-link-row"><label>Then use <select ${attr('target')}><option value="">Choose an ability or group</option>${link.target && !targets.some(t=>t.key===link.target)?`<option selected value="${esc(link.target)}">Missing target</option>`:''}${targets.map(t=>`<option value="${esc(t.key)}" ${t.key===link.target?'selected':''}>${esc(t.title)}</option>`).join('')}</select></label>

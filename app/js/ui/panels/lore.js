@@ -76,32 +76,33 @@ export function renderProgressionPanel(model, ctx) {
           </tr>`).join('')}</tbody>
         </table></div>
         <p class="hint">
-          Class tracks pick from the classes on the Overview; HP, ranks and saves per level
-          are read-only, computed gestalt-style from the classes chosen on that row
+          Class tracks pick from the classes on the Overview. HP, ranks and saves per level
+          are read-only. They are computed gestalt-style from the classes chosen on that row
           (good saves ½, poor ⅓). Rows past level ${level} are plans. Class features live
-          in the groups below; ability-boosting choices on the <strong>Stats</strong> tab.
+          in the groups below. Ability-boosting choices live on the <strong>Stats</strong> tab.
         </p>
         <p class="hint">
           <strong>Rule groups.</strong> Under each feature column's name, <em>+ level rule</em>
-          adds a named, coloured schedule saying which levels it grants on — write
-          <code>odd</code>, <code>even</code>, <code>2, +4</code> (2 and every 4 thereafter),
+          adds a named, coloured schedule. The schedule says which levels the column grants on.
+          Write <code>odd</code>, <code>even</code>, <code>2, +4</code> (2 and every 4 thereafter),
           <code>1, 2, +2</code> (1st and every even level), <code>5-10</code>, or a list.
-          Terms add up left to right, so <code>2, +4, 3</code> is that schedule plus a
-          one-off at 3, and <code>odd, -13</code> takes one away. A column with no rule
-          grants at every level, as before.
+          Terms add up left to right. <code>2, +4, 3</code> is that schedule plus a
+          one-off at 3. <code>odd, -13</code> takes level 13 away. A column with no rule
+          grants at every level.
         </p>
         <p class="hint">
-          <strong>Several rules can share one column</strong> — give a kineticist's Wild Talent
-          column <code>{Infusions, odd}</code> and <code>{Utility, even}</code> and each level
-          is tinted and tagged by whichever grants it. A lone group goes untagged; <em>+ names</em> /
-          <em>− names</em> under the column overrides either way, and the ▾ beside the column's
-          name folds its groups down to their coloured names. Typing the whole braced form into either
-          box fills both. Levels count the <em>class's</em> own levels; start a rule with
-          <code>char:</code> to count character levels instead. Anything that isn't a level
-          list is treated as a formula over <code>classLevel</code> / <code>charLevel</code>,
-          e.g. <code>classLevel % 3 == 1</code>. A level you have reached that grants something
-          you haven't filled in is outlined and counted on the group header; one you haven't
-          reached yet is only faintly marked.
+          <strong>Several rules can share one column</strong>. Give a kineticist's Wild Talent
+          column <code>{Infusions, odd}</code> and <code>{Utility, even}</code>. Each level
+          is then tinted and tagged by the group that grants it. A lone group goes untagged.
+          <em>+ names</em> / <em>− names</em> under the column overrides that either way. The ▾
+          beside the column's name folds its groups down to their coloured names. Typing the
+          whole braced form into either box fills both. Levels count the <em>class's</em> own
+          levels. Start a rule with <code>char:</code> to count character levels instead.
+          Anything that is not a level list is treated as a formula over
+          <code>classLevel</code> / <code>charLevel</code>, e.g. <code>classLevel % 3 == 1</code>.
+          A level you have reached that grants something you have not filled in is outlined
+          and counted on the group header. A level you have not reached yet is only faintly
+          marked.
         </p>
       </section>`)}
     </div>
@@ -218,7 +219,7 @@ function packOffers(className, offers) {
     return `<div class="cfoffers">
       <div class="offerhead">
         <span>In your packs</span>
-        <span class="hint">Named on the ladder and carried by a pack. Open one to read it; adding copies its text here, yours to edit.</span>
+        <span class="hint">Named on the ladder and carried by a pack. Open one to read it. Adding copies its text here, where you can edit it.</span>
         ${offers.length > 1 ? `<button data-action="add-cfnote-pack" data-class="${esc(className)}">+ Add all ${offers.length}</button>` : ''}
       </div>
       ${offers.map((o) => `<details class="cfoffer">
@@ -623,10 +624,9 @@ export function renderExtrasPanel(model, ctx) {
         <label class="fld tall" style="margin-top:10px"><span>Notes</span>
           ${prose(model, 'data-set="extras.approvalNotes"', x.approvalNotes, 3, 'grow')}</label>
         <p class="hint">Custom archetypes, feats and items that needed a sign-off, and where the
-          approval lives. The two short columns carry the whole of what was typed on their
-          tooltips, so a long name is cut on screen and never lost; the Link column takes the
-          rest of the row, since a URL is the one thing here that cannot be abbreviated.
-          The notes box reads {…} like the rest of the sheet.</p>
+          approval lives. The two short columns show their full text on hover, so a long name
+          is cut on screen but never lost. The Link column takes the rest of the row, because
+          a URL cannot be abbreviated. The notes box reads {…} like the rest of the sheet.</p>
       </section>
       ${systemExtrasPanel(x, 'extras', 'ExtrasNotes')}
     </div>`;

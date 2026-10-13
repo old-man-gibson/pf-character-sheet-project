@@ -75,19 +75,19 @@ export function renderTrackersPanel(model, ctx) {
         </div>`;
   })()}
         <p class="hint">
-          Formulas are plain text and are never executed as code — they are parsed and
-          evaluated in a sandbox, and every one is visible to your GM in the Formula Audit tab.
+          Formulas are plain text and are never executed as code. They are parsed and
+          evaluated in a sandbox. Every formula is visible to your GM in the Formula Audit tab.
           Functions: <code>floor</code> <code>ceil</code> <code>round</code> <code>min</code>
           <code>max</code> <code>sum</code> <code>abs</code> <code>clamp</code> <code>if</code>
           <code>mod</code> <code>iterations</code> <code>dice</code> <code>step</code> <code>tags</code>.
           <button data-view data-action="formulas" class="linkish"
             title="The guide, a scratchpad, and every value with its current number"
-            >ƒx Formulas</button> has all of them explained, somewhere to try one, and every
-          value this character can read with what it is worth now.
+            >ƒx Formulas</button> explains each function, has a box to try one in, and lists
+          every value this character can read with its current number.
         </p>
         <p class="hint">
           <strong>Min</strong> is 0 unless you give it a formula. A negative min makes a two-sided
-          meter that swings below zero — e.g. max <code>floor((burn.max + qi.max) / 4)</code>
+          meter that runs below zero. Example: max <code>floor((burn.max + qi.max) / 4)</code>
           and min <code>-floor((burn.max + qi.max) / 4)</code> for a ±7 pool. Custom trackers
           can be edited later with ✎.
         </p>
@@ -496,8 +496,8 @@ function trackerEditRow(model, ctx, t) {
         </div>
         ${previewBox(model, 'edit', d.maxFormula, d.minFormula)}
         ${trackerNoteField(model, t, d.note)}
-        ${t.source === 'sheet' ? `<p class="hint">Seeded from the sheet’s Resource Tracker — your
-          changes are saved against it, and Reset restores the sheet’s version.</p>` : ''}
+        ${t.source === 'sheet' ? `<p class="hint">Seeded from the sheet’s Resource Tracker. Your
+          changes are saved against it. Reset restores the sheet’s version.</p>` : ''}
         <div class="tstyle" data-tstyle-for="${esc(t.id)}">${trackerStyleEditor(model, ctx, t)}</div>
         <div style="display:flex;gap:6px">
           <button class="primary" data-action="save-tracker" data-id="${esc(t.id)}">Save</button>
@@ -525,11 +525,11 @@ function trackerNoteField(model, t, value) {
       <span class="hint">
         <code>self</code> is this tracker: ${facts.map((k) => `<code>self.${k}</code>`).join(' ')}.
         Elsewhere on the character the same numbers are
-        <code>tracker.${esc(t.id)}.max</code> and friends — that id is fixed when the
-        tracker is created and does not follow a rename.<br>
-        Burn, for example: <code>Nonlethal {= self.current * level}, +{= self.current} to DCs</code>.
+        <code>tracker.${esc(t.id)}.max</code> and the other fields under that id. The id is set when the
+        tracker is created and does not change on a rename.<br>
+        Example for Burn: <code>Nonlethal {= self.current * level}, +{= self.current} to DCs</code>.
         A <code>{name = …}</code> written here shows its value but is not published to the rest
-        of the character, because a note reads the pool rather than defining it.
+        of the character. A note reads the pool; it does not define it.
       </span>
     </label>`;
 }
@@ -578,9 +578,9 @@ export function trackerStyleEditor(model, ctx, t) {
         <div style="flex:1;display:grid;gap:5px">
           ${zoneRows}
           <div><button data-add-zone>+ Zone</button>
-            <span class="hint">Highlight a value or range in its own colour. Bounds are formulas —
-              <code>floor(${esc(zoneExample)})</code> for a band a third of the way up — and a labelled zone
-              shows its name on the ${t.meter ? 'meter' : 'tracker'} while the value sits in it.</span></div>
+            <span class="hint">Highlight a value or range in its own colour. Bounds are formulas, for example
+              <code>floor(${esc(zoneExample)})</code> for a band a third of the way up. A labelled zone
+              shows its name on the ${t.meter ? 'meter' : 'tracker'} while the value is inside it.</span></div>
         </div>
       </div>
       <div class="tstyle-row">

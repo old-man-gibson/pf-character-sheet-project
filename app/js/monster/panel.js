@@ -248,13 +248,13 @@ export function renderStatBlockPanel(model, ctx = {}) {
       ${(c.raceTraits || []).some((t) => String(t.name || '').trim() || String(t.text || '').trim()) ? `<h4 class="sb-section">${m ? 'Special Abilities' : 'Race traits'}</h4>
       ${(c.raceTraits || []).filter((t) => String(t.name || '').trim() || String(t.text || '').trim()).map((t) => `<div class="sb-ability"><b>${esc(t.name || '—')}</b> ${shown(model, t.text)}</div>`).join('')}` : ''}
       ${m?.description ? `<h4 class="sb-section">Description</h4><div class="sb-line sb-prose">${shown(model, m.description)}</div>` : ''}
-      <p class="hint">Every figure here is the sheet's own, worked out now: a score changed on the Stats tab, a buff ticked on the dashboard or a condition on the Overview moves this block the way it moves everything else. Hover a number for its working.</p>
+      <p class="hint">Every figure here is computed from the sheet now. A score changed on the Stats tab, a buff ticked on the dashboard or a condition on the Overview changes this block as it changes everything else. Hover a number for its working.</p>
     </section>`;
 
     const systems = dashSystemCards(model);
     const systemsPanel = systems ? `<section class="panel span2 sb-systems">
       <h3>From the sub-systems</h3>
-      <p class="hint">What the creature carries on its sub-system tabs, as the session dashboard shows it; the pips and squares spend from the one pool the tab holds. The ⚙ tab manager turns a sub-system's tab on, and the class row's <em>Systems</em> toggles on the Overview mark one before anything is typed into it.</p>
+      <p class="hint">What the creature holds on its sub-system tabs, as the session dashboard shows it. The pips and squares spend from the same pool the tab holds. The ⚙ tab manager turns a sub-system's tab on. The class row's <em>Systems</em> toggles on the Overview mark a system before anything is typed into it.</p>
       <div class="grid dashboard">${systems}</div>
     </section>` : '';
 
@@ -317,7 +317,7 @@ function editPanel(model, m, ctx) {
     if (!m) {
       return `<section class="panel span2">
         <h3>Monster fields</h3>
-        <p class="hint">This character has no monster block, so the lines a Bestiary entry carries and a character sheet does not — CR and XP, senses and aura, spell-like abilities, ecology, description — are left off. Giving it one puts them on this tab to fill in; nothing else about the character changes.</p>
+        <p class="hint">This character has no monster block. The lines a Bestiary entry has and a character sheet does not (CR and XP, senses and aura, spell-like abilities, ecology, description) are left off. Giving it a block puts those fields on this tab to fill in. Nothing else about the character changes.</p>
         <button data-action="monster-block">Give this character a monster block</button>
       </section>`;
     }
@@ -326,7 +326,7 @@ function editPanel(model, m, ctx) {
     const subtypes = Array.isArray(m.subtypes) ? m.subtypes.join(', ') : String(m.subtypes || '');
     const body = `<section class="panel span2 sb-edit">
       <h3>Monster fields</h3>
-      <p class="hint">What the block prints that no other tab holds. Scores, AC columns, saves, hit points, attacks, feats, skills and the special abilities are on their own tabs — Stats, Overview, Equipment, Feats &amp; Mythic, Skills, and the race-trait rows on the Overview — and this block reads them from there. Prose fields take <code>{…}</code> formulas, so a DC written as <code>{= 10 + con.mod + floor(level / 2)}</code> follows the score.</p>
+      <p class="hint">The fields the block prints that no other tab holds. Scores, AC columns, saves, hit points, attacks, feats, skills and the special abilities are on their own tabs: Stats, Overview, Equipment, Feats &amp; Mythic, Skills, and the race-trait rows on the Overview. This block reads them from there. Prose fields take <code>{…}</code> formulas. A DC written as <code>{= 10 + con.mod + floor(level / 2)}</code> follows the score.</p>
       <div class="sb-fields">
         ${field('CR', t('cr', '1/2, 5, 30…'))}
         ${field('XP', num('monster.xp', m.xp ?? 0))}
@@ -380,7 +380,7 @@ function unreadPanel(model, m) {
     if (!rows.length) return '';
     return `<section class="panel span2">
       <h3>Not read <span class="badge">${rows.length}</span></h3>
-      <p class="hint">Lines of the pasted block the reader could not place. Copy one into the field it belongs in above, or on the Overview, then remove it; a line kept here is kept with the creature.</p>
+      <p class="hint">Lines of the pasted block the reader could not place. Copy a line into the field it belongs in above, or on the Overview, then remove it. A line kept here is saved with the creature.</p>
       <div class="tablewrap"><table class="gridtab"><tbody>
         ${rows.map((r, ri) => `<tr><td>${itemText('monster.unread', ri, 'text', r.text)}</td>${rowTools('monster.unread', ri)}</tr>`).join('')}
       </tbody></table></div>

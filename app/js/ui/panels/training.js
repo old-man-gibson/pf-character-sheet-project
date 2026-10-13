@@ -616,19 +616,19 @@ export function blendedPanel(model, pairs) {
       </div>`;
   }).join('')}
       <p class="hint">
-        One pool of talents, spent any of the ways ticked under <strong>Counts as</strong>: the
+        One pool of talents, spent on any kind ticked under <strong>Counts as</strong>. The
         sphere on each row decides whether a talent is martial (Sphere BAB / DC), magical
         (Sphere CL / DC) or a skill talent (ranks in the sphere's associated skill). Martial
-        and magical each keep their own type and ability score, because a blended class rarely
-        advances at the same rate as both; skill talents read the one operative modifier. A skill
-        class keeps both its ladders here, and either can be spent on any kind it reaches. A class
-        that reaches skill talents gains a [utility] ladder too: by default its any talents keep the
-        class's Talents / level and its [utility] talents come at the levels you write (even, odd,
-        "2, +2"), or choose a tier from the book's table, or Custom rules for both. Unticking skill
-        hides that ladder and the setting without losing them. A talent in a sphere of a kind the
-        class does not reach is counted nowhere and marked on its row. This group heads the tab of
-        every kind a class reaches and is the same on each: what you type on one tab is what the
-        others are showing.
+        and magical each keep their own type and ability score, since a blended class rarely
+        advances at the same rate in both. Skill talents read the one operative modifier. A skill
+        class keeps both its ladders here. Either ladder can be spent on any kind it reaches. A class
+        that reaches skill talents gains a [utility] ladder too. By default its any talents keep the
+        class's Talents / level, and its [utility] talents come at the levels you write (even, odd,
+        "2, +2"). You can instead choose a tier from the book's table, or Custom rules for both
+        ladders. Unticking skill hides that ladder and the setting without losing them. A talent in
+        a sphere of a kind the class does not reach is counted nowhere and is marked on its row.
+        This group heads the tab of every kind the class reaches and is the same on each. What you
+        type on one tab shows on the others.
       </p>
     </section>`;
   }

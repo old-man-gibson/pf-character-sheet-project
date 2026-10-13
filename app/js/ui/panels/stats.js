@@ -133,7 +133,7 @@ export function renderStatsPanel(model, ctx) {
         <p class="hint">
           <strong>ABP</strong>, <strong>Array</strong> and <strong>Level/4</strong> are
           filled in from the picks below and cannot be typed over.
-          <strong>Attuned</strong> is a single +${ATTUNEMENT_BONUS}, and unlocks at
+          <strong>Attuned</strong> is a single +${ATTUNEMENT_BONUS}. It unlocks at
           level ${ATTUNEMENT_MIN_LEVEL}${unlocked ? '' : ' (locked)'}.
         </p>
         ${over.length ? `<p class="hint warn">
@@ -177,11 +177,11 @@ export function renderStatsPanel(model, ctx) {
           </table>
         </div>
         <p class="hint">
-          Temporary bonuses feed the Temp Score used by every derived stat;
-          the permanent Total is left untouched. <strong>Fwd</strong> is what a rule
-          written elsewhere on the sheet sends here — <code>{str.score += 2 as size}</code>
-          for a permanent one, and either <code>{str.temp += 2 as size}</code> or
-          <code>{str.score += 2 as temp.size}</code> for a temporary one — and points
+          Temporary bonuses feed the Temp Score used by every derived stat.
+          The permanent Total is not changed. <strong>Fwd</strong> is what a rule
+          written elsewhere on the sheet sends here. Write <code>{str.score += 2 as size}</code>
+          for a permanent one. Write <code>{str.temp += 2 as size}</code> or
+          <code>{str.score += 2 as temp.size}</code> for a temporary one. The badge points
           back at the sentence that sent it.
         </p>
       </section>
@@ -306,21 +306,21 @@ function defenceBonusPanel(model) {
       </table></div>
       <p class="hint">
         Each cell takes a number or a formula, so a conditional bonus can be written as
-        the rule it is — Force Redirection's
-        <code>min(str.mod - dex.mod, 3 + floor(bab / 2))</code> keeps up when BAB moves,
-        where a typed-in number would not. Formulas read abilities, level, BAB and any
-        name defined in prose, and show in the GM's Formula Audit.
+        a rule. Example: Force Redirection's
+        <code>min(str.mod - dex.mod, 3 + floor(bab / 2))</code> updates when BAB changes.
+        A typed-in number would not. Formulas read abilities, level, BAB and any
+        name defined in prose. They show in the GM's Formula Audit.
       </p>
       <p class="hint">
-        Natural-armour and enhancement bonuses do not count against <strong>touch</strong>,
-        and dodge is lost while <strong>flat-footed</strong> — both follow from the column,
+        Natural-armour and enhancement bonuses do not count against <strong>touch</strong>.
+        Dodge is lost while <strong>flat-footed</strong>. Both follow from the column,
         so all three numbers move together. The three <strong>ABP</strong> columns follow the
-        character's level along the progression's ladder and are not typed; each is paired
+        character's level along the progression's ladder and are not typed. Each is paired
         with the typed bonus of the same kind (resistance, deflection, enhanced natural
-        armour), and the pair adds up to at most +${ABP_DEFENCE_CAP} — unless the typed side is
-        past +${ABP_DEFENCE_CAP} by itself, in which case it stands alone.${savesSheet || acSheet ? `
+        armour). The pair adds up to at most +${ABP_DEFENCE_CAP}. If the typed side is
+        past +${ABP_DEFENCE_CAP} by itself, it stands alone.${savesSheet || acSheet ? `
         <strong>Sheet</strong> is what the imported workbook's total held beyond the columns
-        the export could read. Move it into the columns it belongs in: once a table's Sheet
+        the export could read. Move it into the columns it belongs in. Once a table's Sheet
         cells are all cleared, the column goes.` : ''}
       </p>
     </section>`;
@@ -372,9 +372,9 @@ function milestonePicksPanel(model) {
       </table></div>
       <p class="hint">
         <strong>Level/4</strong> is +1 at every fourth level. <strong>Mythic</strong> is
-        +2 at every even tier — the same increases as the ladder on
-        <strong>Feats &amp; Mythic</strong>, either place edits the one set.
-        Currently level ${level}, tier ${tier}; anything past that is greyed and does not
+        +2 at every even tier. These are the same increases as the ladder on
+        <strong>Feats &amp; Mythic</strong>. Either place edits the one set.
+        Currently level ${level}, tier ${tier}. Anything past that is greyed and does not
         count yet.
       </p>
     </section>`;
@@ -452,7 +452,7 @@ function abpPicksPanel(model) {
       <p class="hint">
         +2 each. The two tracks advance on different levels, so most rows offer a
         choice on one side only. Levels 11 and 12 raise the ability chosen at 6 and 7
-        rather than offering a new choice. Rows above level ${level} are greyed: they
+        instead of offering a new choice. Rows above level ${level} are greyed. They
         are planned but do not count toward the score yet.
       </p>
     </section>`;
@@ -479,7 +479,7 @@ function arrayPicksPanel(model) {
   return `<section class="panel">
       <h3>Optional array</h3>
       <p class="hint warn" style="margin-top:0">
-        Bought separately, with Primordia shards — these do not come with the level.
+        Bought separately, with Primordia shards. These do not come with the level.
       </p>
       <div class="tablewrap"><table class="build picks">
         <thead><tr><th class="num">Lvl</th>${
@@ -504,8 +504,8 @@ function arrayPicksPanel(model) {
           </tr>`;
   }).join('')}</tbody>
       </table></div>
-      <p class="hint">+2 each — four picks at 8, three at 12 and 16. The first three
-        columns are one choice raised again later; only the fourth is chosen anew each
+      <p class="hint">+2 each. Four picks at 8, three at 12 and 16. The first three
+        columns are one choice raised again later. Only the fourth is chosen anew each
         time.${c.progressionPicks?.arrayNote
       ? ` Sheet note: ${esc(String(c.progressionPicks.arrayNote).replace(/^Array \(Optional\)\s*/, '').replace(/\s+/g, ' '))}` : ''}</p>
     </section>`;

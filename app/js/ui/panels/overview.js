@@ -318,11 +318,10 @@ function dashArrangePanel(model) {
         ${custom ? '<button style="margin-left:auto" data-action="dash-cards-reset" title="Back to the automatic arrangement: the standing cards plus whatever this character casts or manifests with">Reset to automatic</button>' : ''}
       </h3>
       <p class="hint">
-        The cards are fixed building blocks; which show, and in what order, is yours.
-        Left automatic, the caster cards come and go with what the character uses; the
-        first change you make here pins the arrangement. The reference lists — veils,
-        readied maneuvers, talents — are below, for whatever your playstyle keeps
-        reaching for.
+        The cards are fixed. You choose which ones show and in what order.
+        On automatic, the caster cards appear and disappear with the systems the character uses.
+        The first change you make here pins the arrangement. The reference lists (veils,
+        readied maneuvers, talents) are below. Add the ones you use often.
       </p>
       <div class="rowlist">${visible.map(row).join('')}</div>
       ${hidden.length ? `<h4 class="subhead" style="margin-top:10px">More to add</h4>
@@ -506,28 +505,28 @@ function buffsPanel(model, ctx) {
           ${(b.bonuses || []).map(bonusRow).join('')}
           <button data-action="buff-bonus-add" data-index="${i}">+ Add bonus</button>
         </div>
-        <p class="hint">Extra bonuses reach what the dials do not: an ability score cascades
-          into everything built on its modifier; <em>Save DCs</em> and <em>Essence pool</em>
-          show where those numbers are read. <em>Size</em> comes in types that stack with
-          each other, while within a type only the largest counts: <em>true</em> changes
-          the size itself — attack, AC, CMB, CMD and every weapon's damage dice along the
-          official chart — <em>effective</em> ("treated as larger") steps the dice alone,
-          and <em>stacking</em> is for the odd item that makes size effects stack outright
-          (wraps of suppressed size): it sums with everything and carries the full true
-          bundle. Nothing grows past Colossal nor shrinks past Fine — modifiers and
-          dice alike run off the capped steps. Riders like sneak keep their dice, and
-          reach stays yours. Values take formulas, like the dials.</p>
+        <p class="hint">Extra bonuses cover targets the dials do not. An ability score bonus
+          changes everything built on that modifier. <em>Save DCs</em> and <em>Essence pool</em>
+          show where those values are read. <em>Size</em> has three types. Different types
+          stack with each other. Within one type only the largest counts. <em>True</em> changes
+          the size itself: attack, AC, CMB, CMD and every weapon's damage dice follow the
+          official chart. <em>Effective</em> ("treated as larger") steps the damage dice only.
+          <em>Stacking</em> is for items that make size effects stack outright
+          (wraps of suppressed size). It sums with everything and applies the full true
+          bundle. Nothing grows past Colossal or shrinks past Fine. Modifiers and
+          dice both use the capped steps. Riders like sneak attack keep their own dice.
+          Reach does not change. Values take formulas, like the dials.</p>
         <label class="fld" style="margin-top:6px"><span>Note</span>
           ${prose(model, `data-item="${list}|${i}|note"`, b.note, 2, 'grow', null, {
     inactive: !b.on,
     inactiveTitle: 'This buff is off, so the bonus is not applying. Tick the buff to switch it on.',
   })}</label>
-        <p class="hint">The note reads {…} like prose: a definition written here — say
-          <code>{deathgrip.dmg.max = 2 * (1 + essence.shoulder) * if(hp.current / hp.total &lt; 0.5, 2, 1)}</code>
-          — is a name the whole sheet can then read: a weapon's dice, a tracker, another buff.
-          A <em>definition</em> stands whether the buff is ticked or not, so a reference to it never
-          breaks; a value that should switch says so itself, with if(…). A <em>bonus</em>
-          (<code>{skill.stealth += 4}</code>) waits for the tick like every dial above, and shows
+        <p class="hint">The note reads {…} like prose. A definition written here, for example
+          <code>{deathgrip.dmg.max = 2 * (1 + essence.shoulder) * if(hp.current / hp.total &lt; 0.5, 2, 1)}</code>,
+          is a name the whole sheet can read: a weapon's dice, a tracker, another buff.
+          A <em>definition</em> applies whether the buff is ticked or not, so a reference to it never
+          breaks. A value that should switch must say so itself, with if(…). A <em>bonus</em>
+          (<code>{skill.stealth += 4}</code>) applies only while the buff is ticked, like every dial above. It shows
           ${b.on ? 'in gold while the buff is on' : '<span class="tok push off">greyed</span> while it is off'}.</p>
       </div>`;
     })();
@@ -539,10 +538,10 @@ function buffsPanel(model, ctx) {
         ${buffs.map(row).join('') || '<p class="empty">No buffs yet.</p>'}
       </div>
       ${editor}
-      <p class="hint">A ticked buff rides the same machinery as a condition: attacks, AC,
-        saves, skills, initiative and damage all show their <em>now</em> value with it in.
-        Every dial takes a number or a formula — <code>1 + essence.shoulder</code> keeps a
-        banner's bonus right as the essence moves.</p>
+      <p class="hint">A ticked buff applies the same way as a condition. Attacks, AC,
+        saves, skills, initiative and damage show their <em>now</em> value with the buff included.
+        Every dial takes a number or a formula. <code>1 + essence.shoulder</code> keeps a
+        banner's bonus current as the essence changes.</p>
     </section>`;
   }
 
@@ -672,7 +671,7 @@ function dashSpeedCard(model) {
       <h3>Movement</h3>
       ${rows.length ? rows.map(line).join('')
     : '<p class="empty">No movement rates yet — the Speed panel on the build Overview takes them.</p>'}
-      ${rows.length ? '<p class="hint">×2 is a double move, and as far as a charge reaches; run is ×4 — ×3 in heavy armour or under a heavy load.</p>' : ''}
+      ${rows.length ? '<p class="hint">×2 is a double move and the charge distance. Run is ×4, or ×3 in heavy armour or under a heavy load.</p>' : ''}
     </section>`;
   }
 
@@ -718,8 +717,8 @@ function dashEffectsCard(model) {
       <h3>Active effects</h3>
       <div class="effectlist">${effects.map(row).join('') || '<p class="empty">Nothing running.</p>'}</div>
       <div style="margin-top:8px">${addButton('effects', 'Add effect', { name: '', note: '', on: true })}</div>
-      <p class="hint">Reminders, not rules: these move no numbers. A bonus with numbers
-        behind it belongs in <strong>Buffs</strong> above, where it moves everything.</p>
+      <p class="hint">These are reminders only. They change no numbers. A bonus with numbers
+        belongs in <strong>Buffs</strong> above, where it applies to every total.</p>
     </section>`;
   }
 
@@ -787,7 +786,7 @@ function dashQuickCard(model, ctx) {
         <span class="dashsep" aria-hidden="true"></span>
         ${restButtons()}
       </div>
-      <p class="hint">Type an amount, then press what happened to it. The strip above follows along.</p>
+      <p class="hint">Type an amount, then press the button for what happened. The strip above updates.</p>
     </section>`;
   }
 
@@ -836,8 +835,8 @@ function dashVancianCard(model) {
       </h3>
       ${classes.map(classRow).join('')}
       ${prepared.length ? `<div class="dashspells">${prepared.map(prow).join('')}</div>` : ''}
-      <p class="hint">Pips spend an anonymous slot; squares spend a prepared casting —
-        the Vancian tab holds the tables, DCs and spell lists.</p>
+      <p class="hint">Pips spend an anonymous slot. Squares spend a prepared casting.
+        The Vancian tab holds the tables, DCs and spell lists.</p>
     </section>`;
   }
 
@@ -924,7 +923,7 @@ function dashSpheresCard(model) {
       ${lineHtml('Save DC', dcShown(model, m.globalDC), true)}
       ${line('Spell points', `${m.availableSP ?? m.totalSP ?? 0} of ${m.totalSP ?? 0}`)}` : ''}
       ${combat ? lineHtml('Practitioner DC', dcShown(model, combat.practitionerDC), true) : ''}
-      ${m ? `<p class="hint">Points spent in play live on their tracker in Resources; the
+      ${m ? `<p class="hint">Points spent in play go on their tracker in Resources. The
         talents are on Magic Spheres.</p>` : ''}
     </section>`;
   }
@@ -1157,7 +1156,7 @@ function specialtyPanel(model) {
         </label>`).join('')}
       </div>
       <p class="hint">The specialty feat is also listed under <strong>Granted feats</strong>
-        on Feats &amp; Mythic; the three specialty skills are chosen on the Skills tab.</p>
+        on Feats &amp; Mythic. The three specialty skills are chosen on the Skills tab.</p>
     </section>`;
   }
 
@@ -1237,8 +1236,8 @@ function languagesPanel(model) {
         <span class="hint">${spare > 0 ? `${spare} slot${spare === 1 ? '' : 's'} spare`
     : spare < 0 ? `${-spare} over the slots` : 'every slot used'}</span>
       </div>
-      <p class="hint">Native languages are free. One slot per point of Int bonus, one per
-        Linguistics rank; <strong>Extra</strong> takes a number or a formula for what a race
+      <p class="hint">Native languages are free. You get one slot per point of Int bonus and one per
+        Linguistics rank. <strong>Extra</strong> takes a number or a formula for slots a race
         or a trait adds.</p>
     </section>`;
   }
@@ -1290,12 +1289,12 @@ function abilityScoresPanel(model) {
         }).join('')}
       </div>
       ${built ? `<p class="hint" style="margin-top:8px">
-        Scores are built from point buy, race, ABP and the rest —
-        edit them on the <strong>Stats</strong> tab.
+        Scores are built from point buy, race, ABP and other sources.
+        Edit them on the <strong>Stats</strong> tab.
       </p>` : ''}
       ${cs.changed && ABILITIES.some((k) => cs.deltas[k]) ? `<p class="hint warn">
-        Scores and modifiers in red are what the ticked conditions leave —
-        the temporary score less the condition's penalty, and its modifier.
+        Scores and modifiers in red include the ticked conditions.
+        The score is the temporary score less the condition's penalty. The modifier is that score's modifier.
       </p>` : ''}
     </section>`;
   }
@@ -1340,11 +1339,11 @@ function acPanel(model) {
       ${defenceBox(model, 'resistance', 'Resistance', 'fire 10, cold 5')}
       ${defenceBox(model, 'weakness', 'Vulnerability', 'sonic 5')}
       ${defenceBox(model, 'immunities', 'Immunities', 'sleep, paralysis')}
-      <p class="hint">These five read <code>{…}</code> like prose, and each part of
-        them can be aimed at: <code>{dr.magic += 2}</code>, <code>{resistance.fire += 5}</code>,
-        <code>{immune.sleep += 1}</code>, <code>{defenses.sr += 2}</code>. A part the box has
-        not got is granted rather than refused — which is what “energy resistance (fire) 10”
-        does — so the energy’s own spelling is the one mistake this cannot catch for you.</p>
+      <p class="hint">These five boxes read <code>{…}</code> like prose. Each part of
+        them is a bonus target: <code>{dr.magic += 2}</code>, <code>{resistance.fire += 5}</code>,
+        <code>{immune.sleep += 1}</code>, <code>{defenses.sr += 2}</code>. A bonus to a part the box
+        does not have adds that part instead of failing. That is how “energy resistance (fire) 10”
+        works. A misspelled energy name is therefore not caught. It adds a new part instead.</p>
       ${sheetBonusHint('Deflection, natural armor, insight and the rest')}
     </section>`;
   }
@@ -1533,12 +1532,12 @@ function attackPanel(model) {
           </tr>`;
         }).join('')}</tbody>
       </table></div>
-      <p class="hint">Base attack bonus is the Classes table's, gestalt-style: the best
-        progression among the classes present at each level, summed and floored once.
+      <p class="hint">Base attack bonus comes from the Classes table, gestalt-style. Each level
+        takes the best progression among the classes present at that level. The sum is floored once.
         An <strong>alternate</strong> is the same attack with a different
-        ability in the slot — Dex for a finessed blade, Wis for a monk's fist — so it
-        carries the same BAB, misc and size, and the same import reconciliation. Each one
-        folds into the attack it belongs to; the caret says what is under it.</p>
+        ability in the slot (Dex for a finessed blade, Wis for a monk's fist). It
+        shares the same BAB, misc and size, and the same import reconciliation. Each alternate
+        folds under the attack it belongs to. The caret says what is under it.</p>
       ${sheetBonusHint('a weapon’s enhancement, a size bonus, anything a talent added')}
     </section>`;
   }
@@ -1571,13 +1570,13 @@ function speedPanel(model) {
     },
     badge: (handle) => forwardedBadge(model, handle),
   })}
-      <p class="hint">Bonus takes a formula, so fast movement can be written as the rule
-        it is — <code>floor(level / 3) * 10</code> — and keep up with the level.
-        Each rate answers to the name under its type: a formula anywhere reads
-        <code>speed.land</code>, and a feature elsewhere sends a bonus here with
-        <code>{speed.land += 10}</code> or <code>{speed += 10}</code> for every speed you
-        have. A rate may read the rates above it — a fly speed written
-        <code>speed.land</code> follows the land speed — and not the ones below.</p>
+      <p class="hint">Bonus takes a formula. Fast movement written as
+        <code>floor(level / 3) * 10</code> updates with the level.
+        Each rate is named by its type. A formula anywhere reads
+        <code>speed.land</code>. A feature elsewhere adds a bonus here with
+        <code>{speed.land += 10}</code>, or <code>{speed += 10}</code> for every speed you
+        have. A rate may read the rates above it and not the ones below. A fly speed written
+        <code>speed.land</code> follows the land speed.</p>
     </section>`;
   }
 
@@ -1653,10 +1652,10 @@ function proficienciesPanel(model) {
       </div>
       <p class="hint">${summary.length
     ? `Proficient with ${esc(summary.join(', '))}. `
-    : 'No weapon proficiencies recorded. '}A weapon on Equipment is read against these — by its
-        familiarity, handedness, group, name and <strong>As</strong> (the base weapon it is) — and marked
-        when nothing covers it; a veil weapon is proficient by the [Enhanced] rule, and a row's own
-        <strong>Proficient</strong> field overrides all of it for Custom Training and the like. The −4 stays yours to write.</p>
+    : 'No weapon proficiencies recorded. '}A weapon on Equipment is checked against these by its
+        familiarity, handedness, group, name and <strong>As</strong> (the base weapon it is). It is marked
+        when nothing covers it. A veil weapon is proficient by the [Enhanced] rule. A row's own
+        <strong>Proficient</strong> field overrides all of this, for Custom Training and the like. The −4 penalty is not applied for you. Write it yourself.</p>
     </section>`;
   }
 
@@ -1715,8 +1714,8 @@ function classesPanel(model, ctx) {
       const extra = [...on].filter((id) => !known.has(id));
       return `<tr class="syspicker"><td colspan="11">
         <p class="hint" style="margin:2px 0 6px">
-          The machinery ${esc(x.name || 'this class')} plays with. A marked system shows
-          <em>marked</em> on its tabs in the ⚙ manager and joins the session view's bar,
+          The sub-systems ${esc(x.name || 'this class')} uses. A marked system shows
+          <em>marked</em> on its tabs in the ⚙ manager and appears on the session view's bar,
           even before anything is typed into it.
         </p>
         <div class="pair" style="flex-wrap:wrap">
@@ -1806,12 +1805,12 @@ function classesPanel(model, ctx) {
           <span class="value">${g.ranksPerLevel || 0}</span></div>
       </div>
       <p class="hint">
-        ${gestalt ? `Gestalt: each level takes the best progression among the classes present that
-        level (from the Planner). Good saves give +2 once plus &frac12;/level; poor give &#8531;/level.`
-    : `Good saves give +2 once plus &frac12;/level; poor give &#8531;/level.`}
-        These bases drive the Saves, Attack and Hit points panels automatically${gestalt
-    ? ` — which is why a hit die or a progression that another class is already beating
-        changes nothing when you move it. Those dropdowns say so when you hover them.` : ''}.
+        ${gestalt ? `Gestalt: each level takes the best progression among the classes present at that
+        level (from the Planner). Good saves give +2 once plus &frac12;/level. Poor saves give &#8531;/level.`
+    : `Good saves give +2 once plus &frac12;/level. Poor saves give &#8531;/level.`}
+        These bases drive the Saves, Attack and Hit points panels automatically.${gestalt
+    ? ` A hit die or a progression that another class already beats
+        changes nothing when you move it. Those dropdowns say so on hover.` : ''}
       </p>
     </section>`;
   }
@@ -1986,7 +1985,7 @@ function hitPointsPanel(ctx, model) {
       </div>
       ${status ? `<p class="hint warn">${status === 'dead' ? `Dead — at or past ${minus(hp.deathAt)}.`
         : status === 'dying' ? `Dying — ${hp.current - hp.deathAt} point${hp.current - hp.deathAt === 1 ? '' : 's'} from death at ${signed(hp.deathAt)}.`
-          : hp.nonlethal >= hp.effective && hp.current > 0 ? 'Unconscious — nonlethal damage has caught up with what is left.'
+          : hp.nonlethal >= hp.effective && hp.current > 0 ? 'Unconscious — nonlethal damage equals or exceeds current hit points.'
             : 'Unconscious.'}</p>` : ''}
       <div class="hpactions">
         <input type="number" value="0" data-hp-amount aria-label="Amount" min="0">
@@ -1997,9 +1996,9 @@ function hitPointsPanel(ctx, model) {
       <div class="hpactions">${restButtons()}</div>
       <p class="hint">Damage spends temporary hit points first. Death comes at
         −(Con ${hp.deathBonus ? `+ ${hp.deathBonus} ` : ''}), so the threshold moves
-        with Con; raise it for Death's Door and the like. End encounter, New day and
-        New week each bring back what lasts that long, and each takes in the shorter
-        ones; all three can be undone.</p>
+        with Con. Raise Death threshold for Death's Door and the like. End encounter, New day and
+        New week each restore what lasts that long. Each includes the shorter
+        rests. All three can be undone.</p>
     </section>`;
   }
 
@@ -2078,10 +2077,10 @@ function conditionsPanel(model) {
         ${cs.superseded.length ? `<span class="hint">(${cs.superseded.map(({ info, name }) => esc(info.label || name)).join(', ')} superseded)</span>` : ''}
         ${cs.notes.length ? `<ul class="hint">${cs.notes.map((n) => `<li>${esc(n[0].toUpperCase() + n.slice(1))}.</li>`).join('')}</ul>` : ''}
       </div>` : ''}
-      <p class="hint">Tick a condition and every number it moves shows what it is
-        <em>now</em> beside the base — attacks, AC, saves, initiative, speed and the
+      <p class="hint">Tick a condition and every number it changes shows its
+        <em>now</em> value beside the base: attacks, AC, saves, initiative, speed and the
         ability modifiers. The base stays as the sheet has it. Shaken, frightened and
-        panicked do not stack, nor fatigued and exhausted: the worse one counts.</p>
+        panicked do not stack. Fatigued and exhausted do not stack. The worse one counts.</p>
     </section>`;
   }
 
@@ -2142,10 +2141,10 @@ function traitsPanel(model, ctx) {
             <button data-action="add-trait-category">Add category</button>
           </div>
           <p class="hint">
-            Traits 1–3 are the standard picks. Drawback 1 unlocks Trait 4, Drawback 2 unlocks
-            Trait 5, and a Major Drawback buys a Drawback Feat — which is named under
-            <strong>Granted feats</strong> on the Feats &amp; Mythic tab, with the other feats
-            something hands you. Categories cover the standard list plus any you add
+            Traits 1–3 are the standard picks. Drawback 1 unlocks Trait 4. Drawback 2 unlocks
+            Trait 5. A Major Drawback buys a Drawback Feat. That feat is named under
+            <strong>Granted feats</strong> on the Feats &amp; Mythic tab, with the other granted feats.
+            Categories cover the standard list plus any you add
             (Akashic, Mythic, Psionic…).
           </p>
         </div>
@@ -2166,8 +2165,8 @@ function traitsPanel(model, ctx) {
             </tbody>
           </table></div>
           <div style="margin-top:8px">${addButton('raceTraits', 'Add race trait', { name: '', text: '' })}</div>
-          <p class="hint">What the race hands you — a few for some, ten for others.
-            Alternate racial traits go here too, in place of what they replace.</p>
+          <p class="hint">The traits the race grants. Some races have a few, others ten.
+            Alternate racial traits go here too, in place of the traits they replace.</p>
         </div>
       </div>
     </section>`;

@@ -89,9 +89,9 @@ function grantedFeatsSection(model, ctx) {
         name their own source.
         ${c.altTraining?.calc?.counts?.feat
     ? `Technique feats (${c.altTraining.calc.counts.feat} from
-        <strong>${esc(c.altTraining.calc.technique)}</strong>) live on the
-        <strong>Alternate Training</strong> tab, beside the levels that grant them — one home
-        each, so they cannot drift apart.` : ''}
+        <strong>${esc(c.altTraining.calc.technique)}</strong>) are listed on the
+        <strong>Alternate Training</strong> tab, beside the levels that grant them. Each is
+        kept in that one place, so the two lists cannot disagree.` : ''}
       </p>`;
 }
 
@@ -237,11 +237,11 @@ export function renderFeaturesPanel(model, ctx) {
       ${featured}${main}
       <div class="addgroup">
         ${rows.addButton('featGroups', 'Add group', { name: 'New group', entries: [] })}
-        <span class="hint">Groups mirror the columns on the sheet's Feats tab — Level Up,
-          Oaths, Attunement, Class, and so on. The first group stands on its own; the rest
-          stack under the granted feats. Drag a feat by its grip to reorder it, or onto
-          another group to move it there. Level Up is one slot per odd level, 1 to 19: its
-          feats move between levels but are not added, removed or dragged out.</span>
+        <span class="hint">Groups mirror the columns on the sheet's Feats tab: Level Up,
+          Oaths, Attunement, Class, and so on. The first group stands on its own. The rest
+          stack under the granted feats. Drag a feat by its grip to reorder it, or drop it on
+          another group to move it there. Level Up has one slot per odd level, 1 to 19. Its
+          feats move between levels but cannot be added, removed or dragged out.</span>
       </div>
 
       ${rows.collapsible(model, 'mythic', `<section class="panel span2">
@@ -262,11 +262,11 @@ export function renderFeaturesPanel(model, ctx) {
           ${fields.field('Base path ability', fields.text('mythic.basePathAbility', m.basePathAbility))}
         </div>
         <p class="hint">
-          Tier comes from character level (8→1, 10→2, 12→3, 14→4, then one per level to
-          20→10). Bonus HP/tier is ${(Number(model.mythicHp) || 0) / (c.identity.mythicTier || 1)}
-          × ${esc(c.identity.mythicTier ?? 0)} = <strong>${model.mythicHp}</strong> hit points, counted
-          into the maximum on the Hit points panel (Champion/Guardian 5, Marshal/Trickster 4,
-          Archmage/Hierophant 3).
+          Tier comes from character level: 8→1, 10→2, 12→3, 14→4, then one per level to
+          20→10. Bonus HP/tier is ${(Number(model.mythicHp) || 0) / (c.identity.mythicTier || 1)}
+          × ${esc(c.identity.mythicTier ?? 0)} = <strong>${model.mythicHp}</strong> hit points. That is
+          counted into the maximum on the Hit points panel. Path values: Champion/Guardian 5,
+          Marshal/Trickster 4, Archmage/Hierophant 3.
         </p>
         ${rows.collapsibleSub(model, 'mythic-abilities', 'Mythic path abilities', `
           <div class="tablewrap"><table class="mythic stacked">
@@ -302,10 +302,10 @@ export function renderFeaturesPanel(model, ctx) {
           </table></div>
           <p class="hint">
             Ten tiers, one row each, beside the character level it is reached at. A
-            <strong>+2 ability increase</strong> comes at every even tier, which is why
-            only those rows offer a Stat; the same increases are on the
-            <strong>Stats</strong> tab, and either place edits the one set. Rows above
-            tier ${tier} are greyed: planned, not counted yet.
+            <strong>+2 ability increase</strong> comes at every even tier, so only
+            those rows offer a Stat. The same increases are on the
+            <strong>Stats</strong> tab. Either place edits the one set. Rows above
+            tier ${tier} are greyed. They are planned, not counted yet.
           </p>`, 'mythladder')}
 
         ${rows.collapsibleSub(model, 'mythic-feats', 'Mythic Feats', `
@@ -337,14 +337,14 @@ export function renderFeaturesPanel(model, ctx) {
             }).join('')}</tbody>
           </table></div>
           <p class="hint">
-            A mythic feat on the odd tiers, an RP power on the even ones:
-            <strong>Grants</strong> is what the tier hands over, <strong>Name</strong> is
-            what you took for it, and <strong>Effect</strong> says what that thing does —
-            folded to one line to keep the table readable, so click one to open it and
+            Odd tiers grant a mythic feat. Even tiers grant an RP power.
+            <strong>Grants</strong> is what the tier hands over. <strong>Name</strong> is
+            what you took for it. <strong>Effect</strong> says what that does. Effect is
+            folded to one line to keep the table readable. Click one to open it and
             click away to shut it again. Formulas work here and in the path abilities
-            above: write “{= tier * 2}” for a value, or “{fort += 2}” to send a bonus
-            somewhere. A bonus written above tier ${tier} does not apply until it is
-            reached.
+            above. Write “{= tier * 2}” for a value, or “{fort += 2}” to send a bonus
+            somewhere. A bonus written above tier ${tier} does not apply until that tier
+            is reached.
           </p>`, 'mythladder')}
       </section>`)}
 
@@ -376,7 +376,7 @@ function mythicTraditionPanel(model, ctx, m) {
         }).join('')}</tbody>
       </table></div>
       <p class="hint">
-        One mandatory drawback unlocks one boon; each further drawback (up to two)
+        One mandatory drawback unlocks one boon. Each further drawback, up to two,
         unlocks another. The quality carries both a bonus and a drawback. The name and
         the note both resolve <code>{name = expr}</code>, so a boon that grants a pool
         can define it where it is written down.

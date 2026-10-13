@@ -1031,7 +1031,7 @@ export class CharacterSheetElement extends HTMLElement {
         </div>
         <p class="hint">Remembered in this browser, for every character. The side rail needs a wide window
           and falls back to the bar on a narrow one. Action cards can show their type as a tag, as colour,
-          both or neither; the colour can be a left edge or a wash across the card.</p>
+          both or neither. The colour can be a left edge or a wash across the card.</p>
       </section>`;
   }
 
@@ -3252,8 +3252,8 @@ export class CharacterSheetElement extends HTMLElement {
           </span>
         </h3>
         <p class="hint">${tab.hidden ? 'This worksheet was hidden in the source workbook. ' : ''}
-          ${tab.custom ? 'Custom tab — a free grid for anything the sheet doesn\'t model. '
-    : 'Cell-for-cell from the workbook. '}Every cell is editable; rows and columns can be added.
+          ${tab.custom ? 'Custom tab: a free grid for anything the sheet doesn\'t model. '
+    : 'Cell-for-cell from the workbook. '}Every cell is editable. Rows and columns can be added.
           Cells accept inline formulas like <code>{name = expr}</code>.</p>
       </section>
       ${this.#gridTab(index, tab)}
@@ -3308,9 +3308,9 @@ export class CharacterSheetElement extends HTMLElement {
       </div>
       <textarea class="rolltext" readonly rows="2" spellcheck="false"
         aria-label="The copied roll">${esc(t.text)}</textarea>
-      ${t.failed ? `<p class="hint warn">The clipboard is not available here — a page served
-        over plain <code>http://</code> or an embed without permission. The text is selected;
-        <kbd>Ctrl</kbd>+<kbd>C</kbd> takes it.</p>` : ''}
+      ${t.failed ? `<p class="hint warn">The clipboard is not available here. This happens on a page
+        served over plain <code>http://</code> or in an embed without permission. The text is selected.
+        <kbd>Ctrl</kbd>+<kbd>C</kbd> copies it.</p>` : ''}
     </div>`;
   }
 
