@@ -81,6 +81,11 @@ export function rest(model, span) {
 
   if (reach >= REST_SPANS.indexOf('day')) {
     const d = model.data;
+    // Flowing Power's strain is the one damage only this heals, and the
+    // effect and its free rounds end with the day. Before the maximum is
+    // read, since the strain is taken off it.
+    if (d.hp) d.hp.strain = 0;
+    if (d.mythic?.flowing) { d.mythic.flowing.increase = 0; d.mythic.flowing.freeLeft = 0; }
     if (d.hp) {
       d.hp.current = model.hpMax;
       d.hp.temp = 0;

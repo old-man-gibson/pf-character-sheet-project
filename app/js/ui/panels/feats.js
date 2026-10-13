@@ -17,7 +17,7 @@ import { pickSelect, mythicPickAt } from './stats.js';
 import { featDetails, featCatalogue } from '../../model.js';
 import {
   MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS, MYTHIC_TIERS, MYTHIC_TIER_LEVEL,
-  mythicTierGrant,
+  effectiveMythicTier, mythicTierGrant,
 } from '../../rules.js';
 
 /** The mythic paths a Path cell offers: the six standard ones, and every path this character has listed. */
@@ -264,6 +264,9 @@ export function renderFeaturesPanel(model, ctx) {
       title: 'From the path; enter a number to override it.', label: 'Bonus hit points per mythic tier',
     }))}
           ${fields.field('Base path ability', fields.text('mythic.basePathAbility', m.basePathAbility))}
+          ${fields.field('Mythic Paragon', `<label class="chk">
+            <input type="checkbox" ${m.paragon ? 'checked' : ''} data-set="mythic.paragon" data-kind="bool">
+            <span>Tier reads +2 for effects${m.paragon && tier ? ` → ${effectiveMythicTier(c)}` : ''}</span></label>`)}
         </div>
         ${mythicPathsDatalist()}
         <p class="hint">
@@ -271,7 +274,10 @@ export function renderFeaturesPanel(model, ctx) {
           20→10. Bonus HP/tier is ${(Number(model.mythicHp) || 0) / (c.identity.mythicTier || 1)}
           × ${esc(c.identity.mythicTier ?? 0)} = <strong>${model.mythicHp}</strong> hit points. That is
           counted into the maximum on the Hit points panel. Path values: Champion/Guardian 5,
-          Marshal/Trickster 4, Archmage/Hierophant 3.
+          Marshal/Trickster 4, Archmage/Hierophant 3. Mythic Paragon makes every ability, feat
+          and spell that depends on the tier read it 2 higher: <code>mythic.tier</code> in a
+          formula, Amazing Initiative, the power uses and the surge die. The rows reached, the
+          picks and the feat slots still go by the tier itself (<code>mythic.baseTier</code>).
         </p>
         ${rows.collapsibleSub(model, 'mythic-paths', `Additional paths${(m.paths || []).length ? ` <span class="badge">${m.paths.length}</span>` : ''}`, `
           <div class="tablewrap"><table class="mythic stacked">
@@ -372,8 +378,10 @@ export function renderFeaturesPanel(model, ctx) {
           </p>`, 'mythladder')}
       </section>`)}
 
-      ${rows.collapsible(model, 'mythic-base', mythicTierGrantsPanel(model, tier))}
-      ${rows.collapsible(model, 'mythic-tradition', mythicTraditionPanel(model, ctx, m))}
+      <div class="band lead">
+        ${rows.collapsible(model, 'mythic-tradition', mythicTraditionPanel(model, ctx, m))}
+        ${rows.collapsible(model, 'mythic-base', mythicTierGrantsPanel(model, tier))}
+      </div>
     </div>`;
 }
 
@@ -388,10 +396,15 @@ export function renderFeaturesPanel(model, ctx) {
  * table for reading without hovering.
  */
 function mythicTierGrantsPanel(model, tier) {
+    // The numbers the character has now read the tier as effects do (Mythic
+    // Paragon's +2 included); the rows are by the tier reached.
+    const eff = effectiveMythicTier(model.data);
+    // The rule opens in the sheet's popover on hover (data-tip); the title
+    // is the fallback for a browser without one.
     const chip = (name, t) => {
       const a = MYTHIC_BASE_ABILITIES[name] || {};
       const value = a.value ? ` ${a.value(t)}` : '';
-      return `<span class="badge" title="${esc(a.text || '')}">${esc(name)}${esc(value)}</span>`;
+      return `<span class="badge" tabindex="0" data-tip="${esc(a.text || '')}" data-tiphead="${esc(name)}" title="${esc(a.text || '')}">${esc(name)}${esc(value)}</span>`;
     };
     const row = (t) => `<tr class="${t > tier ? 'future' : ''}">
       <td class="num">${t}</td>
@@ -399,13 +412,14 @@ function mythicTierGrantsPanel(model, tier) {
       <td>${(MYTHIC_TIER_GRANTS[t] || []).map((name) => chip(name, t)).join(' ')}</td>
     </tr>`;
     const now = tier >= 1 ? [
-      `Mythic power ${MYTHIC_BASE_ABILITIES['Mythic Power'].value(tier)}`,
-      `Surge ${MYTHIC_BASE_ABILITIES.Surge.value(tier)}`,
-      tier >= 2 ? `Initiative ${MYTHIC_BASE_ABILITIES['Amazing Initiative'].value(tier).replace(' initiative', '')}` : '',
+      eff !== tier ? `Reads as tier ${eff} (Mythic Paragon)` : '',
+      `Mythic power ${MYTHIC_BASE_ABILITIES['Mythic Power'].value(eff)}`,
+      `Surge ${MYTHIC_BASE_ABILITIES.Surge.value(eff)}`,
+      tier >= 2 ? `Initiative ${MYTHIC_BASE_ABILITIES['Amazing Initiative'].value(eff).replace(' initiative', '')}` : '',
       'Death at −(2 × Con)',
     ].filter(Boolean).join(' · ') : 'No mythic tier yet.';
     const names = [...new Set(Object.values(MYTHIC_TIER_GRANTS).flat())];
-    return `<section class="panel">
+    return `<section class="panel mythgrants">
       <h3>What each tier grants <span class="badge">tier ${tier}</span></h3>
       <p class="mythnow">${esc(now)}</p>
       <table class="mythtiers">
@@ -429,12 +443,12 @@ function mythicPathsDatalist() {
 function mythicTraditionPanel(model, ctx, m) {
     const tr = m.tradition || {};
     const filled = (k) => !!(tr[k] && String(tr[k]).trim());
-    return `<section class="panel span2">
+    return `<section class="panel wide">
       <h3>Mythic tradition
         ${!filled('drawback1') ? '<span class="badge err">Drawback 1 is mandatory</span>' : ''}
         <label class="chk" style="margin-left:auto">
           <input type="checkbox" ${m.flowingPower ? 'checked' : ''} data-set="mythic.flowingPower" data-kind="bool">
-          <span>Flowing Power</span></label>
+          <span title="Its controls are on the Overview, with the buffs: the increase, the round's damage and the free rounds">Flowing Power</span></label>
       </h3>
       <div class="tablewrap"><table class="tradition stacked">
         <thead><tr><th class="slot">Slot</th><th class="choice">Choice</th><th>Notes</th></tr></thead>

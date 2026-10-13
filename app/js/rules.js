@@ -1024,6 +1024,17 @@ export function mythicTierGrant(tier) {
   return tier % 2 ? `Feat ${n}` : `RP Power ${n}`;
 }
 
+/**
+ * The tier an effect reads: the character's tier, plus 2 with Mythic Paragon,
+ * which raises the tier for every ability, feat and spell that depends on
+ * it. What the character has reached -- the ladder rows, the picks, the
+ * feat slots -- still goes by `identity.mythicTier`.
+ */
+export const effectiveMythicTier = (c) => {
+  const tier = Number(c?.identity?.mythicTier) || 0;
+  return tier >= 1 && c?.mythic?.paragon ? tier + 2 : tier;
+};
+
 /** Mythic power: uses a day at a tier, 0 for a character with no tier. */
 export const mythicPowerUses = (tier) => (tier >= 1 ? 3 + 2 * tier : 0);
 
@@ -3136,12 +3147,13 @@ export function abilityPart(c, stat1, stat2, { cap = Infinity, label = 'ability'
 
 /** Initiative: the ability the row names -- Dex unless something says otherwise -- and the flat bonus. */
 export function initiativeParts(c) {
-  // Amazing Initiative: a bonus equal to the mythic tier, from the 2nd.
+  // Amazing Initiative: a bonus equal to the mythic tier, from the 2nd; the
+  // tier as effects read it, so Mythic Paragon's +2 counts.
   const tier = Number(c.identity?.mythicTier) || 0;
   return [
     abilityPart(c, c.hp.initAbility || 'Dex', c.hp.initAbility2),
     recipePart('misc', Number(c.hp.initMisc) || 0),
-    ...(tier >= 2 ? [recipePlain('Amazing Initiative', tier, 'mythic tier, from the 2nd')] : []),
+    ...(tier >= 2 ? [recipePlain('Amazing Initiative', effectiveMythicTier(c), 'mythic tier, from the 2nd')] : []),
   ];
 }
 

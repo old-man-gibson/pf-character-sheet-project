@@ -16,6 +16,7 @@
 import { esc } from '../html.js';
 import { renderSessionBoard } from './session.js';
 import { field } from '../fields.js';
+import { effectiveMythicTier } from '../../rules.js';
 import { minus, signed } from '../format.js';
 import { collapsible, foldButton, isCollapsed, isOpen } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
@@ -530,10 +531,33 @@ function buffsPanel(model, ctx) {
           ${b.on ? 'in gold while the buff is on' : '<span class="tok push off">greyed</span> while it is off'}.</p>
       </div>`;
     })();
+    /*
+     * Flowing Power (mythic tradition): the increase chosen this round, the
+     * round's cost, and the free rounds a use of mythic power buys. Here with
+     * the buffs because that is what it is while it is on.
+     */
+    const flowing = model.data.mythic?.flowingPower ? (() => {
+      const f = model.data.mythic.flowing || {};
+      const tier = effectiveMythicTier(model.data);
+      const n = Math.max(0, Math.min(tier, Math.floor(Number(f.increase) || 0)));
+      const free = Number(f.freeLeft) || 0;
+      const strain = Number(model.data.hp?.strain) || 0;
+      const perFree = Math.max(1, Math.floor(tier / 2));
+      return `<div class="flowing">
+        <strong>Flowing Power</strong>
+        <label class="minifield">Increase ${num('mythic.flowing.increase', f.increase, `min="0" max="${tier}" style="width:4rem" title="Up to your mythic tier (${tier})"`)}</label>
+        <span class="d">+${n} to every ability score${n ? `, ${n * n} damage a round` : ''}.</span>
+        <button data-action="flowing-round" ${n ? '' : 'disabled'}
+          title="${free ? 'End the round on a free round: no damage' : `End the round: ${n * n} damage to real hit points, as strain only a New day rest heals`}">End round${free ? ' (free)' : n ? ` −${n * n}` : ''}</button>
+        <button data-action="flowing-free" title="Spend one use of mythic power for ${perFree} round${perFree === 1 ? '' : 's'} without damage today">Free rounds: ${free}</button>
+        ${strain ? `<span class="d">Strain ${strain}, off the maximum until a New day rest.</span>` : ''}
+      </div>`;
+    })() : '';
     return `<section class="panel span2">
       <h3>Buffs ${cs.buffsOn ? `<span class="badge ok">${cs.buffsOn} on</span>` : ''}
         <button style="margin-left:auto" data-action="buff-add">+ Add buff</button>
       </h3>
+      ${flowing}
       <div class="bufflist">
         ${buffs.map(row).join('') || '<p class="empty">No buffs yet.</p>'}
       </div>

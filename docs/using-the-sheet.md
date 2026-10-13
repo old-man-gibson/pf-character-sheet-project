@@ -65,6 +65,14 @@ and anything downstream recalculates immediately.
   **Additional paths** under the Mythic panel lists a second or later path (Dual Path and
   the like) with its base ability and what granted it; every Path cell on the ladder
   offers the six standard paths.
+  A **Mythic Paragon** tick reads the tier 2 higher for every effect that depends on it:
+  `mythic.tier` in formulas, Amazing Initiative, the power uses and the surge die, while
+  the ladder rows and picks still go by the tier reached (`mythic.baseTier`).
+  **Flowing Power** (the tradition's tick) gets its controls on the Overview's Buffs panel:
+  an increase up to the tier, applied to every ability score as a buff; **End round**
+  takes the square of the increase off real hit points and the maximum as strain, which
+  only a New day rest heals; **Free rounds** spends one use of mythic power for half the
+  tier in rounds without damage.
 - *Equipment* — every slot with bonuses, weight and cost, plus a running carried-weight
   total against your light load.
 - *Crafting* — speed increases, base costs, cost reductions, projects and their DCs,

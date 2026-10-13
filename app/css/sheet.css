@@ -1497,6 +1497,11 @@ select.jumpto[hidden] { display: none; }
    million pixels, which would give its panel every row to itself; the
    traditions start from the 28rem their table is floored at instead. */
 .band > .panel.wide { flex: 1.5 1 30rem; }
+/* The mythic tier grants beside the tradition: a reading width, never the whole row. */
+.band > .panel.mythgrants { flex: 1 1 28rem; max-width: 46rem; }
+/* Flowing Power's round controls, above the buff list. */
+.flowing { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 0 0 8px; padding: 6px 8px; border: 1px solid var(--cs-line); border-radius: 6px; }
+.flowing .d { font-size: 0.78rem; color: var(--cs-muted); }
 /* Folded, any of them is its header line, which knows its own width. */
 .band > .panel.collapsed { flex-basis: auto; }
 

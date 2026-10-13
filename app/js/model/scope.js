@@ -13,7 +13,7 @@ import {
   FORWARD_STATS, MANEUVER_FIELDS, SAVE_BONUS_TYPES, SHEET_ALIASES, armorParts, gearBonusToken, skillLabel,
   abpGroupTotal, columnTypes, resolveAbility, statMod,
 } from '../rules.js';
-import { deathThreshold, mythicPowerUses, surgeDie } from '../rules.js';
+import { deathThreshold, effectiveMythicTier, mythicPowerUses, surgeDie } from '../rules.js';
 import {
   COMPANION_ALIASES, COMPANION_FAMILIES, COMPANION_KINDS, COMPANION_LABELS, COMPANION_TARGETS, companionAttackKey,
   companionHeading, companionInUse, companionNameTest, companionScope, companionSkillKey,
@@ -184,10 +184,12 @@ export function characterScope(model) {
       death: deathThreshold(Number(c.abilities.con?.workingScore ?? c.abilities.con?.tempScore) || 10, deathBonus, Number(c.identity.mythicTier) || 0),
     },
     mythic: {
-      tier: Number(c.identity.mythicTier) || 0,
+      // The tier as effects read it (Mythic Paragon adds 2); the tier reached is `baseTier`.
+      tier: effectiveMythicTier(c),
+      baseTier: Number(c.identity.mythicTier) || 0,
       // Mythic power a day and the surge die: {mythic.power}, 1d{mythic.surge}.
-      power: mythicPowerUses(Number(c.identity.mythicTier) || 0),
-      surge: surgeDie(Number(c.identity.mythicTier) || 0),
+      power: mythicPowerUses(effectiveMythicTier(c)),
+      surge: surgeDie(effectiveMythicTier(c)),
     },
     // The size as it stands, true-size buffs included -- {size} follows an
     // enlarge the moment it is ticked.

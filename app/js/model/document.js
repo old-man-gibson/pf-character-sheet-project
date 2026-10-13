@@ -1120,6 +1120,17 @@ export function normalise(model) {
     .map((p) => ({
       path: String(p.path ?? ''), basePathAbility: String(p.basePathAbility ?? ''), grantedBy: String(p.grantedBy ?? ''),
     }));
+  // Mythic Paragon: the tier reads 2 higher for every effect that depends on it.
+  d.mythic.paragon = d.mythic.paragon === true;
+  // Flowing Power in play: the increase chosen this round and the free rounds
+  // left today. Strain, the damage it does, is on hp (hp.strain).
+  const flowing = d.mythic.flowing && typeof d.mythic.flowing === 'object' ? d.mythic.flowing : {};
+  d.mythic.flowing = {
+    increase: Math.max(0, Math.floor(Number(flowing.increase) || 0)),
+    freeLeft: Math.max(0, Math.floor(Number(flowing.freeLeft) || 0)),
+  };
+  if (!Number.isFinite(Number(d.hp.strain)) || d.hp.strain === null) d.hp.strain = 0;
+  d.hp.strain = Math.max(0, Number(d.hp.strain) || 0);
   /*
    * Bonus HP per tier is an override over the path's own figure now that hit
    * points are worked out rather than stored, so "not set" has to be sayable
