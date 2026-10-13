@@ -419,7 +419,7 @@ function mythicTraditionPanel(model, ctx, m) {
         ${!filled('drawback1') ? '<span class="badge err">Drawback 1 is mandatory</span>' : ''}
         <label class="chk" style="margin-left:auto">
           <input type="checkbox" ${m.flowingPower ? 'checked' : ''} data-set="mythic.flowingPower" data-kind="bool">
-          <span>Flowing Power</span></label>
+          <span title="Its controls are on the Overview, with the buffs: the increase, the round's damage and the free rounds">Flowing Power</span></label>
       </h3>
       <div class="tablewrap"><table class="tradition stacked">
         <thead><tr><th class="slot">Slot</th><th class="choice">Choice</th><th>Notes</th></tr></thead>

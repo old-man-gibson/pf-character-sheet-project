@@ -6402,6 +6402,40 @@ console.log('mythic base abilities -- initiative, the death threshold, surge and
   check('and saved as a flag', new Character(c.toJSON()).data.mythic.paragon, false);
 }
 
+console.log('flowing power -- the increase, its damage, the free rounds and the day');
+{
+  const c = new Character(blankDocument({ name: 'Flow', level: 15 }));
+  c.set('mythic.tierOverride', 5);
+  // The scores with the buffs in: what the sheet shows in red.
+  const str = () => c.conditionState.scores.str;
+  const base = str();
+  const left = () => { const t = c.trackers.find((x) => x.id === 'mythic_power'); return t.max - t.current; };
+  c.set('mythic.flowing.increase', 3);
+  check('without the tradition ability nothing happens', [str(), c.conditionState.buffsOn], [base, 0]);
+  c.set('mythic.flowingPower', true);
+  check('+3 to every score, counted as a buff', [str(), c.conditionState.scores.cha - c.data.abilities.cha.workingScore, c.conditionState.buffsOn], [base + 3, 3, 1]);
+  c.set('mythic.flowing.increase', 9);
+  check('capped at the tier', str(), base + 5);
+  c.set('mythic.paragon', true);
+  check('Paragon raises the cap', str(), base + 7);
+  c.set('mythic.paragon', false);
+  c.set('mythic.flowing.increase', 3);
+  const max = c.hpMax;
+  const cur = c.hpState.current;
+  const r = c.flowingRound();
+  check('a round costs the square of the increase, off real hit points and the maximum', [r.taken, c.hpState.current, c.hpMax, c.data.hp.strain], [9, cur - 9, max - 9, 9]);
+  c.heal(50);
+  check('healing cannot buy the strain back', c.hpState.current, max - 9);
+  const uses = left();
+  const fr = c.flowingFree();
+  check('one use of mythic power buys half the tier in free rounds', [fr.rounds, left(), c.data.mythic.flowing.freeLeft], [2, uses - 1, 2]);
+  const r2 = c.flowingRound();
+  check('a free round costs nothing', [r2.free, r2.taken, c.hpMax, c.data.mythic.flowing.freeLeft], [true, 0, max - 9, 1]);
+  check('a spent pool buys nothing', (() => { for (let i = left(); i > 0; i--) c.stepTracker('mythic_power', 1); return c.flowingFree().spent; })(), false);
+  c.rest('day');
+  check('a new day heals the strain and ends the effect', [c.hpMax, c.hpState.current, c.data.hp.strain, c.data.mythic.flowing.increase, c.data.mythic.flowing.freeLeft], [max, max, 0, 0, 0]);
+}
+
 console.log('training values reach the formula scope');
 {
   const c = new Character(load('angou'));

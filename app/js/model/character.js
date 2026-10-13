@@ -90,7 +90,7 @@ import {
   recomputeEquipment, recomputeUnarmed, setGearColumns, weaponHandles,
 } from './stats/attacks.js';
 import {
-  applyDamage, applyHealing, applyNonlethal, availableConditions, conditionState, grantTempHp,
+  applyDamage, applyHealing, applyNonlethal, availableConditions, conditionState, flowingFree, flowingRound, grantTempHp,
   healDamage, hpMax, hpState, meterSpec, meterStyle, mythicHp, resolveAcBonuses,
   resolveDefenceBonuses, resolveDefenceText, setMeterStyle, sizeNow,
   takeDamage,
@@ -677,6 +677,8 @@ export class Character {
   damage(n, o) { return this.play(`${points(n)}${o?.nonlethal ? ' nonlethal' : ''} damage`, () => takeDamage(this, n, o)); }
   heal(n) { return this.play(`heal ${points(n)}`, () => healDamage(this, n)); }
   rest(...a) { return this.play((r) => r?.label, () => rest(this, ...a)); }
+  flowingRound() { return this.play((r) => (r.free ? 'Flowing Power, free round' : r.taken ? `Flowing Power, ${r.taken} damage` : null), () => flowingRound(this)); }
+  flowingFree() { return this.play((r) => r.spent && `Flowing Power, ${r.rounds} free round${r.rounds === 1 ? '' : 's'}`, () => flowingFree(this)); }
   applyDamage(...a) { return this.play((r) => r.taken && `${r.taken} damage`, () => applyDamage(this, ...a)); }
   applyNonlethal(...a) { return this.play((r) => r.taken && `${r.taken} nonlethal damage`, () => applyNonlethal(this, ...a)); }
   grantTempHp(...a) { return this.play((r) => r.granted && `${r.granted} temporary hit points`, () => grantTempHp(this, ...a)); }

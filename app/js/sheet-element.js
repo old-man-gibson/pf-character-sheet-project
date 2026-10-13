@@ -7000,6 +7000,14 @@ export class CharacterSheetElement extends HTMLElement {
         this.#model.set('uiPrefs.dashCards', null);
         this.#render();
         break;
+      case 'flowing-round':
+        this.#model.flowingRound();
+        this.#render();
+        break;
+      case 'flowing-free':
+        this.#model.flowingFree();
+        this.#render();
+        break;
       case 'buff-add':
         this.#view.openBuff = (this.#model.data.buffs || []).length;
         this.#model.listAdd('buffs', {
