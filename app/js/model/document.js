@@ -1112,6 +1112,14 @@ export function normalise(model) {
     const imported = Number(d.identity?.mythicTier) || 0;
     d.mythic.tierOverride = imported !== computed ? imported : null;
   }
+  // Further mythic paths past the first (Dual Path and the like): each the
+  // path, its 1st-tier base ability, and what granted it. The first path
+  // stays `mythic.path` and is the one the bonus hit points per tier follow.
+  d.mythic.paths = (Array.isArray(d.mythic.paths) ? d.mythic.paths : [])
+    .filter((p) => p && typeof p === 'object')
+    .map((p) => ({
+      path: String(p.path ?? ''), basePathAbility: String(p.basePathAbility ?? ''), grantedBy: String(p.grantedBy ?? ''),
+    }));
   /*
    * Bonus HP per tier is an override over the path's own figure now that hit
    * points are worked out rather than stored, so "not set" has to be sayable

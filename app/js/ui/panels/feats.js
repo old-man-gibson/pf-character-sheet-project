@@ -20,6 +20,9 @@ import {
   mythicTierGrant,
 } from '../../rules.js';
 
+/** The mythic paths a Path cell offers: the six standard ones, and every path this character has listed. */
+export const MYTHIC_PATHS_LIST_ID = 'mythic-paths';
+
 /** The one feat catalogue list, shared by every name cell on Feats & Mythic. */
 export const FEAT_LIST_ID = 'cat-feats';
 
@@ -262,6 +265,7 @@ export function renderFeaturesPanel(model, ctx) {
     }))}
           ${fields.field('Base path ability', fields.text('mythic.basePathAbility', m.basePathAbility))}
         </div>
+        ${mythicPathsDatalist()}
         <p class="hint">
           Tier comes from character level: 8→1, 10→2, 12→3, 14→4, then one per level to
           20→10. Bonus HP/tier is ${(Number(model.mythicHp) || 0) / (c.identity.mythicTier || 1)}
@@ -269,6 +273,25 @@ export function renderFeaturesPanel(model, ctx) {
           counted into the maximum on the Hit points panel. Path values: Champion/Guardian 5,
           Marshal/Trickster 4, Archmage/Hierophant 3.
         </p>
+        ${rows.collapsibleSub(model, 'mythic-paths', `Additional paths${(m.paths || []).length ? ` <span class="badge">${m.paths.length}</span>` : ''}`, `
+          <div class="tablewrap"><table class="mythic stacked">
+            <thead><tr>
+              <th>Path</th>
+              <th title="The path's 1st-tier base ability, gained with the path">Base path ability</th>
+              <th title="What grants the path: the Dual Path ability or feat, a GM's ruling">Granted by</th>
+              <th class="noslot"></th>
+            </tr></thead>
+            <tbody>${(m.paths || []).map((p, i) => `<tr data-rowkey="mythpaths">
+              <td data-stack="name">${rows.itemText('mythic.paths', i, 'path', p.path, 'Which path?', { list: MYTHIC_PATHS_LIST_ID })}</td>
+              <td data-label="Base path ability">${rows.itemText('mythic.paths', i, 'basePathAbility', p.basePathAbility, '', true)}</td>
+              <td data-label="Granted by">${rows.itemText('mythic.paths', i, 'grantedBy', p.grantedBy, 'Dual Path', true)}</td>
+              <td class="acts">${rows.removeButton('mythic.paths', i)}</td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+          ${rows.addButton('mythic.paths', 'Add path', { path: '', basePathAbility: '', grantedBy: 'Dual Path' })}
+          <p class="hint">A second or later path, from Dual Path or anything else that grants one.
+            Bonus HP per tier follows the first path above. Each path ability row below says
+            which path it came from; the Path cell offers every path listed here.</p>`, 'mythpaths')}
         ${rows.collapsibleSub(model, 'mythic-abilities', 'Mythic path abilities', `
           <div class="tablewrap"><table class="mythic stacked">
             <!-- Six columns and one of them prose. The tier, the level it is
@@ -292,7 +315,7 @@ export function renderFeaturesPanel(model, ctx) {
               return `<tr class="${t > tier ? 'future' : ''}" data-rowkey="mythladder">
                 <td class="num" data-stack="head" data-headlabel="Tier">${t}</td>
                 <td class="num derived" data-label="Level" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
-                <td data-label="Path">${rows.itemText('mythic.abilities', i, 'path', a.path, '', true)}</td>
+                <td data-label="Path">${rows.itemText('mythic.abilities', i, 'path', a.path, '', { title: true, list: MYTHIC_PATHS_LIST_ID })}</td>
                 <td data-stack="name">${rows.itemText('mythic.abilities', i, 'name', a.name, '', { title: true, list: FEAT_LIST_ID })}</td>
                 <td data-label="Effect">${prose.foldedProse(model, { openCell: ctx.openCell }, `mythic:${i}:effect`, `data-item="mythic.abilities|${i}|effect"`, a.effect, 'What it does')}</td>
                 ${t % 2 === 0
@@ -395,6 +418,12 @@ function mythicTierGrantsPanel(model, tier) {
         from tier 2, Hard to Kill into the death threshold, and Mythic Power is the tracker
         of that name. The rest are applied at the table.</p>
     </section>`;
+  }
+
+/** The datalist behind every Path cell: the six standard paths, then this character's own. */
+function mythicPathsDatalist() {
+    return `<datalist id="${MYTHIC_PATHS_LIST_ID}">${Object.keys(MYTHIC_PATH_HP)
+      .map((p) => `<option value="${esc(p)}"></option>`).join('')}</datalist>`;
   }
 
 function mythicTraditionPanel(model, ctx, m) {

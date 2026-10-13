@@ -2456,6 +2456,7 @@
   "flowingPower": false,
   "basePathAbility": null,
   "tierOverride": 0,
+  "paths": [],
   "bonusHpPerTier": null,
   "computedTier": 3
  },

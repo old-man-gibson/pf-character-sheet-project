@@ -62,6 +62,9 @@ and anything downstream recalculates immediately.
   (Hard to Kill, Mythic Power, Surge, Amazing Initiative and the rest) with this
   character's numbers. Amazing Initiative is counted into Initiative from tier 2, Hard
   to Kill into the death threshold, and the Mythic Power tracker is 3 + 2 × tier.
+  **Additional paths** under the Mythic panel lists a second or later path (Dual Path and
+  the like) with its base ability and what granted it; every Path cell on the ladder
+  offers the six standard paths.
 - *Equipment* — every slot with bonuses, weight and cost, plus a running carried-weight
   total against your light load.
 - *Crafting* — speed increases, base costs, cost reductions, projects and their DCs,
