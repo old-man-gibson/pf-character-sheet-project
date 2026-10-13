@@ -6,7 +6,8 @@
 <meta name="robots" content="noindex">
 <title>Card table</title>
 <!--
-  The card table, or the hand, in a window of its own.
+  The card table, or the hand, in a window of its own -- or a squad member
+  handed to the GM.
 
   Opened from the Cardcasting tab's "Table window" and "Hand window" buttons,
   and good for nothing on its own: the sheet that opened it renders the view
@@ -14,12 +15,17 @@
   back to the sheet as a message and runs there. So this page holds no
   character, saves nothing, and closes when the sheet goes.
 
-  Two views, by ?view=:
-    table  what a shared screen may show -- in play, the deck's back, mana,
-           the piles and the log. Never the hand, never a card Read the Cards
-           turned up.
-    hand   the player's own: the hand with its buttons, the round controls,
-           the top of the deck, the last few lines of the log.
+  Three views, by ?view=:
+    table    what a shared screen may show -- in play, the deck's back, mana,
+             the piles and the log. Never the hand, never a card Read the
+             Cards turned up.
+    hand     the player's own: the hand with its buttons, the round controls,
+             the top of the deck, the last few lines of the log.
+    control  the GM's: one squad member handed over (?s= the published id,
+             ?m= the member, ?t= the grant). Its cards in hand and in play
+             take presses; the rest of the table is shown as it stands; a
+             Features pane is the companion's own tab. Carried over the
+             relay rather than a BroadcastChannel, since the GM is elsewhere.
 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@500;700&family=Alegreya:ital,wght@0,400;0,700;1,400;1,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="css/chrome.css">
@@ -34,6 +40,7 @@
   header.app { position: sticky; top: 0; z-index: 5; }
   header.app .tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-left: auto; }
   header.app .what { color: var(--ink2); font-size: 0.86rem; }
+  header.app .what.off { color: var(--cs-bad); }
   /* The copy toast: what went to the clipboard, or the text to take by hand
      when the clipboard would not have it. */
   .copied {
@@ -46,8 +53,9 @@
   .copied textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; font: 0.78rem/1.35 var(--mono); min-height: 4.5rem; }
   .empty { padding: 40px 16px; text-align: center; color: var(--ink2); }
   /* The view itself: a shadow root wearing the sheet's stylesheet, so the
-     zones look exactly as they do on the tab. */
-  #cards { display: block; }
+     zones look exactly as they do on the tab. The features pane is another. */
+  #cards, #features { display: block; }
+  #features[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -56,12 +64,15 @@
   <strong id="title">Card table</strong>
   <span class="what" id="what"></span>
   <div class="tools">
+    <button type="button" id="showfeatures" aria-pressed="false" hidden
+      title="The companion’s own sheet: abilities, saves, attacks, talents, feats, skills">Features</button>
     <button type="button" id="plain" aria-pressed="false"
       title="Hide the buttons and the rules notes — the cards alone, for a shared screen">Plain</button>
   </div>
 </header>
 
 <div id="cards"></div>
+<div id="features" hidden></div>
 <p class="empty" id="empty">Nothing to show. Open this window from the Cardcasting tab — “Table window” or “Hand window” under the table.</p>
 
 <div class="copied" id="copied" role="status" aria-live="polite"></div>

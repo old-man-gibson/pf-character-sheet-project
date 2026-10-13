@@ -74,6 +74,12 @@ other branch gets a preview address. To deploy from the command line instead, ru
 `node tools/deploy-site.mjs` (`--dry-run` to see what would ship); it exports the
 committed tree and uploads that, never a checkout.
 
+The same Worker carries the **relay** that hands a card-casting squad member to the GM
+(the Squad panel's *Hand over to the GM*): a Durable Object per published character,
+bound as `RELAY` in `wrangler.jsonc` and SQLite-backed, which is the kind the free plan
+includes. Without the binding the sheet works and *Hand over* reports that this copy has
+no relay.
+
 **Publish**, on a sheet's ⋯ menu, puts the character on the site and gives a link
 (`published.html?s=<id>`) that anyone can open: the read-only view that **Preview
 published** shows, carrying only the pack entries the character has. Publishing again

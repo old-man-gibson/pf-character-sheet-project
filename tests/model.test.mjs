@@ -30,7 +30,7 @@ import {
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
   sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable, maneuverCatalogue,
-  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels, evaluateAmount, appendDiceText, appendListText, CARD_STAT_FIELDS, stepCastingTime, deckOrder } from '../app/js/model.js';
+  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels, evaluateAmount, appendDiceText, appendListText, CARD_STAT_FIELDS, stepCastingTime, deckOrder, remoteAllowed, remotePlayArg } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
   FORWARD_LATE, FORWARD_STATS,
@@ -13799,6 +13799,15 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   c.moveManipulationPick(fused()[1].i, '');
   check('the last copy of a row joins the owner\'s row and the row goes', fused().map(({ m }) => [m.owner, m.count]), [['', 3]]);
   check('the member\'s count follows its copies', member().manipulationsTaken, 2);
+
+  // A GM holding the member may act on its cards alone, and casts as it.
+  c.tableSquad(cc.id, true);
+  const mendId = [...t.deck, ...t.hand, ...t.discard].find((id) => id.startsWith('1#'));
+  const boltId = [...t.deck, ...t.hand, ...t.discard].find((id) => id.startsWith('0#'));
+  check('the GM may play, move, roll and resolve the member\'s cards', ['play', 'move', 'roll', 'resolve', 'targets', 'pick'].map((a) => remoteAllowed(c, cc.id, a, mendId)), [true, true, true, true, true, true]);
+  check('and not the character\'s, nor drive the round, peek, or spend the character\'s points', [remoteAllowed(c, cc.id, 'play', boltId), remoteAllowed(c, cc.id, 'next', mendId), remoteAllowed(c, cc.id, 'start', ''), remoteAllowed(c, cc.id, 'peek', mendId), remoteAllowed(c, cc.id, 'sp', mendId), remoteAllowed(c, cc.id, 'exileRandom', mendId), remoteAllowed(c, '', 'play', mendId), remoteAllowed(c, cc.id, 'play', 'no#such')], [false, false, false, false, false, false, false, false]);
+  check('a GM\'s cast is the member\'s cast', remotePlayArg('cast?mode=big&sp=1', cc.id), `cast?mode=big&sp=1&who=${cc.id}`);
+  check('even with no argument, and whoever the page named', [remotePlayArg('', cc.id), remotePlayArg('ongoing?who=', cc.id)], [`cast?who=${cc.id}`, `ongoing?who=${cc.id}`]);
 }
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

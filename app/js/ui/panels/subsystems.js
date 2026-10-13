@@ -1542,7 +1542,14 @@ export function companionPanel(model, kind) {
     };
     return `<div class="grid companion">
       ${companionSwitchPanel(model, kind, list, i, label)}
-      ${companionHeadPanel(model, cc)}
+      ${companionSections(model, cc)}
+    </div>`;
+  }
+
+  /** Every panel of one companion after the switch: the body the tab and the GM's control page share. */
+function companionSections(model, cc) {
+    const { kind } = cc;
+    return `${companionHeadPanel(model, cc)}
       ${companionHpPanel(cc)}
       ${companionScoresPanel(model, cc)}
       ${companionDefensePanel(model, cc)}
@@ -1566,8 +1573,21 @@ export function companionPanel(model, kind) {
       <div class="band lead">
         ${companionGainsPanel(model, cc)}
         ${companionNotesPanel(model, cc)}
-      </div>
-    </div>`;
+      </div>`;
+  }
+
+  /**
+   * One companion, read-only, for the GM's control page: every panel of its
+   * tab inside a disabled fieldset, so the markup is the tab's and nothing
+   * on it takes a press. Found by id, since a grant names the member by id.
+   */
+export function companionFace(model, kind, id) {
+    const list = model.data[kind] || [];
+    const i = list.findIndex((b) => String(b?.id ?? '') === String(id));
+    if (i < 0) return '';
+    const b = list[i];
+    const cc = { kind, i, b, k: b.calc || {}, label: COMPANION_LABELS[kind], p: `${kind}.${i}`, sn: companionScopeName(kind, b), roll: i === 0 ? kind : `${kind}:${i}` };
+    return `<fieldset disabled class="companionface"><div class="grid companion">${companionSections(model, cc)}</div></fieldset>`;
   }
 
 
@@ -2512,7 +2532,7 @@ export function cardcastingPanel(model, ctx) {
       </div>
       ${deckManipulationsPanel(model, p, k, '')}
       <div class="foldstrip">${wrap('deck-land', landAttunedPanel(p, k))}</div>
-      ${squad.length ? wrap('deck-squad', squadPanel(model, p, k)) : ''}
+      ${squad.length ? wrap('deck-squad', squadPanel(model, p, k, ctx)) : ''}
       ${cardDatalists(p)}
       ${deckTablePanel(model, ctx, p, k, '')}
       ${sideboardPanel(model, ctx, p, '')}
@@ -2605,9 +2625,11 @@ function costMark(card) {
    * the effect, and whatever buttons the zone offers. Same frame rules as
    * the full face.
    */
-function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = false, formulas = [], extra = '' } = {}) {
+function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = false, formulas = [], extra = '', locked = false } = {}) {
     const card = model.tableCard(id);
     if (!card) return '';
+    // Locked: another's card on the GM's page -- shown, never pressed.
+    if (locked) buttons = '';
     const r = card.calc || {};
     const colors = String(r.colors || '');
     const frameClass = r.artifact ? 'A' : colors.length === 1 ? esc(colors) : colors.length ? 'multi' : 'C';
@@ -2675,6 +2697,9 @@ const TABLE_VIEWS = {
   sheet: { hand: true, field: true, controls: true, secrets: true, windows: true },
   table: { hand: false, field: true, controls: false, secrets: false, windows: false },
   hand: { hand: true, field: false, controls: true, secrets: true, windows: false },
+  // The GM's page for one squad member: that member's hand, the whole field
+  // as the table window shows it, presses on the member's own cards alone.
+  control: { hand: true, field: true, controls: false, secrets: false, windows: false },
 };
 
 /**
@@ -2697,7 +2722,7 @@ function cardCopyButton(model, ctx, ref, what) {
    * that draw a card's buttons. Worked out once per render and handed to the
    * zone builders, so the sheet and the two windows draw from one state.
    */
-function tableState(model, ctx, p, k, view) {
+function tableState(model, ctx, p, k, view, member = '') {
     const t = p.table || {};
     const tc = t.calc || {};
     const faces = TABLE_VIEWS[view] || TABLE_VIEWS.sheet;
@@ -2722,13 +2747,18 @@ function tableState(model, ctx, p, k, view) {
       // The squad members at the table right now.
       present: (tc.squad || []).filter((m) => m.present),
       copyText,
+      // The member this face is run for (the GM's control page), and whether
+      // a card is that member's: only those take presses there.
+      member,
     };
+    s.mine = (id) => !member || model.cardOwner(model.tableCard(id)) === member;
     // A card opened out: the clamp comes off its text and its rolls are listed.
     s.miniOpts = (id) => {
       const open = !!ctx.openCards?.has?.(id);
-      return { open, formulas: open ? model.cardRollFormulas(model.tableCard(id)) : [] };
+      return { open, formulas: open ? model.cardRollFormulas(model.tableCard(id)) : [], locked: !s.mine(id) };
     };
-    s.spBtn = (id) => (sp ? tableBtn('sp', id, '+1 SP', { arg: 1, title: 'Spend one spell point on this card — a boost, a modal option' }) : '');
+    // +1 SP spends the character's own points, which a GM running a member does not.
+    s.spBtn = (id) => (sp && !member ? tableBtn('sp', id, '+1 SP', { arg: 1, title: 'Spend one spell point on this card — a boost, a modal option' }) : '');
     s.copyBtn = (id) => cardCopyButton(model, ctx, id, model.tableCard(id)?.name || 'card');
     s.zoneMoves = (id, from) => {
       const opts = TABLE_DESTINATIONS.filter(([v]) => p.mods.lifeboundDeck || !LIFEBOUND_PILES.includes(v));
@@ -2755,7 +2785,7 @@ function tableState(model, ctx, p, k, view) {
         ${manaChips(String(card?.calc?.colors || ''), '')}
         <span class="zname">${esc(card?.name || card?.effect || 'card')}</span>
         <span class="zsub">${esc(card?.effect || (card?.mana ? `Mana ${card.mana}` : ''))}</span>
-        <span class="pair tools">${extra(id)}${s.zoneMoves(id, from)}</span>
+        <span class="pair tools">${s.mine(id) ? `${extra(id)}${s.zoneMoves(id, from)}` : ''}</span>
       </div>`;
     }).join('');
     return s;
@@ -2785,7 +2815,7 @@ function tableHead(s) {
     const roster = (tc.squad || []).filter((m) => m.ok || m.present);
     const squad = !roster.length ? '' : faces.controls
       ? `<span class="pair squadctl" title="Multi-Headed Play: a member at the table has its deck shuffled in with yours, and may cast any card in the hand">
-          ${roster.map((m) => tableBtn('squad', m.id, `${m.present ? '✓' : '○'} ${esc(m.name)} <small>${m.cards}</small>`, { cls: m.present ? 'primary' : '', title: m.present ? `${m.name} is at the table: ${m.cards} cards in the deck — press to send ${m.name} away` : `Press when ${m.name} is summoned: ${m.cards} cards join the deck` }))}
+          ${roster.map((m) => tableBtn('squad', m.id, `${m.present ? '✓' : '○'} ${esc(m.name)}${s.ctx?.grants?.[m.id] ? ' <small title="handed to the GM">⚑</small>' : ''} <small>${m.cards}</small>`, { cls: m.present ? 'primary' : '', title: m.present ? `${m.name} is at the table: ${m.cards} cards in the deck — press to send ${m.name} away` : `Press when ${m.name} is summoned: ${m.cards} cards join the deck` }))}
         </span>`
       : '';
     // The two windows and the Roll20 switch: the sheet's own, since a window
@@ -2907,7 +2937,9 @@ function terrainRow(model, card) {
   /** The hand: every card with the moves it may make from there. */
 function handZone(s) {
     const { model, p, k, t, tc, copyText } = s;
-    const cards = (t.hand || []).map((id) => {
+    // On the GM's page the hand is the member's cards alone.
+    const inHand = (t.hand || []).filter((id) => s.mine(id));
+    const cards = inHand.map((id) => {
       const card = model.tableCard(id);
       const check = tc.castable?.[id] || {};
       const manaOk = tc.manaOk?.[id] || {};
@@ -2921,7 +2953,7 @@ function handZone(s) {
       // With squad members at the table the chooser can also say who casts;
       // the character does unless it says otherwise, so a plain Cast stays a
       // plain Cast and a … beside it opens the chooser.
-      const casters = isEffect && s.present.length ? [{ id: '', name: shortName(model.casterInfo('').name), cl: Number(model.scope().caster?.level) || 0 }, ...s.present.map((m) => ({ id: m.id, name: m.name, cl: m.cl }))] : [];
+      const casters = isEffect && s.present.length && !s.member ? [{ id: '', name: shortName(model.casterInfo('').name), cl: Number(model.scope().caster?.level) || 0 }, ...s.present.map((m) => ({ id: m.id, name: m.name, cl: m.cl }))] : [];
       const asks = modes.length > 1;
       // Terrain Casting gives every card a chooser too: a plain Cast pays the
       // default toll, and the … is where another way is picked.
@@ -2943,9 +2975,9 @@ function handZone(s) {
       });
     }).join('');
     return `<section class="panel f-hand">
-      <h3>Hand <span class="badge">${t.hand.length}</span>${k.handMax ? `<span class="badge ${tc.handOver ? 'err' : ''}">limit ${k.handMax}</span>` : ''}
+      <h3>Hand <span class="badge">${inHand.length}</span>${s.member && inHand.length !== t.hand.length ? `<span class="badge" title="The rest of the hand is the player's">${t.hand.length - inHand.length} more, the player's</span>` : ''}${k.handMax ? `<span class="badge ${tc.handOver ? 'err' : ''}">limit ${k.handMax}</span>` : ''}
         ${p.mods.gradualRamp ? `<span class="badge ${tc.manaBlocked ? 'err' : ''}">${tc.manaBlocked ? 'mana played this round' : 'one Mana Point card may be played'}</span>` : ''}</h3>
-      ${t.hand.length ? `<div class="zone hand">${cards}</div>` : '<p class="empty">Empty hand.</p>'}
+      ${inHand.length ? `<div class="zone hand">${cards}</div>` : `<p class="empty">${s.member ? 'None of this companion’s cards are in the hand.' : 'Empty hand.'}</p>`}
     </section>`;
   }
 
@@ -2955,17 +2987,17 @@ function playZone(s) {
     const cards = (t.play || []).map((id) => (faceDown.has(id)
       ? `<div class="mcard mini trap" data-card="${esc(id)}">
           <div class="trapback">Trap<br><small>face down</small></div>
-          <div class="foot"><span class="pair tools">
+          <div class="foot"><span class="pair tools">${s.mine(id) ? `
             ${tableBtn('resolve', id, 'Spring', { title: 'The trap springs: it is cast now, keywords and all', cls: 'primary', copy: copyText(id) })}
             ${tableBtn('reveal', id, 'Reveal', { title: 'Turn it face up, still in play' })}
-            ${s.zoneMoves(id, 'play')}
+            ${s.zoneMoves(id, 'play')}` : ''}
           </span></div>
         </div>`
       : cardMini(model, id, {
         ...s.miniOpts(id),
         // Who it is affecting: the player writes it where the controls are;
         // the shared screen reads it.
-        extra: s.faces.controls
+        extra: s.faces.controls || (s.member && s.mine(id))
           ? `<div class="targets"><input type="text" value="${esc(t.targets?.[id] || '')}" data-table-targets="${esc(id)}" placeholder="targets — who it affects" aria-label="Targets"></div>`
           : (t.targets?.[id] ? `<div class="targets"><small>targets</small> ${esc(t.targets[id])}</div>` : ''),
         buttons: `${tableBtn('resolve', id, 'Resolve', { title: 'The effect ends: back to the deck, or the discard under Cooldown', cls: 'primary' })}${s.rollBtn(id, model.tableCard(id))}${s.copyBtn(id)}${s.spBtn(id)}${s.zoneMoves(id, 'play')}`,
@@ -3006,8 +3038,8 @@ function manaZone(s) {
       return `<div class="manacard${m.tapped ? ' tapped' : ''}" style="${esc(cardFrameStyle(colors))}" data-card="${esc(m.id)}">
         <span class="mana">${manaChips(colors, '')}</span>
         <span class="mname">${esc(card?.name || 'Mana Point')}</span>
-        ${p.mods.stagnantPool || m.tapped ? tableBtn('tap', m.id, m.tapped ? 'Untap' : 'Tap', { title: 'Stagnant Pool: a tapped Mana Point card is spent for the round' }) : ''}
-        ${s.zoneMoves(m.id, 'mana')}
+        ${s.mine(m.id) ? `${p.mods.stagnantPool || m.tapped ? tableBtn('tap', m.id, m.tapped ? 'Untap' : 'Tap', { title: 'Stagnant Pool: a tapped Mana Point card is spent for the round' }) : ''}
+        ${s.zoneMoves(m.id, 'mana')}` : ''}
       </div>`;
     }).join('');
     return `<section class="panel f-mana">
@@ -3025,7 +3057,7 @@ function pilesZone(s) {
     return `<div class="f-piles">
       <section class="panel">
         <h3>Discard <span class="badge">${t.discard.length}</span>
-          ${t.discard.length ? `<span class="pair" style="margin-left:auto">${tableBtn('exileRandom', '', 'Exile one at random', { arg: 1, title: 'Blood and Dust, Grave Peril: a random card from the graveyard into exile' })}</span>` : ''}
+          ${t.discard.length && !s.member ? `<span class="pair" style="margin-left:auto">${tableBtn('exileRandom', '', 'Exile one at random', { arg: 1, title: 'Blood and Dust, Grave Peril: a random card from the graveyard into exile' })}</span>` : ''}
         </h3>
         ${t.discard.length ? `<div class="zonelist">${s.listZone(t.discard, 'discard', (id) => `${s.rollBtn(id, model.tableCard(id))}${s.copyBtn(id)}${s.spBtn(id)}${has('Recollection') || has('Resupply') ? tableBtn('move', id, '→ hand', { arg: 'hand', title: 'Recollection / Resupply' }) : ''}${has('Retrace') ? tableBtn('retrace', id, 'Retrace', { title: 'Retrace: cast it from the discard for its cost + 1 spell point (or a longer casting time); it rolls, its keywords fire, and it stays in the discard', copy: copyText(id) }) : ''}`)}</div>`
     : `<p class="empty">${p.cooldown ? 'Nothing discarded.' : 'Nothing discarded — resolved cards shuffle straight back.'}</p>`}
@@ -3084,14 +3116,23 @@ function tablePanel(model, ctx, p, k) {
    * player's own: the hand, the controls, the top of the deck and the last
    * few lines of the log. Each is the same zones the sheet draws, no more.
    */
-export function cardTableView(model, ctx, view) {
+export function cardTableView(model, ctx, view, member = '') {
     const p = model.data.cardcasting;
     if (!p) return '<div class="grid"><p class="empty">No card casting data.</p></div>';
-    const s = tableState(model, ctx, p, p.calc || {}, view);
+    const s = tableState(model, ctx, p, p.calc || {}, view, view === 'control' ? String(member || '') : '');
     const field = view === 'hand'
       ? `${handZone(s)}${s.peeked.length ? deckZone(s) : ''}${logZone(s, 6)}`
-      : `${playZone(s)}${deckZone(s)}${manaZone(s)}${pilesZone(s)}${logZone(s)}`;
-    return `<div class="grid">${tableHead(s)}${s.active ? `<div class="span2 tablefield ${esc(view)}view">${field}</div>` : ''}</div>`;
+      : view === 'control'
+        ? `${handZone(s)}${playZone(s)}${deckZone(s)}${manaZone(s)}${pilesZone(s)}${logZone(s)}`
+        : `${playZone(s)}${deckZone(s)}${manaZone(s)}${pilesZone(s)}${logZone(s)}`;
+    // The GM's page says whose cards it runs; the rest of the table is the
+    // player's and is shown as it stands.
+    const who = s.member ? (p.calc?.squad || []).find((m) => m.id === s.member) : null;
+    const note = view !== 'control' ? '' : `<p class="hint gmnote">${who
+      ? `You are running ${esc(who.name)}: its cards in the hand and in play take presses, cast on its own numbers and points. The rest of the table is the player’s.`
+      : 'This companion is no longer in the squad.'}</p>`;
+    const idle = view === 'control' ? '<p class="empty gmnote">No encounter in play — the player starts one from the sheet.</p>' : '';
+    return `<div class="grid">${tableHead(s)}${note}${s.active ? `<div class="span2 tablefield ${esc(view)}view">${field}</div>` : idle}</div>`;
   }
 
   /** The deck at a glance, and the rules it is checked against. */
@@ -3667,7 +3708,7 @@ function deckFaces(model, ctx, p, k, list, cards, newCard, own) {
    * joins when that tradition lists Card Casting and the same switches as the
    * character's -- Colored Mana's colours excepted, which are its own.
    */
-function squadPanel(model, p, k) {
+function squadPanel(model, p, k, ctx = {}) {
     const squad = k.squad || [];
     if (!squad.length) return '';
     const c = k.combined || {};
@@ -3695,9 +3736,31 @@ function squadPanel(model, p, k) {
           ${m.deck.issues.length ? `<ul class="hint warn" style="margin:4px 0 0 1.1rem;padding:0">${m.deck.issues.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}
           ${!m.ok && m.why ? `<p class="hint">${esc(m.why)}.</p>` : ''}
         </div>
-        <div class="hint">${m.pool ? `points from ${esc(m.name)}’s own pool` : ''}</div>
+        <div class="hint">${m.pool ? `points from ${esc(m.name)}’s own pool` : ''}
+          ${grantControls(m, ctx)}</div>
       </div>`).join('')}
+      <p class="hint">Hand a member to the GM when it is no longer yours to run — an unwilling companion that made its save.
+        The GM gets a link to a page with that member's cards in hand, the table as it stands, and the companion's
+        features; what the GM presses runs here, on this sheet, which must stay open. Take back closes the page.</p>
     </section>`;
+  }
+
+  /**
+   * Handing a member to the GM, or taking it back: the control link, who is
+   * watching, and the two buttons. `ctx.grants` is what the sheet holds --
+   * member id to { url, name, viewers, since }.
+   */
+function grantControls(m, ctx) {
+    const g = ctx?.grants?.[m.id];
+    if (!g) {
+      return `<div class="pair grant"><button data-action="hand-over" data-member="${esc(m.id)}" title="A link to this companion’s hand, the table and its features, for the GM. The character is published first if it is not yet.">Hand over to the GM</button></div>`;
+    }
+    return `<div class="pair grant">
+      <span class="badge ok" title="${esc(`Handed to the GM${g.since ? ` since ${g.since}` : ''}`)}">handed to the GM${g.viewers ? ` · ${g.viewers} watching` : ''}</span>
+      <input type="text" readonly value="${esc(g.url || '')}" aria-label="Control link" style="width:16rem">
+      <button data-action="copy-grant-link" data-member="${esc(m.id)}" title="Copy the control link for the GM">Copy link</button>
+      <button data-action="take-back" data-member="${esc(m.id)}" class="danger" title="Take control back: the GM’s page is closed">Take back</button>
+    </div>`;
   }
 
   /** Cards kept aside for a swap at rest: this owner's. Folds like the deck. */

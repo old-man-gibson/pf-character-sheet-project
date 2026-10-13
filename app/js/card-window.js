@@ -1,5 +1,6 @@
 /**
- * card-window.js -- the card table, or the hand, in a window of its own.
+ * card-window.js -- the card table, or the hand, in a window of its own; or
+ * a squad member handed to the GM.
  *
  * The sheet that opened this window owns the character. On every render of
  * its own it posts the markup for one view -- the table, which a shared
@@ -16,6 +17,13 @@
  * same address in a tab of their own, all still reach the sheet, as long as
  * it is open on this origin.
  *
+ * The control view is the same page for a GM who is not on this origin at
+ * all: a squad member the player handed over. The sheet and this page meet
+ * at the relay (functions/api/c/relay.js) over a WebSocket, with the same
+ * messages: the sheet sends renders, the page sends presses, and the sheet
+ * decides. The page also gets a Features pane -- the companion's own tab,
+ * read-only -- in the same render.
+ *
  * The one thing done locally is the clipboard: a d20 copies the Roll20 text
  * the button carries, and so does a Cast when the sheet has "Copy for Roll20
  * on cast" switched on. A clipboard write wants a user's gesture in the
@@ -27,25 +35,86 @@ import { SHEET_LINK, adoptSheetStyles } from './styles.js';
 import { castPickArg, castPickCopy, followCastPick } from './ui/cast-pick.js';
 
 const params = new URLSearchParams(location.search);
-const view = params.get('view') === 'hand' ? 'hand' : 'table';
+const view = params.get('view') === 'hand' ? 'hand' : params.get('view') === 'control' ? 'control' : 'table';
 const channelName = params.get('ch') || '';
+// The control view's address: the published id, the member, the grant.
+const control = view === 'control' ? { id: params.get('s') || '', member: params.get('m') || '', grant: params.get('t') || '' } : null;
 
 const host = document.getElementById('cards');
 const root = host.attachShadow({ mode: 'open' });
 adoptSheetStyles(root);
 host.setAttribute('scheme', 'dark');
+const featHost = document.getElementById('features');
+const featRoot = featHost.attachShadow({ mode: 'open' });
+adoptSheetStyles(featRoot);
+featHost.setAttribute('scheme', 'dark');
 
 const title = document.getElementById('title');
 const what = document.getElementById('what');
 const empty = document.getElementById('empty');
 const copied = document.getElementById('copied');
 const plain = document.getElementById('plain');
+const showFeatures = document.getElementById('showfeatures');
 
 /** This window's name on the channel, so the sheet can count its viewers. */
 const me = `${view}-${Math.random().toString(36).slice(2, 10)}`;
-const channel = channelName && typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(channelName) : null;
+const channel = !control && channelName && typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(channelName) : null;
+
+/* The relay, for the control view: a socket to the character's relay, reopened when it drops. */
+let socket = null;
+let socketTries = 0;
+let revoked = false;
+
+function relayUrl() {
+  const url = new URL(`../api/c/${control.id}/relay`, location.href);
+  url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.searchParams.set('grant', control.grant);
+  url.searchParams.set('member', control.member);
+  return url.href;
+}
+
+function openSocket() {
+  if (!control || revoked) return;
+  let ws;
+  try { ws = new WebSocket(relayUrl()); } catch { status('The relay could not be reached.', true); return; }
+  socket = ws;
+  ws.addEventListener('open', () => {
+    socketTries = 0;
+    status('connected — waiting for the player’s sheet…');
+    ws.send(JSON.stringify({ type: 'hello' }));
+  });
+  ws.addEventListener('message', (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.type === 'render') draw(msg);
+    else if (msg.type === 'owner') status(msg.online ? (root.innerHTML ? '' : 'the player’s sheet is open — waiting for a render…') : 'the player’s sheet is closed: nothing pressed here will run until it is back', !msg.online);
+    else if (msg.type === 'waiting') status('waiting for the player’s sheet to draw this…');
+    else if (msg.type === 'revoked') { revoked = true; sheetGone('The player took this companion back.'); }
+  });
+  ws.addEventListener('close', (e) => {
+    socket = null;
+    if (revoked) return;
+    if (e.code === 4001) { revoked = true; sheetGone('This control link was replaced by a newer one.'); return; }
+    if (e.code === 1008 || e.code === 4003) { revoked = true; sheetGone('This control link does not open the character.'); return; }
+    status('the relay dropped — reconnecting…', true);
+    const wait = Math.min(30000, 1000 * 2 ** Math.min(socketTries++, 5));
+    setTimeout(openSocket, wait);
+  });
+}
+
+function status(text, off = false) {
+  what.textContent = text;
+  what.classList.toggle('off', off);
+}
 
 function send(msg) {
+  if (control) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) { status('not connected — the press was not sent', true); return; }
+    const { type, ...rest } = msg;
+    try { socket.send(JSON.stringify({ type: type === 'cards:action' ? 'action' : type.replace(/^cards:/, ''), ...rest })); } catch { /* closing */ }
+    return;
+  }
   if (!channel) return;
   try { channel.postMessage({ ...msg, view, from: me }); } catch { /* the channel is closed */ }
 }
@@ -73,24 +142,33 @@ function followHost() {
 
 /** One render from the sheet. */
 function draw(msg) {
-  if (msg.theme) host.setAttribute('theme', msg.theme);
-  host.setAttribute('scheme', msg.scheme === 'light' ? 'light' : 'dark');
+  for (const h of [host, featHost]) {
+    if (msg.theme) h.setAttribute('theme', msg.theme);
+    h.setAttribute('scheme', msg.scheme === 'light' ? 'light' : 'dark');
+  }
   const heading = String(msg.title || 'Card table');
   document.title = heading;
   title.textContent = heading;
-  what.textContent = view === 'table' ? 'the table — what everyone may see' : 'your hand — keep this one off the stream';
+  status(view === 'table' ? 'the table — what everyone may see' : view === 'hand' ? 'your hand — keep this one off the stream' : 'the GM’s hand — presses run on the player’s sheet');
   empty.hidden = true;
   root.innerHTML = `${SHEET_LINK}<div class="cardwin ${view}">${msg.html || ''}</div>`;
+  if (control) {
+    featRoot.innerHTML = `${SHEET_LINK}<div class="cardwin features">${msg.features || '<p class="empty">No features to show.</p>'}</div>`;
+    showFeatures.hidden = false;
+  }
   followHost();
 }
 
 /** The sheet has gone: say so, and close if this window was opened by it. */
-function sheetGone() {
+function sheetGone(why = 'The sheet that was drawing this window has closed. Open it again from the Cardcasting tab.') {
   root.innerHTML = '';
+  featRoot.innerHTML = '';
+  featHost.hidden = true;
+  showFeatures.hidden = true;
   empty.hidden = false;
-  empty.textContent = 'The sheet that was drawing this window has closed. Open it again from the Cardcasting tab.';
-  what.textContent = '';
-  if (window.opener) window.close();
+  empty.textContent = why;
+  status('');
+  if (!control && window.opener) window.close();
 }
 
 /* The sheet's side of the conversation. */
@@ -159,7 +237,21 @@ plain.addEventListener('click', () => {
   plain.setAttribute('aria-pressed', String(on));
 });
 
-if (channel) {
+/* Features: the companion's own sheet, under the cards, for the GM. */
+showFeatures.addEventListener('click', () => {
+  const on = featHost.hidden;
+  featHost.hidden = !on;
+  showFeatures.setAttribute('aria-pressed', String(on));
+});
+
+if (control) {
+  if (!control.id || !control.member || !control.grant) {
+    empty.textContent = 'This control link is incomplete. Ask the player for a fresh one from the Squad panel.';
+  } else {
+    status('connecting to the relay…');
+    openSocket();
+  }
+} else if (channel) {
   what.textContent = 'waiting for the sheet…';
   send({ type: 'cards:hello' });
   window.addEventListener('pagehide', () => { send({ type: 'cards:bye' }); channel.close(); });

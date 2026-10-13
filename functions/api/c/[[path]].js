@@ -51,7 +51,7 @@ function route(params) {
   return { id: parts[0] || '', rev: parts[1] || '', extra: parts.length > 2 };
 }
 
-const validId = (id) => id.length === ID_LENGTH && [...id].every((ch) => ID_ALPHABET.includes(ch));
+export const validId = (id) => id.length === ID_LENGTH && [...id].every((ch) => ID_ALPHABET.includes(ch));
 
 function newId() {
   const bytes = new Uint8Array(ID_LENGTH);
@@ -65,7 +65,7 @@ function newToken() {
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-async function hash(text) {
+export async function hash(text) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
