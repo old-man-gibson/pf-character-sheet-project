@@ -106,7 +106,7 @@ export function renderAuditPanel(model, ctx) {
       </h3>
       <p class="hint" style="margin-bottom:10px">
         Every formula a player has entered on this character, exactly as written.
-        Formulas are parsed, never executed as code, and can only read the values listed
+        Formulas are parsed, never executed as code. Each can only read the values listed
         under “reads”. Nothing here can reach the page, the network, or other characters.
       </p>
       ${rows.length ? rows.map((r) => `

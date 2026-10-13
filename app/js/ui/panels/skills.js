@@ -145,11 +145,11 @@ export function renderSkillsPanel(model, ctx) {
             ${b.remaining} skill point(s) unspent.</p>`
       : '<p class="hint" style="color:var(--cs-good)">Every skill point is spent.</p>'}
         <p class="hint">
-          Only <strong>Bought</strong> ranks count against the budget — specialty, gear,
+          Only <strong>Bought</strong> ranks count against the budget. Specialty, gear,
           Other and sphere ranks are free. Int bonus/level follows the Intelligence
-          modifier and is a flat metric: raising Int does not refund ranks for the levels
-          below it, unless your table rules otherwise. Bonus points takes a formula, and a
-          rule written anywhere on the sheet can grant one:
+          modifier and is one flat figure per level. Raising Int does not refund ranks for
+          the levels below it, unless your table rules otherwise. Bonus points takes a formula.
+          A rule written anywhere on the sheet can grant a point:
           <code>{skill.pointsPerLevel += 1}</code>.
         </p>
       </section>
@@ -244,22 +244,22 @@ export function renderSkillsPanel(model, ctx) {
         <p class="hint">
           Total ranks = min(level, Bought + (★ + Gear + Other) × level + Spheres).
           <strong>Spheres</strong> comes from the training tabs' talent counts. A gold figure
-          beside it is a <em>competence</em> bonus: two spheres associated themselves with this
-          skill, so only one of them pays it ranks and the other pays half your level instead.
-          <strong>Misc</strong> holds flat bonuses from gear, traits and the like — a number, or a
-          formula such as <code>int.mod</code>, <code>floor(level/2)</code>, or a name defined
-          in prose like <code>skill_familiarity</code>. A gold figure beside it is a bonus
+          beside it is a <em>competence</em> bonus. Two spheres are associated with this
+          skill, so only one of them grants ranks. The other grants half your level instead.
+          <strong>Misc</strong> holds flat bonuses from gear, traits and similar sources. It takes a
+          number, or a formula such as <code>int.mod</code>, <code>floor(level/2)</code>, or a name
+          defined in prose like <code>skill_familiarity</code>. A gold figure beside it is a bonus
           <em>forwarded</em> here from a feature that wrote
-          <code>{skill.bluff += …}</code> — point at it to see which one.
+          <code>{skill.bluff += …}</code>. Point at it to see which feature.
         </p>
         <p class="hint">
           Only ${VARIANT_SKILLS.map((v) => `<strong>${esc(v)}</strong>`).join(', ')} and
-          <strong>Perform</strong> take a variant — the highlighted slots. Write just the
-          variant, or the whole <em>Craft (Weapons and Armor)</em>; either way the skill
+          <strong>Perform</strong> take a variant, in the highlighted slots. Write just the
+          variant, or the whole <em>Craft (Weapons and Armor)</em>. Either way the skill
           reads as one name. Perform is one of nine:
           ${PERFORM_CATEGORIES.map(([c, examples]) => `<span title="${esc(examples)}">${esc(c)}</span>`).join(', ')}.
-          Every other skill is fixed; <strong>Add skill</strong> is where a new one — a
-          further Craft, a homebrew — gets its own name.
+          Every other skill is fixed. <strong>Add skill</strong> creates a new skill with its
+          own name, such as a further Craft or a homebrew skill.
         </p>
       </section>
     </div>`;

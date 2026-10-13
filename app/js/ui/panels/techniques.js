@@ -84,7 +84,7 @@ function techniqueSheet(model, ctx, view, { editable = false, path = 'techniques
         ${fields.check(`${path}.instantInitiation`, t.instantInitiation, 'Instant Initiation (+1)')}
         <label class="pair"><span>Versatile Technique</span>${fields.num(`${path}.versatile`, t.versatile, 'min="0"')}</label>
         ${fields.check(`${path}.signature`, t.signature, 'Signature Technique (−1)')}
-        <span class="hint">These are the AutoTechnique tab's crafting choices; they move Effective Complexity and nothing else.</span>
+        <span class="hint">These are the AutoTechnique tab's crafting choices. They change Effective Complexity and nothing else.</span>
       </div>` : '';
 
     return `
@@ -137,7 +137,7 @@ function techniqueExportBox(model, ctx, text, id) {
           <button data-view data-action="copy-text" data-copy="${id}">Copy for Discord</button>
         </span>
       </h3>
-      <p class="hint">The workbook's application text — character, what is applied for, and the technique in a code block. Paste it as-is.</p>
+      <p class="hint">The workbook's application text: the character, what is applied for, and the technique in a code block. Paste it as-is.</p>
       <textarea id="${id}" class="exportbox" readonly rows="14" spellcheck="false">${esc(text)}</textarea>
     </section>`;
 }
@@ -159,13 +159,12 @@ export function renderTechniqueListPanel(model, ctx) {
           ${Object.entries(byStatus).map(([k, n]) => `<span class="badge">${esc(k)} ${n}</span>`).join('')}
         </h3>
         <p class="hint">
-          Every technique on the character's <code>techRef</code>, read one at a time as the
-          workbook's tab does. The list is read-only apart from the approval status; to
-          change a technique, copy it to AutoTechnique, edit it there and add it back — the
-          same name replaces the entry. Missing techniques — a character imported before the
-          catalogue was read, or new ones on the sheet — come in with
-          <strong>Import from workbook</strong>: only the techniques are taken, nothing else
-          on this character changes.
+          Every technique on the character's <code>techRef</code>, shown one at a time as the
+          workbook's tab does. The list is read-only apart from the approval status. To
+          change a technique, copy it to AutoTechnique, edit it there and add it back. The
+          same name replaces the entry. <strong>Import from workbook</strong> brings in missing
+          techniques, for a character imported before the catalogue was read or for new ones
+          on the sheet. Only the techniques are taken. Nothing else on this character changes.
           <button data-action="tech-import" title="Merge the techniques from a .xlsx export of the workbook into this list">Import from workbook…</button>
           <input type="file" accept=".xlsx,.xlsm" data-techfile hidden>
         </p>
@@ -212,10 +211,10 @@ export function renderAutoTechniquePanel(model, ctx) {
           </span>
         </h3>
         <p class="hint">
-          Design a technique: name it, pick its spheres and the talents each contributes,
-          and the complexity, DCs and SP cost work themselves out as the workbook's
-          formulas do. <strong>Add to Technique List</strong> puts it on the list (the
-          workbook's <code>techRef</code>); the application below is ready to paste.
+          Design a technique. Name it, then pick its spheres and the talents each contributes.
+          Complexity, DCs and SP cost are computed with the workbook's formulas.
+          <strong>Add to Technique List</strong> puts it on the list (the
+          workbook's <code>techRef</code>). The application below is ready to paste.
         </p>
         ${techniqueSheet(model, ctx, view, { editable: true, path: 'techniques.draft', mode: 'auto' })}
       </section>
@@ -236,10 +235,11 @@ export function renderCookingPanel(model, ctx) {
           </span>
         </h3>
         <p class="hint">
-          Bryva's iron chef ability, for anyone at the table: pick the courses, and each
-          ingredient's effect is worked out for the chef's level and the combination — a
-          Red Meat entree strengthens Apples and Potatoes, Rice counts the recipe as three
-          levels higher, and so on. Duration is ⌊level ÷ 3⌋ + 1 hours.
+          The iron chef ability, for anyone at the table. Pick the courses. Each
+          ingredient's effect is computed from the chef's level and the combination. A
+          Red Meat entree strengthens Apples and Potatoes. Rice counts the recipe as three
+          levels higher. The ingredient list below has the other combos. Duration is
+          ⌊level ÷ 3⌋ + 1 hours.
         </p>
         <div class="fieldgrid" style="margin-bottom:10px">
           <label class="fld"><span>Iron chef level</span>

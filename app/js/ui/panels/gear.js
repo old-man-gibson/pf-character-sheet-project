@@ -129,7 +129,7 @@ function nativeUnarmedBlock(model, u, n, base) {
         ${ladder.length ? '' : addManyButton(list, 'monk ladder', MONK_UNARMED_LADDER)}
       </div>
       ${n.rung != null ? `<p class="hint">Reading rung <strong>${n.rung}</strong> at ${esc(n.className || 'character')} level ${n.classLevel || 0} — <strong>${esc(n.baseDice || '—')}</strong>.</p>`
-        : (ladder.length && !n.formula ? `<p class="hint warn">No rung at ${esc(n.className || 'character')} level ${n.classLevel || 0} yet — the practitioner table is what the weapon reads.</p>` : '')}
+        : (ladder.length && !n.formula ? `<p class="hint warn">No rung at ${esc(n.className || 'character')} level ${n.classLevel || 0} yet. The weapon reads the practitioner table.</p>` : '')}
       ${field('Formula', text(`${base}.native.formula`, n.formula || '', '{= … } — wins over the rungs'))}
       ${n.error ? `<p class="hint warn">${esc(n.error)}</p>` : ''}
       <div class="unarmed-grid" style="margin-top:6px">
@@ -162,7 +162,7 @@ function practitionerUnarmedBlock(u, per, base) {
         <span class="badge">${u.unorthodoxFeats || 0} feat${u.unorthodoxFeats === 1 ? '' : 's'} · ${slots} picks</span></span>
       <div class="picks">${Array.from({ length: slots }, (_, i) => select(`${base}.otherSpheres.${i}`, picks[i] || '', COMBAT_SPHERES.filter((s) => !UNARMED_SPHERES.includes(s)))).join('')}</div>
       </div>`
-      : '<p class="hint">Unorthodox Unarmed Training, once taken as a feat, gives two more sphere picks here — two per time it is taken.</p>';
+      : '<p class="hint">Unorthodox Unarmed Training is a feat. Each time it is taken, it adds two sphere picks here.</p>';
     return `<div class="unarmed-grid">
         ${chk('Boxing', `${base}.usesBoxing`, u.usesBoxing, per.Boxing)}
         ${chk('Brute', `${base}.usesBrute`, u.usesBrute, per.Brute)}
@@ -365,9 +365,10 @@ export function weaponsPanel(model, e) {
       </div>`).join('') || '<p class="empty">No weapons yet.</p>'}</div>
       <div style="margin-top:8px">${addButton('equipment.weapons', 'Add weapon', blankWeapon())}</div>
       <p class="hint">
-        Attack = base mode total + enhancement + misc + adjustment; damage = dice +
-        floor(ability × mult) + misc + enhancement. 🥊 makes a weapon an unarmed strike:
-        its dice come from a class progression or the practitioner table, set up in its card.
+        Attack = base mode total + enhancement + misc + adjustment. Damage = dice +
+        floor(ability × mult) + misc + enhancement. Tick 🥊 to make a weapon an unarmed strike.
+        Its dice then come from a class progression or the practitioner table. Both are set up
+        in the weapon's card.
       </p>
     </section>`;
   }
@@ -409,9 +410,9 @@ function armorPanel(e) {
         ghostTouch: false, others: [], weight: 0, cost: 0, active: false,
       })}</div>
       <p class="hint">
-        Worn pieces feed AC, cap the AC stat at the lowest Max Dex, and apply their
-        armor check penalty to flagged skills — all live. A piece's enhancement adds to
-        its own bonus, so a +1 breastplate is AC 6 and Enh. 1.
+        Worn pieces add to AC. The lowest Max Dex among them caps the AC stat. Their armor
+        check penalty applies to flagged skills. All of this updates live. A piece's
+        enhancement adds to its own bonus, so a +1 breastplate is AC 6 and Enh. 1.
       </p>
     </section>`;
   }
@@ -664,11 +665,11 @@ function gearCard(model, list, i, g, cols) {
         <h5>Description</h5>
         ${prose(model, `data-item="${list}|${i}|note"`, g.note, 3, 'grow')}
         <p class="hint">The description resolves <code>{name = expr}</code> like any other prose
-          on the sheet, so an item that grants a pool can define it here — and the Other
-          columns read formulas too. A bonus with an amount, a type and a To is forwarded
-          there: it stacks with other bonuses the way its type says. To offers every
-          destination the sheet knows; the box under it takes one it does not list, such
-          as <code>resistance.fire</code>.</p>
+          on the sheet. An item that grants a pool can define it here. The Other columns
+          read formulas too. A bonus with an amount, a type and a To is forwarded to that
+          target. It stacks with other bonuses by its type. To lists every destination the
+          sheet knows. The box under it takes one not on the list, such as
+          <code>resistance.fire</code>.</p>
       </div>
     </td></tr>`;
   }
@@ -695,10 +696,10 @@ function gearSlotsPanel(model, ctx, e) {
         <tbody>${rows.map(({ g, i }) => gearRow(model, ctx, 'equipment.gear', i, g, cols)).join('')
     || `<tr><td colspan="${gearSpan(cols)}"><p class="empty">Nothing worn — show all slots to fill them in.</p></td></tr>`}</tbody>
       </table></div>
-      <p class="hint">Typed bonuses (amount, type, and where it goes — the amount takes a
-        formula) and freeform properties, as many columns of each as you need — the ± on
-        the last of each family adds or drops one across every row. Click an item's ▸ to
-        open it out with room to describe it.</p>
+      <p class="hint">Each row has typed bonuses (amount, type, and where it goes) and freeform
+        Other properties. The amount takes a formula. Add as many columns of each as you need.
+        The ± on the last column of each family adds or drops one across every row. Click an
+        item's ▸ to open it with room to describe it.</p>
     </section>`;
   }
 
@@ -807,14 +808,13 @@ function craftSpeedPanel(cr) {
       })}</div>
       ${line('Progress / day', group(cr.calc?.speedPerDay))}
       <p class="hint">
-        Flat increases add to the base rate; multipliers stack additively —
-        two ×2 bonuses make ×4, as the sheet's own count did. Amounts may be
-        formulas (<code>level * 100</code>).
+        Flat increases add to the base rate. Multipliers stack additively: two ×2 bonuses
+        make ×4. This matches the original sheet's count. Amounts may be formulas
+        (<code>level * 100</code>).
       </p>
       <p class="hint">
-        A project takes its <strong>base price</strong> ÷ this, rounded up —
-        progress is measured against what the item is worth, not what it costs
-        you to make.
+        A project takes its <strong>base price</strong> ÷ this rate, rounded up.
+        Progress is measured against the item's value, not against its crafting cost.
       </p>
     </section>`;
   }
@@ -840,7 +840,7 @@ function craftCostPanel(cr) {
           </tr>`).join('')}</tbody>
         </table></div>
         <div style="margin-top:6px">${addButton('crafting.baseCosts', 'Add base cost', { label: '', percent: 50 })}</div>
-        <p class="hint">50, 33 and 25 mean a true half, third and quarter of market value, as the sheet's own dropdown did.</p>
+        <p class="hint">50, 33 and 25 mean a true half, third and quarter of market value. This matches the original sheet's dropdown.</p>
       </details>
       <div class="subhead">Manufacturing cost reductions</div>
       <div class="tablewrap"><table class="craftlist stacked">
@@ -884,7 +884,7 @@ function craftCrafterPanel(model, cr) {
       </div>
       ${field('Name on the marketplace post', text('crafting.sellerName', cr.sellerName, 'Character name'))}
       <p class="hint">
-        The discount is what buyers pay off market value — 100% sells at cost.
+        The discount is what buyers pay off market value. 100% sells at cost.
         A project can override it.
       </p>
     </section>`;
@@ -1102,9 +1102,10 @@ export function wealthPanel(model, ctx) {
         </span>
       </div>
       <p class="hint">
-        A <em>session</em> line is session income: it goes on the wallet and, under the oath,
-        half of it is owed at the next offering; a <em>spend</em> is taken off the wallet. Formulas can read <code>mana.current</code>,
-        <code>mana.expected</code> and <code>mana.after</code>.
+        A <em>session</em> line is session income. It is added to the wallet. Under the oath,
+        half of it is owed at the next offering. A <em>spend</em> line is taken off the wallet.
+        Formulas can read <code>mana.current</code>, <code>mana.expected</code> and
+        <code>mana.after</code>.
       </p>
       ${ledger.length ? `<div class="tablewrap"><table class="ledger">
         <thead><tr><th>Date</th><th>What</th><th class="num">Amount</th><th></th></tr></thead>

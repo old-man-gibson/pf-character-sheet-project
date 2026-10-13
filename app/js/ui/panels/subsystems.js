@@ -195,9 +195,9 @@ export function systemExtrasPanel(block, path, tabName) {
     return `<section class="panel span2">
       <h3>From the source tab <span class="badge">${rows.length} rows</span></h3>
       <p class="hint">
-        Cells the workbook's ${esc(tabName)} tab carried that no heading claimed, kept as
-        written. Nothing above reads them, but a <code>{…}</code> formula in one works as it
-        does in any other cell.
+        Cells from the workbook's ${esc(tabName)} tab that no heading claimed. They are kept as
+        written. Nothing above reads them. A <code>{…}</code> formula in one of them works as in
+        any other cell.
       </p>
       <div class="tablewrap" style="margin-top:8px"><table class="gridtab"><tbody>
         ${rows.map((r, ri) => `<tr>
@@ -302,7 +302,7 @@ function essencePanel(ctx, model, a) {
       </div>
       <p class="hint">The Veilweaving sphere condenses
         ${SP_PER_TEMP_ESSENCE} spell points into 1 temporary essence for the day.
-        Those points are spent whether or not the essence is invested, so they
+        The points are spent whether or not the essence is invested. They
         come off the total on <strong>Magic Spheres</strong>.</p>
     </section>`;
   }
@@ -370,8 +370,8 @@ function akashicClassesPanel(a) {
   })}</label>
           </div>
           ${vw.sphere ? `<p class="hint">With the Veilweaving sphere, levels in casting classes count
-            as veilweaving levels (each level once), and a class row with no ability reads its
-            casting ability.</p>` : ''}
+            as veilweaving levels. Each level counts once. A class row with no ability uses the
+            class's casting ability.</p>` : ''}
         </div>
 
         <div class="ak-pool">
@@ -429,9 +429,9 @@ function akashicSlotsPanel(model, ctx, a) {
   })}
         </span>
       </h3>
-      <p class="hint">One veil to a slot, or two with Twinveil. A veil's save DC
-        is the base DC plus the essence invested in it. A description may carry
-        <code>{name = expr}</code> formulas, the same as anywhere else.</p>
+      <p class="hint">One veil per slot, or two with Twinveil. A veil's save DC
+        is the base DC plus the essence invested in it. A description may contain
+        <code>{name = expr}</code> formulas, as any other prose field can.</p>
       ${shown.length
     ? `<div class="veils"${veilGridStyle(model)}>${shown.map(({ s, i }) => veilSlotCard(model, ctx, a, list, s, i)).join('')}</div>`
     : '<p class="empty">No veils shaped.</p>'}
@@ -642,8 +642,8 @@ function akashicReceptaclesPanel(model, a) {
     return `<section class="panel span2">
       <h3>Other receptacles <span class="badge">${rows.length}</span></h3>
       <p class="hint">Anything holding essence that is not one of the slots above.
-        Their essence counts against the day's pool the same way a veil's does,
-        except while one is ticked off.</p>
+        Its essence counts against the day's pool, as a veil's does.
+        A receptacle ticked off does not count.</p>
       ${rows.length ? `<div class="veils"${veilGridStyle(model)}>
         ${rows.map((r, i) => `<div class="veilslot${r.active === false ? ' is-off' : ''}">
           <div class="veilslot-body">
@@ -706,11 +706,11 @@ export function maneuversPanel(model, ctx) {
           ${available.length ? '' : '<span class="hint">Every discipline in the catalogue is trained.</span>'}
         </div>
         <p class="hint" style="margin-top:6px">
-          <strong>Tick</strong> a maneuver to ready it — the box alone, so nothing else
-          on the row can toggle it. <strong>Click its name</strong> to read what you wrote
-          down about it, and the ✎ to write it: type, action, range, target, duration,
-          saving throw and description, every one of them taking <code>{…}</code> formulas.
-          <strong>Right-click</strong> a name for its page on the
+          <strong>Tick</strong> a maneuver to ready it. Only the box toggles it; nothing else
+          on the row does. <strong>Click its name</strong> to read what you wrote
+          about it. Click the ✎ to write it: type, action, range, target, duration,
+          saving throw and description. Each field takes <code>{…}</code> formulas.
+          <strong>Right-click</strong> a name to open its page on the
           <a href="${esc(WIKI_BASE)}" target="_blank" rel="noopener noreferrer">wiki</a>.
         </p>
       </section>
@@ -913,13 +913,13 @@ export function vancianPanel(model, ctx = {}) {
               title="Everything spent comes back">New day</button>
           </span>
         </h3>
-        <p class="hint">A block picks the class whose table it draws slots from, which
-          is separate from what you call it — so an archetype keeps its own name.
-          Slots per day, spells known and the save DC all follow from that, the caster
-          level counted off the Planner, and the casting stats. Type into any of them
+        <p class="hint">A block picks the class whose table it draws slots from. That
+          is separate from the block's name, so an archetype keeps its own name.
+          Slots per day, spells known and the save DC follow from the table, the caster
+          level counted from the Planner, and the casting stats. Type into any of them
           to override.</p>
         ${unknown.length ? `<p class="hint warn">No casting table for
-          ${unknown.map((n) => `<strong>${esc(n)}</strong>`).join(', ')} — those blocks
+          ${unknown.map((n) => `<strong>${esc(n)}</strong>`).join(', ')}. Those blocks
           keep whatever numbers you give them.</p>` : ''}
         ${(v.classes || []).length ? '' : '<p class="empty">No casting classes yet.</p>'}
       </section>
@@ -1134,12 +1134,12 @@ function vancianPreparedPanel(model, v, ctx = {}) {
       <h3>Spell list <span class="badge">${spells}</span>
         ${v.calc?.spent ? `<span class="badge">${v.calc.spent} spent today</span>` : ''}
       </h3>
-      <p class="hint">The workbook's first column could never be a tick box — a formula
-        cell cannot also be something you reset each morning — so players used it as a
-        label instead. Whatever is in it is kept as written; <strong>Prepared</strong> is
-        how many times this spell is committed, and the squares beside it are what is
-        left of them. <strong>Notes</strong> reads {…} like any prose, so a spell's text
-        can carry its numbers — <code>heals {2 + level}d8</code> — and stay right.</p>
+      <p class="hint">The workbook's first column was used as a label, not a tick box.
+        Whatever is in it is kept as written. <strong>Prepared</strong> is
+        how many times this spell is committed. The squares beside it show how many
+        of those are left. <strong>Notes</strong> reads {…} like any prose field, so a
+        spell's text can include its numbers and keep them current:
+        <code>heals {2 + level}d8</code>.</p>
       ${spellDatalist(v)}
       ${rows.length ? `<table class="spelllist"><thead><tr>
         <th style="width:6.5rem">Label</th>
@@ -1226,16 +1226,16 @@ export function altTrainingPanel(model) {
           ${prereq.state === 'unmet' ? ' The technique still works here; this is a note, not a lock.' : ''}
         </p>` : ''}
         ${k.note ? `<p class="hint">${esc(k.note)}</p>` : ''}
-        ${k.unknown ? `<p class="hint warn">The sheet says
-          <strong>${esc(p.technique)}</strong>, which is not in the catalogue the active
-          packs supply — the ladder below is empty until it names one of them. Whatever is
-          written against a level is kept either way.</p>` : ''}
+        ${k.unknown ? `<p class="hint warn">The sheet names
+          <strong>${esc(p.technique)}</strong>. That technique is not in the catalogue the active
+          packs supply. The ladder below stays empty until the field names one that is.
+          Whatever is written against a level is kept either way.</p>` : ''}
         <p class="hint">
-          One technique, taken at 1st level or whenever its prerequisite is first met, granting
+          One technique, taken at 1st level or when its prerequisite is first met. It grants
           at 1st, 3rd, 5th, then ${k.repeatFrom ?? altTrainingRepeatFrom()}th and every two levels after.
-          <strong>Grants</strong> is what the rules hand over; the column beside it is what you
-          took for it, already filled in on the levels the rules name themselves; the last is
-          yours, and takes formulas. A technique feat can be swapped under the Associated Feat
+          <strong>Grants</strong> is what the rules give at that level. The column beside it is what you
+          took for it. It is filled in already on the levels where the rules name the grant. The last
+          column is your note and takes formulas. A technique feat can be swapped under the Associated Feat
           rules if you are later given a feat for a sphere or talent you already have.
         </p>
       </section>
@@ -1308,9 +1308,9 @@ function altTrainingLadder(model, k) {
         <strong>From ${k.repeatFrom}th, every two levels:</strong> ${esc(k.repeat.text)}${citeTag(k.repeat.cite)}
       </p>` : ''}
       <p class="hint">
-        A level you have reached with a choice still to make is outlined and counted above;
-        one you have not reached yet is dotted — the plan, not a chore. Levels whose grant the
-        rules name carry that name already; type over one to say otherwise. Every row's note
+        A reached level with no choice made yet is outlined and counted above. A level not
+        reached yet is dotted and not counted. Levels whose grant the rules name show that
+        name already. Type over it to record something else. Every row's note
         resolves <code>{name = expr}</code> like any other prose field on the sheet.
       </p>
     </section>`;
@@ -1376,7 +1376,7 @@ function altTrainingChooser() {
           <td>${esc(t.repeat?.text || '')}</td>
         </tr>`).join('')}</tbody>
       </table></div>
-      <p class="hint">Pick one — the ladder replaces this table, and nothing written on it is
+      <p class="hint">Pick one. The ladder replaces this table. Nothing written on the tab is
         lost if you change your mind.</p>
     </section>`;
   }
@@ -1422,13 +1422,13 @@ export function psionicsPanel(model, ctx) {
         <div class="fieldgrid" style="margin-top:8px">
           ${field('Bonus points', num('psionics.bonusPoints', p.bonusPoints))}
         </div>
-        <p class="hint">The pool is every manifesting class's points plus the bonus —
-          a feat or an item, which is the one line of the workbook's panel that was
-          typed rather than worked out. Readable from a formula as
+        <p class="hint">The pool is every manifesting class's points plus the bonus.
+          The bonus is the one typed figure: points from a feat or an item.
+          Readable from a formula as
           <code>pp.pool</code>, <code>pp.left</code> and <code>pp.spent</code>.</p>
-        ${unknown.length ? `<p class="hint warn">No power-point curve reaching
-          ${unknown.map((n) => `<strong>${esc(n)}</strong>`).join(', ')} at level 20 —
-          those classes contribute nothing until a curve is picked.</p>` : ''}
+        ${unknown.length ? `<p class="hint warn">No power-point curve reaches
+          ${unknown.map((n) => `<strong>${esc(n)}</strong>`).join(', ')} at level 20.
+          Those classes contribute nothing until a curve is picked.</p>` : ''}
         ${(p.classes || []).length ? '' : '<p class="empty">No manifesting classes yet.</p>'}
       </section>
 
@@ -1598,8 +1598,8 @@ function companionSwitchPanel(model, kind, list, active, label) {
     style: 'margin-left:auto',
   }) : ''}
       </div>
-      ${many ? `<p class="hint">One of ${list.length}. Each reads and takes bonuses under the id on its chip —
-        <code>${kind}.hp</code>, <code>${kind}2.hp</code> — and the id stays with the creature through a
+      ${many ? `<p class="hint">One of ${list.length}. Each reads and takes bonuses under the id on its chip:
+        <code>${kind}.hp</code>, <code>${kind}2.hp</code>. The id stays with the creature through a
         rename or a reordering.</p>` : ''}
     </section>`;
   }
@@ -1686,12 +1686,12 @@ function companionHeadPanel(model, cc) {
         ${bigStat('Will', { html: w('will', sv('will')) }, kind === 'familiar' ? 'master’s base' : ((k.formSaves || b.goodSaves)?.will ? 'good' : 'poor'))}
       </div>
       <p class="hint">${kind === 'familiar'
-    ? 'A familiar is its master’s level, uses the master’s BAB and base saves, has half the master’s hit points, and takes its Intelligence and natural armour from the familiar table.'
+    ? 'A familiar’s level is its master’s level. It uses the master’s BAB and base saves. It has half the master’s hit points. Its Intelligence and natural armour come from the familiar table.'
     : kind === 'animalCompanion'
-      ? 'The level is the master’s levels in the class named (or ranks in Handle Animal / Ride for a Spheres companion), less any penalty; HD, BAB, saves, skill ranks, feats, natural armour, the Str/Dex bonus and bonus tricks all follow the animal companion table.'
+      ? 'The level is the master’s levels in the class named, less any penalty. A Spheres companion uses ranks in Handle Animal or Ride instead. HD, BAB, saves, skill ranks, feats, natural armour, the Str/Dex bonus and bonus tricks follow the animal companion table.'
       : kind === 'conjured'
-        ? 'The level is the Conjuration sphere’s caster level — the CL on that sphere’s row of the Magic Spheres table, its own bonuses included — or a class’s levels, less any penalty; HD, BAB, saves, skill points, feats and natural armour follow the Conjuration sphere’s companion table, and the base form adds its own natural armour, saves and starting scores. Archetypes that bend the progression are ticked below.'
-        : 'The level is the master’s levels in the class named, less any penalty; HD, BAB, saves, feats, natural armour, the Str/Dex bonus, the evolution pool and the attack cap follow the eidolon table.'}
+        ? 'The level is the Conjuration sphere’s caster level, less any penalty. That is the CL on the sphere’s row of the Magic Spheres table, its own bonuses included. A class’s levels can be used instead. HD, BAB, saves, skill points, feats and natural armour follow the Conjuration sphere’s companion table. The base form adds its own natural armour, saves and starting scores. Archetypes that change the progression are ticked below.'
+        : 'The level is the master’s levels in the class named, less any penalty. HD, BAB, saves, feats, natural armour, the Str/Dex bonus, the evolution pool and the attack cap follow the eidolon table.'}
         Readable from a formula as <code>${esc(sn)}.hp</code>, <code>${esc(sn)}.ac</code>, <code>${esc(sn)}.str.mod</code>…</p>
     </section>`;
   }
@@ -1719,8 +1719,8 @@ function companionHpPanel(cc) {
       <p class="hint">${kind === 'familiar'
     ? `Half the master’s maximum${k.protectorDoubles ? ', doubled for a Protector' : ''}, plus the bonus.`
     : `${kind === 'conjured'
-      ? `${k.hpPerDie ?? 10} a hit die — the full d${k.hitDie ?? 10}${k.hitDie === 6 ? ', the mage archetype’s' : ''}, as the character’s own levels are counted —`
-      : '8 a hit die'} plus the ${esc(b.hpAbility || 'Con')} modifier each, plus the bonus. Damage spends temporary points first.`}</p>
+      ? `${k.hpPerDie ?? 10} per hit die (the full d${k.hitDie ?? 10}${k.hitDie === 6 ? ', the mage archetype’s' : ''}, as the character’s own levels are counted)`
+      : '8 per hit die'} plus the ${esc(b.hpAbility || 'Con')} modifier per die, plus the bonus. Damage spends temporary points first.`}</p>
     </section>`;
   }
 
@@ -1803,11 +1803,11 @@ function companionDefensePanel(model, cc) {
     `auto (${['Tiny', 'Diminutive', 'Fine'].includes(b.size) ? 'Dex' : 'Str'})`))}
         ${field('Initiative bonus', formulaBox(cc, 'initBonus'))}
       </div>
-      <p class="hint">10 + Dex + size ${fmt(k.sizeAC ?? 0)} + natural armour ${fmt(k.tableNatural ?? 0)} from the table
-        + the bonuses: <em>all</em> counts everywhere (deflection, luck, insight…), <em>touch only</em>
-        for dodge, which flat-footed loses, <em>flat-footed only</em> for armour and extra natural armour.
-        CMD takes <em>all</em> and dodge, and every penalty. CMB is BAB + ${esc(k.cmbAbility || 'Str')} + the
-        special size modifier ${fmt(-(k.sizeAC ?? 0))}, the same one CMD carries; Tiny or smaller uses Dex.</p>
+      <p class="hint">AC is 10 + Dex + size ${fmt(k.sizeAC ?? 0)} + natural armour ${fmt(k.tableNatural ?? 0)} from the table
+        + the bonuses. <em>All</em> counts in every AC (deflection, luck, insight…). <em>Touch only</em>
+        is for dodge, which flat-footed loses. <em>Flat-footed only</em> is for armour and extra natural armour.
+        CMD takes <em>all</em>, dodge, and every penalty. CMB is BAB + ${esc(k.cmbAbility || 'Str')} + the
+        special size modifier ${fmt(-(k.sizeAC ?? 0))}. CMD uses the same size modifier. Tiny or smaller uses Dex.</p>
       ${kind === 'eidolon' || kind === 'conjured' ? `<div class="fieldgrid" style="margin-top:8px">
         ${field('DR', text(`${p}.dr`, b.dr))}
         ${field('Resistances', text(`${p}.resistances`, b.resistances))}
@@ -1848,9 +1848,9 @@ function companionSavesPanel(model, cc) {
       <p class="hint">${kind === 'familiar'
     ? 'Base saves are the master’s, never below +2.'
     : kind === 'conjured' && k.formSaves
-      ? `Tick the good saves — the ${esc(b.baseForm)} form’s are ${['fort', 'ref', 'will']
-        .filter((x) => k.formSaves[x]).map((x) => ({ fort: 'Fortitude', ref: 'Reflex', will: 'Will' }[x])).join(' and ') || 'none, as printed'} — and the table gives the good and poor base at this HD.`
-      : 'Tick the good saves; the table gives the good and poor base at this level.'}</p>
+      ? `The ${esc(b.baseForm)} form’s good saves are ${['fort', 'ref', 'will']
+        .filter((x) => k.formSaves[x]).map((x) => ({ fort: 'Fortitude', ref: 'Reflex', will: 'Will' }[x])).join(' and ') || 'none, as printed'}. The table gives the good and poor base at this HD.`
+      : 'Tick the good saves. The table gives the good and poor base at this level.'}</p>
       <h4 class="subhead">Speed</h4>
       ${speedTable(`${p}.speeds`, b.speeds || [], k.speeds || [], { example: `30 + 10 * floor(${sn}.hd / 5)` })}
     </section>`;
@@ -1916,10 +1916,10 @@ function companionAttacksPanel(model, cc) {
         </tr>`).join('')}
       </tbody></table>` : '<p class="empty">No attacks yet.</p>'}
       <div style="margin-top:6px">${addButton(list, 'Add attack', { type: 'Bite', damage: '', crit: '20/×2', primary: null, bonus: 0, dmgBonus: 0, qualities: '' })}</div>
-      <p class="hint">Secondary attacks take −5${k.multiattack ? ' — −2 here, for Multiattack' : ' (−2 with Multiattack)'}.
-        Role on auto follows the natural-attack table. Damage stays what you write —
-        “1d6 plus grab” as readily as “1d6+7” — so a bonus to it is kept beside the column and
-        added to the roll’s flat part.</p>
+      <p class="hint">Secondary attacks take −5${k.multiattack ? ' (−2 here, with Multiattack)' : ' (−2 with Multiattack)'}.
+        Role on auto follows the natural-attack table. Damage is kept as you write it,
+        “1d6 plus grab” or “1d6+7”. A bonus to damage goes in the column beside it and is
+        added to the flat part of the roll.</p>
     </section>`;
   }
 
@@ -2060,7 +2060,7 @@ function conjuredArchetypePanel(model, cc) {
         </div>`).join('')}
       </div>
       <p class="hint">Hover an archetype for its rule. Once selected, an archetype cannot be
-        removed from that companion in play; a companion may hold several so long as they
+        removed from that companion in play. A companion may hold several archetypes if they
         do not replace the same features.</p>
     </section>`;
   }
@@ -2094,12 +2094,12 @@ function conjuredCastingPanel(model, cc) {
       ${line('Spell points', cast.spellPoints)}
       ${pool ? trackerLine(pool) : ''}
       <p class="hint">${cast.mage
-    ? `The mage archetype: a Mid-Caster on Charisma. Caster level is ¾ of its ${k.hd ?? 0} Hit Dice;
-        spell points are its Hit Dice plus its Charisma modifier (${k.hd ?? 0} ${cha < 0 ? '−' : '+'} ${Math.abs(cha)}).`
-    : `Magical Companion: a caster on Charisma. Caster level is half its ${k.hd ?? 0} Hit Dice;
-        spell points are its Charisma modifier.`}
-        The talent’s Charisma increase is not added here; forward it from the talent’s note.
-        The pool comes back with this companion’s Rest and with a new day.
+    ? `The mage archetype: a Mid-Caster on Charisma. Caster level is ¾ of its ${k.hd ?? 0} Hit Dice.
+        Spell points are its Hit Dice plus its Charisma modifier (${k.hd ?? 0} ${cha < 0 ? '−' : '+'} ${Math.abs(cha)}).`
+    : `Magical Companion: a caster on Charisma. Caster level is half its ${k.hd ?? 0} Hit Dice.
+        Spell points are its Charisma modifier.`}
+        The talent’s Charisma increase is not added here. Forward it from the talent’s note.
+        The pool refills on this companion’s Rest and on a new day.
         Readable as <code>${esc(sn)}.sp</code> and <code>${esc(sn)}.cl</code>${pool
     ? `; the pool as <code>tracker.${esc(pool.id)}</code>` : ''}.</p>
 
@@ -2111,9 +2111,9 @@ function conjuredCastingPanel(model, cc) {
       <h4 class="subhead">Boons${(tr.boons || []).length ? ` <span class="badge">${tr.boons.length}</span>` : ''}</h4>
       ${proseList(model, blist, tr.boons || [], 'boon')}
       <div>${addButton(blist, 'Add boon', '')}</div>
-      <p class="hint">Blank is natural casting. Drawbacks and boons are kept as written and
-        do not change the spell points above; a line can forward what it grants, as any
-        note does: <code>{${esc(sn)}.cha.score += 2}</code>.</p>
+      <p class="hint">Blank means natural casting. Drawbacks and boons are kept as written and
+        do not change the spell points above. A line can forward what it grants, as any
+        note can: <code>{${esc(sn)}.cha.score += 2}</code>.</p>
     </section>`;
   }
 
@@ -2134,10 +2134,10 @@ function conjuredTalentsPanel(model, cc) {
       badge: `<span class="badge">${k.talentsTaken ?? 0} shaping this companion</span>`,
       what: 'Talent',
       sourcePlaceholder: '(form), (type)…',
-      hint: 'The (form) and (type) talents applied to this companion — one free when it is '
-        + 'gained, and no more than one (type). They are spent from the master’s own magic '
-        + 'talents, so nothing is budgeted here; what a talent changes goes into the rows it '
-        + 'changes, and its note can forward a bonus the way any prose does.',
+      hint: 'The (form) and (type) talents applied to this companion. One is free when the '
+        + 'companion is gained. No more than one (type) talent is allowed. They are spent from the master’s own magic '
+        + 'talents, so nothing is budgeted here. What a talent changes goes into the rows it '
+        + 'changes. Its note can forward a bonus, as any prose field can.',
     }) + companionListPanel(model, {
       list,
       rows,
@@ -2147,9 +2147,9 @@ function conjuredTalentsPanel(model, cc) {
       badge: `<span class="badge">${k.otherTalentsTaken ?? 0} taken</span>`,
       what: 'Talent',
       sourcePlaceholder: 'Conjuration',
-      hint: 'The master’s other Conjuration talents that bear on this companion. Like the (form) '
+      hint: 'The master’s other Conjuration talents that affect this companion. Like the (form) '
         + 'and (type) talents, they are spent from the master’s own magic talents, so nothing is '
-        + 'budgeted here; a talent’s note can forward a bonus the way any prose does.',
+        + 'budgeted here. A talent’s note can forward a bonus, as any prose field can.',
     });
   }
 
@@ -2173,9 +2173,9 @@ function companionFeatsPanel(model, cc) {
         what: 'Feat',
         slots,
         extra: `<div class="fieldgrid tight">${field('Bonus feats', formulaBox(cc, 'bonusFeats'))}</div>`,
-        hint: `A feat at every odd Hit Die (${allowed} at ${k.hd ?? 0} HD), and a slot for each bonus feat:
-          a number, or a formula. A feat past the last slot is kept and marked, and can be removed.
-          A feat named Multiattack softens secondary attacks to −2.`,
+        hint: `One feat at every odd Hit Die (${allowed} at ${k.hd ?? 0} HD), plus a slot for each bonus feat.
+          The Bonus feats field takes a number or a formula. A feat past the last slot is kept, marked, and can be removed.
+          A feat named Multiattack reduces the secondary attack penalty to −2.`,
       });
     }
     const over = (k.featsTaken ?? 0) > allowed;
@@ -2242,11 +2242,11 @@ function companionSkillsPanel(model, cc) {
       </div>
       <div style="margin-top:6px">${addButton(list, 'Add skill', { name: '', spec: '', ability: 'Int', trained: false, classSkill: false, ranks: 0, misc: 0 })}</div>
       <p class="hint">${fam
-    ? 'A familiar uses its own ranks or its master’s, whichever is higher; the +3 class-skill bonus applies once there is a rank.'
+    ? 'A familiar uses its own ranks or its master’s, whichever is higher. The +3 class-skill bonus applies once there is a rank.'
     : kind === 'eidolon'
       ? 'Ranks per the sheet: HD × (6 + Int modifier). The +3 class-skill bonus applies once there is a rank.'
       : kind === 'conjured'
-        ? '2 ranks a hit die at Intelligence 10 or better, 1 under it (the printed column, at the forms’ Int 7); none for a mindless companion. The +3 class-skill bonus applies once there is a rank.'
+        ? '2 ranks per hit die at Intelligence 10 or higher, 1 per hit die below that (the printed column, at the forms’ Int 7). A mindless companion gets none. The +3 class-skill bonus applies once there is a rank.'
         : 'Ranks from the table at this level. The +3 class-skill bonus applies once there is a rank.'}</p>
     </section>`;
   }
@@ -2331,13 +2331,13 @@ function companionItemsPanel(model, cc) {
         </tr>`).join('')}
       </tbody></table></div>` : ''}
       <div style="margin-top:6px">${addButton(list, slots.length ? 'Add slotless item' : 'Add item', { name: '', cost: 0, worn: true, effect: '' })}</div>
-      <p class="hint"><strong>Effect</strong> reads <code>{…}</code> like any prose on the sheet, and
-        every number ${esc(label.toLowerCase())} rolls is something a bonus can be aimed at:
+      <p class="hint"><strong>Effect</strong> reads <code>{…}</code> like any prose field on the sheet.
+        Every number the ${esc(label.toLowerCase())} rolls can be the target of a bonus:
         <code>{${esc(sn)}.str.score += 4 as enhancement}</code>, <code>{${esc(sn)}.ac.total += 2 as armor}</code>,
         <code>{${esc(sn)}.skill.perception += 5}</code>, <code>{${esc(sn)}.attack += 1}</code>,
         <code>{${esc(sn)}.damage += 1}</code>, <code>{${esc(sn)}.saves += 2 as resistance}</code>,
-        <code>{${esc(sn)}.cmb += 2}</code>. Untick <em>Worn</em> and the row keeps saying what it
-        would do without doing it.</p>
+        <code>{${esc(sn)}.cmb += 2}</code>. Untick <em>Worn</em> and the row still shows its effect
+        but stops applying it.</p>
     </section>`;
   }
 
@@ -2711,12 +2711,12 @@ function tableHead(s) {
       ${controls || windows || squad ? `<div class="pair tablectl">${controls}${squad}${windows}</div>` : ''}
       ${notes.length ? `<ul class="hint" style="margin:8px 0 0 1.1rem;padding:0">${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
       ${!active && faces.controls ? `<p class="hint">At initiative: shuffle the deck and draw ${k.openingHand ?? 2} (1 + casting modifier, at least 2)${loaded ? ` plus ${loaded} for Loaded Hand` : ''}.
-        ${p.manaPool ? ` Mana Point cards drawn go straight to the table${p.mods.gradualRamp ? ' — except under Gradual Ramp, where they wait in hand and one is played a round' : ''}.` : ''}
-        ${p.cooldown ? ' Resolved cards go to the discard; a full-round action shuffles it back, and so does running dry' + (p.mods.deckout ? ' — except that Deckout forbids both' : '') + '.' : ' Resolved cards shuffle straight back into the deck.'}
-        Out of combat there is no hand: search the deck and cast at +1 minute.
-        Keywords in a card's text fire when it is cast: ${CARD_KEYWORDS.map((w) => `<code>[${w[0].toUpperCase()}${w.slice(1)}${KEYWORD_EXAMPLE[w] ? ` ${KEYWORD_EXAMPLE[w]}` : ''}]</code>`).join(' ')}
-        — the ones that stand in for a manipulation want it taken.
-        A card with dice in its text, or in its Dice field, gets a 🎲${faces.windows ? '; the d20 beside it copies the card for Roll20' : ''}.</p>` : ''}
+        ${p.manaPool ? ` Mana Point cards drawn go straight to the table.${p.mods.gradualRamp ? ' Under Gradual Ramp they wait in hand instead, and one is played per round.' : ''}` : ''}
+        ${p.cooldown ? ' Resolved cards go to the discard. A full-round action shuffles the discard back into the deck. Running out of cards does the same.' + (p.mods.deckout ? ' Deckout forbids both.' : '') : ' Resolved cards shuffle straight back into the deck.'}
+        Out of combat there is no hand. Search the deck and cast at +1 minute.
+        Keywords in a card's text fire when it is cast: ${CARD_KEYWORDS.map((w) => `<code>[${w[0].toUpperCase()}${w.slice(1)}${KEYWORD_EXAMPLE[w] ? ` ${KEYWORD_EXAMPLE[w]}` : ''}]</code>`).join(' ')}.
+        A keyword that stands in for a manipulation needs that manipulation taken.
+        A card with dice in its text, or in its Dice field, gets a 🎲 button${faces.windows ? '. The d20 beside it copies the card for Roll20' : ''}.</p>` : ''}
     </section>`;
   }
 
@@ -3038,14 +3038,14 @@ function deckLadderPanel(p, k) {
       <h3>The drawback
         <span class="badge">${k.drawbackValue ?? 1} for boons</span>
       </h3>
-      <p class="hint">Card Casting is one drawback on its own; Cooldown or Mana Pool makes it two,
-        both make it three, Mana Graveyard four; each modification is one more
-        (five-colour Colored Mana is two). Hover a row for the whole rule.</p>
+      <p class="hint">Card Casting alone counts as one drawback. Cooldown or Mana Pool makes it two.
+        Both make it three. Mana Graveyard makes it four. Each modification adds one more.
+        Five-colour Colored Mana adds two. Hover a row for the whole rule.</p>
       <div class="modgrid">
       ${row('Card Casting', '<span class="badge">always</span>',
-    'Effects that cost spell points live on cards. Draw 1 + casting modifier (at least 2) at initiative, one more each round; play a card to cast it, and shuffle it back once its effect has resolved. Out of combat, search the deck and cast at +1 minute.')}
+    'Effects that cost spell points are cards. Draw 1 + casting modifier (at least 2) at initiative, and one more each round. Play a card to cast it. Shuffle it back once its effect has resolved. Out of combat, search the deck and cast at +1 minute.')}
       ${row('Cooldown', check('cardcasting.cooldown', p.cooldown, p.cooldown ? 'taken' : 'not taken'),
-    'Resolved cards go to a discard pile instead of the deck. A full-round action shuffles the discard back in; so does running out of cards, as a free action.')}
+    'Resolved cards go to a discard pile instead of the deck. A full-round action shuffles the discard back in. Running out of cards does the same, as a free action.')}
       ${row('Mana Pool', check('cardcasting.manaPool', p.manaPool, p.manaPool ? 'taken' : 'not taken'),
     'Mana Point cards join the deck and go straight to the table when drawn. A card needs as many Mana Points on the table as its spell point cost.')}
       ${row(`Mana Graveyard${p.manaGraveyard && !(p.cooldown && p.manaPool) ? ' <span class="badge err">needs both</span>' : ''}`,
@@ -3112,8 +3112,8 @@ function deckManipulationsHead(model, p, k) {
         </select>`)}
       </div>
       <p class="hint">One manipulation per deck feat (a feat or bought-off drawback tagged [Deck]), plus one
-        for Card Shark; the field overrides that. Hover a name for its rule. Readable as
-        <code>deck.manip.&lt;name&gt;</code> — <code>deck.manip.loaded_hand</code>, <code>deck.manip.fused_cards</code> — and <code>deck.feats</code>.</p>
+        for Card Shark. The Available field overrides that. Hover a name for its rule. Readable as
+        <code>deck.manip.&lt;name&gt;</code> (<code>deck.manip.loaded_hand</code>, <code>deck.manip.fused_cards</code>) and <code>deck.feats</code>.</p>
     </section>`;
     return collapsible(model, 'deck-manipulations', head);
   }
@@ -3214,11 +3214,11 @@ function landAttunedPanel(p, k) {
         ${attuned.size ? `<span class="badge">${attuned.size} attuned</span>` : ''}
         <span class="badge ${k.landAttuned ? 'ok' : ''}" title="${esc(k.landAttunedWhy || '')}">${k.landAttuned ? 'mana pays ×2 on attuned spheres' : 'feat not in force'}</span>
       </h3>
-      <p class="hint">The spheres each colour of mana covers, as the deck's own table had them; tick a
+      <p class="hint">The spheres each colour of mana covers, as the deck's own table had them. Tick a
         sphere to mark it attuned. The count beside a sphere is how many cards in the deck belong to it.
-        With Land-Attuned Magic among the feats, Terrain Casting or Area Bound in the tradition and Mana Pool,
-        every Mana Point card in play pays two spell points on an attuned sphere's card instead of one
-        ${k.landAttunedWhy ? `— ${esc(k.landAttunedWhy)}.` : '.'}</p>
+        With Land-Attuned Magic among the feats, Terrain Casting or Area Bound in the tradition, and Mana Pool taken,
+        every Mana Point card in play pays two spell points on an attuned sphere's card instead of one.
+        ${k.landAttunedWhy ? `Currently ${esc(k.landAttunedWhy)}.` : ''}</p>
       ${CARD_COLORS.map(([c, name]) => {
     const list = `cardcasting.colorSpheres.${c}`;
     const rows = spheres[c] || [];
@@ -3483,9 +3483,9 @@ function deckTablePanel(model, ctx, p, k) {
           ${check('cardcasting.harrow', p.harrow, 'Harrow deck — suits & alignments')}
         </span>
       </h3>
-      <p class="hint">Cost and its colour sit top right and colour the frame; the type line is
-        sphere — tags; the letters under the text are the mana the card puts on the table when a
-        Mana Point card is fused onto it (leave the effect blank for a plain Mana Point card).
+      <p class="hint">Cost and its colour sit top right and set the frame colour. The type line is
+        sphere — tags. The letters under the text are the mana the card puts on the table when a
+        Mana Point card is fused onto it. Leave the effect blank for a plain Mana Point card.
         ${p.useD100 ? 'The number bottom right is the card\'s roll on the d100.' : ''}</p>
       ${p.harrow && Object.keys(suitTally).length ? `<div class="tally">
         ${Object.entries(suitTally).map(([s, n]) => `<span class="t">${esc(s)} <span class="n">${n}</span></span>`).join('')}
@@ -3543,10 +3543,10 @@ function squadPanel(model, p, k) {
         <span class="badge" title="Every deck together, when every member is at the table">${c.deckSize ?? 0} cards in all</span>
         ${c.colors ? `<span class="pair">${manaChips(c.colors, '')}</span>` : ''}
       </h3>
-      <p class="hint">A squad member's deck shuffles in with yours while it is at the table (the roster under the table's
-        controls), and any member may cast any card in the hand, on its own caster level, modifier and spell points — write
+      <p class="hint">A squad member's deck is shuffled in with yours while it is at the table (the roster under the table's
+        controls). Any member may cast any card in the hand, using its own caster level, modifier and spell points. Write
         a card's numbers as <code>caster.level</code> and <code>caster.mod</code> and they follow whoever casts it. A member's
-        tradition must list Card Casting with the same switches as yours; its Colored Mana colours are its own. Your deck
+        tradition must list Card Casting with the same switches as yours. Its Colored Mana colours are its own. Your deck
         feats and manipulations stay yours.</p>
       ${squad.map((m) => `<div class="squadrow">
         <div class="what"><strong>${esc(m.name)}</strong>
@@ -3568,7 +3568,7 @@ function sideboardPanel(model, ctx, p) {
     const cards = p.sideboard || [];
     return `<section class="panel span2">
       <h3>Sideboard <span class="badge">${cards.length}</span></h3>
-      <p class="hint">Cards built but not in the deck — the deck can only change when you rest to regain spell points.</p>
+      <p class="hint">Cards built but not in the deck. The deck can only change when you rest to regain spell points.</p>
       ${cards.length ? `<div class="cardgrid">${cards.map((card, i) => cardFace(model, ctx, list, i, card, p, { inDeck: false })).join('')}</div>` : ''}
       <div style="margin-top:10px">${addButton(list, 'Add to sideboard', {
     name: '', suit: '', alignment: '', effect: '', cost: '', sphere: '', tags: '', color: '', mana: '', art: '', notes: '',

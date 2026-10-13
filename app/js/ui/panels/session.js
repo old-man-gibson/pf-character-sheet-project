@@ -113,8 +113,8 @@ export function renderSessionBoard(model) {
               <label>Attack set <select data-session-field="${edit}.attackSet"><option value="">Normal (iteratives on a full round)</option><option value="top" ${card.attackSet === 'top' ? 'selected' : ''}>Highest bonus only (flurry)</option></select></label>
             </div>
             <details class="session-help"><summary>How the roll fields work</summary>
-              <p class="hint">Leave a field blank to follow the linked source. Attack takes a number or formula; <code>attack.melee</code> and <code>attack.ranged</code> include current conditions, and custom rolls add nothing else on their own. Damage takes dice plus a formula, such as <code>2d6 + str.mod</code> or <code>{floor(level / 2)}d6</code>, and values defined as dice text. Overrides of either omit the linked weapon’s critical rolls.</p>
-              <p class="hint">Extra attacks repeat the card’s highest attack, each group at its own modifier (<code>1 @ -2, 2 @ -max(0, 4 - essence.shoulders)</code>); counts and modifiers are formulas too. The attack modifier shifts every attack and crit confirmation. Extra damage is a rider: on the Damage roll, and once, unmultiplied, on the crit damage. <em>Highest bonus only</em> drops the reduced-bonus iteratives, as a flurry requires.</p>
+              <p class="hint">Leave a field blank to follow the linked source. Attack takes a number or a formula. <code>attack.melee</code> and <code>attack.ranged</code> include current conditions. Custom rolls add nothing else on their own. Damage takes dice plus a formula, such as <code>2d6 + str.mod</code> or <code>{floor(level / 2)}d6</code>. It also takes values defined as dice text. An override of either field omits the linked weapon’s critical rolls.</p>
+              <p class="hint">Extra attacks repeat the card’s highest attack. Each group uses its own modifier, for example <code>1 @ -2, 2 @ -max(0, 4 - essence.shoulders)</code>. Counts and modifiers can be formulas. The attack modifier applies to every attack and crit confirmation. Extra damage is added to the Damage roll. It is added once, unmultiplied, to the crit damage. <em>Highest bonus only</em> drops the reduced-bonus iteratives, as a flurry requires.</p>
             </details>
           </fieldset>
           <fieldset class="session-fields"><legend>Details</legend>
@@ -159,7 +159,7 @@ export function renderSessionBoard(model) {
         <span class="hint">Formula or number · bonus target: actions.${key}</span></label>
         <label>${label} spent (manual override) ${input(`spent.${key}`, state.spent[key] || 0, 'type="number" min="0"')}</label></div>`).join('')}
         <label>Swift reserved for next turn ${input('pendingSwift', state.pendingSwift, 'type="number" min="0"')}</label></div>
-      <p class="hint">Combat Reflexes: use <code>1 + max(0, dex.mod)</code> for the AoO maximum, or put <code>{actions.aoo += max(0, dex.mod)}</code> in the feat’s text. Use one method. Spent overrides and + affect only the chosen counter. Next turn refreshes actions and AoOs, and applies reserved swift costs. Conditions and exceptional abilities still need your judgment.</p>
+      <p class="hint">Combat Reflexes: set the AoO maximum to <code>1 + max(0, dex.mod)</code>, or put <code>{actions.aoo += max(0, dex.mod)}</code> in the feat’s text. Use one method, not both. Spent overrides and + change only the chosen counter. Next turn refreshes actions and AoOs and applies reserved swift costs. Conditions and exceptional abilities still need your judgment.</p>
       ${button('reset', 'Reset encounter')}
     </details>
     <div class="session-groups">${ACTION_TYPES.map(([key, label]) => {
@@ -172,7 +172,7 @@ export function renderSessionBoard(model) {
           <select data-session-shortcut="${key}" aria-label="Add ${label} shortcut"><option value="">+ Link an attack or ability…</option>${shortcuts.filter(s => !s.actionType || s.actionType === key).map(s => `<option value="${esc(s.key)}">${esc(s.kind)} · ${esc(s.title)}${s.detail ? ` (${esc(s.detail)})` : ''}</option>`).join('')}</select></div>
       </details>`;
     }).join('')}</div>
-    <p class="hint">Drag by ⠿ to reorder, move between action types, or drop into a choice group. A group shows only the selected option; choosing it spends nothing. Use spends that option’s action and resource. Undo restores edits.</p>
+    <p class="hint">Drag by ⠿ to reorder, move between action types, or drop into a choice group. A group shows only the selected option. Choosing an option spends nothing. Use spends that option’s action and resource. Undo restores edits.</p>
   </section>`;
 }
 

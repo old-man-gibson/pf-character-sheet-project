@@ -93,16 +93,15 @@ export function renderSystemManagerPanel(model, ctx) {
           Switch to ${mode === 'session' ? 'build' : 'session'} view</button>
       </h3>
       <p class="hint">
-        The tabs across the top, in order. Drag a row -- or a tab on the bar itself --
-        to rearrange; <strong>Hide</strong> moves a tab down into the lists below with
-        its data intact, and it stays hidden. The swatch on each row colours and renames
-        that tab (right-clicking the tab itself opens the same panel); the colour and the
-        name are the tab's own and show on both bars. Each view keeps its own bar: the
-        <em>build</em> view
+        The tabs across the top, in order. Drag a row, or a tab on the bar itself, to reorder.
+        <strong>Hide</strong> moves a tab into the lists below. Its data is kept and it stays
+        hidden. The swatch on each row colours and renames that tab. Right-clicking the tab
+        itself opens the same panel. The colour and the name belong to the tab and show on
+        both bars. Each view keeps its own bar. The <em>build</em> view
         starts from Overview, Stats, Lore, Skills, Progression, Feats &amp; Mythic,
         Alternate Training, Trackers and Equipment, <em>plus every sub-system this character
-        uses</em>; the <em>session</em> view starts from what comes up at the table --
-        those sub-systems again, minus the build machinery.
+        uses</em>. The <em>session</em> view starts from those sub-systems only, without
+        the build tabs.
         <button data-action="tab-reset">Reset this view's bar</button>
       </p>
       <div class="rowlist tabbar-list">
@@ -113,11 +112,11 @@ export function renderSystemManagerPanel(model, ctx) {
     <section class="panel span2">
       <h3>Hidden tabs</h3>
       <p class="hint">
-        Everything else the sheet can show, alphabetically: the rest of the built-in
+        Every other tab the sheet can show, in alphabetical order: the remaining built-in
         tabs, the modelled sub-systems (Martial and Magic Spheres, Crafting, Akashic, Maneuvers,
         Vancian, Psionics, the companions…), and the workbook's own worksheets.
-        <em>In use</em> marks a sub-system that already holds this character's data;
-        <em>marked</em> means a class on the Overview names the system but its tab is
+        <em>In use</em> marks a sub-system that already holds this character's data.
+        A tab is <em>marked</em> when a class on the Overview names the system but its tab is
         still empty.
       </p>
       <div class="rowlist">
@@ -128,8 +127,8 @@ export function renderSystemManagerPanel(model, ctx) {
     <section class="panel span2">
       <h3>Extra — weird systems</h3>
       <p class="hint">
-        The unusual machinery: casting off a deck, and a workbook's technique list
-        and its auto-technique sheet. Off the bar unless the character uses them.
+        Uncommon systems: casting from a deck, and a workbook's technique list
+        and its auto-technique sheet. These stay off the bar unless the character uses them.
       </p>
       <div class="rowlist">
         ${weird.map(offRow).join('') || '<p class="empty">All of these are on the bar.</p>'}
@@ -139,8 +138,8 @@ export function renderSystemManagerPanel(model, ctx) {
     <section class="panel span2">
       <h3>Worksheets</h3>
       <p class="hint">
-        Add a free grid tab of your own (Vancian spellbook, mount, a homebrew system…).
-        Rename any worksheet by typing over its name above; × deletes one and its data, after asking twice.
+        Add a free grid tab (Vancian spellbook, mount, a homebrew system…).
+        Rename a worksheet by typing over its name above. × deletes a worksheet and its data after asking twice.
       </p>
       <div class="pair">
         <input type="text" data-draft="newSystem" placeholder="New tab name" value="${esc(ctx.draft.newSystem || '')}" style="max-width:16rem">
@@ -309,9 +308,9 @@ function extensionBlocksPanel(model, ctx) {
       <p class="hint">
         What the enabled extension packs offer this character: ${packs.length
     ? `${packs.length} pack${packs.length === 1 ? '' : 's'} on, ${blocks.length} block${blocks.length === 1 ? '' : 's'}.`
-    : 'no packs are enabled.'} <strong>+ Add</strong> copies a block onto the sheet — a class into
+    : 'no packs are enabled.'} <strong>+ Add</strong> copies a block onto the sheet: a class into
         the Classes table, a race into the Overview, a feature onto the Template tab, a tracker
-        onto Trackers — where it is then yours to edit like anything typed in. Packs are managed
+        onto Trackers. The copy can be edited like anything typed in. Packs are managed
         from the page's <em>Extensions</em> button.
       </p>
       ${blocks.length ? `<p class="pair extfind" style="margin:0 0 6px">
