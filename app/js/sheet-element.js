@@ -5093,14 +5093,14 @@ export class CharacterSheetElement extends HTMLElement {
 
     // A deck manipulation picked from the catalogue: it lands in its own group
     // with a count of one, or bumps the count of the row that already has it
-    // -- for whoever the picker beside it names, since a squad member takes
+    // -- for whoever's deck view the picker is on, since a squad member takes
     // its own manipulations.
     root.querySelectorAll('select.manip-pick').forEach((sel) => {
       sel.addEventListener('change', () => {
         const entry = deckManipulation(sel.value);
         sel.value = '';
         if (!entry) return;
-        const owner = root.querySelector('select.manip-owner')?.value || '';
+        const owner = sel.dataset.owner || '';
         const list = this.#model.data.cardcasting?.manipulations || [];
         const idx = list.findIndex((m) => deckManipulation(m.name) === entry && String(m.owner || '') === owner);
         if (idx >= 0) this.#model.setItem('cardcasting.manipulations', idx, 'count', (Number(list[idx].count) || 0) + 1);
