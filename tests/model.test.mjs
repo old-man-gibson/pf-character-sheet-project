@@ -13774,6 +13774,9 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   cc.feats = [{ source: '3 HD', name: 'Card Shark', notes: '' }];
   c.recompute();
   check('Card Shark counts two whether or not it is tagged [Deck]', member().manipulationsAvailable, 2);
+  cc.feats = [{ source: '3 HD', name: 'Card Shark', notes: '' }, { source: '5 HD', name: 'Card Shark [Deck]', notes: '' }, { source: '7 HD', name: 'Card Shark', notes: '' }];
+  c.recompute();
+  check('and two more each further time it is taken', member().manipulationsAvailable, 6);
   cc.feats = [{ source: '1 HD', name: 'Rainbow Efficiency [Deck]', notes: '' }, { source: '3 HD', name: 'Card Shark [Deck]', notes: '' }];
   c.recompute();
   check('and not against the character\'s', p.calc.manipulationsTaken, 0);

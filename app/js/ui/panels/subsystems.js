@@ -3228,11 +3228,11 @@ function deckManipulationsHead(model, p, k, own = '') {
         ${f.rainbow ? `<span class="badge">${f.rainbow === 2 ? 'Improved ' : ''}Rainbow Efficiency</span>` : ''}
       </h3>
       <div class="fieldgrid">
-        ${who ? field('Available', `<span class="badge" title="One per deck feat of its own, and two for Card Shark">${f.available}</span>`) : field('Available', exprField('data-set="cardcasting.manipulationsAvailable"', p.manipulationsAvailable ?? '', {
+        ${who ? field('Available', `<span class="badge" title="One per deck feat of its own, and two for Card Shark each time it is taken">${f.available}</span>`) : field('Available', exprField('data-set="cardcasting.manipulationsAvailable"', p.manipulationsAvailable ?? '', {
     // Blank is automatic, so an emptied box has to store nothing rather than 0.
     kind: 'expr-or-null',
     width: '7rem', value: k.manipulationsAvailable, error: k.manipulationsError, placeholder: `auto: ${k.autoAvailable ?? 0}`,
-    title: 'Blank: one per deck feat, and two for Card Shark. Or a number, or a formula.',
+    title: 'Blank: one per deck feat, and two for Card Shark each time it is taken. Or a number, or a formula.',
   }))}
         ${field('Add from the list', `<span class="pair"><select class="manip-pick" data-owner="${esc(own)}" aria-label="Add a deck manipulation">
           <option value="">— pick a manipulation —</option>
@@ -3243,7 +3243,7 @@ function deckManipulationsHead(model, p, k, own = '') {
         </select></span>`)}
       </div>
       <p class="hint">One manipulation per deck feat (a feat or bought-off drawback tagged [Deck]), and two
-        for Card Shark.${who ? '' : ' The Available field overrides that.'}${squad.length ? ` ${who ? 'A member\'s picks are its own, against its own deck feats, and it may use them at the table while it is there' : 'Each caster\'s picks are its own; a member\'s are on its deck\'s view'}. Each row has an owner pick per copy, so one copy can be given to another deck and the rest kept.` : ''} Hover a name for its rule.${who ? '' : ' Readable as'}
+        for Card Shark each time it is taken.${who ? '' : ' The Available field overrides that.'}${squad.length ? ` ${who ? 'A member\'s picks are its own, against its own deck feats, and it may use them at the table while it is there' : 'Each caster\'s picks are its own; a member\'s are on its deck\'s view'}. Each row has an owner pick per copy, so one copy can be given to another deck and the rest kept.` : ''} Hover a name for its rule.${who ? '' : ' Readable as'}
         ${who ? '' : '<code>deck.manip.&lt;name&gt;</code> (<code>deck.manip.loaded_hand</code>, <code>deck.manip.fused_cards</code>) and <code>deck.feats</code>.'}</p>
     </section>`;
     return collapsible(model, `deck-manipulations${own ? `:${own}` : ''}`, head);

@@ -1272,13 +1272,13 @@ export function recomputeTable(model) {
 
 /**
  * The deck manipulations a set of feats grants: one per deck feat (tagged
- * [Deck]), and two for Card Shark, tagged or not, since the feat itself
- * grants them. `allFeats` is where Card Shark is looked for; the deck feats
- * when it is left out.
+ * [Deck]), and two for Card Shark each time it is taken, tagged or not,
+ * since the feat itself grants them. `allFeats` is where Card Shark is
+ * looked for; the deck feats when it is left out.
  */
 export function manipulationsGranted(deckFeats, allFeats = null) {
   const shark = (f) => /card shark/i.test(String(f || ''));
-  return (deckFeats || []).filter((f) => !shark(f)).length + ((allFeats || deckFeats || []).some(shark) ? 2 : 0);
+  return (deckFeats || []).filter((f) => !shark(f)).length + 2 * (allFeats || deckFeats || []).filter(shark).length;
 }
 
 /** Is a deck feat by that name on the character? */
