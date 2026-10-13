@@ -804,7 +804,12 @@ export class CharacterSheetElement extends HTMLElement {
     // A task later rather than inside the observer: drawing changes the
     // sheet's height, which an observer still delivering reports as a loop.
     setTimeout(() => {
-      if (!this.#model || !this.clientWidth || (this.clientWidth <= 620) === this.#renderedNarrow) return;
+      if (!this.#model || !this.clientWidth) return;
+      if ((this.clientWidth <= 620) === this.#renderedNarrow) {
+        // Same side of the line: only the veil columns may need re-dealing.
+        this.#layoutVeils();
+        return;
+      }
       const active = this.shadowRoot.activeElement;
       if (active) this.#rerender(active); else this.#render();
     });
@@ -2130,6 +2135,7 @@ export class CharacterSheetElement extends HTMLElement {
     this.#stackRows();
     // After the stacking, which decides whether a table has columns at all.
     applyColumnWidths(this.shadowRoot, readColumnWidths(), { stacked: this.clientWidth <= 620 });
+    this.#layoutVeils();
     this.#clampHints();
     this.#fitRail();
     // Last of the layout, since every step above can change a box's height.
@@ -4692,6 +4698,41 @@ export class CharacterSheetElement extends HTMLElement {
       button.setAttribute('aria-expanded', String(open));
       button.textContent = `${open ? '\u25be' : '\u25b8'} Help \u2014 ${label}`;
       hint.parentNode.insertBefore(button, hint);
+    }
+  }
+
+  /**
+   * Deal the veil cards into columns, in reading order.
+   *
+   * The cards are rendered flat; this moves them into as many column boxes
+   * as the Per row setting asks for (or as fit, for Auto), first card to the
+   * first column, second to the second, and round again. A column grows only
+   * when a card in it opens, which is what CSS columns gave, and the order
+   * reads across the rows, which they did not: balanced by height, a slot
+   * moved up the list could land under a different neighbour. Runs after a
+   * render and again when the width changes, and does nothing when the
+   * column count has not.
+   */
+  #layoutVeils() {
+    const GAP = 8;
+    for (const box of this.shadowRoot.querySelectorAll('.veils[data-cols]')) {
+      const pinned = Number(box.dataset.cols) || 0;
+      // Auto wants room for 250px cards; a pinned count still refuses to go under 230px.
+      const floor = pinned ? 230 : 250;
+      const width = box.clientWidth || this.clientWidth || 0;
+      const fit = width ? Math.max(1, Math.floor((width + GAP) / (floor + GAP))) : (pinned || 4);
+      const n = pinned ? Math.min(pinned, fit) : fit;
+      const columns = [...box.querySelectorAll(':scope > .veilcol')];
+      if (columns.length === n) continue;
+      const cards = [...box.querySelectorAll(':scope > .veilslot, :scope > .veilcol > .veilslot')];
+      const dealt = Array.from({ length: n }, () => {
+        const col = this.ownerDocument.createElement('div');
+        col.className = 'veilcol';
+        return col;
+      });
+      cards.forEach((card, i) => dealt[i % n].append(card));
+      box.style.setProperty('--veil-cols', String(n));
+      box.replaceChildren(...dealt);
     }
   }
 
