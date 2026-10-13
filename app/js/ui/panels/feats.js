@@ -269,8 +269,6 @@ export function renderFeaturesPanel(model, ctx) {
           counted into the maximum on the Hit points panel. Path values: Champion/Guardian 5,
           Marshal/Trickster 4, Archmage/Hierophant 3.
         </p>
-        ${rows.collapsibleSub(model, 'mythic-base', 'What each tier grants', mythicTierGrantsHtml(tier), 'mythladder')}
-
         ${rows.collapsibleSub(model, 'mythic-abilities', 'Mythic path abilities', `
           <div class="tablewrap"><table class="mythic stacked">
             <!-- Six columns and one of them prose. The tier, the level it is
@@ -351,45 +349,52 @@ export function renderFeaturesPanel(model, ctx) {
           </p>`, 'mythladder')}
       </section>`)}
 
+      ${rows.collapsible(model, 'mythic-base', mythicTierGrantsPanel(model, tier))}
       ${rows.collapsible(model, 'mythic-tradition', mythicTraditionPanel(model, ctx, m))}
     </div>`;
 }
 
 /**
- * The base mythic abilities tier by tier, with this character's numbers.
+ * The base mythic abilities tier by tier, as a side panel.
  *
- * Rows at or under the tier are what the character has; the rest are greyed,
- * the way the ladder tables grey the tiers ahead. An ability that improves
- * with the tier (Surge, Mythic Power, Amazing Initiative) shows the value at
- * the tier the row is for, so the row for tier 7 reads 1d10 and the one for
- * tier 4 reads 1d8.
+ * One line a tier: the level it is reached at and a chip per ability, the
+ * chip carrying the ability's value at that tier (1d8, 11/day, +4 initiative)
+ * and its rule as a tooltip. Tiers past the character's are greyed, the way
+ * the ladder tables grey them. What the character has now is summed up in
+ * one line at the top, and the rules are written out in a fold under the
+ * table for reading without hovering.
  */
-function mythicTierGrantsHtml(tier) {
-    const row = (t) => `<tr class="${t > tier ? 'future' : ''}" data-rowkey="mythbase">
-      <td class="num" data-stack="head" data-headlabel="Tier">${t}</td>
-      <td class="num derived" data-label="Level" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
-      <td data-label="Grants">${(MYTHIC_TIER_GRANTS[t] || []).map((name) => {
-    const a = MYTHIC_BASE_ABILITIES[name];
-    const value = a?.value ? ` <span class="badge">${esc(a.value(t))}</span>` : '';
-    // Not a `.hint`: those fold behind a Help line, and this text is the row.
-    return `<div class="mythbase"><strong>${esc(name)}</strong>${value}<div class="d">${esc(a?.text || '')}</div></div>`;
-  }).join('')}</td>
+function mythicTierGrantsPanel(model, tier) {
+    const chip = (name, t) => {
+      const a = MYTHIC_BASE_ABILITIES[name] || {};
+      const value = a.value ? ` ${a.value(t)}` : '';
+      return `<span class="badge" title="${esc(a.text || '')}">${esc(name)}${esc(value)}</span>`;
+    };
+    const row = (t) => `<tr class="${t > tier ? 'future' : ''}">
+      <td class="num">${t}</td>
+      <td class="num derived" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
+      <td>${(MYTHIC_TIER_GRANTS[t] || []).map((name) => chip(name, t)).join(' ')}</td>
     </tr>`;
-    return `
-      <div class="tablewrap"><table class="mythic stacked">
-        <colgroup><col class="tier"><col class="lvl"><col></colgroup>
-        <thead><tr>
-          <th class="num">Tier</th>
-          <th class="num" title="The character level this tier is reached at">Level</th>
-          <th>Base abilities gained or improved</th>
-        </tr></thead>
+    const now = tier >= 1 ? [
+      `Mythic power ${MYTHIC_BASE_ABILITIES['Mythic Power'].value(tier)}`,
+      `Surge ${MYTHIC_BASE_ABILITIES.Surge.value(tier)}`,
+      tier >= 2 ? `Initiative ${MYTHIC_BASE_ABILITIES['Amazing Initiative'].value(tier).replace(' initiative', '')}` : '',
+      'Death at −(2 × Con)',
+    ].filter(Boolean).join(' · ') : 'No mythic tier yet.';
+    const names = [...new Set(Object.values(MYTHIC_TIER_GRANTS).flat())];
+    return `<section class="panel">
+      <h3>What each tier grants <span class="badge">tier ${tier}</span></h3>
+      <p class="mythnow">${esc(now)}</p>
+      <table class="mythtiers">
+        <thead><tr><th class="num">Tier</th><th class="num" title="The character level this tier is reached at">Lvl</th><th>Base abilities gained or improved</th></tr></thead>
         <tbody>${MYTHIC_TIERS.map(row).join('')}</tbody>
-      </table></div>
-      <p class="hint">What every mythic character gets at each tier, besides the path
-        abilities and the feat and power rows below. Rows above tier ${tier} are greyed.
-        Amazing Initiative is counted into Initiative from tier 2. Hard to Kill is counted
-        into the death threshold. Mythic Power is the tracker of that name. The rest are
-        rules to apply at the table.</p>`;
+      </table>
+      ${rows.collapsibleSub(model, 'mythic-base-text', 'The rules, in brief', `
+        <dl class="mythtext">${names.map((name) => `<dt>${esc(name)}</dt><dd>${esc(MYTHIC_BASE_ABILITIES[name]?.text || '')}</dd>`).join('')}</dl>`, 'mythbase')}
+      <p class="hint">Hover a name for its rule. Amazing Initiative is counted into Initiative
+        from tier 2, Hard to Kill into the death threshold, and Mythic Power is the tracker
+        of that name. The rest are applied at the table.</p>
+    </section>`;
   }
 
 function mythicTraditionPanel(model, ctx, m) {
