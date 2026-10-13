@@ -13,6 +13,7 @@ import {
   FORWARD_STATS, MANEUVER_FIELDS, SAVE_BONUS_TYPES, SHEET_ALIASES, armorParts, gearBonusToken, skillLabel,
   abpGroupTotal, columnTypes, resolveAbility, statMod,
 } from '../rules.js';
+import { deathThreshold, mythicPowerUses, surgeDie } from '../rules.js';
 import {
   COMPANION_ALIASES, COMPANION_FAMILIES, COMPANION_KINDS, COMPANION_LABELS, COMPANION_TARGETS, companionAttackKey,
   companionHeading, companionInUse, companionNameTest, companionScope, companionSkillKey,
@@ -180,9 +181,14 @@ export function characterScope(model) {
       // The threshold and where it sits, so "within 5 of death" can be
       // written down rather than worked out by hand at every level.
       deathBonus,
-      death: -((Number(c.abilities.con?.workingScore ?? c.abilities.con?.tempScore) || 10) + deathBonus),
+      death: deathThreshold(Number(c.abilities.con?.workingScore ?? c.abilities.con?.tempScore) || 10, deathBonus, Number(c.identity.mythicTier) || 0),
     },
-    mythic: { tier: Number(c.identity.mythicTier) || 0 },
+    mythic: {
+      tier: Number(c.identity.mythicTier) || 0,
+      // Mythic power a day and the surge die: {mythic.power}, 1d{mythic.surge}.
+      power: mythicPowerUses(Number(c.identity.mythicTier) || 0),
+      surge: surgeDie(Number(c.identity.mythicTier) || 0),
+    },
     // The size as it stands, true-size buffs included -- {size} follows an
     // enlarge the moment it is ticked.
     size: model.sizeNow(),

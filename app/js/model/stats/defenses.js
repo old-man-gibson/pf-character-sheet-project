@@ -12,6 +12,7 @@ import {
   ABILITIES, AC_BONUS_TYPES, AC_PENALTY_KEYS, BUFF_MOD_KEYS, CONDITIONS, CONDITION_CHANNELS, SIZE_MODIFIERS,
   abilityMod, abpDefence, armorParts, conditionCount, conditionInfo, conditionTotals, statMod, statModDelta,
 } from '../../rules.js';
+import { deathThreshold } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import {
   METERS, dyingFraction, isDefaultMeterStyle, meterDefaultStyle, normalizeStyle, resolveZones,
@@ -534,8 +535,11 @@ export function hpState(model) {
   const conScore = model.data.abilities.con?.workingScore ?? model.data.abilities.con?.tempScore ?? 10;
   const deathBonus = (Number(hp.deathBonusResolved ?? hp.deathBonus) || 0)
     + forwarded(model, 'hp.deathBonus');
-  const deathAt = -(conScore + deathBonus);
+  // Hard to Kill: a mythic character dies at negative twice its Constitution.
+  const tier = Number(model.data.identity?.mythicTier) || 0;
+  const deathAt = deathThreshold(conScore, deathBonus, tier);
   return {
+    hardToKill: tier >= 1,
     max,
     current,
     baseMax,

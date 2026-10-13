@@ -16,7 +16,8 @@ import * as prose from '../prose.js';
 import { pickSelect, mythicPickAt } from './stats.js';
 import { featDetails, featCatalogue } from '../../model.js';
 import {
-  MYTHIC_PATH_HP, MYTHIC_TRADITION_SLOTS, MYTHIC_TIERS, MYTHIC_TIER_LEVEL, mythicTierGrant,
+  MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS, MYTHIC_TIERS, MYTHIC_TIER_LEVEL,
+  mythicTierGrant,
 } from '../../rules.js';
 
 /** The one feat catalogue list, shared by every name cell on Feats & Mythic. */
@@ -268,6 +269,8 @@ export function renderFeaturesPanel(model, ctx) {
           counted into the maximum on the Hit points panel. Path values: Champion/Guardian 5,
           Marshal/Trickster 4, Archmage/Hierophant 3.
         </p>
+        ${rows.collapsibleSub(model, 'mythic-base', 'What each tier grants', mythicTierGrantsHtml(tier), 'mythladder')}
+
         ${rows.collapsibleSub(model, 'mythic-abilities', 'Mythic path abilities', `
           <div class="tablewrap"><table class="mythic stacked">
             <!-- Six columns and one of them prose. The tier, the level it is
@@ -351,6 +354,43 @@ export function renderFeaturesPanel(model, ctx) {
       ${rows.collapsible(model, 'mythic-tradition', mythicTraditionPanel(model, ctx, m))}
     </div>`;
 }
+
+/**
+ * The base mythic abilities tier by tier, with this character's numbers.
+ *
+ * Rows at or under the tier are what the character has; the rest are greyed,
+ * the way the ladder tables grey the tiers ahead. An ability that improves
+ * with the tier (Surge, Mythic Power, Amazing Initiative) shows the value at
+ * the tier the row is for, so the row for tier 7 reads 1d10 and the one for
+ * tier 4 reads 1d8.
+ */
+function mythicTierGrantsHtml(tier) {
+    const row = (t) => `<tr class="${t > tier ? 'future' : ''}" data-rowkey="mythbase">
+      <td class="num" data-stack="head" data-headlabel="Tier">${t}</td>
+      <td class="num derived" data-label="Level" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
+      <td data-label="Grants">${(MYTHIC_TIER_GRANTS[t] || []).map((name) => {
+    const a = MYTHIC_BASE_ABILITIES[name];
+    const value = a?.value ? ` <span class="badge">${esc(a.value(t))}</span>` : '';
+    // Not a `.hint`: those fold behind a Help line, and this text is the row.
+    return `<div class="mythbase"><strong>${esc(name)}</strong>${value}<div class="d">${esc(a?.text || '')}</div></div>`;
+  }).join('')}</td>
+    </tr>`;
+    return `
+      <div class="tablewrap"><table class="mythic stacked">
+        <colgroup><col class="tier"><col class="lvl"><col></colgroup>
+        <thead><tr>
+          <th class="num">Tier</th>
+          <th class="num" title="The character level this tier is reached at">Level</th>
+          <th>Base abilities gained or improved</th>
+        </tr></thead>
+        <tbody>${MYTHIC_TIERS.map(row).join('')}</tbody>
+      </table></div>
+      <p class="hint">What every mythic character gets at each tier, besides the path
+        abilities and the feat and power rows below. Rows above tier ${tier} are greyed.
+        Amazing Initiative is counted into Initiative from tier 2. Hard to Kill is counted
+        into the death threshold. Mythic Power is the tracker of that name. The rest are
+        rules to apply at the table.</p>`;
+  }
 
 function mythicTraditionPanel(model, ctx, m) {
     const tr = m.tradition || {};

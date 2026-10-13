@@ -1995,8 +1995,8 @@ function hitPointsPanel(ctx, model) {
       </div>
       <div class="hpactions">${restButtons()}</div>
       <p class="hint">Damage spends temporary hit points first. Death comes at
-        −(Con ${hp.deathBonus ? `+ ${hp.deathBonus} ` : ''}), so the threshold moves
-        with Con. Raise Death threshold for Death's Door and the like. End encounter, New day and
+        −(${hp.hardToKill ? '2 × Con' : 'Con'} ${hp.deathBonus ? `+ ${hp.deathBonus} ` : ''}), so the threshold moves
+        with Con.${hp.hardToKill ? ' The doubling is Hard to Kill, from the 1st mythic tier.' : ''} Raise Death threshold for Death's Door and the like. End encounter, New day and
         New week each restore what lasts that long. Each includes the shorter
         rests. All three can be undone.</p>
     </section>`;

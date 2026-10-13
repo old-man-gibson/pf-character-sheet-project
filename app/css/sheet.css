@@ -4281,6 +4281,10 @@ table.feats tr.featempty td { cursor: default; }
    would leave the gap where the table was, so it goes. */
 .foldsub.collapsed > h4.subhead { margin-bottom: 0; }
 h4.subhead [data-collapse] { margin-left: auto; padding: 1px 8px; }
+/* The base-abilities ladder on Feats & Mythic: a name, a value badge and a line of text per ability. */
+.mythbase { margin: 2px 0 6px; }
+.mythbase .d { font-size: 0.78rem; color: var(--cs-muted); max-width: 70ch; }
+
 table.mythic { table-layout: fixed; }
 table.mythic col.tier { width: 3.2rem; }
 table.mythic col.lvl { width: 3.2rem; }
