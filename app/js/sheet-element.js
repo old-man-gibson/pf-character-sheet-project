@@ -2123,6 +2123,43 @@ export class CharacterSheetElement extends HTMLElement {
    * Editing rewrites the panel, which would otherwise drop focus mid-edit and
    * make tabbing through a row impossible.
    */
+  /** The box the sheet scrolls in when it is embedded in one, else null for the page. */
+  #scrollBox() {
+    let el = this.parentElement;
+    while (el && el !== document.body) {
+      const cs = getComputedStyle(el);
+      if (/(auto|scroll)/.test(cs.overflowY) && el.scrollHeight > el.clientHeight + 1) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  /**
+   * The first card face the browser is drawing, and where its top is on the
+   * screen -- read before a render, so the view can be put back to it after.
+   * Faces above the view are placeholders (content-visibility), and reading
+   * their boxes would lay each out; `checkVisibility` says which are drawn
+   * without touching them.
+   */
+  #viewAnchor() {
+    const faces = this.shadowRoot.querySelectorAll('[data-face]');
+    if (!faces.length) return null;
+    const drawn = [...faces].find((f) => typeof f.checkVisibility !== 'function' || f.checkVisibility({ contentVisibilityAuto: true }));
+    if (!drawn) return null;
+    return { key: drawn.dataset.face, top: drawn.getBoundingClientRect().top, box: this.#scrollBox() };
+  }
+
+  /** Scroll by however far the anchored face moved in the render, so the view stays where it was. */
+  #holdAnchor(anchor) {
+    if (!anchor) return;
+    const again = this.shadowRoot.querySelector(`[data-face="${CSS.escape(anchor.key)}"]`);
+    if (!again) return;
+    const delta = again.getBoundingClientRect().top - anchor.top;
+    if (Math.abs(delta) < 1) return;
+    if (anchor.box) anchor.box.scrollTop += delta;
+    else window.scrollBy(0, delta);
+  }
+
   #rerender(activeInput) {
     const key = controlKey(activeInput);
     const caret = activeInput?.selectionStart ?? null;
@@ -2180,7 +2217,9 @@ export class CharacterSheetElement extends HTMLElement {
       }
     }
     next.closest('.xf')?.classList.add('editing');
-    next.focus();
+    // The same control, where it was: giving it focus must not scroll the
+    // view, which the render has just put back where it stood.
+    next.focus({ preventScroll: true });
     if (caret !== null && typeof next.setSelectionRange === 'function'
       && (CARET_TYPES.has(next.type) || next.tagName === 'TEXTAREA')) {
       try { next.setSelectionRange(caret, caret); } catch { /* unsupported input type */ }
@@ -2368,6 +2407,11 @@ export class CharacterSheetElement extends HTMLElement {
      */
     const scrolled = { tab: this.#tab, at: [...this.shadowRoot.querySelectorAll('.body .tablewrap')]
       .map((w) => [w.scrollTop, w.scrollLeft]) };
+    // The first face still drawn, and where it sits on the screen. The deck
+    // redraws fifty faces whose off-screen placeholders are not their real
+    // heights, so without an anchor the view lands a few pixels off per face
+    // above it, and an edit makes the page jump.
+    const anchor = this.#viewAnchor();
 
     this.shadowRoot.innerHTML = `
       ${SHEET_LINK}
@@ -2439,6 +2483,7 @@ export class CharacterSheetElement extends HTMLElement {
         if (left) w.scrollLeft = left;
       });
     }
+    this.#holdAnchor(anchor);
     if (this.isPublished) this.#lockPublished();
     // The palette outlives the markup around it: innerHTML dropped it, and the
     // node (with its listeners) is still here to be put back.
