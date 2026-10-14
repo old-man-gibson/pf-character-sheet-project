@@ -1655,6 +1655,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'bury': m.tableBury(id); break;
       case 'move': m.tableMove(id, arg); break;
       case 'targets': m.tableTargets(id, arg); break;
+      case 'springs': m.tableSprings(id, arg); break;
       case 'tap': m.tableTap(id); break;
       case 'peek': this.#view.peek = m.tablePeek(Number(arg) || 1); break;
       default: return false;
@@ -5438,7 +5439,11 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-table]').forEach((b) => {
       b.addEventListener('click', () => {
         const [action, id, arg] = b.dataset.table.split('|');
-        if (this.#tableAction(action, id, castPickArg(b, arg))) this.#render();
+        if (this.#tableAction(action, id, castPickArg(b, arg))) {
+          this.#render();
+          // A trap just set asks what springs it: the field is ready to type into.
+          if (action === 'play' && arg === 'trap') this.shadowRoot.querySelector(`[data-table-springs="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+        }
       });
     });
     // The mode chooser's points follow the mode picked, as its price.
@@ -5462,6 +5467,12 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-table-targets]').forEach((input) => {
       input.addEventListener('change', () => {
         if (this.#tableAction('targets', input.dataset.tableTargets, input.value)) this.#rerender(input);
+      });
+    });
+    // When a face-down trap springs, typed on it as it is set.
+    root.querySelectorAll('[data-table-springs]').forEach((input) => {
+      input.addEventListener('change', () => {
+        if (this.#tableAction('springs', input.dataset.tableSprings, input.value)) this.#rerender(input);
       });
     });
 

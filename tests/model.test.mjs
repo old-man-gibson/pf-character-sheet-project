@@ -13443,16 +13443,23 @@ console.log('\na trap card says when it springs; a card may target the caster');
   c.recompute();
   const t = () => c.data.cardcasting.table;
   check('self is among the targets offered', subsystemPanels.cardcastingPanel(c, { deckView: 'deck', openCards: new Set() }).includes('<datalist id="card-targets"><option value="self">'), true);
-  check('the spring condition is a line of the stat line', c.cardStatLines(c.data.cardcasting.cards[0]).at(-1), ['Springs when', 'a creature enters the square']);
-  const deck = subsystemPanels.cardcastingPanel(c, { deckView: 'deck', openCards: new Set() });
-  check('a face with a condition edits it; one without, in a deck without Trap Card, does not show the row',
-    [deck.includes('data-item="cardcasting.cards|0|trigger"'), deck.includes('data-item="cardcasting.cards|1|trigger"')], [true, false]);
+  check('a card has no spring condition of its own: it belongs to the trap as it is set', 'trigger' in c.data.cardcasting.cards[0] && c.cardStatLines(c.data.cardcasting.cards[0]).some(([l]) => /spring/i.test(l)), false);
   c.tableStart();
   const id = t().hand.find((x) => x.startsWith('0#')) || (t().hand.push('0#0'), t().deck = t().deck.filter((x) => x !== '0#0'), '0#0');
+  check('nothing is written for a card that is not a face-down trap', (c.tableSprings(id, 'early'), Object.keys(t().springs)), []);
   c.tablePlay(id, 'trap');
-  check('set face down, the player\'s view shows when it springs and the shared table does not',
-    [subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set() }).includes('<small>springs</small> a creature enters the square'),
-      subsystemPanels.cardTableView(c, { openCards: new Set() }, 'table').includes('a creature enters the square')], [true, false]);
+  const mine = () => subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set() });
+  check('set face down, the trap offers a field for when it springs; the shared table has none',
+    [mine().includes(`data-table-springs="${id}"`), subsystemPanels.cardTableView(c, { openCards: new Set() }, 'table').includes('data-table-springs')], [true, false]);
+  c.tableSprings(id, '  a creature enters the square ');
+  check('the condition is kept on the trap, trimmed, and shown in the field', [t().springs[id], mine().includes('value="a creature enters the square"')], ['a creature enters the square', true]);
+  check('undo takes it back as one step, named for the card', [c.undo(), id in t().springs], ['Snare springs when', false]);
+  c.tableSprings(id, 'a creature enters the square');
+  check('the shared table never sees it', subsystemPanels.cardTableView(c, { openCards: new Set() }, 'table').includes('a creature enters the square'), false);
+  c.tableReveal(id);
+  check('revealed, the trap is an ongoing card and the condition is gone', [t().faceDown.includes(id), id in t().springs], [false, false]);
+  c.tableEnd();
+  check('an encounter starts with none', (c.tableStart(), t().springs), {});
   c.tableEnd();
 }
 
@@ -13501,10 +13508,10 @@ console.log('\na card\'s stat line: save, DC, range, target and damage types, ea
   check('a range worked out to a number is feet', [far.rangeFeet, c.cardStatLines(cards[3]).find(([l]) => l === 'Range')], [150, ['Range', '150 ft']]);
   check('"none" is a save line of its own', c.cardStatLines(cards[3])[0], ['Save', 'none']);
   check('a card with none of it has nothing to say', [c.cardStats(cards[4]).any, c.cardStatLines(cards[4]), c.cardStats({}).any], [false, [], false]);
-  check('every card carries the eight fields as text once read', CARD_STAT_FIELDS.map((f) => cards[4][f]), ['', '', '', '', '', '', '', '']);
+  check('every card carries the seven fields as text once read', CARD_STAT_FIELDS.map((f) => cards[4][f]), ['', '', '', '', '', '', '']);
   c.shareCardDice('cardcasting.cards', 0);
   check('"alike" hands the stat line on with the dice', CARD_STAT_FIELDS.map((f) => cards[1][f]),
-    ['Ref', '10 + floor(level/2) + int.mod', 'close', 'burst', '{level} rounds', 'standard action', '', 'fire, cold']);
+    ['Ref', '10 + floor(level/2) + int.mod', 'close', 'burst', '{level} rounds', 'standard action', 'fire, cold']);
   check('and leaves a card with another effect alone', cards[2].save, '');
   const html = subsystemPanels.cardcastingPanel(c, { deckView: 'deck', openCards: new Set() });
   check('the face edits each field, with a pick list behind it',

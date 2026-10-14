@@ -161,9 +161,9 @@ function draw(msg) {
     const scroller = document.scrollingElement || document.documentElement;
     const top = scroller.scrollTop;
     const boxes = [...root.querySelectorAll('.zone, .text, .log, .tablewrap')].map((el) => el.scrollTop);
-    const typing = root.activeElement?.dataset?.tableTargets
-      ? { key: root.activeElement.dataset.tableTargets, caret: root.activeElement.selectionStart }
-      : null;
+    const active = root.activeElement;
+    const typingAttr = active?.dataset?.tableTargets ? 'data-table-targets' : active?.dataset?.tableSprings ? 'data-table-springs' : null;
+    const typing = typingAttr ? { attr: typingAttr, key: active.getAttribute(typingAttr), caret: active.selectionStart } : null;
     root.innerHTML = html;
     if (features !== null) featRoot.innerHTML = features;
     drawn = { html, features };
@@ -171,7 +171,7 @@ function draw(msg) {
     const again = [...root.querySelectorAll('.zone, .text, .log, .tablewrap')];
     if (again.length === boxes.length) again.forEach((el, i) => { if (boxes[i]) el.scrollTop = boxes[i]; });
     if (typing) {
-      const field = root.querySelector(`[data-table-targets="${CSS.escape(typing.key)}"]`);
+      const field = root.querySelector(`[${typing.attr}="${CSS.escape(typing.key)}"]`);
       if (field) {
         field.focus({ preventScroll: true });
         try { field.setSelectionRange(typing.caret, typing.caret); } catch { /* not a text control */ }
@@ -224,6 +224,7 @@ root.addEventListener('change', (e) => {
   if (sel?.matches?.('.castpick select[name="mode"]')) { followCastPick(sel); return; }
   // Who an ongoing card is affecting: typed in the hand window, kept on the sheet; blank clears it.
   if (sel?.dataset?.tableTargets) { send({ type: 'cards:action', action: 'targets', id: sel.dataset.tableTargets, arg: sel.value }); return; }
+  if (sel?.dataset?.tableSprings) { send({ type: 'cards:action', action: 'springs', id: sel.dataset.tableSprings, arg: sel.value }); return; }
   if (!sel?.value) return;
   if (sel.dataset.tableMove) send({ type: 'cards:action', action: 'move', id: sel.dataset.tableMove, arg: sel.value });
   else if (sel.dataset.tableRoll) send({ type: 'cards:action', action: 'boost', id: sel.dataset.tableRoll, arg: sel.value });

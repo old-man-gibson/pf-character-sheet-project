@@ -785,10 +785,11 @@ where it is. While an encounter is on, nothing leaves the deck — the table add
 cards by their place — but a copy, or a card joining the deck, is fine; a card that joins
 the deck is in play after the next shuffle.
 
-**Traps.** A deck with Trap Card among its feats gives every face a **springs** row: when
-the trap goes off, in your words ("a creature enters the square"), a formula in braces
-allowed. It is a line of the stat line and travels with the dice to alike cards; a trap set
-face down shows it on the player's view and the hand window, never on the shared table.
+**Traps.** A trap set face down carries a **springs when** line, stated as it is set
+("a creature enters the square") and kept beside it while it lies face down. It is the
+trap's, not the card's: the same card set another time may wait for something else. It is
+typed on the tab or in the hand window, never shown on the shared table, is one undo step
+named for the card, and goes when the trap is sprung, revealed or moved.
 
 **Targets.** A card in play has a **targets** line under its text — "the ogre and both
 guards" — typed on the tab or in the hand window, read on the shared table screen, and

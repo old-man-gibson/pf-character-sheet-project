@@ -1226,6 +1226,10 @@ export function recomputeTable(model) {
   t.targets = Object.fromEntries(Object.entries(t.targets && typeof t.targets === 'object' ? t.targets : {})
     .filter(([id, text]) => t.play.includes(id) && String(text || '').trim())
     .map(([id, text]) => [id, String(text)]));
+  // When a face-down trap springs, stated by the player as it is set; it goes when the trap is sprung, revealed or moved.
+  t.springs = Object.fromEntries(Object.entries(t.springs && typeof t.springs === 'object' ? t.springs : {})
+    .filter(([id, text]) => t.faceDown.includes(id) && String(text || '').trim())
+    .map(([id, text]) => [id, String(text)]));
   if (t.lastRoll && typeof t.lastRoll !== 'object') t.lastRoll = null;
   if (t.counters && (typeof t.counters !== 'object' || !model.tableCard(t.counters.id))) t.counters = null;
   t.lastTrigger = typeof t.lastTrigger === 'string' ? t.lastTrigger : '';
@@ -1635,7 +1639,7 @@ export function tableStart(model) {
   Object.assign(t, {
     active: true, round: 1, redraws: 0, manaPlayed: 0,
     deck: shuffle(model, model.tableInstances().filter((id) => !held.has(id))), hand: [], play: [], mana: [], discard: [], exile: [],
-    ...piles, faceDown: [], targets: {}, log: [], counters: null, lastRoll: null, lastTrigger: '',
+    ...piles, faceDown: [], targets: {}, springs: {}, log: [], counters: null, lastRoll: null, lastTrigger: '',
   });
   const loaded = 2 * (k.loadedHand || 0);
   tableLog(model, t, `encounter begins — ${t.deck.length} cards shuffled${t.banished.length ? ` (${t.banished.length} banished until spell points recover)` : ''}`);
@@ -2186,7 +2190,7 @@ export function appendDiceText(current, piece) {
  * ------------------------------------------------------------------ */
 
 /** The fields of a card's stat line, in the order the face shows them. */
-export const CARD_STAT_FIELDS = ['save', 'dc', 'range', 'target', 'duration', 'casting', 'trigger', 'damage'];
+export const CARD_STAT_FIELDS = ['save', 'dc', 'range', 'target', 'duration', 'casting', 'damage'];
 /** The saves a card may call for, as the picker offers them. */
 export const CARD_SAVES = ['Ref', 'Fort', 'Will', 'none'];
 /** The range words, and the Pathfinder bands behind three of them (feet at a caster level). */
@@ -2246,11 +2250,9 @@ export function cardStats(model, card, who = null) {
   const target = text('target');
   const duration = text('duration');
   const casting = text('casting');
-  // A trap's spring condition, in the player's words.
-  const trigger = text('trigger');
   const damage = text('damage').split(/\s*[,;]\s*/).map((s) => s.trim()).filter(Boolean);
-  const any = !!(save || dcRaw || range || target || duration || casting || trigger || damage.length);
-  return { save, dc, dcError, range, rangeFeet, target, duration, casting, trigger, damage, any };
+  const any = !!(save || dcRaw || range || target || duration || casting || damage.length);
+  return { save, dc, dcError, range, rangeFeet, target, duration, casting, damage, any };
 }
 
 /**
@@ -2278,7 +2280,6 @@ export function cardStatLines(model, card, who = null) {
   if (s.target) lines.push(['Target', s.target]);
   if (s.duration) lines.push(['Duration', s.duration]);
   if (s.casting) lines.push(['Casting time', s.casting]);
-  if (s.trigger) lines.push(['Springs when', s.trigger]);
   if (s.damage.length) lines.push(['Damage type', s.damage.join(', ')]);
   return lines;
 }
@@ -2391,6 +2392,21 @@ export function tableTargets(model, id, text) {
   t.targets = t.targets && typeof t.targets === 'object' ? t.targets : {};
   const clean = String(text ?? '').trim();
   if (clean) t.targets[id] = clean; else delete t.targets[id];
+  return model.recompute();
+}
+
+/**
+ * When a face-down trap springs, in the player's words -- "a creature enters
+ * the square" -- stated as the trap is set and kept beside it while it lies
+ * face down. It is the trap's, not the card's: the same card set another
+ * time may wait for something else. Blank clears it.
+ */
+export function tableSprings(model, id, text) {
+  const t = model.data.cardcasting?.table;
+  if (!t || !(t.faceDown || []).includes(id)) return model;
+  t.springs = t.springs && typeof t.springs === 'object' ? t.springs : {};
+  const clean = String(text ?? '').trim();
+  if (clean) t.springs[id] = clean; else delete t.springs[id];
   return model.recompute();
 }
 
@@ -2562,7 +2578,7 @@ export function tableEnd(model) {
   const banished = (t.banished || []).length;
   Object.assign(t, {
     active: false, round: 0, redraws: 0, manaPlayed: 0,
-    deck: shuffle(model, all), hand: [], play: [], mana: [], discard: [], exile: [], faceDown: [], targets: {},
+    deck: shuffle(model, all), hand: [], play: [], mana: [], discard: [], exile: [], faceDown: [], targets: {}, springs: {},
     counters: null, lastRoll: null, lastTrigger: '',
   });
   tableLog(model, t, `encounter over — everything shuffled back${exiled ? ` (${exiled} exiled cards: half return now, the rest one a minute)` : ''}${banished ? ` — ${banished} banished until spell points recover` : ''}`);
