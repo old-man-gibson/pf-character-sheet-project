@@ -24,6 +24,13 @@
   "kv_namespaces": [
     { "binding": "SHEETS", "id": "4e52b930d33f4b449da628387c48b08c" }
   ],
+  // The relay that hands a squad member to the GM: one Durable Object per
+  // published character, holding the WebSockets and the grants (see
+  // functions/api/c/relay.js). SQLite-backed, which is the free-plan kind.
+  "durable_objects": {
+    "bindings": [{ "name": "RELAY", "class_name": "Relay" }]
+  },
+  "migrations": [{ "tag": "relay-v1", "new_sqlite_classes": ["Relay"] }],
   // Every other branch builds as a Preview, which takes its settings from here
   // and inherits none of the above. Empty on purpose: a preview is for looking
   // at the sheet, and gets no store, so Publish there says so instead of

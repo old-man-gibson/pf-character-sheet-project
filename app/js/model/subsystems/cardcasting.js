@@ -1281,6 +1281,31 @@ export function manipulationsGranted(deckFeats, allFeats = null) {
   return (deckFeats || []).filter((f) => !shark(f)).length + 2 * (allFeats || deckFeats || []).filter(shark).length;
 }
 
+/**
+ * What a GM holding one squad member may do from the control page: play,
+ * resolve, reveal, roll and boost the member's own cards, move them between
+ * zones, write their targets, tap the member's mana, Retrace from the
+ * discard, open the chooser -- and nothing on anyone else's cards, nothing
+ * that drives the round (start, next, redraw, draw, end), nothing that reads
+ * secrets (peek), nothing that spends the character's own spell points.
+ */
+export const REMOTE_ACTIONS = ['play', 'resolve', 'reveal', 'roll', 'boost', 'move', 'targets', 'tap', 'pick', 'expand', 'retrace'];
+
+export function remoteAllowed(model, member, action, id) {
+  const who = String(member ?? '');
+  if (!who || !REMOTE_ACTIONS.includes(String(action))) return false;
+  const card = model.tableCard(String(id ?? ''));
+  return !!card && cardOwner(model, card) === who;
+}
+
+/** A play's argument with the caster fixed to the member: `cast?mode=…&who=<member>`. */
+export function remotePlayArg(arg, member) {
+  const [how, query] = String(arg ?? '').split('?');
+  const q = new URLSearchParams(query || '');
+  q.set('who', String(member));
+  return `${how || 'cast'}?${q.toString()}`;
+}
+
 /** Is a deck feat by that name on the character? */
 export function hasDeckFeat(model, re) {
   return (model.data.cardcasting?.calc?.deckFeats || []).some((f) => re.test(f));

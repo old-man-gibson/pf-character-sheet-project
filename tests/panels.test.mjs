@@ -1067,6 +1067,34 @@ console.log('\na squad member takes its own deck manipulations');
   alone.recompute();
   const solo = subsystems.cardcastingPanel(alone, { ...ctx, deckView: 'deck' });
   ok('without a squad there is one deck, no owner picks and no other decks', !solo.includes('data-manip-owner') && !solo.includes('otherdecks') && /The deck/.test(solo));
+
+  // Handed to the GM: the control view, the features pane, the Squad panel's buttons.
+  let seed = 3;
+  c.rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  c.tableSquad(cc.id, true);
+  c.tableStart();
+  const t = c.data.cardcasting.table;
+  const mend = [...t.deck, ...t.hand].find((id) => id.startsWith('1#'));
+  const bolt = [...t.deck, ...t.hand].find((id) => id.startsWith('0#'));
+  c.tableMove(mend, 'hand');
+  c.tableMove(bolt, 'hand');
+  c.tablePlay(bolt, 'ongoing');
+  const control = subsystems.cardTableView(c, ctx, 'control', cc.id);
+  ok('the control view is the member\'s hand with its buttons, and says whose it is', control.includes('controlview') && control.includes(`data-card="${mend}"`) && new RegExp(`data-table="play\\|${mend}\\|cast"`).test(control) && /You are running Lira/.test(control));
+  ok('the character\'s cards are not in that hand, and in play they take no press', !new RegExp(`class="mcard mini[^"]*" [^>]*data-card="${bolt}"[^]*?data-table="resolve\\|${bolt}`).test(control) && control.includes('f-play') && !control.includes(`data-table="resolve|${bolt}|"`));
+  ok('no round controls, no windows, no peek, no spell points of the player\'s', !/data-table="next\|/.test(control) && !/data-table="window\|/.test(control) && !/data-table="peek\|/.test(control) && !/data-table="sp\|/.test(control) && !/data-table="exileRandom\|/.test(control));
+  ok('the table window itself is unchanged by the member', subsystems.cardTableView(c, ctx, 'table').includes(`data-table="resolve|${bolt}|"`));
+  const face = subsystems.companionFace(c, 'conjured', cc.id);
+  ok('the features pane is the companion\'s tab inside a disabled fieldset, without the switch', face.startsWith('<fieldset disabled class="companionface">') && face.includes('Lira') && !face.includes('companionswitch'));
+  check('an unknown member has no face', subsystems.companionFace(c, 'conjured', 'nobody'), '');
+  const offer = subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck', grants: {} });
+  ok('the Squad panel offers to hand a member over', offer.includes(`data-action="hand-over" data-member="${cc.id}"`));
+  const grants = { [cc.id]: { url: 'https://x/app/cards.html?view=control', name: 'Lira', viewers: 1, since: 'now' } };
+  const given = subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck', grants });
+  ok('handed over, it shows the link, who is watching, Copy and Take back', given.includes('value="https://x/app/cards.html?view=control"') && /handed to the GM · 1 watching/.test(given) && given.includes(`data-action="take-back" data-member="${cc.id}"`) && given.includes('data-action="copy-grant-link"'));
+  ok('and the roster flags the member', subsystems.cardcastingPanel(c, { ...ctx, deckView: 'table', grants }).includes('⚑'));
+  c.tableEnd();
+  ok('with no encounter the control view says so', /No encounter in play/.test(subsystems.cardTableView(c, ctx, 'control', cc.id)));
 }
 
 console.log('\na card with several modes asks on the way in');

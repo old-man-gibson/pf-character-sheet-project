@@ -5407,6 +5407,13 @@ table.stacked .catface { margin-left: 0; }
 .tablefield.handview .f-hand .zone.hand { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
 .tablefield.handview .f-deck, .tablefield.handview .f-log { grid-column: 1 / -1; }
 .tablefield.tableview .f-log { max-height: 16rem; overflow: auto; }
+/* The GM's control page: the member's hand across the top, the field as the table window has it. */
+.tablefield.controlview .f-hand, .tablefield.controlview .f-log { grid-column: 1 / -1; }
+.tablefield.controlview .f-hand .zone.hand { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.gmnote { grid-column: 1 / -1; margin: 0; }
+.grant { flex-wrap: wrap; margin-top: 6px; }
+/* The companion's features on the GM's page: the tab's panels, nothing pressable. */
+.companionface { border: 0; padding: 0; margin: 0; min-width: 0; }
 /* A window shown plain -- for the screen being shared: the cards, the piles
    and the log, with the buttons and the rules notes out of the way. */
 :host([plain]) .tablectl, :host([plain]) .mcard .foot .tools, :host([plain]) .zonerow .tools,

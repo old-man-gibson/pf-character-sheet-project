@@ -56,7 +56,7 @@
 
 import {
   Character, inspectDocument, deckManipulation, techniqueTitle, emptyDish,
-  poolAt, poolBar, poolPip, poolStep, poolTyped,
+  poolAt, poolBar, poolPip, poolStep, poolTyped, remoteAllowed, remotePlayArg,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
 import { COMPANION_KINDS, COMPANION_LABELS } from './companions.js';
@@ -1173,6 +1173,10 @@ export class CharacterSheetElement extends HTMLElement {
     this.#model = new Character(structuredClone(doc));
     // The card table's windows listen on a channel named for the character.
     this.#openCardChannel();
+    // A member handed to the GM stays handed over across a reload: the grants
+    // ride with the publish link, and the relay is opened again for them.
+    this.#closeRelay();
+    this.#loadGrants();
     /*
      * Settle the play state before anything is measured.
      *
@@ -1376,6 +1380,199 @@ export class CharacterSheetElement extends HTMLElement {
   /** The channel's name: this character's, so two sheets open side by side do not cross. */
   #cardChannelName() { return `cs-cards:${this.#model?.data?.id || 'character'}`; }
 
+  /* ------------------------------------------------------------------ *
+   * The relay: a squad member handed to the GM.
+   *
+   * The GM is not on this origin, so the BroadcastChannel cannot reach
+   * them; the relay (functions/api/c/relay.js) carries the same messages
+   * over a WebSocket. This sheet stays the one copy of the character: it
+   * renders the GM's page for each member handed over, and a press from
+   * that page runs here, through #tableAction, if the allow-list in the
+   * model says the GM may make it on that card. The grants ride with the
+   * publish link in localStorage, so a reload picks them up again.
+   * ------------------------------------------------------------------ */
+
+  /** The relay's state: the socket, the grants by member id, and who is watching each. */
+  #relay = { socket: null, tries: 0, members: {}, viewers: {}, closing: false };
+
+  #publishLinkKey() { return `published-link:${this.#model?.data?.id || 'character'}`; }
+  #readPublishLink() { try { return JSON.parse(localStorage.getItem(this.#publishLinkKey()) || 'null'); } catch { return null; } }
+  #writePublishLink(link) { try { localStorage.setItem(this.#publishLinkKey(), JSON.stringify(link)); } catch { /* private window */ } }
+
+  /** The relay's address for one call: `/api/c/<id>/<what>` (this file is app/js/). */
+  #relayApi(id, what) { return new URL(`../../api/c/${id}/${what}`, import.meta.url); }
+
+  /** The grants kept with the publish link, loaded when a character is installed; the socket follows. */
+  #loadGrants() {
+    const kept = this.isPublished ? null : this.#readPublishLink();
+    this.#relay.members = kept?.grants && typeof kept.grants === 'object' ? kept.grants : {};
+    this.#relay.viewers = {};
+    if (Object.keys(this.#relay.members).length) this.#openRelay();
+  }
+
+  /** What the panels show of the grants: member id to { url, name, since, viewers }. */
+  #grantsForCtx() {
+    const out = {};
+    for (const [member, g] of Object.entries(this.#relay.members)) out[member] = { ...g, viewers: this.#relay.viewers[member] || 0 };
+    return out;
+  }
+
+  /** The control link for a member's grant: the GM's page on this app, with the published id, the member and the grant. */
+  #grantUrl(id, member, token) {
+    const url = new URL('../cards.html', import.meta.url);
+    url.searchParams.set('view', 'control');
+    url.searchParams.set('s', id);
+    url.searchParams.set('m', member);
+    url.searchParams.set('t', token);
+    return url.href;
+  }
+
+  /** Hand a member to the GM: publish first if need be, make the grant, open the relay. */
+  async #handOver(member) {
+    const m = (this.#model?.data?.cardcasting?.calc?.squad || []).find((x) => x.id === member);
+    if (!m) return;
+    let kept = this.#readPublishLink();
+    if (!kept?.id || !kept?.token) {
+      await this.#publish();
+      kept = this.#readPublishLink();
+      if (!kept?.id || !kept?.token) return;   // #publish said why
+    }
+    this.#historyNote = `Handing ${m.name} over…`;
+    this.#renderHeader();
+    try {
+      const res = await fetch(this.#relayApi(kept.id, 'grant'), {
+        method: 'POST', credentials: 'omit', headers: { 'content-type': 'application/json', authorization: `Bearer ${kept.token}` },
+        body: JSON.stringify({ member, name: m.name }),
+      });
+      if (res.status === 404 || res.status === 405) throw new Error('this copy of the app has no relay');
+      const answer = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(answer?.error || `the server answered ${res.status}`);
+      this.#relay.members[member] = { name: m.name, token: answer.token, url: this.#grantUrl(kept.id, member, answer.token), since: new Date().toLocaleString() };
+      this.#writePublishLink({ ...kept, grants: this.#relay.members });
+      this.#historyNote = `${m.name} is handed to the GM — copy the control link from the Squad panel. Keep this sheet open: the GM's presses run here.`;
+      this.#openRelay();
+    } catch (err) {
+      this.#historyNote = `Could not hand ${m.name} over — ${err.message.replace(/\.$/, '')}.`;
+    }
+    this.#render();
+  }
+
+  /** Take a member back: the GM's page is told and closed. */
+  async #takeBack(member) {
+    const kept = this.#readPublishLink();
+    const g = this.#relay.members[member];
+    if (!g) return;
+    delete this.#relay.members[member];
+    delete this.#relay.viewers[member];
+    this.#writePublishLink({ ...(kept || {}), grants: this.#relay.members });
+    if (kept?.id && kept?.token) {
+      try {
+        await fetch(this.#relayApi(kept.id, `grant/${encodeURIComponent(member)}`), { method: 'DELETE', credentials: 'omit', headers: { authorization: `Bearer ${kept.token}` } });
+      } catch { /* the link is gone from this sheet either way */ }
+    }
+    this.#historyNote = `${g.name || 'The companion'} is yours again.`;
+    if (!Object.keys(this.#relay.members).length) this.#closeRelay();
+    this.#render();
+  }
+
+  async #copyGrantLink(member) {
+    const g = this.#relay.members[member];
+    if (!g) return;
+    let ok = true;
+    try { await navigator.clipboard.writeText(g.url); } catch { ok = false; }
+    this.#historyNote = ok ? 'Control link copied — send it to the GM.' : 'The clipboard is not available here: select the link in the Squad panel and copy it.';
+    this.#renderHeader();
+  }
+
+  /** Open the socket to the relay: a ticket bought with the publish token, then the socket. */
+  async #openRelay() {
+    const r = this.#relay;
+    if (r.socket || r.closing || typeof WebSocket === 'undefined') return;
+    const kept = this.#readPublishLink();
+    if (!kept?.id || !kept?.token || !Object.keys(r.members).length) return;
+    let ticket;
+    try {
+      const res = await fetch(this.#relayApi(kept.id, 'ticket'), { method: 'POST', credentials: 'omit', headers: { authorization: `Bearer ${kept.token}` } });
+      ticket = (await res.json().catch(() => null))?.ticket;
+      if (!res.ok || !ticket) throw new Error('no ticket');
+    } catch {
+      this.#relayRetry();
+      return;
+    }
+    const url = this.#relayApi(kept.id, 'relay');
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.searchParams.set('owner', ticket);
+    let ws;
+    try { ws = new WebSocket(url.href); } catch { this.#relayRetry(); return; }
+    r.socket = ws;
+    ws.addEventListener('open', () => { r.tries = 0; this.#postRelay(); });
+    ws.addEventListener('message', this.#onRelayMessage);
+    ws.addEventListener('close', () => {
+      if (r.socket === ws) r.socket = null;
+      if (!r.closing && Object.keys(r.members).length) this.#relayRetry();
+    });
+  }
+
+  #relayRetry() {
+    const r = this.#relay;
+    const wait = Math.min(30000, 1000 * 2 ** Math.min(r.tries++, 5));
+    setTimeout(() => { if (!r.closing && !r.socket && Object.keys(r.members).length) this.#openRelay(); }, wait);
+  }
+
+  #closeRelay() {
+    const r = this.#relay;
+    r.closing = true;
+    const ws = r.socket;
+    r.socket = null;
+    try { ws?.close(); } catch { /* already closed */ }
+    r.viewers = {};
+    r.closing = false;
+  }
+
+  /** Draw the GM's page for every member handed over that someone is watching. */
+  #postRelay() {
+    const r = this.#relay;
+    if (!this.#model || !r.socket || r.socket.readyState !== WebSocket.OPEN) return;
+    for (const member of Object.keys(r.members)) {
+      if (!r.viewers[member]) continue;
+      const m = (this.#model.data.cardcasting?.calc?.squad || []).find((x) => x.id === member);
+      const msg = {
+        type: 'render',
+        member,
+        title: `${m?.name || r.members[member].name || 'Companion'} — handed to the GM`,
+        html: subsystems.cardTableView(this.#model, this.#ctx(), 'control', member),
+        features: m ? subsystems.companionFace(this.#model, m.kind, member) : '',
+        theme: this.getAttribute('theme') || '',
+        scheme: this.getAttribute('scheme') || '',
+      };
+      try { r.socket.send(JSON.stringify(msg)); } catch { /* closing */ }
+    }
+  }
+
+  /** A message from the relay: who is watching, or a press from the GM. */
+  #onRelayMessage = (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    if (!msg || typeof msg !== 'object' || !this.#model) return;
+    const r = this.#relay;
+    if (msg.type === 'grants') {
+      const before = JSON.stringify([r.viewers, Object.keys(r.members)]);
+      r.viewers = Object.fromEntries((msg.members || []).map((g) => [g.member, Number(g.viewers) || 0]));
+      // A grant the relay no longer holds -- taken back from another browser -- is dropped here too.
+      const known = new Set((msg.members || []).map((g) => g.member));
+      for (const member of Object.keys(r.members)) if (!known.has(member)) delete r.members[member];
+      if (JSON.stringify([r.viewers, Object.keys(r.members)]) !== before) this.#render();
+    } else if (msg.type === 'action') {
+      const member = String(msg.member || '');
+      const action = String(msg.action || '');
+      const id = String(msg.id || '');
+      let arg = String(msg.arg || '');
+      if (!r.members[member] || !remoteAllowed(this.#model, member, action, id)) return;
+      if (action === 'play') arg = remotePlayArg(arg, member);
+      if (this.#tableAction(action, id, arg, { fromWindow: true })) this.#render();
+    }
+  };
+
   /** Open the channel for the character just installed, closing the last one's. */
   #openCardChannel() {
     this.#closeCardChannel();
@@ -1483,6 +1680,7 @@ export class CharacterSheetElement extends HTMLElement {
 
   /** Draw the windows from the character as it is now: one message per view with a viewer. */
   #postCardWindows(only = null) {
+    if (!only) this.#postRelay();
     if (!this.#model || !this.#cardChannel || !this.#cardViewers.size) return;
     const views = only ? [only] : ['table', 'hand'];
     for (const view of views) {
@@ -1520,6 +1718,7 @@ export class CharacterSheetElement extends HTMLElement {
       try { if (win && !win.closed) win.close(); } catch { /* already gone */ }
     }
     this.#closeCardChannel();
+    this.#closeRelay();
   };
 
   get isAdmin() { return this.getAttribute('role') === 'admin'; }
@@ -3038,7 +3237,7 @@ export class CharacterSheetElement extends HTMLElement {
    * scratch on its ctx -- the Lore tab collects its option menus there --
    * leaves the view as it found it.
    */
-  #ctx(extra = {}) { return { ...this.#view, tab: this.#tab, rollFormat: this.#rollFormat, ...extra }; }
+  #ctx(extra = {}) { return { ...this.#view, tab: this.#tab, rollFormat: this.#rollFormat, grants: this.#grantsForCtx(), ...extra }; }
 
   #overviewPanel() { return overview.renderOverviewPanel(this.#model, this.#ctx()); }
 
@@ -6658,6 +6857,15 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       case 'publish':
         this.#publish();
+        break;
+      case 'hand-over':
+        this.#handOver(String(button?.dataset.member || ''));
+        break;
+      case 'take-back':
+        this.#takeBack(String(button?.dataset.member || ''));
+        break;
+      case 'copy-grant-link':
+        this.#copyGrantLink(String(button?.dataset.member || ''));
         break;
       case 'copy-published-link':
         this.#copyPublishedLink();
