@@ -2828,9 +2828,10 @@ function tableHead(s) {
 
     const notes = [];
     if (model.terrainCasting()) {
-      const tr = model.terrainFreedomTracker();
-      const left = tr ? Math.max(0, (Number(tr.max) || 0) - (Number(tr.current) || 0)) : null;
-      notes.push(`Terrain Casting: every cast pays one spell point more, or a casting-time step, or blights your square and the eight around it. Cast pays the point on a card with a cost and the step on an at-will one; … pays another way${tr ? `, or spends a Drawback Freedom use (${left} left)` : ''}.`);
+      const freedom = model.terrainFreedom();
+      notes.push(freedom
+        ? `Terrain Casting is on the tradition, and ${freedom} ignores it: no cast pays it.`
+        : 'Terrain Casting: every cast pays one spell point more, or a casting-time step, or blights your square and the eight around it. Cast pays the point on a card with a cost and the step on an at-will one; … pays another way.');
     }
     if (active && k.handMax) notes.push(`Tight Hand: ${t.hand.length} of ${k.handMax} in hand${tc.handOver ? ` — ${tc.handOver} over` : ''}.`);
     if (active && p.mods.gradualRamp) notes.push(`Gradual Ramp: ${t.manaPlayed} Mana Point card${t.manaPlayed === 1 ? '' : 's'} played this round (one allowed).`);
@@ -2923,13 +2924,11 @@ function castPicker(s, id, card, modes, casters = []) {
 function terrainRow(model, card) {
     const fallback = model.terrainDefault(card);
     if (!fallback) return '';
-    const tr = model.terrainFreedomTracker();
-    const left = tr ? Math.max(0, (Number(tr.max) || 0) - (Number(tr.current) || 0)) : null;
     const slower = stepCastingTime(card.casting);
-    const label = (k, text) => (k === 'step' && slower ? `casting time one step slower (${slower})` : k === 'waive' ? (tr ? `${text} (${left} left)` : `${text} — no tracker named Drawback Freedom (Terrain Casting)`) : text);
+    const label = (k, text) => (k === 'step' && slower ? `casting time one step slower (${slower})` : text);
     return `<label class="pickrow">Terrain Casting
           <select name="terrain" aria-label="Terrain Casting">
-            ${TERRAIN_CHOICES.map(([k, text]) => `<option value="${k}"${k === fallback ? ' selected' : ''}${k === 'waive' && !tr ? ' disabled' : ''}>${esc(label(k, text))}</option>`).join('')}
+            ${TERRAIN_CHOICES.map(([k, text]) => `<option value="${k}"${k === fallback ? ' selected' : ''}>${esc(label(k, text))}</option>`).join('')}
           </select>
         </label>`;
   }
@@ -3439,7 +3438,11 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
     // Opened out, the face takes two columns, the text a taller box and the
     // Dice field a line per roll: room to read and to edit.
     const open = !!ctx.openCards?.has?.(`${list}.${i}`);
-    return `<article class="mcard ${frameClass}${open ? ' open' : ''}" style="${r.artifact ? '' : esc(cardFrameStyle(colors))}">
+    // The face's last measured height, as its placeholder while it is off the
+    // screen (content-visibility): see the element's #watchFaces.
+    const known = ctx.faceHeights?.get?.(`${list}.${i}`);
+    const placeholder = known ? `contain-intrinsic-size: auto ${known}px;` : '';
+    return `<article class="mcard ${frameClass}${open ? ' open' : ''}" data-face="${list}.${i}" style="${r.artifact ? '' : esc(cardFrameStyle(colors))}${placeholder}">
       <div class="bar title">
         <input type="text" class="name" value="${esc(card.name ?? '')}" data-item="${list}|${i}|name" data-kind="text"
           placeholder="${isMana ? 'Mana Point' : 'Card name'}" aria-label="Card name">

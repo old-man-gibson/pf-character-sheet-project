@@ -151,18 +151,44 @@ function draw(msg) {
   title.textContent = heading;
   status(view === 'table' ? 'the table — what everyone may see' : view === 'hand' ? 'your hand — keep this one off the stream' : 'the GM’s hand — presses run on the player’s sheet');
   empty.hidden = true;
-  root.innerHTML = `${SHEET_LINK}<div class="cardwin ${view}">${msg.html || ''}</div>`;
-  if (control) {
-    featRoot.innerHTML = `${SHEET_LINK}<div class="cardwin features">${msg.features || '<p class="empty">No features to show.</p>'}</div>`;
-    showFeatures.hidden = false;
+  const html = `${SHEET_LINK}<div class="cardwin ${view}">${msg.html || ''}</div>`;
+  const features = control ? `${SHEET_LINK}<div class="cardwin features">${msg.features || '<p class="empty">No features to show.</p>'}</div>` : null;
+  // The sheet posts a render on every change of its own, most of them to
+  // things this window does not show. Markup that has not changed is left
+  // standing: a redraw reset the scroll and dropped the focus, so every
+  // edit on the sheet made this window jump to its top.
+  if (html !== drawn.html || features !== drawn.features) {
+    const scroller = document.scrollingElement || document.documentElement;
+    const top = scroller.scrollTop;
+    const boxes = [...root.querySelectorAll('.zone, .text, .log, .tablewrap')].map((el) => el.scrollTop);
+    const typing = root.activeElement?.dataset?.tableTargets
+      ? { key: root.activeElement.dataset.tableTargets, caret: root.activeElement.selectionStart }
+      : null;
+    root.innerHTML = html;
+    if (features !== null) featRoot.innerHTML = features;
+    drawn = { html, features };
+    scroller.scrollTop = top;
+    const again = [...root.querySelectorAll('.zone, .text, .log, .tablewrap')];
+    if (again.length === boxes.length) again.forEach((el, i) => { if (boxes[i]) el.scrollTop = boxes[i]; });
+    if (typing) {
+      const field = root.querySelector(`[data-table-targets="${CSS.escape(typing.key)}"]`);
+      if (field) {
+        field.focus({ preventScroll: true });
+        try { field.setSelectionRange(typing.caret, typing.caret); } catch { /* not a text control */ }
+      }
+    }
   }
+  if (control) showFeatures.hidden = false;
   followHost();
 }
+/** What the window last drew, so an identical render is not drawn again. */
+let drawn = { html: null, features: null };
 
 /** The sheet has gone: say so, and close if this window was opened by it. */
 function sheetGone(why = 'The sheet that was drawing this window has closed. Open it again from the Cardcasting tab.') {
   root.innerHTML = '';
   featRoot.innerHTML = '';
+  drawn = { html: null, features: null };
   featHost.hidden = true;
   showFeatures.hidden = true;
   empty.hidden = false;
