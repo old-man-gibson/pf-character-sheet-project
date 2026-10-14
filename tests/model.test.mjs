@@ -13331,7 +13331,6 @@ console.log('\nTerrain Casting: every cast pays a point, a step, a blight, or a 
     { name: 'Glow', qty: 3, cost: '0', color: 'W', mana: '', sphere: 'Light', effect: 'Glow', dice: '', casting: 'standard action' },
   ];
   c.addTracker({ name: 'Spell Points', maxFormula: '20' });
-  c.addTracker({ name: 'Drawback Freedom (Terrain Casting)', maxFormula: '3' });
   c.recompute();
   const cards = c.data.cardcasting.cards;
   const t = () => c.data.cardcasting.table;
@@ -13354,14 +13353,20 @@ console.log('\nTerrain Casting: every cast pays a point, a step, a blight, or a 
   const b3 = sp();
   c.tablePlay('0#1', 'cast', { terrain: 'blight' });
   check('blight costs nothing now and is written down for the map', [sp() - b3, /blighted: dead magic for you/.test(log())], [1, true]);
+  const html = subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set(), castPick: t().hand[0] || null });
+  check('the table says the drawback is in force', /Terrain Casting: every cast pays one spell point more/.test(html), true);
+  check('and the tradition panel does too', /Terrain Casting is in force/.test(combatPanels.renderMagicPanel(c)), true);
+  // Drawback Freedom (Terrain Casting) as a mythic path ability -- here the
+  // pick of an Extra Mythic Path Ability -- switches the drawback off.
+  c.data.mythic.abilities[0] = { ...c.data.mythic.abilities[0], name: 'Extra Mythic Path Ability', featChoice: 'Drawback Freedom (Terrain Casting)' };
+  c.recompute();
   inHand('0#2');
   const b4 = sp();
-  const freedom = () => Number(c.terrainFreedomTracker().current) || 0;
-  c.tablePlay('0#2', 'cast', { terrain: 'waive' });
-  check('Drawback Freedom waives it for one use from its tracker', [sp() - b4, freedom(), /Terrain Casting waived, 2 uses left/.test(log())], [1, 1, true]);
-  const html = subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set(), castPick: t().hand[0] || null });
-  check('the table says the drawback is in force, with the uses left', /Terrain Casting: every cast pays one spell point more/.test(html) && /Drawback Freedom use \(2 left\)/.test(html), true);
-  check('and the tradition panel does too', /Terrain Casting is in force/.test(combatPanels.renderMagicPanel(c)), true);
+  c.tablePlay('0#2', 'cast');
+  check('with Drawback Freedom for it, nothing pays the drawback', [c.terrainFreedom(), c.terrainDefault(cards[0]), c.castCheck('0#2').need, sp() - b4],
+    ['Drawback Freedom (Terrain Casting), a mythic path ability', null, 1, 1]);
+  check('and both panels say the ability ignores it', [/ignores it: no cast pays it/.test(subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set() })), /ignores it/.test(combatPanels.renderMagicPanel(c))], [true, true]);
+  check('a copy taken for another drawback does not', (c.data.mythic.abilities[0].featChoice = 'Drawback Freedom (Card Casting)', c.recompute(), c.terrainFreedom()), '');
   c.data.training.magic.tradition.boughtOff = ['Terrain Casting'];
   c.recompute();
   check('bought off, the drawback is gone', [c.terrainCasting(), c.terrainDefault(cards[0]), c.castCheck('0#0').need], [false, null, 1]);

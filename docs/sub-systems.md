@@ -792,8 +792,10 @@ gone with the card when it resolves. Each change is one undo step, named for the
 **Terrain Casting.** With the drawback on the tradition (and not bought off), every cast
 pays it one of three ways: one spell point more, a casting-time step, or blighting your
 square and the eight around it. A plain **Cast** pays the point on a card with a cost and
-the step on an at-will one; the **…** beside Cast opens the chooser to pay another way, or
-to waive it with a use from a tracker named *Drawback Freedom (Terrain Casting)*. The point
+the step on an at-will one; the **…** beside Cast opens the chooser to pay another way. A
+*Drawback Freedom (Terrain Casting)* — a mythic path ability of that name, the pick of an
+Extra Mythic Path Ability, or a feat — switches the drawback off for every cast, and the
+table and the tradition panel say so instead of charging. The point
 rides on the cost, so the mana it needs and the points it spends both count it; the step
 names the slower casting time when the card has one (*standard action* → *full-round
 action*); blight is a log line for the GM's map. The **Cost** field stays the card's own
