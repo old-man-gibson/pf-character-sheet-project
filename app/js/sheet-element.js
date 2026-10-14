@@ -123,8 +123,9 @@ import {
 import { formulaPlace } from './ui/formula-places.js';
 import { hasTokens } from './inline.js';
 import {
-  historyFor, countChanges, requestPersistence, SNAPSHOT_EVERY, AUTO_KEEP,
+  historyFor, countChanges, requestPersistence, workingKey, SNAPSHOT_EVERY, AUTO_KEEP,
 } from './history.js';
+import { SCHEMA_VERSION } from './model.js';
 import { downloadFile } from './download.js';
 import {
   TRACKER_PALETTE, normalizeStyle, normalizeHex, isDefaultStyle, rgba, readableOn,
@@ -866,6 +867,8 @@ export class CharacterSheetElement extends HTMLElement {
     }
     // The card table's pop-out windows are told when the sheet goes.
     window.addEventListener('pagehide', this.#closeCardWindows);
+    // The same character open in another window: its writes are picked up here.
+    window.addEventListener('storage', this.#onStorage);
     if (this.#model && !this.#cardChannel) this.#openCardChannel();
     const src = this.getAttribute('src');
     if (src && !this.#model) this.load(src);
@@ -873,6 +876,9 @@ export class CharacterSheetElement extends HTMLElement {
 
   disconnectedCallback() {
     window.removeEventListener('pagehide', this.#closeCardWindows);
+    window.removeEventListener('storage', this.#onStorage);
+    clearTimeout(this.#syncTimer);
+    this.#pendingSync = null;
     this.#closeCardWindows();
     extensionRuntime.removeEventListener('change', this.#onExtensionsChange);
     this.ownerDocument.removeEventListener('keydown', this.#onDocumentKey);
@@ -1803,6 +1809,90 @@ export class CharacterSheetElement extends HTMLElement {
     return ok;
   }
 
+  /* ------------------------------------------------------------------ *
+   * The same character in two windows.
+   *
+   * Each window keeps its own model and writes the working copy on every
+   * change; nothing used to listen, so a deck built in one window and a
+   * Save pressed there left the other window on the old state until a
+   * reload. Every write to localStorage fires `storage` in the other
+   * windows of the origin, so the working copy is the live channel: a
+   * window whose copy changed under it adopts the new one. The canonical
+   * version and the checkpoints live in IndexedDB, which fires nothing, so
+   * a save stamps a marker key as well, and the other windows read their
+   * saved version and their list again.
+   *
+   * A window being typed in waits until the field is left, since adopting
+   * is a wholesale render and would take the caret; the latest copy wins
+   * then. Two windows edited at once settle on whichever wrote last, which
+   * is what one player with two windows means.
+   * ------------------------------------------------------------------ */
+
+  /** A copy from another window waiting for the field being typed in to be left. */
+  #pendingSync = null;
+  #syncTimer = null;
+
+  /** The marker a save or a checkpoint stamps for the other windows. */
+  #historyMarkKey() { return `${workingKey(this.#model?.data?.id || 'character')}:history`; }
+
+  #markHistory() {
+    try { localStorage.setItem(this.#historyMarkKey(), new Date().toISOString()); } catch { /* the other windows will see it on reload */ }
+  }
+
+  #onStorage = (e) => {
+    if (!this.#model || this.isPublished || !e.key) return;
+    const id = this.#model.data.id;
+    if (e.key === workingKey(id)) {
+      if (!e.newValue) return;
+      let copy;
+      try { copy = JSON.parse(e.newValue); } catch { return; }
+      if (!copy?.data || copy.data.schemaVersion !== SCHEMA_VERSION) return;
+      this.#pendingSync = copy.data;
+      // Typing in the other window writes on every keystroke; settle first.
+      clearTimeout(this.#syncTimer);
+      this.#syncTimer = setTimeout(() => this.#applySync(), 250);
+    } else if (e.key === this.#historyMarkKey()) {
+      this.#syncHistory();
+    }
+  };
+
+  /** Adopt the other window's working copy, unless a field here is being typed in. */
+  #applySync() {
+    const data = this.#pendingSync;
+    if (!data || !this.#model) return;
+    const active = this.shadowRoot?.activeElement;
+    if (active?.matches?.('input, textarea, select, [contenteditable="true"]')) {
+      active.addEventListener('blur', () => this.#applySync(), { once: true });
+      return;
+    }
+    this.#pendingSync = null;
+    const mine = this.#model.toJSON();
+    if (JSON.stringify(data) === JSON.stringify(mine)) return;
+    const changes = countChanges(mine, data, 500);
+    // The pop-out windows listening to this sheet stay listening: adopting
+    // reopens the channel, which forgets who said hello.
+    const viewers = new Set(this.#cardViewers);
+    this.#adoptDocument(data);
+    for (const v of viewers) this.#cardViewers.add(v);
+    this.#historyNote = `Picked up ${changes >= 500 ? 'the' : changes} change${changes === 1 ? '' : 's'} made in another window.`;
+    this.#render();
+  }
+
+  /** Another window saved, or kept a checkpoint: the saved version and the list are read again. */
+  async #syncHistory() {
+    if (!this.#model || !this.#history) return;
+    const model = this.#model;
+    const canonical = await this.#history.readSaved();
+    if (this.#model !== model) return;
+    if (canonical?.data) this.#savedDoc = canonical.data;
+    this.#staleSaved = !!canonical && !canonical.data;
+    await this.#refreshSnapshots();
+    if (this.#model !== model) return;
+    this.#changes = this.#baseline ? countChanges(this.#baseline, this.#model.toJSON()) : 0;
+    if (this.#changes < this.#snapshotAt) this.#snapshotAt = this.#changes;
+    this.#renderHeader();
+  }
+
   /**
    * Recount the drift from the saved version, and snapshot if it has gone far
    * enough.
@@ -1865,6 +1955,7 @@ export class CharacterSheetElement extends HTMLElement {
       this.#historyNote = this.#changes
         ? 'Saved. Newer edits are still unsaved.'
         : 'Saved. This is the version the sheet will open on.';
+      this.#markHistory();
     } catch (err) {
       if (this.#model !== model) return;
       this.#historyNote = `Could not save — ${err.message}.`
@@ -1884,6 +1975,7 @@ export class CharacterSheetElement extends HTMLElement {
       this.#checkpointDraft = '';
       this.#historyNote = `Checkpoint “${label}” kept. Automatic snapshots will not evict it.`;
       await this.#refreshSnapshots();
+      this.#markHistory();
     } catch (err) {
       this.#historyNote = `Could not keep that checkpoint — ${err.message}.`;
     }
