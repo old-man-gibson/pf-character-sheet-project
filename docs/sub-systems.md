@@ -763,7 +763,7 @@ Open cards are a way of looking, kept for the session and not saved.
 
 **The stat line.** Under a face's type line sit five fields the table reads without
 reading the effect: **save** (Ref, Fort, Will, none), **DC**, **range** (melee, close,
-medium, long, or a number of feet), **target** (single, line, cone, burst), **duration**
+medium, long, or a number of feet), **target** (self, single, line, cone, burst), **duration**
 (instantaneous, concentration, 1 round/level… or `{caster.level} rounds`), **cast** (the
 casting time: standard action, swift action, full-round action, 1 minute…) and **dmg**,
 the damage types, with a picker that adds one at a time. Each takes a formula — `{10 +
@@ -784,6 +784,11 @@ sends the effect as a line of its own. Every face has **→ sideboard** / **⧉ 
 where it is. While an encounter is on, nothing leaves the deck — the table addresses deck
 cards by their place — but a copy, or a card joining the deck, is fine; a card that joins
 the deck is in play after the next shuffle.
+
+**Traps.** A deck with Trap Card among its feats gives every face a **springs** row: when
+the trap goes off, in your words ("a creature enters the square"), a formula in braces
+allowed. It is a line of the stat line and travels with the dice to alike cards; a trap set
+face down shows it on the player's view and the hand window, never on the shared table.
 
 **Targets.** A card in play has a **targets** line under its text — "the ogre and both
 guards" — typed on the tab or in the hand window, read on the shared table screen, and

@@ -13432,6 +13432,30 @@ console.log('\nan ongoing card carries who it is affecting while it is in play')
   c.tableEnd();
 }
 
+console.log('\na trap card says when it springs; a card may target the caster');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 5 }));
+  c.data.cardcasting.enabled = true;
+  c.data.cardcasting.cards = [
+    { name: 'Snare', qty: 3, cost: '1', color: 'G', mana: '', sphere: 'Nature', effect: 'Entangle', dice: '', target: 'self', trigger: 'a creature enters the square' },
+    { name: 'Plain', qty: 1, cost: '1', color: 'R', mana: '', sphere: 'Destruction', effect: 'Blast', dice: '' },
+  ];
+  c.recompute();
+  const t = () => c.data.cardcasting.table;
+  check('self is among the targets offered', subsystemPanels.cardcastingPanel(c, { deckView: 'deck', openCards: new Set() }).includes('<datalist id="card-targets"><option value="self">'), true);
+  check('the spring condition is a line of the stat line', c.cardStatLines(c.data.cardcasting.cards[0]).at(-1), ['Springs when', 'a creature enters the square']);
+  const deck = subsystemPanels.cardcastingPanel(c, { deckView: 'deck', openCards: new Set() });
+  check('a face with a condition edits it; one without, in a deck without Trap Card, does not show the row',
+    [deck.includes('data-item="cardcasting.cards|0|trigger"'), deck.includes('data-item="cardcasting.cards|1|trigger"')], [true, false]);
+  c.tableStart();
+  const id = t().hand.find((x) => x.startsWith('0#')) || (t().hand.push('0#0'), t().deck = t().deck.filter((x) => x !== '0#0'), '0#0');
+  c.tablePlay(id, 'trap');
+  check('set face down, the player\'s view shows when it springs and the shared table does not',
+    [subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set() }).includes('<small>springs</small> a creature enters the square'),
+      subsystemPanels.cardTableView(c, { openCards: new Set() }, 'table').includes('a creature enters the square')], [true, false]);
+  c.tableEnd();
+}
+
 console.log('the Dice picker joins what it adds to what is there');
 {
   check('a roll into an empty field', appendDiceText('', '{1+floor(caster.level/2)}d6'), '{1+floor(caster.level/2)}d6');
@@ -13477,10 +13501,10 @@ console.log('\na card\'s stat line: save, DC, range, target and damage types, ea
   check('a range worked out to a number is feet', [far.rangeFeet, c.cardStatLines(cards[3]).find(([l]) => l === 'Range')], [150, ['Range', '150 ft']]);
   check('"none" is a save line of its own', c.cardStatLines(cards[3])[0], ['Save', 'none']);
   check('a card with none of it has nothing to say', [c.cardStats(cards[4]).any, c.cardStatLines(cards[4]), c.cardStats({}).any], [false, [], false]);
-  check('every card carries the seven fields as text once read', CARD_STAT_FIELDS.map((f) => cards[4][f]), ['', '', '', '', '', '', '']);
+  check('every card carries the eight fields as text once read', CARD_STAT_FIELDS.map((f) => cards[4][f]), ['', '', '', '', '', '', '', '']);
   c.shareCardDice('cardcasting.cards', 0);
   check('"alike" hands the stat line on with the dice', CARD_STAT_FIELDS.map((f) => cards[1][f]),
-    ['Ref', '10 + floor(level/2) + int.mod', 'close', 'burst', '{level} rounds', 'standard action', 'fire, cold']);
+    ['Ref', '10 + floor(level/2) + int.mod', 'close', 'burst', '{level} rounds', 'standard action', '', 'fire, cold']);
   check('and leaves a card with another effect alone', cards[2].save, '');
   const html = subsystemPanels.cardcastingPanel(c, { deckView: 'deck', openCards: new Set() });
   check('the face edits each field, with a pick list behind it',

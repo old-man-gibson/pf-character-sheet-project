@@ -60,7 +60,7 @@ import {
 import { ABILITY_LABELS_LIST, nameDatalist, noteCell, packText } from '../html.js';
 import {
   CARD_CASTING_TIMES, CARD_DAMAGE_TYPES, CARD_DURATIONS, CARD_RANGES, CARD_SAVES, CARD_STAT_FIELDS, CARD_TARGETS,
-  TERRAIN_CHOICES, stepCastingTime,
+  TERRAIN_CHOICES, hasDeckFeat, stepCastingTime,
 } from '../../model/subsystems/cardcasting.js';
 import { round } from '../format.js';
 import {
@@ -2986,6 +2986,7 @@ function playZone(s) {
     const cards = (t.play || []).map((id) => (faceDown.has(id)
       ? `<div class="mcard mini trap" data-card="${esc(id)}">
           <div class="trapback">Trap<br><small>face down</small></div>
+          ${s.faces.controls && model.cardStats(model.tableCard(id)).trigger ? `<div class="targets"><small>springs</small> ${esc(model.cardStats(model.tableCard(id)).trigger)}</div>` : ''}
           <div class="foot"><span class="pair tools">${s.mine(id) ? `
             ${tableBtn('resolve', id, 'Spring', { title: 'The trap springs: it is cast now, keywords and all', cls: 'primary', copy: copyText(id) })}
             ${tableBtn('reveal', id, 'Reveal', { title: 'Turn it face up, still in play' })}
@@ -3519,6 +3520,7 @@ function cardStatBars(model, list, i, card) {
       changed('target', s.target) ? ['Target', s.target] : null,
       changed('duration', s.duration) ? ['Duration', s.duration] : null,
       changed('casting', s.casting) ? ['Casting time', s.casting] : null,
+      changed('trigger', s.trigger) ? ['Springs when', s.trigger] : null,
       changed('damage', s.damage.join(', ')) ? ['Damage', s.damage.join(', ')] : null,
     ].filter(Boolean).map(([l, t, cls = 'ok']) => `<span class="badge ${cls}">${esc(l)} ${esc(t)}</span>`).join('');
     // Two to a row while the entries are words; a formula in any of them
@@ -3527,6 +3529,9 @@ function cardStatBars(model, list, i, card) {
       const v = String(card[f] ?? '').trim();
       return /[{}()+*/]/.test(v) || v.length > 14;
     });
+    // A trap's spring condition: offered on every face of a deck with Trap
+    // Card among its feats, and kept on any face that has one written.
+    const trap = hasDeckFeat(model, /trap card/i) || String(card.trigger || '').trim();
     return `<div class="bar stats${wide ? ' rows' : ''}">
         ${stat('save', 'save', 'Saving throw: Ref, Fort, Will or none — or a formula in braces', 'card-saves')}
         ${stat('dc', 'DC', 'Save DC: a number or a formula — caster.dc, 10 + floor(caster.level/2) + int.mod', 'card-dcs')}
@@ -3543,7 +3548,11 @@ function cardStatBars(model, list, i, card) {
           ${CARD_DAMAGE_TYPES.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}
         </select>
         ${preview ? `<span class="preview">${preview}</span>` : ''}
-      </div>`;
+      </div>${trap ? `
+      <div class="bar stats trap">
+        <span class="stat grow" title="When the trap springs: the condition, in your words — a formula in braces works here too"><small>springs</small>
+          <input type="text" value="${esc(card.trigger ?? '')}" data-item="${ref}|trigger" data-kind="text" placeholder="when it springs — a creature enters the square…" aria-label="Springs when"></span>
+      </div>` : ''}`;
   }
 
   /**
