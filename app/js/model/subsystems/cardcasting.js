@@ -1190,13 +1190,18 @@ export function tableCard(model, id) {
  * The drawback: "Whenever you use a sphere talent or ability you must
  * either spend an additional spell point or increase your casting time by
  * one step, else your magic drains and corrupts your space and all adjacent
- * squares." So every cast pays one of three ways, chosen on the way in; a
- * Drawback Freedom (Terrain Casting) use waives it. The table applies it to
- * cards -- the one place the sheet sees a cast happen -- with the spell
- * point as the default on a card that costs any, and the casting step on an
- * at-will one. The Cost field is the card's own cost; the terrain point is
- * added here, so a two-colour card under Rainbow Efficiency is typed at its
- * discounted cost and still pays the terrain point on top.
+ * squares." So every cast pays one of three ways, chosen on the way in. The
+ * table applies it to cards -- the one place the sheet sees a cast happen --
+ * with the spell point as the default on a card that costs any, and the
+ * casting step on an at-will one. The Cost field is the card's own cost; the
+ * terrain point is added here, so a two-colour card under Rainbow Efficiency
+ * is typed at its discounted cost and still pays the terrain point on top.
+ *
+ * Drawback Freedom, the mythic path ability ("when you cast a sphere effect,
+ * you can ignore one general drawback that would otherwise apply to it"),
+ * is not a pool of uses: a copy taken for Terrain Casting -- a mythic row
+ * or a feat reading "Drawback Freedom (Terrain Casting)" -- switches the
+ * drawback off for every cast, and the table says so instead of charging.
  * ------------------------------------------------------------------ */
 
 /** Whether the tradition carries a drawback, and has not bought it off. */
@@ -1216,23 +1221,32 @@ export const TERRAIN_CHOICES = [
   ['sp', 'one spell point more'],
   ['step', 'casting time one step slower'],
   ['blight', 'blight this square and the eight around it'],
-  ['waive', 'Drawback Freedom: waive it'],
 ];
 
-/** The tracker a Drawback Freedom (Terrain Casting) use is spent from, if the player made one. */
-export function terrainFreedomTracker(model) {
-  return (model.trackers || []).find((t) => /drawback freedom/i.test(String(t.name || '')) && /terrain/i.test(String(t.name || ''))) || null;
+/**
+ * What switches Terrain Casting off: a Drawback Freedom taken for it, as a
+ * mythic path ability (a row of its own, or the pick of an Extra Mythic Path
+ * Ability) or a feat. Returns where it was found, or '' when it was not.
+ */
+export function terrainFreedom(model) {
+  const d = model.data;
+  const hit = (s) => /drawback freedom/i.test(String(s || '')) && /terrain casting/i.test(String(s || ''));
+  for (const a of d.mythic?.abilities || []) {
+    if ([a?.name, a?.featChoice, a?.effect, a?.featEffect].some(hit)) return 'Drawback Freedom (Terrain Casting), a mythic path ability';
+  }
+  if (featNames(d).some(hit)) return 'Drawback Freedom (Terrain Casting), among the feats';
+  return '';
 }
 
-/** How a plain Cast pays Terrain Casting for this card: the point on a card that costs any, the step on an at-will one; null when the drawback is not in force. */
+/** How a plain Cast pays Terrain Casting for this card: the point on a card that costs any, the step on an at-will one; null when the drawback is not in force, or Drawback Freedom ignores it. */
 export function terrainDefault(model, card) {
-  if (!terrainCasting(model)) return null;
+  if (!terrainCasting(model) || terrainFreedom(model)) return null;
   return cardCost(card) > 0 ? 'sp' : 'step';
 }
 
-/** The toll a cast pays: the chooser's pick when it is one of the four, else the card's default. */
+/** The toll a cast pays: the chooser's pick when it is one of the three, else the card's default. */
 export function terrainToll(model, card, choice = null) {
-  if (!terrainCasting(model)) return null;
+  if (!terrainCasting(model) || terrainFreedom(model)) return null;
   const pick = String(choice || '').toLowerCase();
   return TERRAIN_CHOICES.some(([k]) => k === pick) ? pick : terrainDefault(model, card);
 }
@@ -1249,8 +1263,7 @@ export function stepCastingTime(text) {
  * Pay Terrain Casting on a cast, by the toll chosen, and say so in the log.
  * The spell point itself is already inside the cast's cost (see castCheck),
  * so here it is only written down; the step names the slower casting time
- * when the card has one; blight is a note for the GM's map; a waiver spends
- * one use from the Drawback Freedom tracker.
+ * when the card has one; blight is a note for the GM's map.
  */
 function payTerrain(model, t, card, toll, name) {
   if (!toll) return;
@@ -1260,13 +1273,6 @@ function payTerrain(model, t, card, toll, name) {
     tableLog(model, t, `${name}: Terrain Casting — ${slower ? `cast as a ${slower} rather than a ${String(card.casting).trim()}` : 'casting time one step slower'}`);
   } else if (toll === 'blight') {
     tableLog(model, t, `${name}: Terrain Casting — this square and the eight around it are blighted: dead magic for you, for about a year`);
-  } else if (toll === 'waive') {
-    const tr = terrainFreedomTracker(model);
-    if (!tr) { tableLog(model, t, `${name}: no Drawback Freedom (Terrain Casting) tracker to spend from — the drawback stands`); return; }
-    const before = Number(tr.current) || 0;
-    tr.current = clampTracker(tr, before + 1);
-    const left = (Number(tr.max) || 0) - tr.current;
-    tableLog(model, t, `${name}: Drawback Freedom — Terrain Casting waived, ${left} use${left === 1 ? '' : 's'} left${tr.current === before ? ' (the pool was empty)' : ''}`);
   }
 }
 

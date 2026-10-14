@@ -355,10 +355,12 @@ function magicTraditionPanel(model, m) {
       <div>${addButton(dlist, 'Add drawback', '')}</div>
       <p class="hint">Write “… x2” on a drawback taken twice — it counts double.
         Formulas work here too: “Expensive Locus ({locus = 22500} mana)”.</p>
-      ${model.terrainCasting() ? `<p class="hint standing"><b>Terrain Casting is in force.</b> Every sphere talent or ability costs one spell point more,
+      ${model.terrainCasting() ? (model.terrainFreedom()
+    ? `<p class="hint standing"><b>Terrain Casting is on the tradition, and ${esc(model.terrainFreedom())} ignores it</b> — no sphere effect pays it.</p>`
+    : `<p class="hint standing"><b>Terrain Casting is in force.</b> Every sphere talent or ability costs one spell point more,
         or one casting-time step, or blights your square and the eight around it (dead magic for you, for about a year).
         The card table charges it on each cast; everywhere else it is yours to remember.
-        A tracker named “Drawback Freedom (Terrain Casting)” lets a cast waive it.</p>` : ''}
+        Drawback Freedom (Terrain Casting), as a mythic path ability or a feat, switches it off.</p>`) : ''}
 
       <h4 class="subhead">Bought off with drawback feats <span class="badge">${m.boughtOffCount ?? 0}</span></h4>
       ${textList(blist, tr.boughtOff || [])}
