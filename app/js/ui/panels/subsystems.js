@@ -3438,7 +3438,11 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
     // Opened out, the face takes two columns, the text a taller box and the
     // Dice field a line per roll: room to read and to edit.
     const open = !!ctx.openCards?.has?.(`${list}.${i}`);
-    return `<article class="mcard ${frameClass}${open ? ' open' : ''}" data-face="${list}.${i}" style="${r.artifact ? '' : esc(cardFrameStyle(colors))}">
+    // The face's last measured height, as its placeholder while it is off the
+    // screen (content-visibility): see the element's #watchFaces.
+    const known = ctx.faceHeights?.get?.(`${list}.${i}`);
+    const placeholder = known ? `contain-intrinsic-size: auto ${known}px;` : '';
+    return `<article class="mcard ${frameClass}${open ? ' open' : ''}" data-face="${list}.${i}" style="${r.artifact ? '' : esc(cardFrameStyle(colors))}${placeholder}">
       <div class="bar title">
         <input type="text" class="name" value="${esc(card.name ?? '')}" data-item="${list}|${i}|name" data-kind="text"
           placeholder="${isMana ? 'Mana Point' : 'Card name'}" aria-label="Card name">

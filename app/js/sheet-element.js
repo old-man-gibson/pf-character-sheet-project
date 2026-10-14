@@ -598,6 +598,13 @@ export class CharacterSheetElement extends HTMLElement {
    * ({ until: 'release' | 'picker', timer }), or null; see `#oweRender`.
    */
   #renderOwed = null;
+  /** Each deck face's last measured height, by its `data-face` key, so a redraw's placeholders are exact (see `#watchFaces`). */
+  #faceHeights = new Map();
+  /** Each face's last observed height, drawn or placeholder, for the hand-rolled anchoring in `#watchFaces`. */
+  #faceBox = new Map();
+  #faceSizer = null;
+  /** The theme's panel surface colour, read once per theme: a computed-style read right after a render costs a style pass over the whole tree. */
+  #surfaceCache = null;
   /** The last Tab keystroke ({ at, back }); see `#rerender`. */
   #lastTab = null;
   /** Date and time boxes drawn again once they are left; see `#renderOnLeave`. */
@@ -2123,9 +2130,13 @@ export class CharacterSheetElement extends HTMLElement {
    * Editing rewrites the panel, which would otherwise drop focus mid-edit and
    * make tabbing through a row impossible.
    */
-  /** The box the sheet scrolls in when it is embedded in one, else null for the page. */
+  /**
+   * The box the sheet scrolls in: the element itself in the app page
+   * (index.html gives it overflow-y: auto under a body that does not
+   * scroll), a box it is embedded in elsewhere, else null for the page.
+   */
   #scrollBox() {
-    let el = this.parentElement;
+    let el = this;
     while (el && el !== document.body) {
       const cs = getComputedStyle(el);
       if (/(auto|scroll)/.test(cs.overflowY) && el.scrollHeight > el.clientHeight + 1) return el;
@@ -2147,6 +2158,55 @@ export class CharacterSheetElement extends HTMLElement {
     const drawn = [...faces].find((f) => typeof f.checkVisibility !== 'function' || f.checkVisibility({ contentVisibilityAuto: true }));
     if (!drawn) return null;
     return { key: drawn.dataset.face, top: drawn.getBoundingClientRect().top, box: this.#scrollBox() };
+  }
+
+  /**
+   * Remember each deck face's height as the browser draws it. A face off the
+   * screen is a placeholder (content-visibility), and a redraw replaces every
+   * face with a new element that has no size of its own to remember -- so
+   * the panel writes the last measured height on each one (`ctx.faceHeights`
+   * in `cardFace`), and the placeholders above the view add up to what the
+   * real faces did. Only a face being drawn is recorded: a skipped one would
+   * report its placeholder back.
+   */
+  #watchFaces() {
+    const faces = this.shadowRoot.querySelectorAll('[data-face]');
+    if (!faces.length || typeof ResizeObserver !== 'function') return;
+    this.#faceSizer ??= new ResizeObserver((entries) => {
+      // The scroller does not anchor (overflow-anchor: none, for reasons of
+      // its own), so this does it for the faces: a face wholly above the
+      // view that changes height -- a placeholder giving way to the real
+      // thing as it comes near -- would shift everything on the screen by
+      // the difference, and the view is moved by the same amount instead.
+      const box = this.#scrollBox();
+      const edge = box ? box.getBoundingClientRect().top : 0;
+      // The grid stretches every face in a row to the row's height, so the
+      // faces of one row all report the same change: it counts once.
+      const rows = new Set();
+      let shift = 0;
+      for (const e of entries) {
+        const el = e.target;
+        const key = el.dataset.face;
+        const h = Math.round(e.borderBoxSize?.[0]?.blockSize ?? el.getBoundingClientRect().height);
+        const was = this.#faceBox.get(key);
+        this.#faceBox.set(key, h);
+        const drawn = typeof el.checkVisibility !== 'function' || el.checkVisibility({ contentVisibilityAuto: true });
+        if (drawn && h > 0) this.#faceHeights.set(key, h);
+        if (was === undefined || h === was) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.bottom > edge + 1) continue;
+        const row = Math.round(rect.top);
+        if (rows.has(row)) continue;
+        rows.add(row);
+        shift += h - was;
+      }
+      if (shift) {
+        if (box) box.scrollTop += shift;
+        else window.scrollBy(0, shift);
+      }
+    });
+    this.#faceSizer.disconnect();
+    faces.forEach((f) => this.#faceSizer.observe(f, { box: 'border-box' }));
   }
 
   /** Scroll by however far the anchored face moved in the render, so the view stays where it was. */
@@ -2484,6 +2544,7 @@ export class CharacterSheetElement extends HTMLElement {
       });
     }
     this.#holdAnchor(anchor);
+    this.#watchFaces();
     if (this.isPublished) this.#lockPublished();
     // The palette outlives the markup around it: innerHTML dropped it, and the
     // node (with its listeners) is still here to be put back.
@@ -3374,7 +3435,7 @@ export class CharacterSheetElement extends HTMLElement {
    * scratch on its ctx -- the Lore tab collects its option menus there --
    * leaves the view as it found it.
    */
-  #ctx(extra = {}) { return { ...this.#view, tab: this.#tab, rollFormat: this.#rollFormat, grants: this.#grantsForCtx(), ...extra }; }
+  #ctx(extra = {}) { return { ...this.#view, tab: this.#tab, rollFormat: this.#rollFormat, grants: this.#grantsForCtx(), faceHeights: this.#faceHeights, ...extra }; }
 
   #overviewPanel() { return overview.renderOverviewPanel(this.#model, this.#ctx()); }
 
@@ -3552,8 +3613,14 @@ export class CharacterSheetElement extends HTMLElement {
    * before the stylesheet is adopted.
    */
   #surface() {
+    // Read once per theme: asked right after a render, getComputedStyle has
+    // to style the whole new tree first, ~280 ms on a full deck.
+    const key = `${this.getAttribute('theme') || ''}|${this.getAttribute('scheme') || ''}`;
+    if (this.#surfaceCache?.key === key) return this.#surfaceCache.value;
     const declared = normalizeHex(getComputedStyle(this).getPropertyValue('--cs-panel-2'));
-    return declared || (this.getAttribute('theme') === 'light' ? '#eef0f5' : '#232733');
+    const value = declared || (this.getAttribute('theme') === 'light' ? '#eef0f5' : '#232733');
+    this.#surfaceCache = { key, value };
+    return value;
   }
 
   /**
@@ -5608,7 +5675,12 @@ export class CharacterSheetElement extends HTMLElement {
     // Feature cells: multi-line, auto-growing. When a rendered view is showing
     // (formulas collapsed to values) the view is the in-flow element and sizes
     // itself; the textarea only needs sizing while editing.
+    // Where the browser sizes a box to its text itself (field-sizing, in
+    // the stylesheet), the script leaves the height alone: an inline height
+    // would override that, and each sizing here costs a layout.
+    const nativeGrow = typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('field-sizing', 'content');
     const grow = (t) => {
+      if (nativeGrow) return;
       const wrap = t.closest('.prose');
       const showingView = wrap?.querySelector('.prose-view') && !wrap.classList.contains('editing');
       if (showingView) return;
@@ -5624,6 +5696,7 @@ export class CharacterSheetElement extends HTMLElement {
      */
     const pendingGrow = [];
     const growMany = (boxes) => {
+      if (nativeGrow) return;
       const live = boxes.filter((t) => {
         const wrap = t.closest('.prose');
         if (wrap?.querySelector('.prose-view') && !wrap.classList.contains('editing')) return false;
@@ -5676,12 +5749,14 @@ export class CharacterSheetElement extends HTMLElement {
       }
     });
     growMany(pendingGrow);
-    // A face that scrolls into view is laid out then; its boxes are sized then too.
-    root.querySelectorAll('.cardgrid .mcard').forEach((card) => {
-      card.addEventListener('contentvisibilityautostatechange', (e) => {
-        if (!e.skipped) growMany([...card.querySelectorAll('.prose.grow textarea, textarea.cfeat')]);
+    // Without the browser's own sizing, a face that scrolls into view sizes its boxes then.
+    if (!nativeGrow) {
+      root.querySelectorAll('.cardgrid .mcard').forEach((card) => {
+        card.addEventListener('contentvisibilityautostatechange', (e) => {
+          if (!e.skipped) growMany([...card.querySelectorAll('.prose.grow textarea, textarea.cfeat')]);
+        });
       });
-    });
+    }
 
     // Formula fields: the resolved value sits in the cell, the source appears
     // in place on click or tab. The change listener is the generic

@@ -4388,10 +4388,20 @@ select.manip-pick option { font-size: 0.85rem; }
 /* A card, drawn as a card. The frame is the cost colour; the bars and the text
    box are card-stock light in either theme, as printed cards are. */
 .cardgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 12px; margin-top: 8px; }
-/* A deck is fifty-odd faces of seventeen fields each, and the sheet redraws
-   whole on every edit. Faces off the screen are not laid out until they
-   scroll into view, which took the deck's layout from ~110 ms to ~17 ms;
-   the intrinsic size keeps the scrollbar honest meanwhile. */
+/* A text box sizes itself to its text where the browser can do that: the
+   script's first sizing of every box (write a height, read scrollHeight)
+   cost the deck a full layout or two per render, and the browser's own
+   sizing costs none. Where it cannot, the script still sizes them. */
+@supports (field-sizing: content) {
+  .prose.grow textarea, textarea.cfeat { field-sizing: content; }
+}
+/* A deck is fifty-odd faces of twenty fields each, and the sheet redraws
+   whole on every edit. Faces off the screen are neither styled nor laid out
+   until they scroll near (a style pass over the deck alone is ~280 ms). A
+   placeholder stands in at the face's last measured height, which the
+   element remembers across redraws and writes inline (see `#watchFaces`);
+   580px is only for a face never yet drawn. Guessed heights are what made
+   the deck bounce, since the sheet's scroller does not anchor (above). */
 .cardgrid .mcard { content-visibility: auto; contain-intrinsic-size: auto 580px; }
 .mcard {
   --frame: #4a4f5a; --frame-dark: #2d3038; --stock: #f4efe4; --ink: #1a1d26;
