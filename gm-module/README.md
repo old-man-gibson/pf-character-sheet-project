@@ -9,6 +9,9 @@ content-free, so everything with game or campaign content in it
 ```
 tools/roll.mjs      crypto-backed dice roller (see header comment for usage)
 screen/             session screen: server.mjs + board page
+planner/            session planner: server.mjs + timeline page (plan.js is the model)
+lib/http.mjs        HTTP helpers both servers use
+plans/              (git-ignored) the planner's plan files, one JSON file per session
 rules/              (git-ignored) homebrew docs and rules references, grep-able
 campaigns/
   _template/        copy to start a new campaign
@@ -38,6 +41,47 @@ The player drags tokens; moves write back into the same file.
 (`round`/`active`/`order` of token ids), `tokens`
 (`id/name/faction/x/y/size/hp:[cur,max]`, optional `hidden`, `gmNote`,
 `color`). Factions: `pc`, `ally`, `enemy`, `neutral`.
+
+## Session planner
+
+```
+node gm-module/planner/server.mjs 8766 [--dir <folder of plan files>]
+```
+
+Then open `http://localhost:8766`. It plans a session as a timeline with one
+lane per player:
+
+- Activities run in parallel, but a player is in one activity at a time. A
+  move, resize or edit that would put a player in two overlapping activities
+  is refused, with the activity in the way named. Back-to-back is fine.
+- An activity with several players has a block in each of their lanes; moving
+  one moves them all. Dragging a block onto another player's lane hands that
+  player's place to the other player. Dragging its right edge changes its
+  duration. Times snap to the plan's step (1–30 minutes).
+- Activities not on the timeline wait in the Unscheduled tray. Drag one onto a
+  lane to place it (the lane's player joins it), or drag a block onto the tray
+  to take it off.
+- Clicking a block opens it: title, players, start and duration, premise,
+  required check and DC, the reward on success, further success tiers (each
+  with its own DC and reward), and what happens on failure. A test box shows
+  which tier a check total reaches.
+- Double-click a lane to add an activity there. Arrow keys move a focused block
+  (Shift changes its duration; up and down move it to the next lane); Delete
+  removes it; Ctrl+Z undoes.
+
+Plans are saved as `<name>.json` in `gm-module/plans/` (git-ignored) or the
+`--dir` folder. A new plan starts with the open plan's players. The file can be
+edited while the page is open: the page reloads it within a couple of seconds,
+and never writes over a change it has not seen (it loads the newer copy and
+keeps its own for Undo). A hand edit that books a player twice is flagged on
+the page. The server answers requests from this machine only, since plans hold
+DCs and rewards.
+
+Plan shape: `title`, `startsAt` ("19:00" or ""), `length` and `snap` in minutes,
+`players` (`id/name/color`), `activities` (`id/title/start/duration/players`,
+`premise`, `check`, `dc`, `success`, `failure`, `tiers: [{id, label, dc,
+reward}]`). `start` is minutes from the start of the session, null when
+unscheduled. Other fields are kept as they are.
 
 ## Dice
 

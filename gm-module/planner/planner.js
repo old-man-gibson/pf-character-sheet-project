@@ -1,0 +1,1064 @@
+// Session planner page. Draws the plan as one lane per player along a time
+// ruler, the unscheduled activities in a tray below, and an editor for the
+// selected activity. Every change goes through plan.js (which refuses to put
+// a player in two activities at once), is kept for undo, and is saved to the
+// plan file through the planner server. The page re-reads the file when it
+// changes on disk, so the file can also be edited by hand while it is open.
+//
+// Rendering is a wholesale rebuild of each part (same as the session screen),
+// with the focused control put back afterwards; a drag draws only its preview.
+
+import {
+  SNAPS, addActivity, addPlayer, allClashes, checkNames, clashText, clashes, clock,
+  deleteActivity, duplicateActivity, end, firstFree, ladder, minutesText, newId, outcome,
+  playerLoad, playerName, removePlayer, snapTo, span, updateActivity, whole,
+} from './plan.js';
+
+const $ = sel => document.querySelector(sel);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const attrSel = (name, value) => `[${name}="${CSS.escape(value)}"]`;
+
+const ZOOMS = [1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24]; // pixels per minute
+const ROOM = 60;          // minutes of empty track after the last activity, to drag into
+const UNDO_LIMIT = 100;
+const SAVE_DELAY = 400;
+const POLL_EVERY = 2000;
+
+const el = {
+  planSelect: $('#plan-select'), newPlan: $('#new-plan'), newPlanForm: $('#new-plan-form'),
+  title: $('#title'), startsAt: $('#starts-at'), length: $('#length'), snap: $('#snap'),
+  zoomOut: $('#zoom-out'), zoomIn: $('#zoom-in'), undo: $('#undo'), saveState: $('#save-state'),
+  clashNote: $('#clash-note'), wrap: $('#timeline-wrap'), timeline: $('#timeline'),
+  tray: $('#tray'), editor: $('#editor'), checks: $('#checks'), tip: $('#drag-tip'),
+  notice: $('#notice'), offline: $('#offline'), main: $('#main'),
+};
+
+function readPref(key, fallback) {
+  try { const v = localStorage.getItem(key); return v === null ? fallback : JSON.parse(v); } catch { return fallback; }
+}
+function writePref(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage blocked: the preference just isn't kept */ }
+}
+
+const S = {
+  name: null,          // plan file name
+  v: null,             // version of the file this page last read or wrote
+  plan: null,
+  plans: [],           // [{ name, title }] in the folder
+  selected: null,      // id of the activity open in the editor
+  editingPlayer: null, // id of the player whose name cell is a form
+  testRoll: '',        // the editor's "test a result" box
+  zoom: Math.min(ZOOMS.length - 1, Math.max(0, whole(readPref('planner-zoom', 5), 5))),
+  undo: [],
+};
+
+const ppm = () => ZOOMS[S.zoom];
+const find = id => S.plan?.activities.find(a => a.id === id) ?? null;
+const selectedActivity = () => find(S.selected);
+
+// ---- Messages --------------------------------------------------------------
+
+let noticeTimer = 0;
+function notice(message, kind = '') {
+  el.notice.textContent = message;
+  el.notice.className = `notice ${kind}`;
+  el.notice.hidden = !message;
+  clearTimeout(noticeTimer);
+  if (message) noticeTimer = setTimeout(() => { el.notice.hidden = true; }, kind === 'warn' ? 7000 : 4000);
+}
+
+function setSaveState(text, bad = false) {
+  el.saveState.textContent = text;
+  el.saveState.classList.toggle('bad', bad);
+}
+
+// ---- Undo ------------------------------------------------------------------
+
+function keepUndo(snapshot) {
+  S.undo.push(snapshot);
+  if (S.undo.length > UNDO_LIMIT) S.undo.shift();
+  el.undo.disabled = false;
+}
+
+// Typing keeps one undo step per visit to a field, not one per key: the plan
+// as it was when the field took focus is kept on the first change.
+let typingBefore = null;
+document.addEventListener('focusin', e => {
+  typingBefore = S.plan && e.target.matches('input, textarea') ? JSON.stringify(S.plan) : null;
+});
+const rebaseTyping = () => { if (typingBefore !== null) typingBefore = JSON.stringify(S.plan); };
+
+function typed(fn) {
+  fn(S.plan);
+  if (typingBefore !== null) { keepUndo(typingBefore); typingBefore = null; }
+  changed();
+}
+
+// Runs `fn` on the plan and keeps the plan as it was for undo when anything
+// changed. `fn` may return an updateActivity result: a refused change is
+// reported and changes nothing.
+function edit(fn) {
+  const before = JSON.stringify(S.plan);
+  const out = fn(S.plan);
+  if (out && out.ok === false) {
+    if (out.clashes?.length) notice(clashText(S.plan, out.clashes), 'warn');
+    return out;
+  }
+  if (JSON.stringify(S.plan) !== before) {
+    keepUndo(before);
+    rebaseTyping();
+    changed();
+  }
+  return out ?? { ok: true };
+}
+
+function undo() {
+  const prev = S.undo.pop();
+  el.undo.disabled = !S.undo.length;
+  if (!prev) return;
+  S.plan = JSON.parse(prev);
+  if (!find(S.selected)) S.selected = null;
+  if (!S.plan.players.some(p => p.id === S.editingPlayer)) S.editingPlayer = null;
+  rebaseTyping();
+  changed();
+  renderAll();
+  notice('Undone.');
+}
+
+// ---- Saving and loading ----------------------------------------------------
+
+let saveTimer = 0;
+let saving = false;
+let dirty = false;
+
+function changed() {
+  dirty = true;
+  setSaveState('Unsaved');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(save, SAVE_DELAY);
+}
+
+const planUrl = (name, extra = '') => `/api/plan?name=${encodeURIComponent(name)}${extra}`;
+
+async function save() {
+  clearTimeout(saveTimer);
+  if (!dirty || !S.name) return;
+  if (saving) { saveTimer = setTimeout(save, 150); return; }
+  saving = true;
+  dirty = false;
+  setSaveState('Saving…');
+  const name = S.name;
+  try {
+    const res = await fetch(planUrl(name), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ base: S.v, plan: S.plan }),
+    });
+    const out = await res.json();
+    if (name !== S.name) return;
+    if (res.ok) {
+      S.v = out.v;
+      setSaveState(dirty ? 'Unsaved' : 'Saved');
+    } else if (res.status === 409 && out.plan) {
+      // The file changed on disk since this page read it. Take that copy and
+      // keep this page's for undo.
+      keepUndo(JSON.stringify(S.plan));
+      takePlan(out.plan, out.v);
+      dirty = false;
+      setSaveState('Saved');
+      notice('The plan file was changed outside this page, so it was loaded again. Undo puts back the version from this page.', 'warn');
+    } else if (res.status === 409) {
+      S.v = null; // the file is gone: write it again
+      dirty = true;
+      saveTimer = setTimeout(save, 0);
+    } else {
+      throw new Error(out.error || res.statusText);
+    }
+  } catch (err) {
+    dirty = true;
+    setSaveState(`Not saved: ${err.message}. Retrying.`, true);
+    saveTimer = setTimeout(save, 3000);
+  } finally {
+    saving = false;
+  }
+}
+
+async function flush() {
+  clearTimeout(saveTimer);
+  while (saving) await new Promise(r => setTimeout(r, 50));
+  if (dirty) await save();
+}
+
+function takePlan(plan, v) {
+  S.plan = plan;
+  S.v = v;
+  if (!find(S.selected)) S.selected = null;
+  if (!plan.players.some(p => p.id === S.editingPlayer)) S.editingPlayer = null;
+  rebaseTyping();
+  renderAll();
+}
+
+async function api(url, options = {}) {
+  const res = await fetch(url, options);
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(out.error || res.statusText), { status: res.status });
+  return out;
+}
+
+async function refreshPlanList() {
+  const out = await api('/api/plans');
+  S.plans = out.plans;
+  renderPlanSelect();
+  return out.plans;
+}
+
+async function openPlan(name, loaded = null) {
+  await flush();
+  const out = loaded ?? await api(planUrl(name));
+  S.name = name;
+  S.v = out.v;
+  S.plan = out.plan;
+  S.selected = null;
+  S.editingPlayer = null;
+  S.undo = [];
+  el.undo.disabled = true;
+  dirty = false;
+  setSaveState('Saved');
+  writePref('planner-last', name);
+  history.replaceState(null, '', `#${encodeURIComponent(name)}`);
+  renderAll();
+}
+
+// A new plan starts with the open plan's players: most sessions have the same table.
+async function createPlan(name, title) {
+  const out = await api('/api/plans', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name, title, players: S.plan?.players ?? [] }),
+  });
+  await refreshPlanList();
+  await openPlan(name, out);
+}
+
+// Picks up changes made to the file outside this page, unless this page has
+// changes of its own waiting or the GM is in the middle of something.
+async function poll() {
+  if (!S.name || saving || dirty || drag || document.activeElement?.matches('input, textarea')) return;
+  try {
+    const res = await fetch(planUrl(S.name, `&since=${encodeURIComponent(S.v ?? '')}`));
+    if (!res.ok) return;
+    const out = await res.json();
+    if (out.same || out.name !== S.name || saving || dirty || drag) return;
+    keepUndo(JSON.stringify(S.plan));
+    takePlan(out.plan, out.v);
+    notice('Loaded a change made to the plan file.');
+  } catch { /* server restarting: try again next time */ }
+}
+
+// ---- Rendering ---------------------------------------------------------------
+
+// Rebuilds `container` with `render` and puts focus (and the caret) back on
+// the control with the same data-key.
+function keepFocus(container, render) {
+  const active = document.activeElement;
+  const key = container.contains(active) ? active.dataset.key : null;
+  let range = null;
+  try { range = key && active.selectionStart != null ? [active.selectionStart, active.selectionEnd] : null; } catch { /* number inputs have no caret */ }
+  render();
+  if (!key) return;
+  const again = container.querySelector(attrSel('data-key', key));
+  if (!again) return;
+  again.focus({ preventScroll: true });
+  try { if (range) again.setSelectionRange(...range); } catch { /* not a text field */ }
+}
+
+function renderAll() {
+  renderBar();
+  renderTimeline();
+  renderTray();
+  renderEditor();
+}
+
+function renderPlanSelect() {
+  const names = S.plans.map(p => p.name);
+  if (S.name && !names.includes(S.name)) names.push(S.name);
+  el.planSelect.innerHTML = names.map(n => `<option value="${esc(n)}"${n === S.name ? ' selected' : ''}>${esc(n)}</option>`).join('');
+}
+
+function renderBar() {
+  const plan = S.plan;
+  renderPlanSelect();
+  const set = (input, value) => { if (document.activeElement !== input) input.value = value; };
+  set(el.title, plan.title);
+  set(el.startsAt, plan.startsAt);
+  set(el.length, plan.length);
+  el.snap.innerHTML = SNAPS.map(s => `<option value="${s}"${s === plan.snap ? ' selected' : ''}>${s}</option>`).join('');
+  el.zoomOut.disabled = S.zoom === 0;
+  el.zoomIn.disabled = S.zoom === ZOOMS.length - 1;
+  el.undo.disabled = !S.undo.length;
+  document.title = `${plan.title.trim() || S.name} · Session Planner`;
+}
+
+// Ruler labels at least ~64px apart; finer lines at the snap step when they
+// are not crowded.
+function gridSteps(px, snap) {
+  const major = [5, 10, 15, 30, 60, 120, 240].find(s => s * px >= 64) ?? 240;
+  const minor = [snap, 5, 10, 15, 30].find(s => s * px >= 8 && s < major && major % s === 0) ?? major;
+  return { major, minor };
+}
+
+// A stable colour per activity, spread round the wheel.
+function hue(id) {
+  let h = 0;
+  for (const c of id) h = (h * 31 + c.codePointAt(0)) >>> 0;
+  return Math.round((h * 137.508) % 360);
+}
+
+function checkLabel(a) {
+  const check = a.check.trim();
+  if (check) return a.dc != null ? `${check} DC ${a.dc}` : check;
+  return a.dc != null ? `DC ${a.dc}` : '';
+}
+
+function blockHtml(a, lane, { left = null, clash = false } = {}) {
+  const plan = S.plan;
+  const others = a.players.filter(p => p !== lane).map(p => playerName(plan, p));
+  const withText = lane ? (others.length ? `with ${others.join(', ')}` : '') : (others.join(', ') || 'No players yet');
+  const when = a.start == null ? 'Not scheduled' : `${clock(a.start, plan.startsAt)}–${clock(end(a), plan.startsAt)}`;
+  const tip = [a.title.trim() || 'Untitled', `${when} · ${minutesText(a.duration)}`, checkLabel(a), withText].filter(Boolean).join('\n');
+  const width = a.duration * ppm();
+  const classes = ['block', lane ? '' : 'chip', a.id === S.selected ? 'selected' : '', lane && width < 64 ? 'narrow' : '', clash ? 'clash' : ''];
+  const style = `--hue:${hue(a.id)}` + (left != null ? `;left:${left}px;width:${width}px` : '');
+  const key = `b:${a.id}:${lane ?? ''}`;
+  return `<div class="${classes.filter(Boolean).join(' ')}" data-id="${esc(a.id)}" data-lane="${esc(lane ?? '')}" data-key="${esc(key)}"
+      style="${style}" tabindex="0" role="button" aria-label="${esc(tip.replace(/\n/g, ', '))}" title="${esc(tip)}">
+    <span class="b-title">${esc(a.title.trim() || 'Untitled')}</span>
+    <span class="b-meta">${esc([minutesText(a.duration), checkLabel(a)].filter(Boolean).join(' · '))}</span>
+    ${withText ? `<span class="b-with">${esc(withText)}</span>` : ''}
+    ${lane ? '<span class="grip" data-grip aria-hidden="true"></span>' : ''}
+  </div>`;
+}
+
+function whoHtml(p, i) {
+  const plan = S.plan;
+  if (p.id === S.editingPlayer) {
+    return `<div class="who editing">
+      <input class="p-name" data-pf="name" data-player="${esc(p.id)}" data-key="pf:name:${esc(p.id)}" value="${esc(p.name)}"
+             placeholder="Player ${i + 1}" aria-label="Player name">
+      <input type="color" data-pf="color" data-player="${esc(p.id)}" data-key="pf:color:${esc(p.id)}" value="${esc(p.color)}" aria-label="Colour">
+      <button type="button" data-act="player-done" data-key="pf:done:${esc(p.id)}">Done</button>
+      <button type="button" class="danger" data-act="remove-player" data-player="${esc(p.id)}">Remove</button>
+    </div>`;
+  }
+  const load = playerLoad(plan, p.id);
+  return `<div class="who">
+    <button type="button" class="pname" data-act="edit-player" data-player="${esc(p.id)}" data-key="pn:${esc(p.id)}"
+            aria-label="${esc(playerName(plan, p.id))}: rename, recolour or remove" title="Rename, recolour or remove"><i class="dot"></i><span>${esc(playerName(plan, p.id))}</span></button>
+    <span class="load" title="Time in scheduled activities">${load ? esc(minutesText(load)) : ''}</span>
+  </div>`;
+}
+
+function renderTimeline() {
+  const plan = S.plan;
+  const px = ppm();
+  const reach = span(plan) + ROOM;
+  const width = Math.round(reach * px);
+  const { major, minor } = gridSteps(px, plan.snap);
+  const clashing = new Set(allClashes(plan).flatMap(c => [c.a.id, c.b.id]));
+
+  let ticks = '';
+  for (let t = 0; t <= reach; t += major) {
+    ticks += `<span class="tick" style="left:${t * px}px">${esc(clock(t, plan.startsAt))}</span>`;
+  }
+  ticks += `<span class="tick end" style="left:${plan.length * px}px" title="Planned end of the session">End</span>`;
+
+  const lanes = plan.players.map((p, i) => {
+    const blocks = plan.activities
+      .filter(a => a.start != null && a.players.includes(p.id))
+      .map(a => blockHtml(a, p.id, { left: a.start * px, clash: clashing.has(a.id) }))
+      .join('');
+    return `<div class="row lane" data-player="${esc(p.id)}" style="--pc:${esc(p.color)}">
+      ${whoHtml(p, i)}
+      <div class="track" style="width:${width}px;--major:${major * px}px;--minor:${minor * px}px">
+        <span class="overtime" style="left:${plan.length * px}px"></span>
+        <span class="end-mark" style="left:${plan.length * px}px"></span>
+        ${blocks}
+      </div>
+    </div>`;
+  }).join('');
+
+  keepFocus(el.timeline, () => {
+    el.timeline.innerHTML = `
+      <div class="row ruler"><div class="who">${plan.players.length ? 'Players' : ''}</div>
+        <div class="track" style="width:${width}px">${ticks}</div></div>
+      ${lanes || '<p class="empty-lanes">Add a player to get a lane on the timeline.</p>'}
+      <div class="row add-row"><div class="who"><button type="button" data-act="add-player" data-key="add-player">Add player</button></div></div>`;
+  });
+
+  const found = allClashes(plan);
+  el.clashNote.hidden = !found.length;
+  el.clashNote.textContent = found.length
+    ? 'Booked twice: ' + found.slice(0, 3).map(c => `${playerName(plan, c.player)} in “${c.a.title || 'Untitled'}” and “${c.b.title || 'Untitled'}”`).join('; ') +
+      (found.length > 3 ? ` and ${found.length - 3} more` : '') + '. Move one of each pair.'
+    : '';
+}
+
+function renderTray() {
+  const waiting = S.plan.activities.filter(a => a.start == null);
+  keepFocus(el.tray, () => {
+    el.tray.innerHTML = `
+      <header class="tray-head">
+        <h2>Unscheduled <span class="count">${waiting.length || ''}</span></h2>
+        <button type="button" data-act="new-activity" data-key="new-activity">New activity</button>
+      </header>
+      <div class="tray-items">
+        ${waiting.map(a => blockHtml(a, null)).join('') || '<p class="empty">Drop a block here to take it off the timeline.</p>'}
+      </div>
+      <p class="hint">Drag a block to move it, or onto another player's lane to hand it to them. Drag its right edge to change how long it takes. Double-click a lane to add an activity there. Click a block to edit it.</p>`;
+  });
+  el.checks.innerHTML = checkNames(S.plan).map(c => `<option value="${esc(c)}"></option>`).join('');
+}
+
+function tierHtml(t) {
+  const k = esc(t.id);
+  return `<div class="tier" data-tier="${k}">
+    <input data-tf="label" data-key="tier:${k}:label" value="${esc(t.label)}" placeholder="Tier name" aria-label="Tier name">
+    <input type="number" data-tf="dc" data-key="tier:${k}:dc" value="${t.dc ?? ''}" placeholder="DC" aria-label="Tier DC">
+    <button type="button" class="icon" data-act="remove-tier" aria-label="Remove tier">×</button>
+    <textarea data-tf="reward" data-key="tier:${k}:reward" rows="2" placeholder="Reward" aria-label="Tier reward">${esc(t.reward)}</textarea>
+  </div>`;
+}
+
+function renderEditor() {
+  const a = selectedActivity();
+  el.editor.hidden = !a;
+  if (!a) { el.editor.innerHTML = ''; return; }
+  const plan = S.plan;
+  const when = a.start == null
+    ? 'Not on the timeline yet.'
+    : `${clock(a.start, plan.startsAt)}–${clock(end(a), plan.startsAt)} (${minutesText(a.duration)})`;
+  const players = plan.players.map(p => `
+    <label class="pchip" style="--pc:${esc(p.color)}">
+      <input type="checkbox" data-player="${esc(p.id)}" data-key="ep:${esc(p.id)}" aria-label="${esc(playerName(plan, p.id))}"${a.players.includes(p.id) ? ' checked' : ''}>
+      ${esc(playerName(plan, p.id))}
+    </label>`).join('');
+  keepFocus(el.editor, () => {
+    el.editor.innerHTML = `
+      <div class="ed-head">
+        <input class="ed-title" data-f="title" data-key="f:title" value="${esc(a.title)}" placeholder="Activity name" aria-label="Activity name">
+        <button type="button" class="icon" data-act="close-editor" aria-label="Close">×</button>
+      </div>
+      <fieldset><legend>Players</legend>${players || '<p class="dim">Add players first.</p>'}</fieldset>
+      <div class="ed-when">
+        <label>Start<span class="unit"><input type="number" data-f="start" data-key="f:start" aria-label="Start, minutes from the start of the session" min="0" step="${plan.snap}"
+          value="${a.start ?? ''}"${a.start == null ? ' disabled' : ''}> min</span></label>
+        <label>Duration<span class="unit"><input type="number" data-f="duration" data-key="f:duration" aria-label="Duration in minutes" min="1" step="${plan.snap}"
+          value="${a.duration}"> min</span></label>
+        ${a.start == null
+          ? '<button type="button" data-act="schedule" data-key="schedule">Put on timeline</button>'
+          : '<button type="button" data-act="unschedule" data-key="unschedule">Move to tray</button>'}
+        <p class="ed-time">${esc(when)}</p>
+      </div>
+      <label class="field">Premise
+        <textarea data-f="premise" data-key="f:premise" rows="4" placeholder="What the player wants to do, and what stands in the way">${esc(a.premise)}</textarea></label>
+      <div class="ed-check">
+        <label class="field grow">Required check <input data-f="check" data-key="f:check" aria-label="Required check" list="checks" value="${esc(a.check)}" placeholder="Skill or ability"></label>
+        <label class="field dc">DC <input type="number" data-f="dc" data-key="f:dc" aria-label="DC" value="${a.dc ?? ''}"></label>
+      </div>
+      <label class="field">On success
+        <textarea data-f="success" data-key="f:success" rows="2" placeholder="Reward for meeting the DC">${esc(a.success)}</textarea></label>
+      <section class="ed-tiers">
+        <h3>Further success tiers</h3>
+        <p class="dim small">Each tier has its own DC and reward. A result earns the highest tier whose DC it meets.</p>
+        ${a.tiers.map(tierHtml).join('')}
+        <button type="button" data-act="add-tier" data-key="add-tier">Add tier</button>
+      </section>
+      <label class="field">On failure
+        <textarea data-f="failure" data-key="f:failure" rows="2" placeholder="What happens below every DC">${esc(a.failure)}</textarea></label>
+      <section class="ed-test">
+        <h3>Outcomes</h3>
+        <label class="field">Test a result <input type="number" id="test-roll" data-key="test" value="${esc(S.testRoll)}" placeholder="Check total"></label>
+        <div id="test-out"></div>
+      </section>
+      <div class="ed-foot">
+        <button type="button" data-act="duplicate" data-key="duplicate">Duplicate</button>
+        <button type="button" class="danger" data-act="delete" data-key="delete">Delete</button>
+      </div>`;
+  });
+  renderOutcomes();
+}
+
+// The editor's ladder: failure, success and each tier with its reward, the
+// tested result's step marked.
+function renderOutcomes() {
+  const box = $('#test-out');
+  const a = selectedActivity();
+  if (!box || !a) return;
+  const steps = ladder(a);
+  if (!steps.length) { box.innerHTML = '<p class="dim small">Set a DC to see the outcomes.</p>'; return; }
+  const total = S.testRoll === '' ? NaN : Number(S.testRoll);
+  const r = outcome(a, total);
+  const row = (cls, dc, name, reward, hit) => `<li class="${cls}${hit ? ' hit' : ''}"><span class="l-dc">${esc(dc)}</span>
+    <span class="l-name">${esc(name)}</span>${reward.trim() ? `<span class="l-reward">${esc(reward)}</span>` : ''}</li>`;
+  let line = '';
+  if (r) {
+    line = r.failure
+      ? `${total} fails: it needs ${r.next.dc} for ${r.next.label}.`
+      : `${total} reaches ${r.tier.label} (DC ${r.tier.dc}).` + (r.next ? ` ${r.next.dc - total} more for ${r.next.label} (DC ${r.next.dc}).` : '');
+  }
+  box.innerHTML = `<ol class="ladder">
+      ${row('fail', `below ${steps[0].dc}`, 'Failure', a.failure, r?.failure)}
+      ${steps.map(t => row('', `DC ${t.dc}`, t.label, t.reward, r && !r.failure && r.tier.id === t.id)).join('')}
+    </ol>${line ? `<p class="test-line">${esc(line)}</p>` : ''}`;
+}
+
+// ---- Selecting and editing ---------------------------------------------------
+
+function select(id) {
+  if (S.selected !== id) S.testRoll = '';
+  S.selected = id;
+  renderTimeline();
+  renderTray();
+  renderEditor();
+}
+
+function setStart(id, start) {
+  const out = edit(plan => updateActivity(plan, id, { start }));
+  renderAll();
+  return out;
+}
+
+function schedule(id) {
+  const a = find(id);
+  if (!a.players.length) { notice('Pick at least one player first.', 'warn'); return; }
+  setStart(id, firstFree(S.plan, a, 0));
+}
+
+function newActivityAt(player, minutes) {
+  const plan = S.plan;
+  const out = edit(p => addActivity(p, { start: Math.max(0, minutes), players: [player], duration: Math.max(plan.snap, 10) }));
+  if (!out.ok) return;
+  select(out.activity.id);
+  const title = el.editor.querySelector('[data-f="title"]');
+  title?.focus();
+  title?.select();
+}
+
+function newActivity() {
+  const out = edit(p => addActivity(p, {}));
+  select(out.activity.id);
+  const title = el.editor.querySelector('[data-f="title"]');
+  title?.focus();
+  title?.select();
+}
+
+function removeActivity(id) {
+  const a = find(id);
+  edit(plan => deleteActivity(plan, id));
+  if (S.selected === id) S.selected = null;
+  renderAll();
+  notice(`Deleted “${a.title.trim() || 'Untitled'}”. Undo brings it back.`);
+}
+
+// The lane above or below `player` (dir -1 / +1), or null at either end.
+function laneBeside(player, dir) {
+  const i = S.plan.players.findIndex(p => p.id === player);
+  return S.plan.players[i + dir]?.id ?? null;
+}
+
+// Moves the copy of an activity in lane `from` to lane `to`.
+function swapPlayers(a, from, to) {
+  if (a.players.includes(to)) return null;
+  return a.players.map(p => (p === from ? to : p));
+}
+
+// ---- Dragging -----------------------------------------------------------------
+//
+// Pointer events on blocks: a press that moves less than a few pixels is a
+// click and opens the editor. A drag shows where the activity would land in
+// each of its players' lanes, green when it fits and red when a player is
+// busy then; letting go over a red spot puts it back. Dragging a block onto
+// another lane hands that copy to the lane's player; onto the tray takes it
+// off the timeline. The grip at a block's right edge changes its duration.
+
+let drag = null;
+
+function trackLeft() {
+  const track = el.timeline.querySelector('.lane .track') ?? el.timeline.querySelector('.ruler .track');
+  return track.getBoundingClientRect().left;
+}
+const minuteAt = clientX => (clientX - trackLeft()) / ppm();
+
+function startDrag(e) {
+  const block = e.target.closest('.block');
+  if (!block || e.button !== 0) return;
+  const a = find(block.dataset.id);
+  if (!a) return;
+  e.preventDefault();
+  block.focus({ preventScroll: true });
+  const mode = e.target.closest('[data-grip]') ? 'resize' : 'move';
+  drag = {
+    id: a.id, mode, block, pointerId: e.pointerId,
+    lane: block.dataset.lane || null,
+    x0: e.clientX, y0: e.clientY,
+    grab: a.start != null ? minuteAt(e.clientX) - a.start : 0,
+    rect: block.getBoundingClientRect(),
+    moved: false, cand: null, ok: false, why: '', ghost: null, last: e,
+  };
+  block.setPointerCapture(e.pointerId);
+}
+
+function beginMoving() {
+  drag.moved = true;
+  document.body.classList.add(drag.mode === 'resize' ? 'resizing' : 'dragging');
+  if (drag.mode === 'move') {
+    for (const b of document.querySelectorAll(`.block${attrSel('data-id', drag.id)}`)) b.classList.add('src');
+    const ghost = drag.block.cloneNode(true);
+    ghost.classList.add('ghost');
+    ghost.classList.remove('src', 'selected');
+    Object.assign(ghost.style, { left: `${drag.rect.left}px`, top: `${drag.rect.top}px`, width: `${drag.rect.width}px`, height: `${drag.rect.height}px` });
+    document.body.append(ghost);
+    drag.ghost = ghost;
+  }
+}
+
+// Where the activity would go for the pointer at (x, y): the candidate, why it
+// cannot go there (if it cannot), and a note on any change to who is in it.
+function candidateAt(x, y) {
+  const plan = S.plan;
+  const a = find(drag.id);
+  const step = plan.snap;
+  const limit = span(plan) + ROOM;
+  if (drag.mode === 'resize') {
+    const duration = Math.max(step, snapTo(minuteAt(x) - a.start, step));
+    return { cand: { ...a, duration: Math.min(duration, limit - a.start) } };
+  }
+  const hit = document.elementFromPoint(x, y);
+  if (hit?.closest('#tray')) return { cand: { ...a, start: null } };
+  const lane = hit?.closest('.lane')?.dataset.player;
+  if (!lane) return { cand: null };
+  let players = a.players;
+  let note = '';
+  if (drag.lane && lane !== drag.lane) {
+    players = swapPlayers(a, drag.lane, lane);
+    if (!players) return { cand: null, why: `${playerName(plan, lane)} is already in this activity.` };
+    note = `${playerName(plan, drag.lane)} → ${playerName(plan, lane)}`;
+  } else if (!drag.lane && !players.includes(lane)) {
+    players = [...players, lane];
+    if (a.players.length) note = `adds ${playerName(plan, lane)}`;
+  }
+  const start = Math.min(Math.max(0, snapTo(minuteAt(x) - drag.grab, step)), Math.max(0, limit - a.duration));
+  return { cand: { ...a, start, players }, note };
+}
+
+function drawPreview() {
+  for (const p of el.timeline.querySelectorAll('.preview')) p.remove();
+  const { cand, ok } = drag;
+  el.tray.classList.toggle('drop', !!cand && cand.start == null);
+  if (!cand || cand.start == null) return;
+  for (const player of cand.players) {
+    const track = el.timeline.querySelector(`.lane${attrSel('data-player', player)} .track`);
+    if (!track) continue;
+    const box = document.createElement('div');
+    box.className = `preview${ok ? '' : ' bad'}`;
+    box.style.left = `${cand.start * ppm()}px`;
+    box.style.width = `${cand.duration * ppm()}px`;
+    track.append(box);
+  }
+}
+
+function showTip(x, y, text, bad) {
+  el.tip.hidden = !text;
+  el.tip.textContent = text;
+  el.tip.classList.toggle('bad', bad);
+  el.tip.style.left = `${Math.min(x + 14, innerWidth - 350)}px`;
+  el.tip.style.top = `${y + 18}px`;
+}
+
+function dragTo(e) {
+  drag.last = e;
+  if (drag.ghost) {
+    drag.ghost.style.transform = `translate(${e.clientX - drag.x0}px, ${e.clientY - drag.y0}px)`;
+  }
+  const plan = S.plan;
+  const { cand, why = '', note = '' } = candidateAt(e.clientX, e.clientY);
+  const found = cand && cand.start != null ? clashes(plan, cand) : [];
+  drag.cand = cand;
+  drag.ok = !!cand && !found.length;
+  drag.why = why || (found.length ? clashText(plan, found) : '');
+  drawPreview();
+  const where = cand
+    ? cand.start == null
+      ? 'Take off the timeline'
+      : [`${clock(cand.start, plan.startsAt)}–${clock(end(cand), plan.startsAt)}`, minutesText(cand.duration), note].filter(Boolean).join(' · ')
+    : '';
+  showTip(e.clientX, e.clientY, drag.why || where, !!drag.why);
+}
+
+// Scrolls the timeline while a drag is held near its left or right edge.
+let edgeTimer = 0;
+function edgeScroll() {
+  clearInterval(edgeTimer);
+  if (!drag?.moved) return;
+  const r = el.wrap.getBoundingClientRect();
+  const x = drag.last.clientX;
+  const left = r.left + parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--who-w'));
+  const speed = x < left + 30 ? -12 : x > r.right - 30 ? 12 : 0;
+  if (!speed || drag.last.clientY < r.top || drag.last.clientY > r.bottom) return;
+  edgeTimer = setInterval(() => {
+    if (!drag) return clearInterval(edgeTimer);
+    el.wrap.scrollLeft += speed;
+    dragTo(drag.last);
+  }, 30);
+}
+
+function finishDrag(e, cancelled = false) {
+  if (!drag || (e && e.pointerId !== drag.pointerId)) return;
+  const d = drag;
+  drag = null;
+  clearInterval(edgeTimer);
+  d.ghost?.remove();
+  el.tip.hidden = true;
+  el.tray.classList.remove('drop');
+  document.body.classList.remove('dragging', 'resizing');
+  if (!d.moved) {
+    if (!cancelled) select(d.id);
+    return;
+  }
+  const before = find(d.id);
+  if (!cancelled && d.cand && d.ok) {
+    const { start, players, duration } = d.cand;
+    edit(plan => updateActivity(plan, d.id, { start, players, duration }));
+    notice(start == null && before.start != null
+      ? `“${before.title.trim() || 'Untitled'}” is off the timeline. Drag it back or use Put on timeline.`
+      : '');
+  } else if (!cancelled && d.why) {
+    notice(d.why, 'warn');
+  }
+  renderAll();
+}
+
+el.main.addEventListener('pointerdown', startDrag);
+document.addEventListener('pointermove', e => {
+  if (!drag || e.pointerId !== drag.pointerId) return;
+  if (!drag.moved) {
+    if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 4) return;
+    beginMoving();
+  }
+  dragTo(e);
+  edgeScroll();
+});
+document.addEventListener('pointerup', e => finishDrag(e));
+document.addEventListener('pointercancel', e => finishDrag(e, true));
+
+// Highlight every copy of a shared activity together.
+el.timeline.addEventListener('pointerover', e => {
+  const block = e.target.closest('.block');
+  for (const b of el.timeline.querySelectorAll('.block.linked')) if (b.dataset.id !== block?.dataset.id) b.classList.remove('linked');
+  if (block && !drag) for (const b of el.timeline.querySelectorAll(`.block${attrSel('data-id', block.dataset.id)}`)) b.classList.add('linked');
+});
+el.timeline.addEventListener('pointerleave', () => {
+  for (const b of el.timeline.querySelectorAll('.block.linked')) b.classList.remove('linked');
+});
+
+el.timeline.addEventListener('dblclick', e => {
+  if (e.target.closest('.block')) return;
+  const lane = e.target.closest('.lane .track') && e.target.closest('.lane').dataset.player;
+  if (!lane) return;
+  const at = Math.floor(minuteAt(e.clientX) / S.plan.snap) * S.plan.snap;
+  newActivityAt(lane, at);
+});
+
+el.timeline.addEventListener('click', e => {
+  if (e.target.closest('.lane .track') && !e.target.closest('.block') && S.selected) select(null);
+});
+
+// ---- Keyboard ------------------------------------------------------------------
+
+el.main.addEventListener('keydown', e => {
+  const block = e.target.closest?.('.block');
+  if (!block || e.target !== block) return;
+  const a = find(block.dataset.id);
+  if (!a) return;
+  const lane = block.dataset.lane || null;
+  const step = S.plan.snap;
+  const focusAfter = (laneId = lane) => {
+    const again = el.main.querySelector(`.block${attrSel('data-id', a.id)}${attrSel('data-lane', laneId ?? '')}`);
+    again?.focus();
+  };
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    select(a.id);
+    focusAfter();
+  } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && a.start != null) {
+    e.preventDefault();
+    const dir = e.key === 'ArrowLeft' ? -1 : 1;
+    const changes = e.shiftKey
+      ? { duration: Math.max(step, a.duration + dir * step) }
+      : { start: Math.max(0, a.start + dir * step) };
+    edit(plan => updateActivity(plan, a.id, changes));
+    renderAll();
+    focusAfter();
+  } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && lane) {
+    e.preventDefault();
+    const to = laneBeside(lane, e.key === 'ArrowUp' ? -1 : 1);
+    if (!to) return;
+    const players = swapPlayers(a, lane, to);
+    if (!players) { notice(`${playerName(S.plan, to)} is already in this activity.`, 'warn'); return; }
+    const out = edit(plan => updateActivity(plan, a.id, { players }));
+    renderAll();
+    focusAfter(out.ok ? to : lane);
+  } else if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault();
+    removeActivity(a.id);
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && drag) { finishDrag(null, true); renderAll(); return; }
+  const inText = e.target.matches?.('input, textarea, select');
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !inText) {
+    e.preventDefault();
+    undo();
+  } else if (e.key === 'Escape' && S.editingPlayer) {
+    S.editingPlayer = null;
+    renderTimeline();
+  } else if (e.key === 'Escape' && S.selected && !inText) {
+    select(null);
+  }
+});
+
+// ---- Buttons ---------------------------------------------------------------------
+
+document.addEventListener('click', e => {
+  const button = e.target.closest('[data-act]');
+  if (!button) return;
+  const act = button.dataset.act;
+  const a = selectedActivity();
+  if (act === 'add-player') {
+    edit(plan => { S.editingPlayer = addPlayer(plan).id; });
+    renderAll();
+    el.timeline.querySelector(attrSel('data-key', `pf:name:${S.editingPlayer}`))?.focus();
+  } else if (act === 'edit-player') {
+    S.editingPlayer = button.dataset.player;
+    renderTimeline();
+    const input = el.timeline.querySelector(attrSel('data-key', `pf:name:${S.editingPlayer}`));
+    input?.focus();
+    input?.select();
+  } else if (act === 'player-done') {
+    S.editingPlayer = null;
+    renderTimeline();
+  } else if (act === 'remove-player') {
+    const id = button.dataset.player;
+    const name = playerName(S.plan, id);
+    let emptied = [];
+    edit(plan => { emptied = removePlayer(plan, id); });
+    S.editingPlayer = null;
+    renderAll();
+    notice(`Removed ${name}.` + (emptied.length ? ` ${emptied.length} ${emptied.length === 1 ? 'activity' : 'activities'} had nobody left and moved to the tray.` : '') + ' Undo brings them back.');
+  } else if (act === 'new-activity') {
+    newActivity();
+  } else if (act === 'close-editor') {
+    select(null);
+  } else if (!a) {
+    // the rest act on the open activity
+  } else if (act === 'schedule') {
+    schedule(a.id);
+  } else if (act === 'unschedule') {
+    setStart(a.id, null);
+  } else if (act === 'duplicate') {
+    const out = edit(plan => duplicateActivity(plan, a.id));
+    select(out.activity.id);
+    notice('Duplicated.' + (out.activity.start != null ? ' The copy starts when its players are next free.' : ''));
+  } else if (act === 'delete') {
+    removeActivity(a.id);
+  } else if (act === 'add-tier') {
+    const top = Math.max(-Infinity, a.dc ?? -Infinity, ...a.tiers.map(t => t.dc ?? -Infinity));
+    const id = newId(a.tiers, 't');
+    edit(() => { a.tiers.push({ id, label: '', dc: Number.isFinite(top) ? top + 5 : null, reward: '' }); });
+    renderEditor();
+    el.editor.querySelector(attrSel('data-key', `tier:${id}:label`))?.focus();
+  } else if (act === 'remove-tier') {
+    const id = button.closest('.tier').dataset.tier;
+    edit(() => { a.tiers = a.tiers.filter(t => t.id !== id); });
+    renderEditor();
+    renderTimeline();
+  }
+});
+
+// ---- Fields ------------------------------------------------------------------------
+
+const TEXT_FIELDS = ['title', 'premise', 'check', 'success', 'failure'];
+
+el.editor.addEventListener('input', e => {
+  const t = e.target;
+  const a = selectedActivity();
+  if (!a) return;
+  if (t.id === 'test-roll') {
+    S.testRoll = t.value;
+    renderOutcomes();
+    return;
+  }
+  const f = t.dataset.f;
+  if (TEXT_FIELDS.includes(f)) typed(() => { a[f] = t.value; });
+  else if (f === 'dc') typed(() => { a.dc = whole(t.value, null); });
+  else if (t.dataset.tf) {
+    const tier = a.tiers.find(x => x.id === t.closest('.tier').dataset.tier);
+    const tf = t.dataset.tf;
+    typed(() => { tier[tf] = tf === 'dc' ? whole(t.value, null) : t.value; });
+  } else return;
+  renderTimeline();
+  renderTray();
+  renderOutcomes();
+});
+
+el.editor.addEventListener('change', e => {
+  const t = e.target;
+  const a = selectedActivity();
+  if (!a) return;
+  if (t.dataset.f === 'start' || t.dataset.f === 'duration') {
+    const f = t.dataset.f;
+    const value = whole(t.value, a[f], f === 'start' ? 0 : 1);
+    edit(plan => updateActivity(plan, a.id, { [f]: value }));
+    renderAll();
+  } else if (t.type === 'checkbox' && t.dataset.player) {
+    const wanted = new Set(a.players);
+    if (t.checked) wanted.add(t.dataset.player); else wanted.delete(t.dataset.player);
+    const players = S.plan.players.map(p => p.id).filter(id => wanted.has(id));
+    const wasOn = a.start != null;
+    const out = edit(plan => updateActivity(plan, a.id, { players }));
+    renderAll();
+    if (out.ok && wasOn && out.activity.start == null) notice('Nobody is left in it, so it moved to the tray.');
+  }
+});
+
+// A player's name is saved as it is typed. The colour waits for the picker to
+// close: redrawing the lane while it is open would take the picker's input away.
+el.timeline.addEventListener('input', e => {
+  const t = e.target;
+  const p = S.plan.players.find(x => x.id === t.dataset.player);
+  if (!p || t.dataset.pf !== 'name') return;
+  typed(() => { p.name = t.value; });
+  renderTimeline();
+  renderTray();
+  renderEditor();
+});
+el.timeline.addEventListener('change', e => {
+  const t = e.target;
+  const p = S.plan.players.find(x => x.id === t.dataset.player);
+  if (!p || t.dataset.pf !== 'color') return;
+  edit(() => { p.color = t.value; });
+  renderAll();
+});
+
+el.timeline.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.dataset.pf) {
+    // Without this the same key press would also click the name button that
+    // takes focus next, and open the form again.
+    e.preventDefault();
+    S.editingPlayer = null;
+    renderTimeline();
+    el.timeline.querySelector(attrSel('data-key', `pn:${e.target.dataset.player}`))?.focus();
+  }
+});
+
+el.title.addEventListener('input', () => {
+  typed(plan => { plan.title = el.title.value; });
+  document.title = `${S.plan.title.trim() || S.name} · Session Planner`;
+});
+el.startsAt.addEventListener('change', () => {
+  edit(plan => { plan.startsAt = el.startsAt.value; });
+  renderAll();
+});
+el.length.addEventListener('change', () => {
+  edit(plan => { plan.length = whole(el.length.value, plan.length, 1); });
+  renderAll();
+});
+el.snap.addEventListener('change', () => {
+  edit(plan => { plan.snap = Number(el.snap.value); });
+  renderAll();
+});
+
+// Zooms about the middle of the visible lanes, or keeps the start of the
+// session in view when the timeline is scrolled to it.
+function zoom(dir) {
+  const half = (el.wrap.clientWidth - el.timeline.querySelector('.who').offsetWidth) / 2;
+  const atStart = el.wrap.scrollLeft === 0;
+  const centre = (el.wrap.scrollLeft + half) / ppm();
+  S.zoom = Math.min(ZOOMS.length - 1, Math.max(0, S.zoom + dir));
+  writePref('planner-zoom', S.zoom);
+  renderBar();
+  renderTimeline();
+  renderTray();
+  el.wrap.scrollLeft = atStart ? 0 : centre * ppm() - half;
+}
+el.zoomOut.addEventListener('click', () => zoom(-1));
+el.zoomIn.addEventListener('click', () => zoom(1));
+el.undo.addEventListener('click', undo);
+
+// ---- Plan files ----------------------------------------------------------------------
+
+el.planSelect.addEventListener('change', () => {
+  openPlan(el.planSelect.value).catch(err => notice(`Could not open that plan: ${err.message}`, 'warn'));
+});
+
+function suggestName() {
+  const taken = new Set(S.plans.map(p => p.name.toLowerCase()));
+  let n = S.plans.length + 1;
+  while (taken.has(`session-${n}`)) n++;
+  return `session-${n}`;
+}
+
+el.newPlan.addEventListener('click', () => {
+  el.newPlan.hidden = true;
+  el.newPlanForm.hidden = false;
+  const input = el.newPlanForm.elements.name;
+  input.value = suggestName();
+  input.focus();
+  input.select();
+});
+const closeNewPlan = () => { el.newPlanForm.hidden = true; el.newPlan.hidden = false; };
+el.newPlanForm.addEventListener('click', e => { if (e.target.dataset.act === 'cancel-new-plan') closeNewPlan(); });
+el.newPlanForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = el.newPlanForm.elements.name.value.trim();
+  try {
+    await createPlan(name, name.replace(/[-_]+/g, ' ').replace(/^\w/, c => c.toUpperCase()));
+    closeNewPlan();
+  } catch (err) {
+    notice(err.message, 'warn');
+  }
+});
+
+// Leaving with a change not yet saved: send it on the way out.
+addEventListener('pagehide', () => {
+  if (!dirty || !S.name) return;
+  fetch(planUrl(S.name), {
+    method: 'PUT', keepalive: true,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ base: S.v, plan: S.plan }),
+  });
+});
+
+// ---- Start ---------------------------------------------------------------------------
+
+async function boot() {
+  let plans;
+  try {
+    plans = await refreshPlanList();
+  } catch {
+    el.main.hidden = true;
+    document.querySelector('.bar').hidden = true;
+    el.offline.hidden = false;
+    return;
+  }
+  let wanted = readPref('planner-last', '');
+  try { wanted = decodeURIComponent(location.hash.slice(1)) || wanted; } catch { /* a mangled address: use the last plan */ }
+  const names = plans.map(p => p.name);
+  if (names.includes(wanted)) await openPlan(wanted);
+  else if (names.length) await openPlan(names[0]);
+  else await createPlan('session-1', 'Session 1');
+  setInterval(poll, POLL_EVERY);
+}
+
+boot();
