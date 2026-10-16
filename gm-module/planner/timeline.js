@@ -4,7 +4,7 @@
 // same code, and it can be checked in Node. Also the few page helpers both
 // pages use (escaping, zoom, per-viewer settings).
 
-import { clock, end, minutesText, npcName, playerName, span, whole } from './plan.js';
+import { clock, end, minutesText, npcName, placesText, playerName, span, whole } from './plan.js';
 
 export const ZOOMS = [1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24]; // pixels per minute
 export const DEFAULT_ZOOM = 5;
@@ -80,7 +80,8 @@ export function blockHtml(plan, a, lane, L, { selected = false, clash = false, m
   const when = a.start == null ? 'Not scheduled' : `${clock(a.start, plan.startsAt)}–${clock(end(a), plan.startsAt)}`;
   const check = showCheck ? checkLabel(a) : '';
   const npcs = plan.npcs && a.npcs?.length ? `NPCs: ${a.npcs.map(n => npcName(plan, n)).join(', ')}` : '';
-  const tip = [a.title.trim() || 'Untitled', `${when} · ${minutesText(a.duration)}`, check, withText, npcs].filter(Boolean).join('\n');
+  const places = placesText(a);
+  const tip = [a.title.trim() || 'Untitled', `${when} · ${minutesText(a.duration)}`, places, check, withText, npcs].filter(Boolean).join('\n');
   const width = a.duration * L.px;
   const classes = ['block', lane ? '' : 'chip', editable ? '' : 'static', selected ? 'selected' : '',
     lane && width < 64 ? 'narrow' : '', clash ? 'clash' : '', marked ? 'marked' : ''];
@@ -91,7 +92,7 @@ export function blockHtml(plan, a, lane, L, { selected = false, clash = false, m
   return `<div class="${classes.filter(Boolean).join(' ')}" data-id="${esc(a.id)}" data-lane="${esc(lane ?? '')}"${focus}
       style="${style}" title="${esc(tip)}">
     <span class="b-title">${esc(a.title.trim() || 'Untitled')}</span>
-    <span class="b-meta">${esc([minutesText(a.duration), check].filter(Boolean).join(' · '))}</span>
+    <span class="b-meta">${esc([minutesText(a.duration), places && `${a.players.length}/${a.maxPlayers}`, check].filter(Boolean).join(' · '))}</span>
     ${withText ? `<span class="b-with">${esc(withText)}</span>` : ''}
     ${editable && lane ? '<span class="grip" data-grip aria-hidden="true"></span>' : ''}
   </div>`;

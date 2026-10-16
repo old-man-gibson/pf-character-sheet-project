@@ -358,6 +358,10 @@ main {
   color: var(--text);
 }
 .pchip:has(input:checked) { background: color-mix(in srgb, var(--pc) 22%, transparent); }
+.pchip.shut { opacity: .45; cursor: default; }
+.editor legend .count { margin-left: 6px; color: var(--text); }
+.ed-max { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; color: var(--dim); font-size: 12px; }
+.ed-max input { width: 56px; color: var(--text); }
 .ed-when { display: flex; flex-wrap: wrap; align-items: end; gap: 6px 12px; }
 .ed-when label { display: flex; flex-direction: column; gap: 3px; }
 .ed-when .unit { display: inline-flex; align-items: center; gap: 4px; }

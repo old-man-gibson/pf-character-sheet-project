@@ -95,6 +95,9 @@ one lane per player:
 - Activities run in parallel, but a player is in one activity at a time. A
   move, resize or edit that would put a player in two overlapping activities
   is refused, with the activity in the way named. Back-to-back is fine.
+- An activity can take at most a set number of players (empty: no limit). A
+  full activity offers no more places: adding a player, or lowering the limit
+  below who is in it, is refused. Its blocks show how full it is (2/3).
 - An activity with several players has a block in each of their lanes; moving
   one moves them all. Dragging a block onto another player's lane hands that
   player's place to the other player. Dragging its right edge changes its
@@ -148,7 +151,7 @@ deletes. A new plan starts with the open plan's players and NPCs.
 
 Plan shape: `title`, `startsAt` ("19:00" or ""), `length` and `snap` in minutes,
 `players` (`id/name/color`), `npcs` (`id/name/role/description/notes`),
-`activities` (`id/title/start/duration/players/npcs`, `premise`, `check`, `dc`,
+`activities` (`id/title/start/duration/players/maxPlayers/npcs`, `premise`, `check`, `dc`,
 `success`, `failure`, `tiers: [{id, label, dc, reward}]`). `start` is minutes
 from the start of the session, null when unscheduled. Other fields are kept as
 they are.

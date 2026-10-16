@@ -1,5 +1,5 @@
 /** Tests the GM module's session planner: the plan model (one activity per
- *  player at a time, success tiers, NPCs), what the player view is allowed to see,
+ *  player at a time, player limits, success tiers, NPCs), what the player view is allowed to see,
  *  the timeline markup both pages draw, the plan files on disk (versioned
  *  writes that never overwrite a change made elsewhere), the planner API
  *  through tools/serve.mjs on a spare port against a temporary folder, and the
@@ -14,8 +14,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   addActivity, addNpc, addPlayer, allClashes, blankPlan, clashText, clashes, clock, duplicateActivity,
-  firstFree, freeName, ladder, minutesText, nameFrom, newPlan, normalizePlan, npcActivities, npcClashes,
-  npcName, outcome, playerLoad, playerView, removeNpc, removePlayer, span, updateActivity,
+  firstFree, freeName, ladder, limitText, minutesText, nameFrom, newPlan, normalizePlan, npcActivities, npcClashes,
+  npcName, outcome, overLimit, placesText, playerLoad, playerView, removeNpc, removePlayer, span, updateActivity,
 } from '../gm-module/planner/plan.js';
 import { browserStore, fileStore } from '../gm-module/planner/stores.js';
 import { blockHtml, layout } from '../gm-module/planner/timeline.js';
@@ -186,6 +186,40 @@ function table() {
   check('and the timeline grows to the last end', span({ ...plan, length: 30 }), 40);
 }
 
+// ---- Player limits -----------------------------------------------------------
+
+{
+  const read = v => normalizePlan({ players: [{ id: 'p1' }], activities: [{ id: 'a1', players: ['p1'], maxPlayers: v }] }).activities[0].maxPlayers;
+  check('a limit is read as a whole number of at least one', ['3', 2.6, 0, -4].map(read), [3, 3, 1, 1]);
+  check('blank or missing means no limit', [read(''), read(null), read(undefined), read('lots')], [null, null, null, null]);
+
+  const plan = table();
+  const d = plan.activities[2];
+  const capped = updateActivity(plan, d.id, { maxPlayers: 2 });
+  check('a limit can be set at the number already in it', [capped.ok, placesText(capped.activity)], [true, '2 of 2 players']);
+  const more = updateActivity(plan, d.id, { players: ['p3', 'p4', 'p1'], start: 30 });
+  check('a full activity takes no more players', [more.ok, more.full, limitText(more.activity)], [false, true, '“D” takes at most 2 players.']);
+  check('and is left as it was', plan.activities[2].players, ['p3', 'p4']);
+  const lowered = updateActivity(plan, d.id, { maxPlayers: 1 });
+  check('the limit cannot drop below who is in it', [lowered.full, limitText(lowered.activity, lowered.before)],
+    [true, '“D” has 2 players, so its limit cannot be lower than 2.']);
+  check('handing a place to another player is fine', updateActivity(plan, d.id, { players: ['p1', 'p4'], start: 30 }).ok, true);
+  check('raising the limit makes room', [updateActivity(plan, d.id, { maxPlayers: 3 }).ok, updateActivity(plan, d.id, { players: ['p1', 'p4', 'p3'] }).ok], [true, true]);
+  check('and clearing it removes the limit', [updateActivity(plan, d.id, { maxPlayers: '' }).activity.maxPlayers, placesText(plan.activities[2])], [null, '']);
+  check('a one-player limit reads in the singular', limitText({ title: 'Solo', maxPlayers: 1 }), '“Solo” takes at most 1 player.');
+  check('a new activity over its limit is refused', addActivity(plan, { start: 100, players: ['p1', 'p2'], maxPlayers: 1 }).full, true);
+
+  const crowded = () => normalizePlan({
+    players: [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }, { id: 'p4' }],
+    activities: [{ id: 'a1', title: 'Crowded', start: 0, duration: 10, players: ['p1', 'p2', 'p3'], maxPlayers: 2 }],
+  });
+  check('a hand edit can leave one over its limit', overLimit(crowded().activities[0]), true);
+  check('it can still be moved', updateActivity(crowded(), 'a1', { start: 20 }).ok, true);
+  check('or have a player taken out', updateActivity(crowded(), 'a1', { players: ['p1', 'p2'] }).ok, true);
+  check('but not be given another', updateActivity(crowded(), 'a1', { players: ['p1', 'p2', 'p3', 'p4'] }).full, true);
+  check('nor have its limit lowered further', updateActivity(crowded(), 'a1', { maxPlayers: 1 }).full, true);
+}
+
 // ---- NPCs ------------------------------------------------------------------
 
 {
@@ -262,7 +296,7 @@ function secretPlan() {
     npcs: [{ id: 'n1', name: 'SECRET npc', role: 'SECRET role', description: 'SECRET looks', notes: 'SECRET motive' }],
     activities: [
       {
-        id: 'a1', title: 'Pick the lock', start: 0, duration: 5, players: ['p1', 'p2'], npcs: ['n1'], check: 'Disable Device',
+        id: 'a1', title: 'Pick the lock', start: 0, duration: 5, players: ['p1', 'p2'], maxPlayers: 3, npcs: ['n1'], check: 'Disable Device',
         dc: 1777, premise: 'SECRET premise', success: 'SECRET success', failure: 'SECRET failure',
         tiers: [{ id: 't1', label: 'SECRET tier', dc: 1888, reward: 'SECRET tier reward' }], gmNote: 'SECRET field',
       },
@@ -280,6 +314,7 @@ function secretPlan() {
   check('players keep their colours and get a name when they have none', view.players.map(p => [p.name, !!p.color]),
     [['Ana', true], ['Player 2', true]]);
   check('the session times come through', [view.title, view.length, view.startsAt], ['Open night', 240, '']);
+  check('the player limit stays with the GM', 'maxPlayers' in view.activities[0], false);
 }
 
 {
@@ -296,6 +331,8 @@ function secretPlan() {
   const gm = blockHtml(secretPlan(), secretPlan().activities[0], 'p1', L, { editable: true });
   check('the GM block shows the DC and can be dragged', [gm.includes('Disable Device DC 1777'), gm.includes('data-grip'), gm.includes('tabindex="0"')], [true, true, true]);
   check('and names its NPCs in the tooltip', gm.includes('NPCs: SECRET npc'), true);
+  check('and how full it is', [gm.includes('2/3'), gm.includes('2 of 3 players')], [true, true]);
+  check('a player block shows no count', without.includes('2/3') || without.includes('of 3'), false);
   check('a block linked to the open NPC is marked', blockHtml(secretPlan(), secretPlan().activities[0], 'p1', L, { marked: true }).includes('marked'), true);
   const odd = blockHtml(view, { ...act, title: '<b>"x"</b>' }, 'p1', L);
   check('titles are escaped', odd.includes('&lt;b&gt;&quot;x&quot;&lt;/b&gt;') && !odd.includes('<b>'), true);

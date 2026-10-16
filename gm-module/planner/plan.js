@@ -6,9 +6,10 @@
 // Times are whole minutes from the start of the session. An activity whose
 // `start` is null is unscheduled and waits in the tray. Activities run in
 // parallel, but a player takes part in one at a time: two activities that
-// share a player may meet end to start, never overlap. Every edit that moves
-// an activity or changes who is in it goes through `updateActivity` (or
-// `addActivity`), which refuses a change that would break that rule.
+// share a player may meet end to start, never overlap. An activity may also
+// set `maxPlayers`, the most players it takes (null: no limit). Every edit that
+// moves an activity or changes who is in it goes through `updateActivity` (or
+// `addActivity`), which refuses a change that would break either rule.
 //
 // A check has a DC to succeed and any number of further tiers, each with its
 // own DC and reward. A result reaches the tier with the highest DC it meets;
@@ -23,7 +24,8 @@
 //     players: [{ id, name, color }],
 //     npcs: [{ id, name, role, description, notes }],
 //     activities: [{ id, title, start (min) | null, duration (min), players: [ids],
-//                    npcs: [ids], premise, check, dc | null, success, failure,
+//                    maxPlayers | null, npcs: [ids], premise, check, dc | null,
+//                    success, failure,
 //                    tiers: [{ id, label, dc | null, reward }] }] }
 // Fields a plan carries beyond these are kept as they are.
 
@@ -158,6 +160,7 @@ export function normalizeActivity(raw, known = null) {
     start: players.length ? whole(a.start, null, 0) : null,
     duration: whole(a.duration, DEFAULTS.duration, 1),
     players,
+    maxPlayers: whole(a.maxPlayers, null, 1),
     npcs: idList(a.npcs, known?.npcs),
     premise: text(a.premise),
     check: text(a.check),
@@ -317,6 +320,7 @@ export function updateActivity(plan, id, changes) {
   const i = plan.activities.findIndex(a => a.id === id);
   if (i < 0) return { ok: false, clashes: [], activity: null };
   const next = normalizeActivity({ ...plan.activities[i], ...changes }, knownIds(plan));
+  if (overfills(plan.activities[i], next)) return { ok: false, clashes: [], full: true, activity: next, before: plan.activities[i] };
   const found = clashes(plan, next);
   if (found.length) return { ok: false, clashes: found, activity: next };
   plan.activities[i] = next;
@@ -325,11 +329,42 @@ export function updateActivity(plan, id, changes) {
 
 export function addActivity(plan, fields = {}) {
   const act = normalizeActivity(blankActivity(newId(plan.activities, 'a'), fields), knownIds(plan));
+  if (overfills(null, act)) return { ok: false, clashes: [], full: true, activity: act };
   const found = clashes(plan, act);
   if (found.length) return { ok: false, clashes: found, activity: act };
   plan.activities.push(act);
   return { ok: true, activity: act };
 }
+
+// ---- The player limit ----------------------------------------------------------
+
+export const overLimit = a => a.maxPlayers != null && a.players.length > a.maxPlayers;
+
+// Whether going from `before` (null for a new activity) to `next` puts more
+// players in than its limit allows: a player added, or the limit lowered.
+// An activity already over its limit (a hand-edited file) may still be moved
+// or have players taken out.
+export function overfills(before, next) {
+  if (!overLimit(next)) return false;
+  if (!before) return true;
+  return next.players.length > before.players.length || !overLimit(before) || next.maxPlayers < before.maxPlayers;
+}
+
+// Why a change was refused: "“Search the archive” takes at most 2 players."
+// when it added a player, or "“Search the archive” has 3 players, so its limit
+// cannot be lower than 3." when it lowered the limit (`before` is the
+// activity as it was).
+export function limitText(act, before = null) {
+  const title = `“${act.title.trim() || 'Untitled'}”`;
+  const plural = n => `${n} ${n === 1 ? 'player' : 'players'}`;
+  if (before && act.players.length <= before.players.length) {
+    return `${title} has ${plural(act.players.length)}, so its limit cannot be lower than ${act.players.length}.`;
+  }
+  return `${title} takes at most ${plural(act.maxPlayers)}.`;
+}
+
+// "2 of 3 players", or "" when there is no limit.
+export const placesText = a => (a.maxPlayers == null ? '' : `${a.players.length} of ${a.maxPlayers} ${a.maxPlayers === 1 ? 'player' : 'players'}`);
 
 // A copy with the same players, placed at the first time after the original
 // that they are all free (or unscheduled, when the original is).

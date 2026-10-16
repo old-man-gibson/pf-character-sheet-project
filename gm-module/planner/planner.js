@@ -13,9 +13,9 @@
 
 import {
   SNAPS, addActivity, addNpc, addPlayer, allClashes, checkNames, clashText, clashes, clock,
-  deleteActivity, duplicateActivity, end, firstFree, freeName, ladder, minutesText, nameFrom, newId,
-  newPlan, normalizePlan, npcActivities, npcClashes, npcName, outcome, playerLoad, playerName,
-  removeNpc, removePlayer, snapTo, span, updateActivity, whole,
+  deleteActivity, duplicateActivity, end, firstFree, freeName, ladder, limitText, minutesText, nameFrom,
+  newId, newPlan, normalizePlan, npcActivities, npcClashes, npcName, outcome, overLimit, overfills,
+  placesText, playerLoad, playerName, removeNpc, removePlayer, snapTo, span, updateActivity, whole,
 } from './plan.js';
 import { openStore } from './stores.js';
 import { downloadFile } from '../../app/js/download.js';
@@ -115,7 +115,8 @@ function edit(fn) {
   const before = JSON.stringify(S.plan);
   const out = fn(S.plan);
   if (out && out.ok === false) {
-    if (out.clashes?.length) notice(clashText(S.plan, out.clashes), 'warn');
+    if (out.full) notice(limitText(out.activity, out.before), 'warn');
+    else if (out.clashes?.length) notice(clashText(S.plan, out.clashes), 'warn');
     return out;
   }
   if (JSON.stringify(S.plan) !== before) {
@@ -327,7 +328,8 @@ function whoHtml(p, i) {
 function renderTimeline() {
   const plan = S.plan;
   const L = layout(plan, ppm());
-  const clashing = new Set(allClashes(plan).flatMap(c => [c.a.id, c.b.id]));
+  // Booked twice, or over its player limit: only a hand-edited file can be.
+  const clashing = new Set([...allClashes(plan).flatMap(c => [c.a.id, c.b.id]), ...plan.activities.filter(overLimit).map(a => a.id)]);
   // With an NPC open, the activities it is linked to stand out.
   const npc = !S.selected && openNpc();
   const marked = new Set(npc ? npcActivities(plan, npc.id).map(a => a.id) : []);
@@ -353,11 +355,17 @@ function renderTimeline() {
   });
 
   const found = allClashes(plan);
-  el.clashNote.hidden = !found.length;
-  el.clashNote.textContent = found.length
-    ? 'Booked twice: ' + found.slice(0, 3).map(c => `${playerName(plan, c.player)} in “${c.a.title || 'Untitled'}” and “${c.b.title || 'Untitled'}”`).join('; ') +
-      (found.length > 3 ? ` and ${found.length - 3} more` : '') + '. Move one of each pair.'
-    : '';
+  const over = plan.activities.filter(overLimit);
+  el.clashNote.hidden = !found.length && !over.length;
+  el.clashNote.textContent = [
+    found.length
+      ? 'Booked twice: ' + found.slice(0, 3).map(c => `${playerName(plan, c.player)} in “${c.a.title || 'Untitled'}” and “${c.b.title || 'Untitled'}”`).join('; ') +
+        (found.length > 3 ? ` and ${found.length - 3} more` : '') + '. Move one of each pair.'
+      : '',
+    over.length
+      ? 'Over the player limit: ' + over.map(a => `“${a.title || 'Untitled'}” (${placesText(a)})`).join('; ') + '. Take a player out or raise the limit.'
+      : '',
+  ].filter(Boolean).join(' ');
 }
 
 function renderTray() {
@@ -491,18 +499,28 @@ function renderActivityEditor(a) {
   const when = a.start == null
     ? 'Not on the timeline yet.'
     : `${clock(a.start, plan.startsAt)}–${clock(end(a), plan.startsAt)} (${minutesText(a.duration)})`;
-  const players = plan.players.map(p => `
-    <label class="pchip" style="--pc:${esc(p.color)}">
-      <input type="checkbox" data-player="${esc(p.id)}" data-key="ep:${esc(p.id)}" aria-label="${esc(playerName(plan, p.id))}"${a.players.includes(p.id) ? ' checked' : ''}>
+  // A full activity offers no more places: the other players' boxes are off.
+  const full = a.maxPlayers != null && a.players.length >= a.maxPlayers;
+  const players = plan.players.map(p => {
+    const inIt = a.players.includes(p.id);
+    const shut = full && !inIt;
+    return `
+    <label class="pchip${shut ? ' shut' : ''}" style="--pc:${esc(p.color)}"${shut ? ` title="${esc(limitText(a))}"` : ''}>
+      <input type="checkbox" data-player="${esc(p.id)}" data-key="ep:${esc(p.id)}" aria-label="${esc(playerName(plan, p.id))}"${inIt ? ' checked' : ''}${shut ? ' disabled' : ''}>
       ${esc(playerName(plan, p.id))}
-    </label>`).join('');
+    </label>`;
+  }).join('');
   keepFocus(el.editor, () => {
     el.editor.innerHTML = `
       <div class="ed-head">
         <input class="ed-title" data-f="title" data-key="f:title" value="${esc(a.title)}" placeholder="Activity name" aria-label="Activity name">
         <button type="button" class="icon" data-act="close-editor" aria-label="Close">×</button>
       </div>
-      <fieldset><legend>Players</legend>${players || '<p class="dim">Add players first.</p>'}</fieldset>
+      <fieldset class="ed-players"><legend>Players${a.maxPlayers != null ? ` <span class="count">${a.players.length} of ${a.maxPlayers}</span>` : ''}</legend>
+        ${players || '<p class="dim">Add players first.</p>'}
+        <label class="ed-max">At most <input type="number" data-f="maxPlayers" data-key="f:maxPlayers" min="1" step="1"
+          value="${a.maxPlayers ?? ''}" placeholder="any" aria-label="Most players this activity takes; empty for no limit"> players</label>
+      </fieldset>
       ${activityNpcsHtml(a)}
       <div class="ed-when">
         <label>Start<span class="unit"><input type="number" data-f="start" data-key="f:start" aria-label="Start, minutes from the start of the session" min="0" step="${plan.snap}"
@@ -766,9 +784,10 @@ function dragTo(e) {
   const plan = S.plan;
   const { cand, why = '', note = '' } = candidateAt(e.clientX, e.clientY);
   const found = cand && cand.start != null ? clashes(plan, cand) : [];
+  const full = !!cand && overfills(find(drag.id), cand);
   drag.cand = cand;
-  drag.ok = !!cand && !found.length;
-  drag.why = why || (found.length ? clashText(plan, found) : '');
+  drag.ok = !!cand && !found.length && !full;
+  drag.why = why || (full ? limitText(cand) : found.length ? clashText(plan, found) : '');
   drawPreview();
   const where = cand
     ? cand.start == null
@@ -1042,6 +1061,9 @@ el.editor.addEventListener('change', e => {
       edit(plan => updateActivity(plan, a.id, { npcs: [...a.npcs, t.value] }));
       renderAll();
     }
+  } else if (t.dataset.f === 'maxPlayers') {
+    edit(plan => updateActivity(plan, a.id, { maxPlayers: whole(t.value, null, 1) }));
+    renderAll();
   } else if (t.dataset.f === 'start' || t.dataset.f === 'duration') {
     const f = t.dataset.f;
     const value = whole(t.value, a[f], f === 'start' ? 0 : 1);
