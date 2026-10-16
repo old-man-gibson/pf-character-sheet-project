@@ -7,12 +7,14 @@ content-free, so everything with game or campaign content in it
 ## Layout
 
 ```
+tools.json          the GM tools registry: which folders are tools
 tools/roll.mjs      crypto-backed dice roller (see header comment for usage)
-lib/gm-tools.mjs    the GM tools menu: finds gm-tool.json files, mounts their APIs
+lib/gm-tools.mjs    the GM tools mount for tools/serve.mjs: loads manifests and APIs
+lib/http.mjs        HTTP helpers for the GM servers
 screen/             session screen: server.mjs + board page
-planner/            session planner: server.mjs, the GM page and the player view
-                    (plan.js is the model, timeline.js the markup both pages draw)
-lib/http.mjs        HTTP helpers both servers use
+planner/            session planner: the GM page and the player view (plan.js is the
+                    model, timeline.js the markup both pages draw, stores.js where
+                    plans are kept, api.mjs the file API)
 plans/              (git-ignored) the planner's plan files, one JSON file per session
 rules/              (git-ignored) homebrew docs and rules references, grep-able
 campaigns/
@@ -46,26 +48,30 @@ The player drags tokens; moves write back into the same file.
 
 ## GM tools menu
 
-When the sheet runs on `node tools/serve.mjs`, its top bar has a **GM tools**
-button listing the tools here; each opens in a tab of its own. The public site
-has no GM tools and shows no button.
+The sheet's top bar has a **GM tools** button listing the tools here; each
+opens in a tab of its own and keeps its saved files apart from the characters.
 
-- Everything under `/gm-module/` (the menu, the pages, the APIs, the saved
-  files) answers this computer only, so players on the same network see
-  nothing of it.
-- Each tool keeps its saved files in a folder of its own under the GM data
-  folder: `gm-module/` by default (git-ignored folders such as `plans/`), or
-  another with `node tools/serve.mjs --gm-data <folder>`. Characters stay in the
-  browser, as before.
+- **On this computer** (`node tools/serve.mjs`) every registered tool is
+  listed, server parts and all. Everything under `/gm-module/` (the menu, the
+  pages, the APIs, the saved files) answers this computer only, so players on
+  the same network see nothing of it. Saved files go in a folder of each tool's
+  own under the GM data folder: `gm-module/` by default (git-ignored folders such
+  as `plans/`), or another with `node tools/serve.mjs --gm-data <folder>`.
+- **On the public site** the tools marked `"site": true` are listed. The deploy
+  ships `tools.json` and those tools' folders only (see `.assetsignore`), never
+  `campaigns/`, `rules/` or plan files. Such a tool keeps what it saves in the
+  visitor's browser.
 
-A tool joins the menu with a `gm-tool.json` in its folder:
+A tool is a folder named in `tools.json` (`{ "folders": [...] }`) with a
+`gm-tool.json` in it:
 
 ```json
 {
   "tools": [{ "id": "planner", "name": "Session planner",
               "description": "One line for the menu", "page": "index.html" }],
   "api": "api.mjs",
-  "data": "plans"
+  "data": "plans",
+  "site": true
 }
 ```
 
@@ -75,20 +81,16 @@ a folder may list several. `api` and `data` are for a tool with a server part:
 the GM data folder) and returns a handler `(req, res, route, url)` for requests
 to `/gm-module/<folder>/api/<route>`; pages ask for it by the relative address
 `api/<route>`. The mount has already checked that the request is from this
-computer and that a write is JSON. A tool whose manifest or server part fails
-to load is left out of the menu and named in the server's startup output.
-`planner/` is the worked example (`gm-tool.json`, `api.mjs`).
+computer and that a write is JSON. `site` says the tool also works with no
+server part. A tool whose manifest or server part fails to load is left out of
+the menu and named in the server's startup output; the tests check `tools.json`
+names every folder with a manifest. `planner/` is the worked example
+(`gm-tool.json`, `api.mjs`, and `stores.js` for working with or without its API).
 
 ## Session planner
 
-Open it from the sheet's GM tools button, or run it on its own:
-
-```
-node gm-module/planner/server.mjs 8766 [--dir <folder of plan files>]
-```
-
-and open `http://localhost:8766`. Both use `gm-module/plans/` unless told
-otherwise. It plans a session as a timeline with one lane per player:
+Open it from the sheet's GM tools button. It plans a session as a timeline with
+one lane per player:
 
 - Activities run in parallel, but a player is in one activity at a time. A
   move, resize or edit that would put a player in two overlapping activities
@@ -119,25 +121,37 @@ everywhere; Undo brings it back.
 **Player view.** The Player view button opens `players.html#<plan>`: the same
 timeline, read-only, for a second screen or a screen share. It shows each
 scheduled activity's title, time, duration and players, and the required check
-when its Show checks box is ticked. DCs, rewards, success tiers, premises, NPCs
-and unscheduled activities are never sent to it: the server builds its data from a
-list of the fields players may see (`playerView` in plan.js). It asks for
-changes every second, so it follows the GM page's edits about a second after
-they are saved.
+when its Show checks box is ticked. It only ever gets a plan as `playerView` in
+plan.js makes it, from a list of the fields players may see: DCs, rewards,
+success tiers, premises, NPCs and unscheduled activities are left out. It asks
+for changes every second, so it follows the GM page's edits about a second
+after they are saved.
 
-Plans are saved as `<name>.json` in `gm-module/plans/` (git-ignored) or the
-`--dir` folder. A new plan starts with the open plan's players and NPCs. The file can be
-edited while the page is open: the page reloads it within a couple of seconds,
-and never writes over a change it has not seen (it loads the newer copy and
-keeps its own for Undo). A hand edit that books a player twice is flagged on
-the page. The server answers requests from this machine only, since plans hold
-DCs and rewards.
+**Where plans are kept** (`stores.js`; the bar says which):
+
+- *Files*, when the sheet runs on this computer with `node tools/serve.mjs`:
+  `<name>.json` in `gm-module/plans/` (git-ignored) or the `--gm-data` folder's
+  `plans/`. A file can be edited while the page is open: the page reloads it
+  within a couple of seconds, and never writes over a change it has not seen
+  (it loads the newer copy and keeps its own for Undo). A hand edit that books a
+  player twice is flagged on the page. The player view's data is built on the
+  server, so the browser showing it never receives the GM's fields.
+- *This browser*, everywhere else (the public site): the browser's own
+  `gm-planner` database, apart from the characters and packs. Another tab
+  editing the same plan is handled the same way as a file edit. The player view
+  has to be open in the same browser (a second window, or a screen share).
+
+**Export** downloads the open plan as the same `.json` a plan file is, and
+**Import** adds one as a new plan (named after the file), so plans move between
+the two, or between computers. **Delete plan** asks once more before it
+deletes. A new plan starts with the open plan's players and NPCs.
 
 Plan shape: `title`, `startsAt` ("19:00" or ""), `length` and `snap` in minutes,
 `players` (`id/name/color`), `npcs` (`id/name/role/description/notes`),
 `activities` (`id/title/start/duration/players/npcs`, `premise`, `check`, `dc`,
-`success`, `failure`, `tiers: [{id, label, dc, reward}]`). `start` is minutes from the start of the session, null when
-unscheduled. Other fields are kept as they are.
+`success`, `failure`, `tiers: [{id, label, dc, reward}]`). `start` is minutes
+from the start of the session, null when unscheduled. Other fields are kept as
+they are.
 
 ## Dice
 

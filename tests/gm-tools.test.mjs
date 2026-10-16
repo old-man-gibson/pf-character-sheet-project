@@ -1,5 +1,6 @@
 /** Tests the GM tools hook: how a folder in gm-module/ joins the sheet's GM
- *  tools menu (gm-tool.json), what the mount refuses, and the sheet app's local
+ *  tools menu (tools.json and gm-tool.json), what the mount refuses, the list
+ *  the sheet shows here and on the public site, and the sheet app's local
  *  server (tools/serve.mjs) with the tools mounted, run on a spare port with
  *  the GM data in a temporary folder.
  *
@@ -10,7 +11,9 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { isLocalRequest } from '../gm-module/lib/http.mjs';
-import { loadGmTools, mountGmTools } from '../gm-module/lib/gm-tools.mjs';
+import { loadGmTools, mountGmTools, registeredFolders } from '../gm-module/lib/gm-tools.mjs';
+import { gmToolsList, menuEntries } from '../app/js/gm-tools.js';
+import { newPlan } from '../gm-module/planner/plan.js';
 
 let pass = 0;
 let fail = 0;
@@ -51,7 +54,11 @@ try {
 
   // ---- Reading gm-tool.json ------------------------------------------------
 
-  const real = await loadGmTools(path.resolve('gm-module'), tmp);
+  const gmRoot = path.resolve('gm-module');
+  const withManifest = fs.readdirSync(gmRoot, { withFileTypes: true })
+    .filter(d => d.isDirectory() && fs.existsSync(path.join(gmRoot, d.name, 'gm-tool.json'))).map(d => d.name).sort();
+  check('tools.json registers every folder with a gm-tool.json, and only those', [...registeredFolders(gmRoot)].sort(), withManifest);
+  const real = await loadGmTools(gmRoot, tmp);
   check('the planner joins the menu with its two pages', real.tools.map(t => [t.name, t.href]),
     [['Session planner', 'planner/index.html'], ['Player view', 'planner/players.html']]);
   check('and its server part is loaded', [...real.apis.keys()], ['planner']);
@@ -70,6 +77,8 @@ try {
   write('tools/with-api/api.mjs',
     'export default ({ dir }) => async (req, res, route) => { res.writeHead(200); res.end(JSON.stringify({ dir, route })); };');
   write('tools/no-manifest/index.html', '<p>not a tool</p>');
+  write('tools/unlisted/gm-tool.json', { tools: [{ name: 'Not registered', page: 'index.html' }] });
+  write('tools/tools.json', { folders: ['plain', 'second', 'broken', 'escapes', 'far-api', 'bad-data', 'throws', 'with-api', 'no-manifest', '../up'] });
 
   const loaded = await loadGmTools(path.join(tmp, 'tools'), path.join(tmp, 'data'));
   check('tools come in folder order, each entry with a name and a page', loaded.tools.map(t => [t.name, t.href]),
@@ -77,7 +86,9 @@ try {
   check('an entry without an id is given one', loaded.tools[1].id, 'second/dice.html');
   check('a description is optional', loaded.tools[1].description, '');
   check('every broken tool is named, and left out', loaded.problems.map(p => p.split(':')[0]).sort(),
-    ['bad-data', 'broken', 'escapes', 'far-api', 'throws']);
+    ['../up', 'bad-data', 'broken', 'escapes', 'far-api', 'no-manifest', 'throws']);
+  check('a folder not in tools.json is not a tool', loaded.tools.some(t => t.href.startsWith('unlisted/')), false);
+  check('no tools.json, no tools', (await loadGmTools(path.join(tmp, 'tools', 'plain'))).tools, []);
   check('only working server parts are kept', [...loaded.apis.keys()], ['with-api']);
 
   // ---- The mount ------------------------------------------------------------
@@ -96,6 +107,29 @@ try {
   check("a tool's API gets its route and its own data folder", JSON.parse(api.body), { dir: path.join(tmp, 'data', 'counts'), route: 'count/up' });
   check('a folder without a server part has no API', (await ask('/gm-module/plain/api/x')).status, 404);
   check('a write that is not JSON is refused', (await ask('/gm-module/with-api/api/x', { method: 'POST', type: 'text/plain' })).status, 415);
+
+  // ---- The list the sheet shows ---------------------------------------------
+
+  const files = {
+    '../gm-module/tools': null,
+    '../gm-module/tools.json': { folders: ['planner', 'local-only', '../up'] },
+    '../gm-module/planner/gm-tool.json': { site: true, tools: [{ id: 'planner', name: 'Session planner', page: 'index.html' }] },
+    '../gm-module/local-only/gm-tool.json': { api: 'api.mjs', tools: [{ name: 'Needs its server', page: 'index.html' }] },
+    '../gm-module/../up/gm-tool.json': { site: true, tools: [{ name: 'Escaped', page: 'x.html' }] },
+  };
+  const asked = [];
+  const get = async url => { asked.push(url); return structuredClone(files[url] ?? null); };
+  const site = await gmToolsList({ local: false, get });
+  check('on the site the list comes from the static files, tools marked site only', site.map(t => [t.name, t.href]),
+    [['Session planner', 'planner/index.html']]);
+  check('and the site never asks a server for it', asked.includes('../gm-module/tools'), false);
+  files['../gm-module/tools'] = { tools: [{ id: 'x', name: 'Served', description: '', href: 'x/index.html' }] };
+  check('on this computer the server answers with what it loaded', (await gmToolsList({ local: true, get })).map(t => t.name), ['Served']);
+  files['../gm-module/tools'] = null;
+  check('and without one the static files still give the site tools', (await gmToolsList({ local: true, get })).map(t => t.name), ['Session planner']);
+  const realManifest = JSON.parse(fs.readFileSync(path.join(gmRoot, 'planner', 'gm-tool.json'), 'utf8'));
+  check('the planner works on the site', realManifest.site, true);
+  check('both sides read entries the same way', menuEntries('planner', realManifest), real.tools);
 
   // ---- The sheet app's server ------------------------------------------------
 
@@ -143,7 +177,7 @@ try {
     check('the planner page is served by the sheet server', [page.status, page.text.includes('planner.js')], [200, true]);
     check('its folder address leads to it', (await request('GET', '/gm-module/planner')).location, '/gm-module/planner/');
 
-    const made = await request('POST', '/gm-module/planner/api/plans', { body: { name: 'from-sheet', title: 'From the sheet' } });
+    const made = await request('POST', '/gm-module/planner/api/plans', { body: { name: 'from-sheet', plan: newPlan('From the sheet') } });
     check('the planner API answers through the sheet server', [made.status, made.json.plan.title], [201, 'From the sheet']);
     check('and keeps its plan in its own folder under the GM data folder',
       fs.existsSync(path.join(gmData, 'plans', 'from-sheet.json')), true);
@@ -152,6 +186,7 @@ try {
     check('the player view feed answers there too', (await request('GET', '/gm-module/planner/api/players?name=from-sheet')).status, 200);
     check('a write that is not JSON is refused', (await request('POST', '/gm-module/planner/api/plans', { body: { name: 'x' }, type: 'text/plain' })).status, 415);
     check('a tool that is not there has no API', (await request('GET', '/gm-module/nothing/api/x')).status, 404);
+    check('the registry is served for the sheet to read', (await request('GET', '/gm-module/tools.json')).json?.folders, ['planner']);
   } finally {
     server.kill();
   }

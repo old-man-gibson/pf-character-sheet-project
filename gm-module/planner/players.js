@@ -1,14 +1,19 @@
 // Player view of a session plan, for a second screen or a screen share. It
 // shows the timeline: each activity's title, time and players, and its
-// required check when "Show checks" is ticked. The server sends nothing more
-// (see playerView in plan.js), and the page asks it for changes every second,
-// so the view follows the GM's edits as soon as the planner saves them.
+// required check when "Show checks" is ticked. It reads the plan through the
+// same store the planner saves to (stores.js), and only ever as playerView()
+// (plan.js) makes it: the server sends nothing more in file mode, and in
+// browser mode nothing more is drawn. It asks for changes every second, so the
+// view follows the GM's edits as soon as the planner saves them. In browser
+// mode it must be open in the same browser as the planner (a second window or
+// screen share), since that is where the plan is.
 //
 // The plan is named in the address (players.html#<plan name>), which the
 // planner's Player view link fills in. Without one, the page shows the plan
 // last opened in the planner in this browser.
 
 import { clock, minutesText } from './plan.js';
+import { openStore } from './stores.js';
 import {
   ZOOMS, blockHtml, esc, layout, readPref, rescale, rulerHtml, trackHtml, writePref, zoomPref,
 } from './timeline.js';
@@ -79,6 +84,7 @@ function render() {
     (lanes || '<p class="empty-lanes">No players yet.</p>');
 }
 
+let store = null;
 let polling = false;
 async function poll() {
   if (polling) return;
@@ -89,15 +95,16 @@ async function poll() {
   }
   polling = true;
   try {
+    store ??= await openStore();
     const since = S.name === name ? S.v ?? '' : '';
-    const res = await fetch(`api/players?name=${encodeURIComponent(name)}&since=${encodeURIComponent(since)}`);
-    if (res.status === 404 || res.status === 400) {
-      showMissing(`There is no plan named “${name}”.`);
+    const out = await store.playerView(name, since);
+    if (!out) {
+      showMissing(store.kind === 'browser'
+        ? `There is no plan named “${name}” in this browser. Open the player view from the planner, in the same browser.`
+        : `There is no plan named “${name}”.`);
       setLive('');
       return;
     }
-    if (!res.ok) throw new Error(res.statusText);
-    const out = await res.json();
     setLive('Live');
     if (out.same && S.name === name) return;
     if (!planName()) history.replaceState(null, '', `#${encodeURIComponent(name)}`);

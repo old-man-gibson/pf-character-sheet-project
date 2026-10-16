@@ -9,17 +9,16 @@
 //   GET  players?name=&since=     { name, v, view } (see playerView in plan.js), or
 //                                 { name, v, same: true } when the view is unchanged
 //   GET  plans                    { dir, plans: [{ name, title, players, activities }] }
-//   POST plans  { name, title?, players?, npcs? }
-//                                 creates a plan with no activities -> { name, v, plan }
-//                                 (409 if the name is taken)
+//   POST plans  { name, plan }    a new plan file -> { name, v, plan } (409 if the name is taken)
 //   GET  plan?name=&since=        { name, v, plan }, or { name, v, same: true } when the
 //                                 file is still at version `since`
 //   PUT  plan?name=  { base, plan }
 //                                 -> { name, v }, or 409 { name, v, plan } with the file's
 //                                    current copy when it is no longer at version `base`
+//   DELETE plan?name=             deletes the plan file -> { name, deleted }
 
 import { json, readJson } from '../lib/http.mjs';
-import { createPlan, currentVersion, listPlans, readPlan, readPlayerView, validName, writePlan } from './store.mjs';
+import { createPlan, currentVersion, listPlans, readPlan, readPlayerView, removePlan, validName, writePlan } from './store.mjs';
 
 const BODY_LIMIT = 4 * 1024 * 1024;
 
@@ -31,12 +30,9 @@ export default function plannerApi({ dir }) {
     if (route === 'plans') {
       if (req.method === 'GET') return json(res, 200, { dir, plans: listPlans(dir) });
       if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
-      const { name: wanted, title, players, npcs } = await readJson(req);
+      const { name: wanted, plan } = await readJson(req, BODY_LIMIT);
       if (!validName(wanted)) return json(res, 400, { error: 'Plan names use letters, digits, spaces, - and _.' });
-      const out = createPlan(dir, wanted, typeof title === 'string' ? title : '', {
-        players: Array.isArray(players) ? players : [],
-        npcs: Array.isArray(npcs) ? npcs : [],
-      });
+      const out = createPlan(dir, wanted, plan);
       return out.ok ? json(res, 201, { name: wanted, v: out.v, plan: out.plan }) : json(res, 409, { error: 'A plan with that name exists.' });
     }
     if (route === 'plan') {
@@ -47,6 +43,7 @@ export default function plannerApi({ dir }) {
         if (url.searchParams.get('since') === v) return json(res, 200, { name, v, same: true });
         return json(res, 200, { name, ...readPlan(dir, name) });
       }
+      if (req.method === 'DELETE') return json(res, 200, { name, deleted: removePlan(dir, name) });
       if (req.method !== 'PUT') return json(res, 405, { error: 'method not allowed' });
       const { base, plan } = await readJson(req, BODY_LIMIT);
       const out = writePlan(dir, name, plan, base ?? null);

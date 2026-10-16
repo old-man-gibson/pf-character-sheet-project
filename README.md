@@ -47,10 +47,11 @@ Then open <http://localhost:8777/app/index.html>. Pass a port to use another one
 server — Node only, nothing to install. If you have Python instead, `python -m
 http.server 8777` from the repository root does the same job for the sheet.
 
-The Node server also mounts the GM tools in `gm-module/` (the session planner and
-its player view), which the sheet then offers under a **GM tools** button. They
-answer this computer only and keep their saved files in their own folders, apart
-from the characters: see [gm-module/README.md](gm-module/README.md).
+The sheet's **GM tools** button opens the tools in `gm-module/` (the session
+planner and its player view). On this computer the Node server also mounts their
+server parts, so the planner keeps its plans as files, and it answers this
+computer only. On the public site the planner keeps its plans in the browser,
+apart from the characters. See [gm-module/README.md](gm-module/README.md).
 
 > On Windows, `python` may resolve to a 0-byte Microsoft Store *app execution alias*
 > rather than a real interpreter, which fails with `The system cannot find the path

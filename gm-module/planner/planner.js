@@ -1,19 +1,24 @@
 // Session planner page. Draws the plan as one lane per player along a time
 // ruler, the unscheduled activities in a tray below, and a side panel with
-// the selected activity's editor or the plan's NPCs. Every change goes through plan.js (which refuses to put
-// a player in two activities at once), is kept for undo, and is saved to the
-// plan file through the planner server. The page re-reads the file when it
-// changes on disk, so the file can also be edited by hand while it is open.
+// the selected activity's editor or the plan's NPCs. Every change goes
+// through plan.js (which refuses to put a player in two activities at once),
+// is kept for undo, and is saved to the plan store (stores.js): the plan
+// files when the page is served by tools/serve.mjs on this computer, this
+// browser's own storage anywhere else. The page re-reads the plan when it
+// changes elsewhere (the file by hand, or another tab), and never writes over
+// a change it has not seen.
 //
 // Rendering is a wholesale rebuild of each part (same as the session screen),
 // with the focused control put back afterwards; a drag draws only its preview.
 
 import {
   SNAPS, addActivity, addNpc, addPlayer, allClashes, checkNames, clashText, clashes, clock,
-  deleteActivity, duplicateActivity, end, firstFree, ladder, minutesText, newId, npcActivities,
-  npcClashes, npcName, outcome, playerLoad, playerName, removeNpc, removePlayer, snapTo, span,
-  updateActivity, whole,
+  deleteActivity, duplicateActivity, end, firstFree, freeName, ladder, minutesText, nameFrom, newId,
+  newPlan, normalizePlan, npcActivities, npcClashes, npcName, outcome, playerLoad, playerName,
+  removeNpc, removePlayer, snapTo, span, updateActivity, whole,
 } from './plan.js';
+import { openStore } from './stores.js';
+import { downloadFile } from '../../app/js/download.js';
 import {
   ROOM, ZOOMS, blockHtml, esc, layout, readPref, rescale, rulerHtml, trackHtml, writePref, zoomPref,
 } from './timeline.js';
@@ -31,9 +36,13 @@ const el = {
   zoomOut: $('#zoom-out'), zoomIn: $('#zoom-in'), undo: $('#undo'), saveState: $('#save-state'),
   clashNote: $('#clash-note'), wrap: $('#timeline-wrap'), timeline: $('#timeline'),
   tray: $('#tray'), editor: $('#editor'), checks: $('#checks'), tip: $('#drag-tip'),
-  notice: $('#notice'), offline: $('#offline'), main: $('#main'), playerLink: $('#player-link'),
-  npcs: $('#npcs'),
+  notice: $('#notice'), offline: $('#offline'), offlineText: $('#offline-text'), main: $('#main'),
+  playerLink: $('#player-link'), npcs: $('#npcs'), where: $('#where'),
+  exportPlan: $('#export-plan'), importPlan: $('#import-plan'), importFile: $('#import-file'),
+  deletePlan: $('#delete-plan'),
 };
+
+let store = null; // where plans are kept: see stores.js
 
 const S = {
   name: null,          // plan file name
@@ -142,7 +151,8 @@ function changed() {
   saveTimer = setTimeout(save, SAVE_DELAY);
 }
 
-const planUrl = (name, extra = '') => `api/plan?name=${encodeURIComponent(name)}${extra}`;
+// Where a change made elsewhere came from, for the notices.
+const elsewhere = () => (store.kind === 'files' ? 'The plan file was changed outside this page' : 'This plan was changed in another tab');
 
 async function save() {
   clearTimeout(saveTimer);
@@ -153,30 +163,23 @@ async function save() {
   setSaveState('Saving…');
   const name = S.name;
   try {
-    const res = await fetch(planUrl(name), {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ base: S.v, plan: S.plan }),
-    });
-    const out = await res.json();
+    const out = await store.write(name, S.plan, S.v);
     if (name !== S.name) return;
-    if (res.ok) {
+    if (out.ok) {
       S.v = out.v;
       setSaveState(dirty ? 'Unsaved' : 'Saved');
-    } else if (res.status === 409 && out.plan) {
-      // The file changed on disk since this page read it. Take that copy and
-      // keep this page's for undo.
+    } else if (out.plan) {
+      // The plan changed since this page read it. Take that copy and keep
+      // this page's for undo.
       keepUndo(JSON.stringify(S.plan));
       takePlan(out.plan, out.v);
       dirty = false;
       setSaveState('Saved');
-      notice('The plan file was changed outside this page, so it was loaded again. Undo puts back the version from this page.', 'warn');
-    } else if (res.status === 409) {
-      S.v = null; // the file is gone: write it again
+      notice(`${elsewhere()}, so it was loaded again. Undo puts back the version from this page.`, 'warn');
+    } else {
+      S.v = null; // the plan is gone: write it again
       dirty = true;
       saveTimer = setTimeout(save, 0);
-    } else {
-      throw new Error(out.error || res.statusText);
     }
   } catch (err) {
     dirty = true;
@@ -201,23 +204,16 @@ function takePlan(plan, v) {
   renderAll();
 }
 
-async function api(url, options = {}) {
-  const res = await fetch(url, options);
-  const out = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(out.error || res.statusText), { status: res.status });
-  return out;
-}
-
 async function refreshPlanList() {
-  const out = await api('api/plans');
-  S.plans = out.plans;
+  S.plans = await store.list();
   renderPlanSelect();
-  return out.plans;
+  return S.plans;
 }
 
 async function openPlan(name, loaded = null) {
   await flush();
-  const out = loaded ?? await api(planUrl(name));
+  const out = loaded ?? await store.read(name);
+  if (!out) throw new Error(`there is no plan named “${name}”`);
   S.name = name;
   S.v = out.v;
   S.plan = out.plan;
@@ -233,30 +229,28 @@ async function openPlan(name, loaded = null) {
   renderAll();
 }
 
-// A new plan starts with the open plan's players and NPCs: most sessions have
-// the same table and many of the same people.
-async function createPlan(name, title) {
-  const out = await api('api/plans', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name, title, players: S.plan?.players ?? [], npcs: S.plan?.npcs ?? [] }),
-  });
+// The open plan's players and NPCs, for a new plan: most sessions have the
+// same table and many of the same people.
+const cast = () => ({ players: S.plan?.players ?? [], npcs: S.plan?.npcs ?? [] });
+
+async function createPlan(name, plan) {
+  const out = await store.create(name, plan);
+  if (!out.ok) throw new Error(out.error);
   await refreshPlanList();
   await openPlan(name, out);
 }
 
-// Picks up changes made to the file outside this page, unless this page has
-// changes of its own waiting or the GM is in the middle of something.
+// Picks up changes made to the plan elsewhere, unless this page has changes
+// of its own waiting or the GM is in the middle of something.
 async function poll() {
   if (!S.name || saving || dirty || drag || document.activeElement?.matches('input, textarea')) return;
+  const name = S.name;
   try {
-    const res = await fetch(planUrl(S.name, `&since=${encodeURIComponent(S.v ?? '')}`));
-    if (!res.ok) return;
-    const out = await res.json();
-    if (out.same || out.name !== S.name || saving || dirty || drag) return;
+    const out = await store.read(name, S.v ?? '');
+    if (!out || out.same || name !== S.name || saving || dirty || drag) return;
     keepUndo(JSON.stringify(S.plan));
     takePlan(out.plan, out.v);
-    notice('Loaded a change made to the plan file.');
+    notice(`${elsewhere()}; loaded the change.`);
   } catch { /* server restarting: try again next time */ }
 }
 
@@ -302,6 +296,10 @@ function renderBar() {
   el.zoomIn.disabled = S.zoom === ZOOMS.length - 1;
   el.undo.disabled = !S.undo.length;
   el.playerLink.href = `players.html#${encodeURIComponent(S.name)}`;
+  el.where.textContent = store.kind === 'files' ? 'Plans are files' : 'Plans are kept in this browser';
+  el.where.title = store.kind === 'files'
+    ? `Saved as .json files in ${store.where}`
+    : 'Saved in this browser only, apart from the characters. Export a plan to keep a copy or move it to another computer.';
   el.npcs.textContent = plan.npcs.length ? `NPCs (${plan.npcs.length})` : 'NPCs';
   el.npcs.setAttribute('aria-pressed', String(!S.selected && !!S.npcPanel));
   document.title = `${plan.title.trim() || S.name} · Session Planner`;
@@ -1152,33 +1150,80 @@ el.newPlanForm.addEventListener('submit', async e => {
   e.preventDefault();
   const name = el.newPlanForm.elements.name.value.trim();
   try {
-    await createPlan(name, name.replace(/[-_]+/g, ' ').replace(/^\w/, c => c.toUpperCase()));
+    await createPlan(name, newPlan(name.replace(/[-_]+/g, ' ').replace(/^\w/, c => c.toUpperCase()), cast()));
     closeNewPlan();
   } catch (err) {
     notice(err.message, 'warn');
   }
 });
 
+// Export: the plan as the same .json a plan file is, so it imports into
+// either store (or can be dropped into the plans folder as it is).
+el.exportPlan.addEventListener('click', async () => {
+  await flush();
+  downloadFile(`${S.name}.json`, JSON.stringify(S.plan, null, 2) + '\n');
+});
+
+el.importPlan.addEventListener('click', () => el.importFile.click());
+el.importFile.addEventListener('change', async () => {
+  const file = el.importFile.files[0];
+  el.importFile.value = '';
+  if (!file) return;
+  try {
+    const plan = normalizePlan(JSON.parse(await file.text()));
+    const name = freeName(S.plans.map(p => p.name), nameFrom(file.name));
+    await createPlan(name, plan);
+    notice(`Imported “${file.name}” as ${name}.`);
+  } catch (err) {
+    notice(`Could not import “${file.name}”: ${err.message}`, 'warn');
+  }
+});
+
+// Delete asks twice: the first press turns the button into the question.
+let deleteArmed = 0;
+el.deletePlan.addEventListener('click', async () => {
+  if (!deleteArmed) {
+    el.deletePlan.textContent = `Delete “${S.name}”?`;
+    deleteArmed = setTimeout(() => { deleteArmed = 0; el.deletePlan.textContent = 'Delete plan'; }, 4000);
+    return;
+  }
+  clearTimeout(deleteArmed);
+  deleteArmed = 0;
+  el.deletePlan.textContent = 'Delete plan';
+  const gone = S.name;
+  const keep = cast();
+  try {
+    clearTimeout(saveTimer);
+    dirty = false;
+    await store.remove(gone);
+    const plans = await refreshPlanList();
+    if (plans.length) await openPlan(plans[0].name);
+    else await createPlan('session-1', newPlan('Session 1', keep));
+    notice(`Deleted the plan “${gone}”.`);
+  } catch (err) {
+    notice(`Could not delete “${gone}”: ${err.message}`, 'warn');
+  }
+});
+
 // Leaving with a change not yet saved: send it on the way out.
 addEventListener('pagehide', () => {
-  if (!dirty || !S.name) return;
-  fetch(planUrl(S.name), {
-    method: 'PUT', keepalive: true,
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ base: S.v, plan: S.plan }),
-  });
+  if (dirty && S.name) store.writeOnExit(S.name, S.plan, S.v);
 });
 
 // ---- Start ---------------------------------------------------------------------------
 
 async function boot() {
+  store = await openStore();
   let plans;
   try {
     plans = await refreshPlanList();
-  } catch {
+  } catch (err) {
     el.main.hidden = true;
     document.querySelector('.bar').hidden = true;
     el.offline.hidden = false;
+    el.offlineText.textContent = store.kind === 'browser'
+      ? `This browser will not keep plans (${err.message}). It may be a private window, or site storage may be blocked.`
+      : `The plan files could not be read (${err.message}).`;
     return;
   }
   let wanted = readPref('gm-planner:last', '');
@@ -1186,7 +1231,7 @@ async function boot() {
   const names = plans.map(p => p.name);
   if (names.includes(wanted)) await openPlan(wanted);
   else if (names.length) await openPlan(names[0]);
-  else await createPlan('session-1', 'Session 1');
+  else await createPlan('session-1', newPlan('Session 1'));
   setInterval(poll, POLL_EVERY);
 }
 

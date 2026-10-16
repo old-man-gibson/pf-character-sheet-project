@@ -10,6 +10,10 @@
   <header class="bar">
     <label class="pick">Plan <select id="plan-select" aria-label="Plan file"></select></label>
     <button id="new-plan" type="button">New plan</button>
+    <button id="export-plan" type="button" title="Download this plan as a .json file">Export</button>
+    <button id="import-plan" type="button" title="Add a plan from a .json file">Import</button>
+    <input id="import-file" type="file" accept=".json,application/json" hidden>
+    <button id="delete-plan" type="button" class="danger">Delete plan</button>
     <form id="new-plan-form" class="inline-form" hidden>
       <input name="name" required maxlength="64" pattern="[A-Za-z0-9]([A-Za-z0-9 _\-]*[A-Za-z0-9_\-])?"
              aria-label="New plan name" title="Letters, digits, spaces, - and _">
@@ -29,6 +33,7 @@
     <a id="player-link" class="button" href="players.html" target="_blank" rel="noopener"
        title="The timeline without DCs or rewards, for a second screen or a screen share">Player view</a>
     <span id="save-state" class="save-state" aria-live="polite"></span>
+    <span id="where" class="save-state"></span>
   </header>
 
   <main id="main">
@@ -44,11 +49,9 @@
 
   <div id="offline" class="offline" hidden>
     <h1>Session planner</h1>
-    <p>This page needs a server that keeps the plan files. Either open it from the
-      character sheet's GM tools button, with the sheet run by</p>
-    <pre>node tools/serve.mjs</pre>
-    <p>or run the planner on its own and open <code>http://localhost:8766</code>:</p>
-    <pre>node gm-module/planner/server.mjs 8766</pre>
+    <p id="offline-text"></p>
+    <p>The planner keeps plans in the browser, or as files in <code>gm-module/plans/</code>
+      when the sheet runs on this computer with <code>node tools/serve.mjs</code>.</p>
   </div>
 
   <datalist id="checks"></datalist>

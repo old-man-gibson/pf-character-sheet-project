@@ -14,5 +14,6 @@
     }
   ],
   "api": "api.mjs",
-  "data": "plans"
+  "data": "plans",
+  "site": true
 }

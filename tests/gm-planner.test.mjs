@@ -1,8 +1,10 @@
 /** Tests the GM module's session planner: the plan model (one activity per
  *  player at a time, success tiers, NPCs), what the player view is allowed to see,
  *  the timeline markup both pages draw, the plan files on disk (versioned
- *  writes that never overwrite a change made elsewhere), and the server in
- *  front of them, run on a spare port against a temporary folder.
+ *  writes that never overwrite a change made elsewhere), the planner API
+ *  through tools/serve.mjs on a spare port against a temporary folder, and the
+ *  two plan stores the pages use (files and this browser's IndexedDB) held to
+ *  one contract, so a plan behaves the same in either.
  *
  *  Run: node tests/gm-planner.test.mjs */
 import { spawn } from 'node:child_process';
@@ -12,11 +14,12 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   addActivity, addNpc, addPlayer, allClashes, blankPlan, clashText, clashes, clock, duplicateActivity,
-  firstFree, ladder, minutesText, normalizePlan, npcActivities, npcClashes, npcName, outcome, playerLoad,
-  playerView, removeNpc, removePlayer, span, updateActivity,
+  firstFree, freeName, ladder, minutesText, nameFrom, newPlan, normalizePlan, npcActivities, npcClashes,
+  npcName, outcome, playerLoad, playerView, removeNpc, removePlayer, span, updateActivity,
 } from '../gm-module/planner/plan.js';
+import { browserStore, fileStore } from '../gm-module/planner/stores.js';
 import { blockHtml, layout } from '../gm-module/planner/timeline.js';
-import { createPlan, currentVersion, listPlans, readPlan, readPlayerView, validName, writePlan } from '../gm-module/planner/store.mjs';
+import { createPlan, currentVersion, listPlans, readPlan, readPlayerView, removePlan, validName, writePlan } from '../gm-module/planner/store.mjs';
 
 let pass = 0;
 let fail = 0;
@@ -27,6 +30,56 @@ const check = (label, actual, expected) => {
     console.log(`FAIL ${label}\n  expected ${JSON.stringify(expected)}\n  got      ${JSON.stringify(actual)}`);
   }
 };
+
+// A stand-in for IndexedDB with what browserStore uses: one store keyed by
+// `name`, get/getAll/put/delete requests, and readwrite transactions that
+// commit when their last request has settled (so a put issued after a get's
+// result still lands, as in a browser) and are lost if anything throws.
+function fakeIndexedDb() {
+  const rows = new Map();
+  let made = false;
+  const db = {
+    objectStoreNames: { contains: () => made },
+    createObjectStore: () => { made = true; return {}; },
+    close() {},
+    transaction(_name, mode) {
+      const staged = new Map(rows);
+      const tx = { oncomplete: null, onerror: null, onabort: null, error: null };
+      let pending = 0;
+      let done = false;
+      const settle = () => setTimeout(() => {
+        if (done || pending) return;
+        done = true;
+        if (mode === 'readwrite') { rows.clear(); for (const [k, v] of staged) rows.set(k, v); }
+        tx.oncomplete?.();
+      }, 0);
+      const request = fn => {
+        if (done) throw new Error('TransactionInactiveError');
+        pending++;
+        const req = { result: undefined, onsuccess: null, onerror: null };
+        queueMicrotask(() => { req.result = fn(); pending--; req.onsuccess?.(); settle(); });
+        return req;
+      };
+      const writable = () => { if (mode !== 'readwrite') throw new Error('ReadOnlyError'); };
+      tx.objectStore = () => ({
+        get: key => request(() => structuredClone(staged.get(key))),
+        getAll: () => request(() => [...staged.values()].map(v => structuredClone(v))),
+        put: rec => { writable(); return request(() => { staged.set(rec.name, structuredClone(rec)); return rec.name; }); },
+        delete: key => { writable(); return request(() => { staged.delete(key); }); },
+      });
+      settle();
+      return tx;
+    },
+  };
+  return {
+    rows,
+    open() {
+      const req = { result: null, onsuccess: null, onerror: null, onupgradeneeded: null, onblocked: null };
+      queueMicrotask(() => { req.result = db; req.onupgradeneeded?.(); req.onsuccess?.(); });
+      return req;
+    },
+  };
+}
 
 // Four players and the three activities of the planning example: a 5-minute,
 // a 15-minute and a shared 10-minute activity, all starting together.
@@ -259,6 +312,13 @@ check('or hours and minutes', [minutesText(60), minutesText(95)], ['1 h', '1 h 3
 // ---- Plan files --------------------------------------------------------------
 
 check('plain names are allowed', ['session-1', 'Session 2', 'arc_3'].map(validName), [true, true, true]);
+check('an imported file name becomes a plan name', ['Heist night #2.json', 'arc_3.JSON', '  spaced  .json'].map(n => nameFrom(n)),
+  ['Heist night -2', 'arc_3', 'spaced']);
+check('or a fallback when nothing is left of it', [nameFrom('...json'), nameFrom('CON.json'), nameFrom('###')], ['imported', 'imported', 'imported']);
+check('a taken name gets a number', [freeName(['a'], 'b'), freeName(['a', 'A-2'], 'a')], ['b', 'a-3']);
+check('a new plan starts with the players and NPCs it is given',
+  [newPlan('Next', { players: [{ id: 'p1', name: 'Ana' }], npcs: [{ id: 'n1', name: 'Vey' }] })].map(p => [p.title, p.players[0].name, p.npcs[0].name, p.activities]),
+  [['Next', 'Ana', 'Vey', []]]);
 check('names that could leave the folder or trip Windows are not',
   ['../x', 'a/b', 'a.b', ' lead', 'trail ', 'CON', 'lpt1', '', 'x'.repeat(65), null].map(validName),
   [false, false, false, false, false, false, false, false, false, false]);
@@ -267,10 +327,10 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gm-planner-'));
 try {
   const dir = path.join(tmp, 'plans');
   check('a missing folder lists no plans', listPlans(dir), []);
-  const made = createPlan(dir, 'session-2', 'Second');
+  const made = createPlan(dir, 'session-2', newPlan('Second'));
   check('a new plan is written', [made.ok, made.plan.title, currentVersion(dir, 'session-2') === made.v], [true, 'Second', true]);
-  check('a name that is taken is refused', createPlan(dir, 'session-2', 'Again').ok, false);
-  createPlan(dir, 'session-10', '');
+  check('a name that is taken is refused', createPlan(dir, 'session-2', newPlan('Again')).ok, false);
+  createPlan(dir, 'session-10', newPlan('session-10'));
   fs.writeFileSync(path.join(dir, 'broken.json'), '{ not json');
   fs.writeFileSync(path.join(dir, 'not a plan.txt'), '');
   check('plans list in number order, a broken file flagged', listPlans(dir).map(p => [p.name, !!p.error]),
@@ -305,15 +365,19 @@ try {
   check('a change the players see gives it a new version', readPlayerView(dir, 'secrets').v !== shown.v, true);
   check('a missing plan has no player view', readPlayerView(dir, 'nope'), null);
 
-  // ---- The server ----------------------------------------------------------
+  createPlan(dir, 'to-delete', newPlan('Gone soon'));
+  check('a plan file can be deleted', [removePlan(dir, 'to-delete'), fs.existsSync(path.join(dir, 'to-delete.json'))], [true, false]);
+  check('deleting it again finds nothing', removePlan(dir, 'to-delete'), false);
 
-  const server = spawn(process.execPath, [path.resolve('gm-module/planner/server.mjs'), '0', '--dir', dir], { stdio: ['ignore', 'pipe', 'pipe'] });
+  // ---- The planner API, through the sheet app's server ----------------------
+
+  const server = spawn(process.execPath, [path.resolve('tools/serve.mjs'), '0', '--gm-data', tmp], { stdio: ['ignore', 'pipe', 'pipe'] });
   try {
     const port = await new Promise((resolve, reject) => {
       let out = '';
       server.stdout.on('data', c => {
         out += c;
-        const m = out.match(/localhost:(\d+)/);
+        const m = out.match(/localhost:(\d+)\/app/);
         if (m) resolve(Number(m[1]));
       });
       server.on('exit', code => reject(new Error(`server exited (${code})`)));
@@ -337,46 +401,91 @@ try {
         if (data) req.write(data);
         req.end();
       });
+    const API = '/gm-module/planner/api/';
 
-    const list = await request('GET', '/api/plans');
+    const list = await request('GET', `${API}plans`);
     check('the server lists the folder', [list.status, list.json.plans.map(p => p.name)], [200, ['broken', 'secrets', 'session-2', 'session-10']]);
-    check('a request under another host name is refused', (await request('GET', '/api/plans', { host: 'evil.example:80' })).status, 403);
-    check('a write that is not JSON is refused', (await request('POST', '/api/plans', { body: { name: 'x' }, type: 'text/plain' })).status, 415);
-    check('a bad plan name is refused', (await request('POST', '/api/plans', { body: { name: '../up' } })).status, 400);
+    check('a request under another host name is refused', (await request('GET', `${API}plans`, { host: 'evil.example:80' })).status, 403);
+    check('a write that is not JSON is refused', (await request('POST', `${API}plans`, { body: { name: 'x' }, type: 'text/plain' })).status, 415);
+    check('a bad plan name is refused', (await request('POST', `${API}plans`, { body: { name: '../up', plan: blankPlan() } })).status, 400);
 
-    const created = await request('POST', '/api/plans', {
-      body: { name: 'session-3', title: 'Third', players: table().players, npcs: [{ id: 'n1', name: 'Vey', notes: 'Owes Ana' }] },
+    const created = await request('POST', `${API}plans`, {
+      body: { name: 'session-3', plan: newPlan('Third', { players: table().players, npcs: [{ id: 'n1', name: 'Vey', notes: 'Owes Ana' }] }) },
     });
-    check('a plan is created with the players and NPCs it is given',
+    check('a plan is created as it is sent',
       [created.status, created.json.plan.title, created.json.plan.players.map(p => p.name), created.json.plan.npcs.map(n => [n.name, n.notes])],
       [201, 'Third', ['Ana', 'Ben', 'Cai', 'Dee'], [['Vey', 'Owes Ana']]]);
-    check('a taken name is refused', (await request('POST', '/api/plans', { body: { name: 'session-3' } })).status, 409);
+    check('a taken name is refused', (await request('POST', `${API}plans`, { body: { name: 'session-3', plan: blankPlan() } })).status, 409);
 
     const v = created.json.v;
-    const same = await request('GET', `/api/plan?name=session-3&since=${v}`);
+    const same = await request('GET', `${API}plan?name=session-3&since=${v}`);
     check('polling an unchanged plan returns no copy', [same.json.same, same.json.plan], [true, undefined]);
-    const put = await request('PUT', '/api/plan?name=session-3', { body: { base: v, plan: table() } });
+    const put = await request('PUT', `${API}plan?name=session-3`, { body: { base: v, plan: table() } });
     check('a save at the current version is accepted', [put.status, put.json.v !== v], [200, true]);
-    const conflict = await request('PUT', '/api/plan?name=session-3', { body: { base: v, plan: blankPlan() } });
+    const conflict = await request('PUT', `${API}plan?name=session-3`, { body: { base: v, plan: blankPlan() } });
     check('a save from a stale version gets the current copy back', [conflict.status, conflict.json.plan.activities.length], [409, 3]);
-    const got = await request('GET', `/api/plan?name=session-3&since=${v}`);
+    const got = await request('GET', `${API}plan?name=session-3&since=${v}`);
     check('polling a changed plan returns it', [got.status, got.json.v, got.json.plan.activities.length], [200, put.json.v, 3]);
-    check('a missing plan is a 404', (await request('GET', '/api/plan?name=nope')).status, 404);
+    check('a missing plan is a 404', (await request('GET', `${API}plan?name=nope`)).status, 404);
+    check('a delete has to say it is JSON too', (await request('DELETE', `${API}plan?name=session-3`)).status, 415);
 
-    const players = await request('GET', '/api/players?name=secrets');
+    const players = await request('GET', `${API}players?name=secrets`);
     check('the player feed carries the timeline', [players.status, players.json.view.activities[0].title], [200, 'Pick the other lock']);
     check('and nothing the GM keeps back', /SECRET|1777|1888|1999/.test(players.text), false);
-    const still = await request('GET', `/api/players?name=secrets&since=${players.json.v}`);
+    const still = await request('GET', `${API}players?name=secrets&since=${players.json.v}`);
     check('polling an unchanged player view returns no copy', [still.json.same, still.json.view], [true, undefined]);
-    check('the player feed is read-only', (await request('PUT', '/api/players?name=secrets', { body: {} })).status, 405);
-    check('a missing plan has no player feed', (await request('GET', '/api/players?name=nope')).status, 404);
-    const pv = await request('GET', '/players.html');
-    check('the player view page is served', [pv.status, pv.text.includes('players.js')], [200, true]);
+    check('the player feed is read-only', (await request('PUT', `${API}players?name=secrets`, { body: {} })).status, 405);
+    check('a missing plan has no player feed', (await request('GET', `${API}players?name=nope`)).status, 404);
 
-    const page = await request('GET', '/');
-    check('the page is served', [page.status, page.type.startsWith('text/html'), page.text.includes('planner.js')], [200, true, true]);
-    check('the model is served to the page', (await request('GET', '/plan.js')).status, 200);
-    check('nothing outside the planner folder is served', (await request('GET', '/%2e%2e/lib/http.mjs')).status, 404);
+    const page = await request('GET', '/gm-module/planner/');
+    check('the planner page is served', [page.status, page.type.startsWith('text/html'), page.text.includes('planner.js')], [200, true, true]);
+    const pv = await request('GET', '/gm-module/planner/players.html');
+    check('and the player view', [pv.status, pv.text.includes('players.js')], [200, true]);
+
+    // ---- Both stores, one contract ------------------------------------------
+
+    const stores = [
+      ['files', fileStore(`http://localhost:${port}/gm-module/planner/api/`), path.join(tmp, 'plans')],
+      ['browser', browserStore({ factory: fakeIndexedDb() }), null],
+    ];
+    for (const [kind, store] of stores) {
+      const k = `${kind} store`;
+      check(`${k}: says which it is`, store.kind, kind);
+      const before = (await store.list()).map(p => p.name);
+      const first = await store.create('contract', newPlan('Contract', { players: [{ id: 'p1', name: 'Ana' }] }));
+      check(`${k}: creates a plan`, [first.ok, first.plan.title, first.plan.players[0].name], [true, 'Contract', 'Ana']);
+      check(`${k}: refuses a taken name`, (await store.create('contract', blankPlan())).ok, false);
+      check(`${k}: refuses a bad name`, (await store.create('../up', blankPlan())).ok, false);
+      check(`${k}: lists it`, (await store.list()).map(p => p.name).filter(n => !before.includes(n)), ['contract']);
+      const read = await store.read('contract');
+      check(`${k}: reads it back`, [read.v, read.plan.title], [first.v, 'Contract']);
+      check(`${k}: says when nothing changed`, await store.read('contract', first.v), { v: first.v, same: true });
+      const plan = { ...read.plan, activities: [{ id: 'a1', title: 'Pick the lock', start: 0, duration: 5, players: ['p1'], dc: 1777, success: 'SECRET' }] };
+      const saved = await store.write('contract', plan, first.v);
+      check(`${k}: saves at the current version`, [saved.ok, saved.v !== first.v], [true, true]);
+      const stale = await store.write('contract', blankPlan(), first.v);
+      check(`${k}: refuses a stale version and hands back the current copy`, [stale.ok, stale.v, stale.plan.activities.length], [false, saved.v, 1]);
+      const view = await store.playerView('contract');
+      check(`${k}: the player view has the timeline and no DC or reward`,
+        [view.view.activities[0].title, /1777|SECRET/.test(JSON.stringify(view))], ['Pick the lock', false]);
+      const dcOnly = { ...plan, activities: [{ ...plan.activities[0], dc: 1999 }] };
+      await store.write('contract', dcOnly, saved.v);
+      check(`${k}: a DC change does not change the player view`, await store.playerView('contract', view.v), { v: view.v, same: true });
+      check(`${k}: an unknown plan has none`, [await store.read('nope'), await store.playerView('nope')], [null, null]);
+      await store.create('contract-10', blankPlan());
+      await store.create('contract-2', blankPlan());
+      check(`${k}: lists in number order`, (await store.list()).map(p => p.name).filter(n => n.startsWith('contract')),
+        ['contract', 'contract-2', 'contract-10']);
+      await store.remove('contract-2');
+      check(`${k}: deletes a plan`, [await store.read('contract-2'), (await store.list()).some(p => p.name === 'contract-2')], [null, false]);
+      const gone = await store.write('contract-2', blankPlan(), '1');
+      check(`${k}: a save to a deleted plan says it is gone`, [gone.ok, gone.v, gone.plan], [false, null, null]);
+      check(`${k}: and can write it again from nothing`, (await store.write('contract-2', blankPlan(), null)).ok, true);
+    }
+    const exported = JSON.parse(fs.readFileSync(path.join(tmp, 'plans', 'contract.json'), 'utf8'));
+    const into = browserStore({ factory: fakeIndexedDb() });
+    check('a plan file imports into the browser store as it is',
+      [(await into.create('from-file', exported)).ok, (await into.read('from-file')).plan.activities[0].dc], [true, 1999]);
   } finally {
     server.kill();
   }

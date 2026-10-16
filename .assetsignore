@@ -14,4 +14,9 @@ worker.js
 wrangler.jsonc
 tests
 tools
-gm-module
+# The GM module stays out but for the session planner's pages and the tools
+# registry, which work on the site with plans kept in the visitor's browser.
+# Campaigns, rules references and plan files never ship.
+gm-module/*
+!gm-module/tools.json
+!gm-module/planner/

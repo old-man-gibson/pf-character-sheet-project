@@ -7,14 +7,9 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { blankPlan, normalizePlan, playerView } from './plan.js';
+import { normalizePlan, planSummary, playerView, validName } from './plan.js';
 
-// A plan's name is its file name without ".json": letters, digits, spaces,
-// dashes and underscores, so a name never reaches outside the folder. Windows
-// reserves a few device names whatever the extension.
-const NAME = /^[A-Za-z0-9](?:[A-Za-z0-9 _-]{0,62}[A-Za-z0-9_-])?$/;
-const RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)$/i;
-export const validName = name => typeof name === 'string' && NAME.test(name) && !RESERVED.test(name);
+export { validName };
 
 const fileOf = (dir, name) => path.join(dir, `${name}.json`);
 const versionOf = bytes => createHash('sha256').update(bytes).digest('hex').slice(0, 16);
@@ -50,8 +45,7 @@ export function listPlans(dir) {
     .map(f => {
       const name = f.slice(0, -5);
       try {
-        const { plan } = readPlan(dir, name);
-        return { name, title: plan.title, players: plan.players.length, activities: plan.activities.length };
+        return planSummary(name, readPlan(dir, name).plan);
       } catch (err) {
         return { name, title: '', error: String(err.message ?? err) };
       }
@@ -81,10 +75,19 @@ export function writePlan(dir, name, plan, base) {
   return { ok: true, v: versionOf(bytes) };
 }
 
-// A plan with no activities, starting with the given players and NPCs (a new
-// session usually has the same table and many of the same people).
-export function createPlan(dir, name, title, { players = [], npcs = [] } = {}) {
-  const plan = { ...blankPlan(title || name), players, npcs };
+// A new plan file holding `plan`, unless the name is taken.
+export function createPlan(dir, name, plan) {
   const out = writePlan(dir, name, plan, null);
   return out.ok ? { ok: true, v: out.v, plan: normalizePlan(plan) } : out;
+}
+
+// Deletes a plan file. True when there was one.
+export function removePlan(dir, name) {
+  try {
+    fs.rmSync(fileOf(dir, name));
+    return true;
+  } catch (err) {
+    if (err.code === 'ENOENT') return false;
+    throw err;
+  }
 }

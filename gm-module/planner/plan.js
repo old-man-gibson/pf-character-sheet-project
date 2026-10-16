@@ -62,6 +62,54 @@ export function blankPlan(title = DEFAULTS.title) {
   };
 }
 
+// A new plan with no activities, starting with the given players and NPCs (a
+// new session usually has the same table and many of the same people).
+export function newPlan(title = DEFAULTS.title, { players = [], npcs = [] } = {}) {
+  return normalizePlan({ ...blankPlan(title), players, npcs });
+}
+
+// ---- Plan names ----------------------------------------------------------------
+//
+// A plan's name is its file name without ".json" in the plans folder, and its
+// key in the browser's plan store: letters, digits, spaces, dashes and
+// underscores, so a name never reaches outside the folder. Windows reserves a
+// few device names whatever the extension.
+
+const NAME = /^[A-Za-z0-9](?:[A-Za-z0-9 _-]{0,62}[A-Za-z0-9_-])?$/;
+const RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)$/i;
+export const validName = name => typeof name === 'string' && NAME.test(name) && !RESERVED.test(name);
+
+// A valid name made from any text (an imported file's name, say), or `fallback`.
+export function nameFrom(raw, fallback = 'imported') {
+  const name = text(raw).replace(/\.json$/i, '').replace(/[^A-Za-z0-9 _-]+/g, '-')
+    .replace(/^[^A-Za-z0-9]+/, '').slice(0, 64).replace(/[^A-Za-z0-9_-]+$/, '');
+  return validName(name) ? name : fallback;
+}
+
+// `wanted`, or `wanted-2`, `wanted-3`... whichever is not in `taken`.
+export function freeName(taken, wanted) {
+  const used = new Set([...taken].map(n => n.toLowerCase()));
+  if (!used.has(wanted.toLowerCase())) return wanted;
+  for (let n = 2; ; n++) {
+    const name = `${wanted.slice(0, 60)}-${n}`;
+    if (!used.has(name.toLowerCase())) return name;
+  }
+}
+
+// What a plan list shows of a plan.
+export const planSummary = (name, plan) =>
+  ({ name, title: plan.title, players: plan.players.length, activities: plan.activities.length });
+
+// A short fingerprint of some text (FNV-1a), for telling versions apart.
+export function textHash(s) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
 export function blankActivity(id, fields = {}) {
   return {
     id, title: 'New activity', start: null, duration: DEFAULTS.duration, players: [], npcs: [],
