@@ -111,6 +111,14 @@ one lane per player:
   happens on failure. **Add another check** starts a new one with the last one's
   DC and outcomes, to change what differs. A test box shows which tier a check
   total reaches on the chosen check.
+- A **hidden check** (*Add a hidden check*, or tick *Hidden check* on one) is a
+  specialized way in that the players are not shown: one for a character with
+  the right thing in their toolkit. It says what it *needs* ("Alchemist, or
+  ranks in Craft (alchemy)", "shapeshifting"), its roll is optional, and any of
+  its DCs can be marked *Auto*: reached without a roll by a character who has
+  what it needs. Anyone else rolls for it as usual. The test box then has a
+  *Has …* tick for trying both. A block counts its hidden checks ("+1
+  hidden") and names them in its tooltip.
 - The **World** row above the players holds world events: things that happen
   at their time whoever is there (a patrol passes, a bell rings). Double-click
   it to add one, or tick *World event* in an activity. An event has no players,
@@ -160,6 +168,16 @@ is written), saves, initiative, and ability checks by their exact name. A save
 fails on a 1 and succeeds on a 20; a trained-only skill with no ranks is
 flagged.
 
+For a hidden check it first looks for what the check needs among what the
+sheet's search palette lists of the character (classes and archetypes, feats,
+spheres and talents, spells, powers, veils, maneuvers, techniques, gear, class
+features, companions) and the skills they have ranks in. The needs are read as
+alternatives split at commas and "or", each of parts joined by "and"; a part is
+met by one thing that has every word of it, words compared by their stem
+("alchemist" meets "alchemy"), and "5 ranks" asks for five. The match is
+loose, so the line says what it found ("the sheet has Wizard (class)"), and the
+Auto steps read "auto" for that player.
+
 **Library.** *Save to library* keeps an activity, with its checks, tiers and
 outcomes, for any session; the tray's *Library* button lists them and adds a
 copy to the plan. New plan can also *bring over what was not played*: copies of
@@ -169,8 +187,8 @@ the open plan's activities without a result, in the new plan's tray.
 results: what each activity came to, the rewards earned and by whom, what did
 not happen and why, and the notes that happened; *Download .md* or *Copy* it
 for the campaign log (notes can be left out). *Run sheet* opens the session in
-time order, with every check, DC, tier, reward, failure, NPC, link and note,
-to read at the table or print.
+time order, with every check (hidden ones marked, with what they need), DC,
+tier, reward, failure, NPC, link and note, to read at the table or print.
 
 **Player view.** The Player view button opens `players.html#<plan>`: the same
 timeline, read-only, for a second screen or a screen share. It shows each
@@ -178,7 +196,8 @@ scheduled activity's title, time, duration and players, and the names of its
 checks when its Show checks box is ticked ("Stealth or Bluff"). Notes, links,
 results and NPCs are not part of it. It only ever gets a plan as `playerView` in
 plan.js makes it, from a list of the fields players may see: DCs, rewards,
-success tiers, premises, NPCs and unscheduled activities are left out. It asks
+success tiers, premises, NPCs, hidden checks and unscheduled activities are
+left out. It asks
 for changes every second, so it follows the GM page's edits about a second
 after they are saved.
 
@@ -204,7 +223,7 @@ deletes. A new plan starts with the open plan's players and NPCs.
 Plan shape: `title`, `startsAt` ("19:00" or ""), `length` and `snap` in minutes,
 `players` (`id/name/color/character`), `npcs` (`id/name/role/description/notes`),
 `activities` (`id/title/start/duration/event/players/maxPlayers/npcs`, `premise`,
-`checks: [{id, check, dc, success, failure, tiers: [{id, label, dc, reward}]}]`,
+`checks: [{id, check, dc, success, failure, hidden, needs, auto, tiers: [{id, label, dc, auto, reward}]}]`,
 `result`: null or `{check, outcome}` with outcome `done`/`failure`/`success`/a tier id),
 `notes` (`id/text/about/happened`) and `links` (`id/from/to/kind`, kind `leads` or
 `blocks`; `from` and `about` are `{activity}`, `{activity, check, outcome}` or

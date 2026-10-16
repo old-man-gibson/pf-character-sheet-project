@@ -5,7 +5,7 @@
 // through the planner's store (stores.js), so it works wherever the planner
 // does. The plan is named in the address: runsheet.html#<plan name>.
 
-import { clock, end, minutesText, noteTitle, npcName, outcomeChoices, playerName, refText } from './plan.js';
+import { checkName, checkNeeds, clock, end, ladder, minutesText, npcName, outcomeChoices, playerName, refText } from './plan.js';
 import { openStore } from './stores.js';
 import { esc, readPref } from './timeline.js';
 
@@ -17,13 +17,20 @@ export function runSheetHtml(plan) {
   const ordered = [...plan.activities].sort((x, y) => (x.start ?? Infinity) - (y.start ?? Infinity) || Number(y.event) - Number(x.event));
   const lines = (s, cls = '') => (s.trim() ? `<p class="${cls}">${esc(s.trim())}</p>` : '');
 
+  // A hidden check is marked, with what it needs; an Auto step reads
+  // "(auto)", or "(auto, or 15)" when it can be rolled for as well.
   const checkHtml = (a, c) => {
-    const tiers = [...c.tiers].filter(t => t.dc != null).sort((x, y) => x.dc - y.dc);
-    return `<li class="check">
-      <p class="check-name"><strong>${esc(c.check.trim() || 'Check')}</strong>${c.dc != null ? ` DC ${c.dc}` : ''}</p>
+    const steps = ladder(c);
+    const needs = checkNeeds(c);
+    const dc = t => (t.auto ? (t.dc != null ? ` (auto, or ${t.dc})` : ' (auto)') : ` (${t.dc})`);
+    const success = steps.find(t => t.id === 'success');
+    const tiers = steps.filter(t => t.id !== 'success');
+    return `<li class="check${c.hidden ? ' hidden' : ''}">
+      <p class="check-name">${c.hidden ? '<span class="tag">Hidden</span> ' : ''}<strong>${esc(checkName(c) || 'Check')}</strong>${c.dc != null ? ` DC ${c.dc}` : ''}${success?.auto ? ', auto' : ''}</p>
+      ${needs && c.check.trim() ? `<p class="needs"><span class="label">Needs</span> ${esc(needs)}</p>` : ''}
       <dl>
-        ${c.success.trim() ? `<dt>Success${c.dc != null ? ` (${c.dc})` : ''}</dt><dd>${esc(c.success.trim())}</dd>` : ''}
-        ${tiers.map(t => `<dt>${esc(t.label.trim() || 'Tier')} (${t.dc})</dt><dd>${esc(t.reward.trim()) || '—'}</dd>`).join('')}
+        ${c.success.trim() ? `<dt>Success${success ? dc(success) : ''}</dt><dd>${esc(c.success.trim())}</dd>` : ''}
+        ${tiers.map(t => `<dt>${esc(t.label.trim() || 'Tier')}${dc(t)}</dt><dd>${esc(t.reward.trim()) || '—'}</dd>`).join('')}
         ${c.failure.trim() ? `<dt>Failure</dt><dd>${esc(c.failure.trim())}</dd>` : ''}
       </dl>
     </li>`;
@@ -47,7 +54,7 @@ export function runSheetHtml(plan) {
     });
     const links = linkLines(a);
     const notes = plan.notes.filter(n => n.about?.activity === a.id);
-    const checks = a.checks.filter(c => c.check.trim() || c.dc != null || c.success.trim() || c.failure.trim() || c.tiers.length);
+    const checks = a.checks.filter(c => checkName(c) || c.dc != null || c.success.trim() || c.failure.trim() || c.tiers.length);
     return `<article class="entry${a.event ? ' event' : ''}">
       <header>
         <span class="when">${esc(time(a))}</span>

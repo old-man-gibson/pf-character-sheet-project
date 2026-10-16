@@ -38,14 +38,28 @@ export function hue(id) {
   return Math.round((h * 137.508) % 360);
 }
 
-// "Stealth DC 15 or Bluff DC 18". The player view's checks carry no DC, so
+// "Stealth DC 15 or Bluff DC 18", with a count of the hidden checks ("(+1
+// hidden)"). The player view's checks carry no DC and no hidden ones, so
 // theirs are the names alone ("Stealth or Bluff").
 export function checkLabel(a) {
-  return (a.checks ?? []).map((c) => {
-    const name = (c.check ?? '').trim();
-    if (name) return c.dc != null ? `${name} DC ${c.dc}` : name;
-    return c.dc != null ? `DC ${c.dc}` : '';
-  }).filter(Boolean).join(' or ');
+  const checks = a.checks ?? [];
+  const shown = checks.filter(c => !c.hidden)
+    .map(c => [(c.check ?? '').trim(), c.dc != null ? `DC ${c.dc}` : ''].filter(Boolean).join(' '))
+    .filter(Boolean).join(' or ');
+  const hidden = checks.filter(c => c.hidden).length;
+  if (!hidden) return shown;
+  return shown ? `${shown} (+${hidden} hidden)` : `${hidden} hidden check${hidden === 1 ? '' : 's'}`;
+}
+
+// The hidden checks, by what they need, for a GM block's tooltip:
+// "Hidden: Alchemist (auto); shapeshifting (DC 20)".
+export function hiddenLabel(a) {
+  const list = (a.checks ?? []).filter(c => c.hidden).map(c => {
+    const name = (c.needs ?? '').trim() || (c.check ?? '').trim() || 'needs not set';
+    const dc = c.auto ? 'auto' : c.dc != null ? `DC ${c.dc}` : '';
+    return dc ? `${name} (${dc})` : name;
+  });
+  return list.length ? `Hidden: ${list.join('; ')}` : '';
 }
 
 // The measurements of a timeline drawn at `px` pixels per minute.
@@ -89,9 +103,10 @@ export function blockHtml(plan, a, lane, L, {
   const withText = lane ? (others.length ? `with ${others.join(', ')}` : '') : (others.join(', ') || 'No players yet');
   const when = a.start == null ? 'Not scheduled' : `${clock(a.start, plan.startsAt)}–${clock(end(a), plan.startsAt)}`;
   const check = showCheck ? checkLabel(a) : '';
+  const hidden = showCheck ? hiddenLabel(a) : '';
   const npcs = plan.npcs && a.npcs?.length ? `NPCs: ${a.npcs.map(n => npcName(plan, n)).join(', ')}` : '';
   const places = placesText(a);
-  const tip = [a.title.trim() || 'Untitled', `${when} · ${minutesText(a.duration)}`, places, check, withText, npcs, ...because].filter(Boolean).join('\n');
+  const tip = [a.title.trim() || 'Untitled', `${when} · ${minutesText(a.duration)}`, places, check, hidden, withText, npcs, ...because].filter(Boolean).join('\n');
   const width = a.duration * L.px;
   const classes = ['block', lane ? '' : 'chip', editable ? '' : 'static', selected ? 'selected' : '',
     lane && width < 64 ? 'narrow' : '', clash ? 'clash' : '', marked ? 'marked' : '', a.event ? 'event' : '',

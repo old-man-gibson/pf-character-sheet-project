@@ -1,6 +1,8 @@
 /** Tests the GM module's session planner: the plan model (one activity per
- *  player at a time, player limits, several checks with success tiers, NPCs,
- *  notes, links and what happened), what the player view is allowed to see,
+ *  player at a time, player limits, several checks with success tiers, hidden
+ *  checks with what they need and their Auto DCs, NPCs, notes, links and what
+ *  happened), reading a character's sheet for odds and needs, what the player
+ *  view is allowed to see,
  *  the timeline markup both pages draw, the plan files on disk (versioned
  *  writes that never overwrite a change made elsewhere), the planner API
  *  through tools/serve.mjs on a spare port against a temporary folder, and the
@@ -14,7 +16,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  activityState, addActivity, addCheck, addLink, addNote, addNpc, addPlayer, allClashes, blankPlan, checkNames,
+  activityState, addActivity, addCheck, addLink, addNote, addNpc, addPlayer, allClashes, blankPlan, checkName, checkNames, checkNeeds,
   clashText, clashes, clock, deleteActivity, duplicateActivity, noteTitle, outcomeChoices, pruneRefs, refHappened,
   recap, recapMarkdown, refText, removeLink, removeNote, resultText, carryOver, fromLibrary, libraryItem, normalizeLibrary,
   saveToLibrary,
@@ -23,9 +25,9 @@ import {
 } from '../gm-module/planner/plan.js';
 import { browserStore, fileStore } from '../gm-module/planner/stores.js';
 import { runSheetHtml } from '../gm-module/planner/runsheet.js';
-import { chance, checkBonus, loadCharacter } from '../gm-module/planner/characters.js';
+import { chance, checkBonus, hasNeeds, loadCharacter } from '../gm-module/planner/characters.js';
 import { Character } from '../app/js/model.js';
-import { blockHtml, checkLabel, layout } from '../gm-module/planner/timeline.js';
+import { blockHtml, checkLabel, hiddenLabel, layout } from '../gm-module/planner/timeline.js';
 import { createPlan, currentVersion, listPlans, readPlan, readPlayerView, removePlan, validName, writePlan } from '../gm-module/planner/store.mjs';
 
 let pass = 0;
@@ -305,6 +307,65 @@ function table() {
     .activities[0].checks, [{ check: 'Bluff' }]);
 }
 
+// ---- Hidden checks ---------------------------------------------------------------
+
+{
+  const plan = normalizePlan({
+    players: [{ id: 'p1', name: 'Ana' }],
+    activities: [{
+      id: 'a1', title: 'Brew the antidote', players: ['p1'], checks: [
+        { id: 'c1', check: 'Heal', dc: 25, success: 'Cured' },
+        {
+          id: 'c2', check: 'Craft (alchemy)', dc: 20, hidden: true, needs: 'Alchemist, or ranks in Craft (alchemy)', auto: true,
+          success: 'Cured', tiers: [{ id: 't1', label: 'Potent', dc: 30, auto: 'yes', reward: 'And a spare' }],
+        },
+      ],
+    }],
+  });
+  const [visible, hidden] = plan.activities[0].checks;
+  check('a check is not hidden unless it says so', [visible.hidden, visible.needs, visible.auto, hidden.hidden], [false, '', false, true]);
+  check('only true makes a DC auto', hidden.tiers[0].auto, false);
+  check('a hidden check is called by its roll, else by what it needs',
+    [checkName(hidden), checkName({ ...hidden, check: '' }), checkName({ ...visible, check: '', needs: 'x' })], ['Craft (alchemy)', 'Alchemist, or ranks in Craft (alchemy)', '']);
+  check('only a hidden check needs anything', [checkNeeds(hidden), checkNeeds({ ...visible, needs: 'Alchemist' })], ['Alchemist, or ranks in Craft (alchemy)', '']);
+
+  check('its auto steps are marked in the ladder', ladder(hidden).map(t => [t.label, t.dc, t.auto]), [['Success', 20, true], ['Potent', 30, false]]);
+  check('auto counts only on a hidden check', ladder({ ...visible, auto: true }).map(t => t.auto), [false]);
+  const noRoll = { ...hidden, check: '', dc: null, tiers: [{ id: 't1', label: 'Potent', dc: 30, auto: false, reward: '' }] };
+  check('an auto step needs no DC, and comes first', ladder(noRoll).map(t => [t.label, t.dc, t.auto]), [['Success', null, true], ['Potent', 30, false]]);
+  check('a step with neither is not on it', ladder({ ...noRoll, auto: false }).map(t => t.label), ['Potent']);
+
+  const met = outcome(hidden, NaN, { met: true });
+  check('having what it needs reaches an auto step with no roll', [met.tier.label, met.auto, met.next.label], ['Success', true, 'Potent']);
+  check('a roll can still reach higher', [outcome(hidden, 31, { met: true }).tier.label, outcome(hidden, 31, { met: true }).auto], ['Potent', false]);
+  check('a low roll keeps the auto step', [outcome(hidden, 3, { met: true }).failure, outcome(hidden, 3, { met: true }).tier.label], [false, 'Success']);
+  check('without it, the DCs are rolled for as usual', [outcome(hidden, 19).failure, outcome(hidden, 20).tier.label, outcome(hidden, 20).auto], [true, 'Success', false]);
+  check('and with no roll and nothing auto there is no outcome yet', [outcome(hidden, NaN), outcome(visible, NaN, { met: true })], [null, null]);
+  const topAuto = { ...hidden, auto: false, tiers: [{ id: 't1', label: 'Potent', dc: 30, auto: true, reward: '' }] };
+  check('an auto step may sit above a rolled one', [outcome(topAuto, 21, { met: true }).tier.label, outcome(topAuto, 21).tier.label], ['Potent', 'Success']);
+
+  check('its outcomes are named by it', outcomeChoices(plan.activities[0]).filter(o => o.check === 'c2').map(o => o.label),
+    ['Craft (alchemy): Failure', 'Craft (alchemy): Success', 'Craft (alchemy): Potent']);
+  check('and by what it needs when it has no roll', outcomeChoices({ checks: [noRoll] }).map(o => o.label),
+    ['Alchemist, or ranks in Craft (alchemy): Failure', 'Alchemist, or ranks in Craft (alchemy): Success', 'Alchemist, or ranks in Craft (alchemy): Potent']);
+  check('the GM block counts the hidden checks', [checkLabel(plan.activities[0]), checkLabel({ checks: [hidden, noRoll] })],
+    ['Heal DC 25 (+1 hidden)', '2 hidden checks']);
+  check('and its tooltip names them by what they need', [hiddenLabel(plan.activities[0]), hiddenLabel({ checks: [{ ...noRoll, auto: false }, { hidden: true, check: '', needs: '' }] }), hiddenLabel({ checks: [visible] })],
+    ['Hidden: Alchemist, or ranks in Craft (alchemy) (auto)', 'Hidden: Alchemist, or ranks in Craft (alchemy); needs not set', '']);
+  const L = layout(plan, 8);
+  const tip = blockHtml(plan, plan.activities[0], 'p1', L, {}).match(/title="([^"]*)"/)[1];
+  check('which the GM block carries', tip.includes('Hidden: Alchemist, or ranks in Craft (alchemy) (auto)'), true);
+  check('what hidden checks need is suggested while typing another', checkNames(plan, checkNeeds), ['Alchemist, or ranks in Craft (alchemy)']);
+
+  const act = plan.activities[0];
+  const added = addCheck(act, { hidden: true });
+  check('a new hidden check starts with the last DC and outcomes, needing nothing yet',
+    [added.hidden, added.needs, added.auto, added.dc, added.success, added.tiers.map(t => [t.label, t.auto])], [true, '', false, 20, 'Cured', [['Potent', false]]]);
+  const after = addCheck(act);
+  check('and the next one is not hidden', [after.hidden, after.needs], [false, '']);
+  check('the library keeps a hidden check as it is', libraryItem(act).checks[1].needs, 'Alchemist, or ranks in Craft (alchemy)');
+}
+
 // ---- Notes, links and what happened ----------------------------------------------
 
 {
@@ -442,7 +503,9 @@ function table() {
       { id: 'a2', title: 'Escape', start: 30, duration: 10, players: ['p1'] },
       { id: 'a1', title: 'Pick the lock', start: 0, duration: 10, players: ['p1'], npcs: ['n1'], premise: 'Old lock', maxPlayers: 1,
         checks: [{ id: 'c1', check: 'Disable Device', dc: 15, success: 'In', failure: 'Jammed', tiers: [{ id: 't1', label: 'Silent', dc: 20, reward: 'Unheard' }] },
-          { id: 'c2', check: 'Strength', dc: 18, success: 'Forced' }] },
+          { id: 'c2', check: 'Strength', dc: 18, success: 'Forced' },
+          { id: 'c3', check: '', hidden: true, needs: 'Shapeshifting', auto: true, success: 'Through the bars', tiers: [{ id: 't1', label: 'Unseen', dc: 25, auto: true, reward: 'Nobody saw' }] },
+          { id: 'c4', check: 'Craft (alchemy)', dc: 20, hidden: true, needs: 'Alchemist', success: 'Acid' }] },
       { id: 'e1', title: 'Patrol passes', event: true, start: 0, duration: 5 },
       { id: 'a3', title: 'Later maybe', start: null, duration: 5, players: [] },
     ],
@@ -457,6 +520,9 @@ function table() {
   check('and the times, players, limit, premise, NPCs, links and notes', ['19:00–19:10', 'Ana · at most 1', 'Old lock', 'Vey', 'Fence', 'Blocks “Escape” on Disable Device: Failure', 'Blocked by “Pick the lock”: Disable Device: Failure', 'Guard asleep', 'Bell at midnight', 'Owes Ana', 'World event']
     .filter(t => !html.includes(t)), []);
   check('titles are escaped', [html.includes('Heist &lt;night&gt;'), html.includes('<night>')], [true, false]);
+  check('hidden checks are marked, with what they need and their auto steps',
+    ['<span class="tag">Hidden</span> <strong>Shapeshifting</strong>, auto', 'Success (auto)', 'Unseen (auto, or 25)', '<strong>Craft (alchemy)</strong> DC 20', '<span class="label">Needs</span> Alchemist']
+      .filter(t => !html.includes(t)), []);
 }
 
 // ---- Odds from the character sheets ----------------------------------------------
@@ -474,6 +540,21 @@ function table() {
   check('a save is marked as one', [bonus('Fortitude').save, bonus('Perception').save], [true, false]);
   check('a skill is not mistaken for an ability that starts the same', bonus('Intimidate').label, 'Intimidate');
   check('a name the sheet does not have finds nothing', [bonus('Basket weaving'), bonus('')], [null, null]);
+  const has = needs => hasNeeds(model, needs);
+  check('a need is met by what is on the sheet, and says what', [has('Wizard'), has('being a wizard')],
+    [{ met: true, found: ['Wizard (class)'] }, { met: true, found: ['Wizard (class)'] }]);
+  check('alternatives: any one will do', has('Alchemist, or Wizard'), { met: true, found: ['Wizard (class)'] });
+  check('parts joined by "and" must all be there', [has('Psion and Wizard').found, has('Psion and Druid').met], [['Psion (class)', 'Wizard (class)'], false]);
+  check('ranks are looked for in skills, Knowledge however it is written',
+    [has('ranks in Knowledge (arcana)').found, has('Kn. (arcana)').met], [['Kn. (arcana), 12 ranks'], true]);
+  check('a number of ranks is a least', ['12 ranks in Knowledge (arcana)', '13 ranks in Knowledge (arcana)', '2 or more ranks in Acrobatics', '3+ ranks in Acrobatics'].map(n => has(n).met),
+    [true, false, true, false]);
+  check('a skill with no ranks is not a need met', has('ranks in Disable Device').met, false);
+  check('spells, powers and gear count', ['Magic Missile', 'Mind Thrust', 'mithral'].map(n => has(n).found[0]),
+    ['Magic Missile (spell)', 'Mind Thrust (power)', 'Mithral Chain Shirt (gear)']);
+  check('words are met by their stem, not by a short root', [has('wizardry').met, has('Psionics').met, has('Mind').met], [true, true, true]);
+  check('what the sheet does not have is not met', ['Alchemist', 'shapeshifting', 'Basket weaving'].map(n => has(n).met), [false, false, false]);
+  check('needs that name nothing cannot be told', [has('magic'), has(''), has('any spells')], [{ met: null, found: [] }, { met: null, found: [] }, { met: null, found: [] }]);
   check('the chance is what a d20 gives', [chance(6, 15), chance(17, 15), chance(0, 25), chance(5, 5)], [0.6, 1, 0, 1]);
   check('a save fails on a 1 and succeeds on a 20', [chance(-5, 30, { save: true }), chance(30, 10, { save: true })], [0.05, 0.95]);
 
@@ -569,6 +650,10 @@ function secretPlan() {
         tiers: [{ id: 't1', label: 'SECRET tier', dc: 1888, reward: 'SECRET tier reward' }], gmNote: 'SECRET field',
       },
       { id: 'a2', title: 'SECRET unscheduled', start: null, duration: 10, players: ['p1'], result: { outcome: 'done' } },
+      {
+        id: 'a3', title: 'Climb the wall', start: 10, duration: 5, players: ['p2'],
+        checks: [{ id: 'c1', check: 'Climb' }, { id: 'c2', check: 'SECRET hidden roll', hidden: true, needs: 'SECRET needs', auto: true }],
+      },
     ],
   });
 }
@@ -578,7 +663,7 @@ function secretPlan() {
   const text = JSON.stringify(view);
   check('the player view leaves out every GM field', [text.includes('SECRET'), text.includes('1777'), text.includes('1888')], [false, false, false]);
   check('and keeps the timeline', view.activities.map(a => [a.title, a.start, a.duration, a.players, a.checks]),
-    [['Pick the lock', 0, 5, ['p1', 'p2'], [{ check: 'Disable Device' }]]]);
+    [['Pick the lock', 0, 5, ['p1', 'p2'], [{ check: 'Disable Device' }]], ['Climb the wall', 10, 5, ['p2'], [{ check: 'Climb' }]]]);
   check('players keep their colours and get a name when they have none', view.players.map(p => [p.name, !!p.color]),
     [['Ana', true], ['Player 2', true]]);
   check('the session times come through', [view.title, view.length, view.startsAt], ['Open night', 240, '']);

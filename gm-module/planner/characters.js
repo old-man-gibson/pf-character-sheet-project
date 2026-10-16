@@ -13,15 +13,20 @@
 //                      ability check. Read through the sheet's roll code, so
 //                      the character's conditions count.
 //   chance(b, dc, s)   the chance of reaching dc on d20 + b.
+//   hasNeeds(m, text)  whether a character has what a hidden check needs
+//                      ("Alchemist, or ranks in Craft (alchemy)"), and what on
+//                      their sheet says so.
 //
 // planner.js imports this module only once a player has a character, since it
 // brings the sheet's model with it.
 
+import { COMPANION_KINDS } from '../../app/js/companions.js';
 import { historyFor } from '../../app/js/history.js';
 import { Character } from '../../app/js/model.js';
 import { rollSpec } from '../../app/js/roll20.js';
 import { skillLabel } from '../../app/js/rules.js';
 import { normalizeName } from '../../app/js/model/util.js';
+import { buildIndex, kindLabel } from '../../app/js/ui/palette.js';
 
 const LIBRARY_KEY = 'character-sheet:library';
 const docKey = id => `character-sheet:doc:${id}`;
@@ -127,4 +132,117 @@ export function checkBonus(model, name) {
 export function chance(bonus, dc, { save = false } = {}) {
   const p = Math.min(1, Math.max(0, (21 + bonus - dc) / 20));
   return save ? Math.min(0.95, Math.max(0.05, p)) : p;
+}
+
+// ---- What a character has, for a hidden check's needs ---------------------------
+//
+// A character's toolkit is what the sheet's search palette lists of them
+// (ui/palette.js): classes and archetypes, feats and traits, spheres and
+// talents, spells, powers, veils, known maneuvers, cards, techniques, gear,
+// class features, companions and pools, plus the skills they have ranks in.
+//
+// A need is read as alternatives ("Alchemist, or ranks in Craft (alchemy)":
+// split at commas, semicolons, slashes and "or"), each of parts that must all
+// be had ("and", "&", "+"). A part is met by one thing on the sheet that has
+// every word of it in its name (a talent's sphere and a companion's kind
+// count too), words compared by their stem ("alchemist" meets "alchemy",
+// "necromancy" meets "Necromancer"). Words that say nothing about which thing
+// it is ("ranks in", "being an", "magic") are skipped; a part that mentions
+// ranks looks only at skills, with "5 ranks" asking for five. The match is
+// loose on purpose, so what it found is always shown: the GM decides.
+
+const TOOLKIT_KINDS = new Set([
+  'class', 'feat', 'sphere', 'talent', 'spell', 'power', 'veil', 'maneuver', 'card', 'technique',
+  'gear', 'weapon', 'feature', 'progression', 'companion', 'tracker',
+]);
+const SKIP = new Set(('a an the and of in on to at by for with any some all has have having had be being is are '
+  + 'can could who which that their its least more one or level levels class classes skill skills rank ranks '
+  + 'feat feats talent talents sphere spheres spell spells magic power powers ability abilities use using '
+  + 'cast casting caster trained training access able').split(' '));
+const SUFFIXES = ['ings', 'ing', 'ists', 'ist', 'ical', 'ic', 'ers', 'er', 'ies', 'es', 'ed', 'al', 'y', 's'];
+
+function stem(w) {
+  for (const s of SUFFIXES) {
+    if (w.length - s.length >= 4 && w.endsWith(s) && !(s === 's' && w.endsWith('ss'))) return w.slice(0, -s.length);
+  }
+  return w;
+}
+// Words by their stem, with "Knowledge" as the sheet spells it ("Kn."),
+// leaving out numbers and any in `skip`.
+const wordsOf = (s, skip = null) => normalizeName(s).split(/[^a-z0-9]+/).filter(w => w && !/^\d+$/.test(w) && !skip?.has(w))
+  .map(w => (w === 'knowledge' ? 'kn' : stem(w)));
+// The same word, or one the start of the other that is most of it
+// ("transmut", "transmutation"), not a short root ("shape", "shapeshift").
+const sameWord = (x, y) => {
+  if (x === y) return true;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  return short.length >= 5 && short.length >= long.length * 0.6 && long.startsWith(short);
+};
+// The kinds whose subtitle names what they belong to ("Dark · Bonus talent",
+// "Animal companion"); the rest carry numbers or prose there.
+const NAMED_BY_SUB = new Set(['talent', 'companion']);
+
+const toolkits = new WeakMap();
+function toolkit(model) {
+  let list = toolkits.get(model);
+  if (list) return list;
+  list = [];
+  const seen = new Set();
+  const add = (label, words, also = [], ranks = null) => {
+    if (seen.has(label.toLowerCase())) return;
+    seen.add(label.toLowerCase());
+    list.push({ label, words, also: [...words, ...also], ranks });
+  };
+  for (const row of buildIndex(model)) {
+    if (!TOOLKIT_KINDS.has(row.kind)) continue;
+    // A companion's own feats and skills are the companion's.
+    if (COMPANION_KINDS.includes(row.tab) && row.kind !== 'companion') continue;
+    // A discipline lists every maneuver in it; the known ones say so.
+    if (row.kind === 'maneuver' && !row.value) continue;
+    add(`${row.title} (${kindLabel(row.kind).toLowerCase()})`, wordsOf(row.title), NAMED_BY_SUB.has(row.kind) ? wordsOf(row.sub) : []);
+  }
+  for (const s of model.data.skills ?? []) {
+    const ranks = Number(s.totalRanks) || 0;
+    if (ranks <= 0) continue;
+    const label = skillLabel(s.name, s.spec);
+    add(`${label}, ${ranks} rank${ranks === 1 ? '' : 's'}`, wordsOf(label), [], ranks);
+  }
+  toolkits.set(model, list);
+  return list;
+}
+
+// One part of a need, read: { words, ranks: null | n, skillsOnly }.
+function readPart(text) {
+  const ranks = /(\d+)\s*\+?\s*ranks?\b|\branks?\s*(?:of\s+|>=?\s*|≥\s*)?(\d+)/i.exec(text);
+  return {
+    words: wordsOf(text, SKIP),
+    ranks: ranks ? Number(ranks[1] ?? ranks[2]) : null,
+    skillsOnly: /\branks?\b/i.test(text),
+  };
+}
+
+// { met: true | false | null, found: [label] }: whether the character has
+// one of the needs' alternatives, and the things on the sheet that make it.
+// `met` is null when the needs name nothing the sheet could have.
+export function hasNeeds(model, needs) {
+  // "5 or more ranks" is one need, not two alternatives.
+  const alternatives = String(needs ?? '').replace(/\bor more\b/gi, '+').split(/\s*(?:[,;/|]|\bor\b)\s*/i)
+    .map(alt => alt.split(/\s*(?:\band\b|&|\+(?!\s*ranks?))\s*/i).map(readPart).filter(p => p.words.length))
+    .filter(parts => parts.length);
+  if (!alternatives.length) return { met: null, found: [] };
+  const list = toolkit(model);
+  for (const parts of alternatives) {
+    const found = [];
+    for (const part of parts) {
+      const fits = t => (!part.skillsOnly || t.ranks != null) && (part.ranks == null || (t.ranks ?? 0) >= part.ranks);
+      const named = key => t => fits(t) && part.words.every(w => t[key].some(x => sameWord(w, x)));
+      // A thing named for it ("Dark", the sphere) before one that only belongs
+      // to it (a talent of the Dark sphere).
+      const thing = list.find(named('words')) ?? list.find(named('also'));
+      if (!thing) break;
+      found.push(thing.label);
+    }
+    if (found.length === parts.length) return { met: true, found };
+  }
+  return { met: false, found: [] };
 }

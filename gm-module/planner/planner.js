@@ -13,7 +13,7 @@
 
 import {
   LINK_KINDS, SNAPS, activityState, addActivity, addCheck, addLink, addNote, addNpc, addPlayer, allClashes,
-  checkNames, clashText, clashes, clock, noteTitle, outcomeChoices, pruneRefs, recap, recapMarkdown, refHappened, refKey, refText,
+  checkName, checkNames, checkNeeds, clashText, clashes, clock, noteTitle, outcomeChoices, pruneRefs, recap, recapMarkdown, refHappened, refKey, refText,
   removeLink, removeNote, resultText,
   carryOver, deleteActivity, duplicateActivity, end, firstFree, freeName, fromLibrary, ladder, limitText, minutesText, nameFrom,
   normalizeLibrary, saveToLibrary,
@@ -38,7 +38,7 @@ const el = {
   title: $('#title'), startsAt: $('#starts-at'), length: $('#length'), snap: $('#snap'),
   zoomOut: $('#zoom-out'), zoomIn: $('#zoom-in'), undo: $('#undo'), saveState: $('#save-state'),
   clashNote: $('#clash-note'), wrap: $('#timeline-wrap'), timeline: $('#timeline'),
-  tray: $('#tray'), editor: $('#editor'), checks: $('#checks'), tip: $('#drag-tip'),
+  tray: $('#tray'), editor: $('#editor'), checks: $('#checks'), needs: $('#needs'), tip: $('#drag-tip'),
   notice: $('#notice'), offline: $('#offline'), offlineText: $('#offline-text'), main: $('#main'),
   playerLink: $('#player-link'), runsheetLink: $('#runsheet-link'), npcs: $('#npcs'), notes: $('#notes'), recap: $('#recap'), where: $('#where'),
   exportPlan: $('#export-plan'), importPlan: $('#import-plan'), importFile: $('#import-file'),
@@ -58,6 +58,7 @@ const S = {
   editingPlayer: null, // id of the player whose name cell is a form
   testRoll: '',        // the editor's "test a result" box
   testCheck: null,     // which of the activity's checks it tests (null: the first)
+  testMet: false,      // the tester's "has what it needs", for a hidden check's auto DCs
   recapNotes: readPref('gm-planner:recap-notes', true) !== false, // the recap includes the notes
   library: { v: null, library: { items: [] } }, // the activity library, as last read
   roster: null,        // the sheet's characters in this browser (null: not read yet)
@@ -417,30 +418,45 @@ function renderTray() {
       <p class="hint">Drag a block to move it, or onto another player's lane to hand it to them. Drag its right edge to change how long it takes. Double-click a lane to add an activity there. Click a block to edit it.</p>`;
   });
   el.checks.innerHTML = checkNames(S.plan).map(c => `<option value="${esc(c)}"></option>`).join('');
+  el.needs.innerHTML = checkNames(S.plan, checkNeeds).map(c => `<option value="${esc(c)}"></option>`).join('');
 }
 
-function tierHtml(t, checkId) {
-  const k = `${esc(checkId)}:${esc(t.id)}`;
-  return `<div class="tier" data-tier="${esc(t.id)}">
+// A hidden check's "Auto" box beside a DC: reached without a roll by a
+// character who has what the check needs.
+const autoHtml = (attr, key, on, what) => `<label class="auto-pick" title="Reached without a roll by a character who has what the check needs">
+  <input type="checkbox" ${attr} data-key="${key}"${on ? ' checked' : ''} aria-label="${esc(what)} without a roll for a character who has what it needs"> Auto</label>`;
+
+function tierHtml(t, check) {
+  const k = `${esc(check.id)}:${esc(t.id)}`;
+  return `<div class="tier${check.hidden ? ' with-auto' : ''}" data-tier="${esc(t.id)}">
     <input data-tf="label" data-key="tier:${k}:label" value="${esc(t.label)}" placeholder="Tier name" aria-label="Tier name">
     <input type="number" data-tf="dc" data-key="tier:${k}:dc" value="${t.dc ?? ''}" placeholder="DC" aria-label="Tier DC">
+    ${check.hidden ? autoHtml('data-tf="auto"', `tier:${k}:auto`, t.auto, t.label.trim() || 'This tier') : ''}
     <button type="button" class="icon" data-act="remove-tier" aria-label="Remove tier">×</button>
     <textarea data-tf="reward" data-key="tier:${k}:reward" rows="2" placeholder="Reward" aria-label="Tier reward">${esc(t.reward)}</textarea>
   </div>`;
 }
 
 // One way to try the activity: the check, its DC, its outcomes. With several,
-// each is a numbered card and can be removed.
+// each is a numbered card and can be removed. A hidden check also says what it
+// needs, and each of its DCs can be reached without a roll.
 function checkHtml(activity, c, i, many) {
   const k = esc(c.id);
   const n = i + 1;
-  return `<div class="check-card${many ? ' boxed' : ''}" data-check="${k}">
+  const hidden = c.hidden;
+  return `<div class="check-card${many || hidden ? ' boxed' : ''}${hidden ? ' secret' : ''}" data-check="${k}">
     ${many ? `<div class="check-head"><h3>Check ${n}</h3>
       <button type="button" class="icon" data-act="remove-check" aria-label="Remove check ${n}">×</button></div>` : ''}
+    <label class="hide-pick"><input type="checkbox" data-cf="hidden" data-key="c:${k}:hidden"${hidden ? ' checked' : ''}>
+      <span>Hidden check <span class="dim">· a specialized way in, not shown to the players</span></span></label>
+    ${hidden ? `<label class="field">Needs <input data-cf="needs" data-key="c:${k}:needs" list="needs" value="${esc(c.needs)}"
+        placeholder="What it takes: a class, a sphere, a spell, ranks in a skill…" aria-label="What ${many ? `check ${n}` : 'the hidden check'} needs"></label>
+      <p class="dim small">A character who has it reaches each DC marked Auto without a roll. The roll is for the rest, and can be left empty.</p>` : ''}
     <div class="ed-check">
-      <label class="field grow">${many ? 'Check' : 'Required check'} <input data-cf="check" data-key="c:${k}:check" list="checks"
-        value="${esc(c.check)}" placeholder="Skill or ability" aria-label="${many ? `Check ${n}` : 'Required check'}"></label>
+      <label class="field grow">${hidden ? 'Roll' : many ? 'Check' : 'Required check'} <input data-cf="check" data-key="c:${k}:check" list="checks"
+        value="${esc(c.check)}" placeholder="${hidden ? 'If it takes a roll' : 'Skill or ability'}" aria-label="${hidden ? `Roll for ${many ? `check ${n}` : 'the hidden check'}` : many ? `Check ${n}` : 'Required check'}"></label>
       <label class="field dc">DC <input type="number" data-cf="dc" data-key="c:${k}:dc" value="${c.dc ?? ''}" aria-label="DC${many ? ` for check ${n}` : ''}"></label>
+      ${hidden ? autoHtml('data-cf="auto"', `c:${k}:auto`, c.auto, 'Success') : ''}
     </div>
     ${oddsHtml(activity, c)}
     <label class="field">On success
@@ -448,7 +464,7 @@ function checkHtml(activity, c, i, many) {
     <div class="ed-tiers">
       <h4>Further success tiers</h4>
       ${i === 0 ? '<p class="dim small">Each tier has its own DC and reward. A result earns the highest tier whose DC it meets.</p>' : ''}
-      ${c.tiers.map(t => tierHtml(t, c.id)).join('')}
+      ${c.tiers.map(t => tierHtml(t, c)).join('')}
       <button type="button" data-act="add-tier" data-key="c:${k}:add-tier">Add tier</button>
     </div>
     <label class="field">On failure
@@ -461,8 +477,12 @@ function checksHtml(a) {
   const cards = a.checks.map((c, i) => checkHtml(a, c, i, many)).join(many ? '<p class="check-or">or</p>' : '');
   return `<section class="ed-checks">
     ${cards || '<p class="dim small">No check: nothing to roll.</p>'}
-    <button type="button" data-act="add-check" data-key="add-check"
-      title="Another way to try this, with its own DC and outcomes">${a.checks.length ? 'Add another check' : 'Add a check'}</button>
+    <div class="check-adds">
+      <button type="button" data-act="add-check" data-key="add-check"
+        title="Another way to try this, with its own DC and outcomes">${a.checks.length ? 'Add another check' : 'Add a check'}</button>
+      <button type="button" data-act="add-hidden-check" data-key="add-hidden-check"
+        title="A specialized way in for a character with the right thing in their toolkit. The players are not shown it.">Add a hidden check</button>
+    </div>
   </section>`;
 }
 
@@ -639,8 +659,12 @@ function charactersHtml(a) {
 }
 
 // Under a check: each linked player's bonus and their chance of each step.
+// For a hidden check, first whether their sheet has what it needs (and what
+// on it does): if so, its Auto steps are theirs without a roll.
 function oddsHtml(a, c) {
-  if (!C || a.event || !c.check.trim()) return '';
+  const roll = c.check.trim();
+  const needs = checkNeeds(c);
+  if (!C || a.event || (!roll && !needs)) return '';
   const steps = ladder(c);
   const rows = a.players.map(pid => {
     const p = S.plan.players.find(x => x.id === pid);
@@ -649,11 +673,21 @@ function oddsHtml(a, c) {
     const st = S.chars.get(p.character);
     if (!st || st.state === 'loading') return `<li class="dim">${who}: reading the sheet…</li>`;
     if (st.state === 'error') return `<li class="dim">${who}: ${esc(st.error)}</li>`;
-    const b = C.checkBonus(st.model, c.check);
-    if (!b) return `<li class="dim">${who}: no “${esc(c.check.trim())}” on the sheet</li>`;
-    if (b.untrained) return `<li>${who} <span class="bonus">${signedText(b.bonus)}</span>: ${esc(b.label)} is trained only, and they have no ranks.</li>`;
-    const parts = steps.map(t => `${esc(t.label)} ${pct(C.chance(b.bonus, t.dc, { save: b.save }))}`);
-    return `<li>${who} <span class="bonus">${signedText(b.bonus)}</span>${parts.length ? `: ${parts.join(' · ')}` : ''}</li>`;
+    const has = needs ? C.hasNeeds(st.model, needs) : { met: null, found: [] };
+    const b = roll ? C.checkBonus(st.model, roll) : null;
+    const said = [];
+    if (needs) {
+      said.push(has.met ? `the sheet has ${has.found.map(esc).join(' and ')}`
+        : has.met === false ? `nothing on the sheet matches “${esc(needs)}”`
+          : `the sheet cannot say whether they have “${esc(needs)}”`);
+    }
+    if (roll && !b) said.push(`no “${esc(roll)}” on the sheet`);
+    else if (b?.untrained) said.push(`${esc(b.label)} is trained only, and they have no ranks`);
+    const parts = steps.flatMap(t => (t.auto && has.met ? [`${esc(t.label)} auto`]
+      : b && !b.untrained && t.dc != null ? [`${esc(t.label)} ${pct(C.chance(b.bonus, t.dc, { save: b.save }))}`] : []));
+    const text = [said.join('; '), parts.join(' · ')].filter(Boolean).join('. ');
+    const dim = has.met === false || (!parts.length && !has.met);
+    return `<li${dim ? ' class="dim"' : ''}>${who}${b ? ` <span class="bonus">${signedText(b.bonus)}</span>` : ''}${text ? `: ${text}` : ''}</li>`;
   }).filter(Boolean);
   return rows.length ? `<ul class="odds" aria-label="Odds">${rows.join('')}</ul>` : '';
 }
@@ -962,9 +996,11 @@ function renderActivityEditor(a) {
       <section class="ed-test">
         <h3>Outcomes</h3>
         ${a.checks.length > 1 ? `<label class="field">Check <select id="test-check" data-key="test-check">
-          ${a.checks.map((c, i) => `<option value="${esc(c.id)}"${c.id === testedCheck(a)?.id ? ' selected' : ''}>${i + 1}. ${esc(c.check.trim() || 'Unnamed check')}</option>`).join('')}
+          ${a.checks.map((c, i) => `<option value="${esc(c.id)}"${c.id === testedCheck(a)?.id ? ' selected' : ''}>${i + 1}. ${esc(checkName(c) || 'Unnamed check')}</option>`).join('')}
         </select></label>` : ''}
         <label class="field">Test a result <input type="number" id="test-roll" data-key="test" value="${esc(S.testRoll)}" placeholder="Check total"></label>
+        ${testedCheck(a) && ladder(testedCheck(a)).some(t => t.auto) ? `<label class="test-met"><input type="checkbox" id="test-met" data-key="test-met"${S.testMet ? ' checked' : ''}>
+          Has ${esc(checkNeeds(testedCheck(a)) || 'what it needs')}</label>` : ''}
         <div id="test-out"></div>
       </section>
       ${activityPlayHtml(a)}
@@ -986,27 +1022,32 @@ function renderOutcomes() {
   const c = testedCheck(a);
   if (!c) { box.innerHTML = '<p class="dim small">Add a check to see its outcomes.</p>'; return; }
   const steps = ladder(c);
-  if (!steps.length) { box.innerHTML = '<p class="dim small">Set a DC to see the outcomes.</p>'; return; }
+  if (!steps.length) { box.innerHTML = `<p class="dim small">${c.hidden ? 'Set a DC, or mark one Auto,' : 'Set a DC'} to see the outcomes.</p>`; return; }
   const total = S.testRoll === '' ? NaN : Number(S.testRoll);
-  const r = outcome(c, total);
+  const r = outcome(c, total, { met: S.testMet });
+  const needs = checkNeeds(c) || 'what it needs';
   const row = (cls, dc, name, reward, hit) => `<li class="${cls}${hit ? ' hit' : ''}"><span class="l-dc">${esc(dc)}</span>
     <span class="l-name">${esc(name)}</span>${reward.trim() ? `<span class="l-reward">${esc(reward)}</span>` : ''}</li>`;
+  const dcText = t => (t.auto ? (t.dc != null ? `auto or ${t.dc}` : 'auto') : `DC ${t.dc}`);
+  const lowest = steps.find(t => t.dc != null)?.dc;
   let line = '';
-  if (r) {
-    line = r.failure
-      ? `${total} fails: it needs ${r.next.dc} for ${r.next.label}.`
-      : `${total} reaches ${r.tier.label} (DC ${r.tier.dc}).` + (r.next ? ` ${r.next.dc - total} more for ${r.next.label} (DC ${r.next.dc}).` : '');
+  if (r?.failure) {
+    line = r.next.dc != null ? `${total} fails: it needs ${r.next.dc} for ${r.next.label}.` : `${total} fails: ${r.next.label} needs ${needs}.`;
+  } else if (r) {
+    const more = !r.next || r.next.dc == null ? ''
+      : Number.isFinite(total) ? ` ${r.next.dc - total} more for ${r.next.label} (DC ${r.next.dc}).` : ` ${r.next.label} takes a roll of ${r.next.dc}.`;
+    line = (r.auto ? `With ${needs}: ${r.tier.label}, no roll needed.` : `${total} reaches ${r.tier.label} (DC ${r.tier.dc}).`) + more;
   }
   box.innerHTML = `<ol class="ladder">
-      ${row('fail', `below ${steps[0].dc}`, 'Failure', c.failure, r?.failure)}
-      ${steps.map(t => row('', `DC ${t.dc}`, t.label, t.reward, r && !r.failure && r.tier.id === t.id)).join('')}
+      ${row('fail', lowest != null ? `below ${lowest}` : 'without it', 'Failure', c.failure, r?.failure)}
+      ${steps.map(t => row(t.auto ? 'auto' : '', dcText(t), t.label, t.reward, r && !r.failure && r.tier.id === t.id)).join('')}
     </ol>${line ? `<p class="test-line">${esc(line)}</p>` : ''}`;
 }
 
 // ---- Selecting and editing ---------------------------------------------------
 
 function select(id) {
-  if (S.selected !== id) { S.testRoll = ''; S.testCheck = null; }
+  if (S.selected !== id) { S.testRoll = ''; S.testCheck = null; S.testMet = false; }
   S.selected = id;
   S.side = null;
   renderBar();
@@ -1509,14 +1550,15 @@ document.addEventListener('click', e => {
     edit(() => { c.tiers = c.tiers.filter(t => t.id !== id); });
     renderEditor();
     renderTimeline();
-  } else if (act === 'add-check') {
+  } else if (act === 'add-check' || act === 'add-hidden-check') {
+    const hidden = act === 'add-hidden-check';
     let added = null;
-    edit(() => { added = addCheck(a); });
+    edit(() => { added = addCheck(a, { hidden }); });
     S.testCheck = added.id;
     renderEditor();
     renderTimeline();
     renderTray();
-    el.editor.querySelector(attrSel('data-key', `c:${added.id}:check`))?.focus();
+    el.editor.querySelector(attrSel('data-key', `c:${added.id}:${hidden ? 'needs' : 'check'}`))?.focus();
   } else if (act === 'remove-check') {
     const c = checkOf(a, button);
     edit(() => { removeCheck(a, c.id); });
@@ -1546,7 +1588,7 @@ el.editor.addEventListener('input', e => {
     return;
   }
   const a = selectedActivity();
-  if (!a) return;
+  if (!a || t.type === 'checkbox') return; // (handled on change)
   if (t.id === 'test-roll') {
     S.testRoll = t.value;
     renderOutcomes();
@@ -1566,8 +1608,8 @@ el.editor.addEventListener('input', e => {
   renderTimeline();
   renderTray();
   renderOutcomes();
-  // The odds under a check follow its name, its DC and its tiers' DCs.
-  if (c && (t.dataset.cf === 'check' || t.dataset.cf === 'dc' || t.dataset.tf === 'dc')) {
+  // The odds under a check follow its name, its DC, what it needs and its tiers' DCs.
+  if (c && (['check', 'dc', 'needs'].includes(t.dataset.cf) || t.dataset.tf === 'dc')) {
     const card = el.editor.querySelector(`.check-card${attrSel('data-check', c.id)}`);
     const odds = card?.querySelector(':scope > .odds');
     const fresh = oddsHtml(a, c);
@@ -1575,9 +1617,9 @@ el.editor.addEventListener('input', e => {
     else if (fresh) card?.querySelector(':scope > .ed-check')?.insertAdjacentHTML('afterend', fresh);
   }
   // The tester's list names the checks.
-  if (t.dataset.cf === 'check') {
+  if (t.dataset.cf === 'check' || t.dataset.cf === 'needs') {
     const option = el.editor.querySelector(`#test-check option${attrSel('value', c.id)}`);
-    if (option) option.textContent = `${a.checks.indexOf(c) + 1}. ${c.check.trim() || 'Unnamed check'}`;
+    if (option) option.textContent = `${a.checks.indexOf(c) + 1}. ${checkName(c) || 'Unnamed check'}`;
   }
 });
 
@@ -1609,7 +1651,21 @@ el.editor.addEventListener('change', e => {
   if (!a) return;
   if (t.id === 'test-check') {
     S.testCheck = t.value;
+    renderEditor(); // (the "has what it needs" box follows the check)
+  } else if (t.id === 'test-met') {
+    S.testMet = t.checked;
     renderOutcomes();
+  } else if (t.type === 'checkbox' && (t.dataset.cf || t.dataset.tf) && checkOf(a, t)) {
+    const c = checkOf(a, t);
+    const tier = t.dataset.tf ? c.tiers.find(x => x.id === t.closest('.tier')?.dataset.tier) : null;
+    edit(() => {
+      if (tier) tier[t.dataset.tf] = t.checked;
+      else c[t.dataset.cf] = t.checked;
+    });
+    renderEditor();
+    renderTimeline();
+    renderTray();
+    if (t.dataset.cf === 'hidden' && t.checked) el.editor.querySelector(attrSel('data-key', `c:${c.id}:needs`))?.focus();
   } else if (t.dataset.characterFor) {
     const p = S.plan.players.find(x => x.id === t.dataset.characterFor);
     edit(() => {

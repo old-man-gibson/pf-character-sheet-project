@@ -407,6 +407,14 @@ svg.links .arrow.blocks { fill: var(--bad); }
   border-radius: 6px;
 }
 .tier textarea { grid-column: 1 / -1; }
+.tier.with-auto { grid-template-columns: 1fr 64px auto auto; }
+.check-adds { display: flex; flex-wrap: wrap; gap: 6px; }
+.check-card.secret { border-style: dashed; border-color: var(--warn); }
+.hide-pick, .auto-pick, .test-met { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text); cursor: pointer; }
+.hide-pick { align-items: baseline; }
+.ed-check .auto-pick { align-self: end; padding-bottom: 6px; }
+.tier .auto-pick { padding: 0 2px; }
+.ladder li.auto .l-dc { color: var(--warn); }
 .ed-test { display: flex; flex-direction: column; gap: 6px; }
 .ed-test .field input { width: 110px; }
 .ladder { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 2px; }

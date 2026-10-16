@@ -19,6 +19,12 @@
 // their own DC and reward, and a failure. A result reaches the tier with the
 // highest DC it meets; below every DC it is a failure.
 //
+// A hidden check is a way in the players are not shown: a specialised
+// solution, open to a character with the right thing in their toolkit (a
+// class, a sphere, a spell, ranks in a skill). It says what it `needs`, and
+// any of its DCs (`auto`) can be reached without a roll by a character who
+// has that. Its roll (`check`) is optional: some solutions are just had.
+//
 // NPCs are the plan's cast. An activity links any number of them. Nothing
 // stops one NPC being linked to two activities at once (a link can mean "about
 // them" as well as "with them"), but `npcClashes` reports it.
@@ -39,7 +45,8 @@
 //     activities: [{ id, title, start (min) | null, duration (min), players: [ids],
 //                    event, maxPlayers | null, npcs: [ids], premise, result | null,
 //                    checks: [{ id, check, dc | null, success, failure,
-//                               tiers: [{ id, label, dc | null, reward }] }] }] }
+//                               hidden, needs, auto,
+//                               tiers: [{ id, label, dc | null, auto, reward }] }] }] }
 //   result  { check: id | null, outcome: 'done' | 'failure' | 'success' | tier id }
 //   Ref     { activity } (it happened), { activity, check, outcome } (that
 //           outcome happened) or { note }
@@ -189,7 +196,7 @@ export function blankActivity(id, fields = {}) {
 }
 
 export function blankCheck(id, fields = {}) {
-  return { id, check: '', dc: null, success: '', failure: '', tiers: [], ...fields };
+  return { id, check: '', dc: null, success: '', failure: '', hidden: false, needs: '', auto: false, tiers: [], ...fields };
 }
 
 function normalizeTier(raw, taken) {
@@ -200,6 +207,7 @@ function normalizeTier(raw, taken) {
     id: id && !taken.some(x => x.id === id) ? id : newId(taken, 't'),
     label: text(t.label),
     dc: whole(t.dc, null),
+    auto: t.auto === true,
     reward: text(t.reward),
   };
 }
@@ -230,6 +238,9 @@ function normalizeCheck(raw, taken) {
     dc: whole(c.dc, null),
     success: text(c.success),
     failure: text(c.failure),
+    hidden: c.hidden === true,
+    needs: text(c.needs),
+    auto: c.auto === true,
     tiers,
   };
 }
@@ -555,13 +566,24 @@ export function npcClashes(plan, act) {
 // ---- Checks ----------------------------------------------------------------
 
 // Another way to try an activity. It starts with the last check's DC and
-// outcomes (often the same, whichever way it is tried), with no name.
-export function addCheck(act) {
+// outcomes (often the same, whichever way it is tried), with no name and
+// nothing it needs. `hidden: true` makes it a hidden check.
+export function addCheck(act, { hidden = false } = {}) {
   const last = act.checks.at(-1);
-  const check = normalizeCheck(last ? { ...structuredClone(last), id: '', check: '' } : {}, act.checks);
+  const copy = last ? structuredClone(last) : {};
+  const check = normalizeCheck({
+    ...copy, id: '', check: '', hidden, needs: '', auto: false,
+    tiers: (copy.tiers ?? []).map(t => ({ ...t, auto: false })),
+  }, act.checks);
   act.checks.push(check);
   return check;
 }
+
+// What a hidden check needs ('' for a check that is not hidden).
+export const checkNeeds = c => (c.hidden ? c.needs.trim() : '');
+
+// What a check is called: its roll, else (a hidden check) what it needs.
+export const checkName = c => c.check.trim() || checkNeeds(c);
 
 // Results, notes and links that named the check are cleared by pruneRefs.
 export function removeCheck(act, id) {
@@ -569,24 +591,38 @@ export function removeCheck(act, id) {
 }
 
 // One check's DC to succeed and every further tier that has a DC, lowest DC
-// first. The success tier carries the id "success".
+// first. The success tier carries the id "success". On a hidden check a step
+// may be `auto` (reached without a roll by a character who has what the
+// check needs), and an auto step needs no DC: one without comes first.
 export function ladder(check) {
+  const auto = v => check.hidden === true && v === true;
   const list = [];
-  if (check.dc != null) list.push({ id: 'success', label: 'Success', dc: check.dc, reward: check.success });
-  for (const t of check.tiers) if (t.dc != null) list.push({ ...t, label: t.label.trim() || 'Unnamed tier' });
-  return list.sort((x, y) => x.dc - y.dc);
+  if (check.dc != null || auto(check.auto)) list.push({ id: 'success', label: 'Success', dc: check.dc, auto: auto(check.auto), reward: check.success });
+  for (const t of check.tiers) {
+    if (t.dc != null || auto(t.auto)) list.push({ ...t, auto: auto(t.auto), label: t.label.trim() || 'Unnamed tier' });
+  }
+  const at = t => t.dc ?? -Infinity;
+  return list.sort((x, y) => (at(x) === at(y) ? 0 : at(x) - at(y)));
 }
 
 // What a result of `total` on a check earns: { failure: true, reward, next }
-// below every DC, otherwise { tier, reward, next } for the highest tier
-// reached. `next` is the tier above (or null). Null when the check sets no DC.
-export function outcome(check, total) {
+// below every DC, otherwise { tier, reward, next, auto } for the highest tier
+// reached. `next` is the tier above (or null). `met`: the character has what
+// a hidden check needs, so its auto steps are reached whatever the total
+// (`auto` is then true when the roll alone would not have reached the tier).
+// Null when the check sets no DC, or when there is no total and nothing is
+// reached without one.
+export function outcome(check, total, { met = false } = {}) {
   const steps = ladder(check);
-  if (!steps.length || !Number.isFinite(total)) return null;
-  const reached = steps.filter(t => total >= t.dc).length;
-  if (!reached) return { failure: true, tier: null, reward: check.failure, next: steps[0] };
-  const tier = steps[reached - 1];
-  return { failure: false, tier, reward: tier.reward, next: steps[reached] ?? null };
+  const rolled = Number.isFinite(total);
+  const byRoll = t => rolled && t.dc != null && total >= t.dc;
+  const free = t => met && t.auto;
+  if (!steps.length || (!rolled && !steps.some(free))) return null;
+  let top = -1;
+  steps.forEach((t, i) => { if (byRoll(t) || free(t)) top = i; });
+  if (top < 0) return { failure: true, tier: null, reward: check.failure, next: steps[0], auto: false };
+  const tier = steps[top];
+  return { failure: false, tier, reward: tier.reward, next: steps[top + 1] ?? null, auto: !byRoll(tier) };
 }
 
 // ---- Notes, links and what happened ---------------------------------------------
@@ -672,8 +708,8 @@ export function activityState(plan, id) {
 export function outcomeChoices(act) {
   const many = act.checks.length > 1;
   return act.checks.flatMap((c, i) => {
-    const name = c.check.trim() || `Check ${i + 1}`;
-    const label = o => (many || c.check.trim() ? `${name}: ${o}` : o);
+    const name = checkName(c) || `Check ${i + 1}`;
+    const label = o => (many || checkName(c) ? `${name}: ${o}` : o);
     return [
       { check: c.id, outcome: 'failure', label: label('Failure') },
       { check: c.id, outcome: 'success', label: label('Success') },
@@ -815,9 +851,9 @@ export function recapMarkdown(plan, { notes = true } = {}) {
 // ---- Player view -------------------------------------------------------------
 
 // What the players may see of a plan: the timeline's activities (not world
-// events) with their titles, times, players and the names of their checks.
-// Built from a list of the fields
-// to keep, so DCs, rewards, tiers, premises, unscheduled activities and any
+// events) with their titles, times, players and the names of their checks
+// (not the hidden ones). Built from a list of the fields to keep, so DCs,
+// rewards, tiers, premises, unscheduled activities, hidden checks and any
 // field added to a plan later stay with the GM.
 export function playerView(plan) {
   return {
@@ -830,17 +866,18 @@ export function playerView(plan) {
       .filter(a => a.start != null && !a.event)
       .map(a => ({
         id: a.id, title: a.title, start: a.start, duration: a.duration, players: [...a.players],
-        checks: a.checks.filter(c => c.check.trim()).map(c => ({ check: c.check })),
+        checks: a.checks.filter(c => !c.hidden && c.check.trim()).map(c => ({ check: c.check })),
       })),
   };
 }
 
 // The checks the plan already names, for suggestions while typing another.
-export function checkNames(plan) {
+// `of` picks what to list (checkNeeds: what the hidden checks need).
+export function checkNames(plan, of = c => c.check.trim()) {
   const seen = new Map();
   for (const a of plan.activities) {
     for (const c of a.checks) {
-      const name = c.check.trim();
+      const name = of(c);
       if (name && !seen.has(name.toLowerCase())) seen.set(name.toLowerCase(), name);
     }
   }
