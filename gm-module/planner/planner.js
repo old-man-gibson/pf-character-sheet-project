@@ -15,14 +15,15 @@ import {
   LINK_KINDS, SNAPS, activityState, addActivity, addCheck, addLink, addNote, addNpc, addPlayer, allClashes,
   checkNames, clashText, clashes, clock, noteTitle, outcomeChoices, pruneRefs, recap, recapMarkdown, refHappened, refKey, refText,
   removeLink, removeNote, resultText,
-  deleteActivity, duplicateActivity, end, firstFree, freeName, ladder, limitText, minutesText, nameFrom,
+  carryOver, deleteActivity, duplicateActivity, end, firstFree, freeName, fromLibrary, ladder, limitText, minutesText, nameFrom,
+  normalizeLibrary, saveToLibrary,
   newId, newPlan, normalizePlan, npcActivities, npcClashes, npcName, outcome, overLimit, overfills,
   placesText, playerLoad, playerName, removeCheck, removeNpc, removePlayer, snapTo, span, updateActivity, whole,
 } from './plan.js';
 import { openStore } from './stores.js';
 import { downloadFile } from '../../app/js/download.js';
 import {
-  ROOM, WORLD, ZOOMS, blockHtml, esc, layout, readPref, rescale, rulerHtml, trackHtml, writePref, zoomPref,
+  ROOM, WORLD, ZOOMS, blockHtml, checkLabel, esc, layout, readPref, rescale, rulerHtml, trackHtml, writePref, zoomPref,
 } from './timeline.js';
 
 const $ = sel => document.querySelector(sel);
@@ -58,6 +59,7 @@ const S = {
   testRoll: '',        // the editor's "test a result" box
   testCheck: null,     // which of the activity's checks it tests (null: the first)
   recapNotes: readPref('gm-planner:recap-notes', true) !== false, // the recap includes the notes
+  library: { v: null, library: { items: [] } }, // the activity library, as last read
   zoom: zoomPref('gm-planner:zoom'),
   undo: [],
 };
@@ -404,6 +406,7 @@ function renderTray() {
       <header class="tray-head">
         <h2>Unscheduled <span class="count">${waiting.length || ''}</span></h2>
         <button type="button" data-act="new-activity" data-key="new-activity">New activity</button>
+        <button type="button" data-act="library" data-key="library" aria-pressed="${sideIs('library')}">Library</button>
       </header>
       <div class="tray-items">
         ${waiting.map(a => blockHtml(S.plan, a, null, layout(S.plan, ppm()), { selected: a.id === S.selected, editable: true, ...linkState(a) })).join('') || '<p class="empty">Drop a block here to take it off the timeline.</p>'}
@@ -469,7 +472,7 @@ function renderEditor() {
   const a = selectedActivity();
   const kind = a ? 'activity' : S.side?.kind ?? null;
   el.editor.hidden = !kind;
-  el.editor.setAttribute('aria-label', { activity: 'Activity', npcs: 'NPCs', npc: 'NPC', notes: 'Notes', note: 'Note', recap: 'Recap' }[kind] ?? '');
+  el.editor.setAttribute('aria-label', { activity: 'Activity', npcs: 'NPCs', npc: 'NPC', notes: 'Notes', note: 'Note', recap: 'Recap', library: 'Library' }[kind] ?? '');
   if (a) return renderActivityEditor(a);
   const html = {
     npcs: () => npcListHtml(),
@@ -477,6 +480,7 @@ function renderEditor() {
     notes: () => noteListHtml(),
     note: () => noteEditorHtml(openNote()),
     recap: () => recapHtml(),
+    library: () => libraryHtml(),
   }[kind];
   keepFocus(el.editor, () => { el.editor.innerHTML = html ? html() : ''; });
 }
@@ -567,6 +571,48 @@ function activityPlayHtml(a) {
         <span class="dim small">${n.about.check ? esc(refText(plan, n.about).replace(/^“[^”]*”: /, '')) : ''}</span></li>`).join('')}</ul>` : ''}
       <button type="button" class="align-start" data-act="new-note-here" data-key="new-note-here">Add a note</button>
     </section>`;
+}
+
+// ---- Activity library -------------------------------------------------------------
+
+// Reads the library afresh, applies `fn` to a copy and saves it; if it was
+// changed elsewhere in the meantime, tries once more on the newer copy.
+async function editLibrary(fn) {
+  for (let tries = 0; tries < 2; tries++) {
+    const now = await store.readLibrary();
+    const library = structuredClone(now.library);
+    const outcome = fn(library);
+    const out = await store.writeLibrary(library, now.v);
+    if (out.ok) {
+      S.library = { v: out.v, library: normalizeLibrary(library) };
+      return outcome;
+    }
+  }
+  throw new Error('the library kept changing elsewhere');
+}
+
+async function refreshLibrary() {
+  try { S.library = await store.readLibrary(); } catch { /* keep the last copy */ }
+  if (sideIs('library')) renderEditor();
+}
+
+function libraryHtml() {
+  const items = S.library.library.items;
+  const rows = items.map(item => `<li><div class="npc-row static-row">
+      <span class="npc-name">${esc(item.title.trim() || 'Untitled')}</span>
+      <span class="npc-count">
+        <button type="button" data-act="library-add" data-item="${esc(item.id)}" data-key="lb:${esc(item.id)}">Add</button>
+        <button type="button" class="icon" data-act="library-remove" data-item="${esc(item.id)}" aria-label="Remove ${esc(item.title.trim() || 'Untitled')} from the library">×</button>
+      </span>
+      <span class="npc-role">${esc([item.event ? 'World event' : '', minutesText(item.duration), checkLabel(item)].filter(Boolean).join(' · '))}</span>
+    </div></li>`).join('');
+  return `<div class="ed-head">
+      <h2 class="ed-heading">Activity library</h2>
+      <button type="button" class="icon" data-act="close-editor" aria-label="Close">×</button>
+    </div>
+    <p class="dim small">Activities kept for any session, with their checks and outcomes. Add puts a copy in this plan's tray.</p>
+    ${rows ? `<ul class="npc-list">${rows}</ul>`
+      : '<p class="dim">Nothing saved yet. Open an activity and press <em>Save to library</em>.</p>'}`;
 }
 
 // The recap panel: the same recap the download holds, drawn for reading.
@@ -838,6 +884,7 @@ function renderActivityEditor(a) {
       ${activityPlayHtml(a)}
       <div class="ed-foot">
         <button type="button" data-act="duplicate" data-key="duplicate">Duplicate</button>
+        <button type="button" data-act="save-to-library" data-key="save-to-library" title="Keep a copy, with its checks and outcomes, for any session">Save to library</button>
         <button type="button" class="danger" data-act="delete" data-key="delete">Delete</button>
       </div>`;
   });
@@ -1273,6 +1320,21 @@ document.addEventListener('click', e => {
     showSide({ kind: 'npc', id: button.dataset.npc });
   } else if (act === 'npc-list') {
     showSide({ kind: 'npcs' });
+  } else if (act === 'library') {
+    if (sideIs('library')) closePanel();
+    else { showSide({ kind: 'library' }); refreshLibrary(); }
+  } else if (act === 'library-add') {
+    const item = S.library.library.items.find(x => x.id === button.dataset.item);
+    if (!item) return;
+    const out = edit(plan => fromLibrary(plan, item));
+    if (out.ok) {
+      select(out.activity.id);
+      notice(`Added “${out.activity.title}” to the tray.`);
+    }
+  } else if (act === 'library-remove') {
+    const id = button.dataset.item;
+    editLibrary(library => { library.items = library.items.filter(x => x.id !== id); })
+      .then(() => renderEditor(), err => notice(`Could not change the library: ${err.message}`, 'warn'));
   } else if (act === 'recap-download') {
     downloadFile(`${S.name}-recap.md`, recapMarkdown(S.plan, { notes: S.recapNotes }), 'text/markdown');
   } else if (act === 'recap-copy') {
@@ -1324,6 +1386,11 @@ document.addEventListener('click', e => {
     schedule(a.id);
   } else if (act === 'unschedule') {
     setStart(a.id, null);
+  } else if (act === 'save-to-library') {
+    const title = a.title.trim() || 'Untitled';
+    editLibrary(library => saveToLibrary(library, a))
+      .then(how => notice(how === 'replaced' ? `Updated “${title}” in the library.` : `Saved “${title}” to the library.`),
+        err => notice(`Could not save to the library: ${err.message}`, 'warn'));
   } else if (act === 'duplicate') {
     const out = edit(plan => duplicateActivity(plan, a.id));
     select(out.activity.id);
@@ -1583,7 +1650,9 @@ el.newPlanForm.addEventListener('submit', async e => {
   e.preventDefault();
   const name = el.newPlanForm.elements.name.value.trim();
   try {
-    await createPlan(name, newPlan(name.replace(/[-_]+/g, ' ').replace(/^\w/, c => c.toUpperCase()), cast()));
+    const carry = el.newPlanForm.elements.carry.checked ? carryOver(S.plan) : [];
+    await createPlan(name, newPlan(name.replace(/[-_]+/g, ' ').replace(/^\w/, c => c.toUpperCase()), { ...cast(), activities: carry }));
+    if (carry.length) notice(`Brought over ${carry.length} ${carry.length === 1 ? 'activity' : 'activities'} that were not played; they are in the tray.`);
     closeNewPlan();
   } catch (err) {
     notice(err.message, 'warn');
@@ -1665,6 +1734,7 @@ async function boot() {
   if (names.includes(wanted)) await openPlan(wanted);
   else if (names.length) await openPlan(names[0]);
   else await createPlan('session-1', newPlan('Session 1'));
+  refreshLibrary();
   setInterval(poll, POLL_EVERY);
 }
 

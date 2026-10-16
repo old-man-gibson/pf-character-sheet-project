@@ -7,7 +7,7 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { normalizePlan, planSummary, playerView, validName } from './plan.js';
+import { normalizeLibrary, normalizePlan, planSummary, playerView, validName } from './plan.js';
 
 export { validName };
 
@@ -61,6 +61,11 @@ export function writePlan(dir, name, plan, base) {
   const now = currentVersion(dir, name);
   if (now !== base) return { ok: false, ...(now === null ? { v: null, plan: null } : readPlan(dir, name)) };
   const bytes = JSON.stringify(normalizePlan(plan), null, 2) + '\n';
+  putFile(dir, name, bytes);
+  return { ok: true, v: versionOf(bytes) };
+}
+
+function putFile(dir, name, bytes) {
   fs.mkdirSync(dir, { recursive: true });
   const file = fileOf(dir, name);
   const tmp = `${file}.${process.pid}.tmp`;
@@ -72,6 +77,26 @@ export function writePlan(dir, name, plan, base) {
     fs.writeFileSync(file, bytes);
     fs.rmSync(tmp, { force: true });
   }
+}
+
+// The activity library, beside the plans as _library.json: not a valid plan
+// name, so it is never listed as a plan. Versioned like a plan file.
+export const LIBRARY = '_library';
+
+export function readLibrary(dir) {
+  try {
+    const raw = fs.readFileSync(fileOf(dir, LIBRARY), 'utf8');
+    return { v: versionOf(raw), library: normalizeLibrary(JSON.parse(raw)) };
+  } catch (err) {
+    if (err.code === 'ENOENT') return { v: null, library: normalizeLibrary(null) };
+    throw err;
+  }
+}
+
+export function writeLibrary(dir, library, base) {
+  if (currentVersion(dir, LIBRARY) !== (base ?? null)) return { ok: false, ...readLibrary(dir) };
+  const bytes = JSON.stringify(normalizeLibrary(library), null, 2) + '\n';
+  putFile(dir, LIBRARY, bytes);
   return { ok: true, v: versionOf(bytes) };
 }
 

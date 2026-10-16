@@ -84,8 +84,59 @@ export function blankPlan(title = DEFAULTS.title) {
 
 // A new plan with no activities, starting with the given players and NPCs (a
 // new session usually has the same table and many of the same people).
-export function newPlan(title = DEFAULTS.title, { players = [], npcs = [] } = {}) {
-  return normalizePlan({ ...blankPlan(title), players, npcs });
+// `activities` (from carryOver, say) start it off too.
+export function newPlan(title = DEFAULTS.title, { players = [], npcs = [], activities = [] } = {}) {
+  return normalizePlan({ ...blankPlan(title), players, npcs, activities });
+}
+
+// The activities of `plan` that were not played (no result), for the next
+// session: copies in the tray, with their players, checks and NPCs, without
+// their times or links.
+export function carryOver(plan) {
+  return plan.activities.filter(a => !a.result).map(a => ({ ...structuredClone(a), start: null, result: null }));
+}
+
+// ---- Activity library -------------------------------------------------------
+//
+// Activities kept for use in any plan: { version, items: [template] }, where a
+// template is an activity without anything that belongs to one session (its
+// time, players, NPCs, result). Stored beside the plans under a name no plan
+// can have (see stores.js and store.mjs).
+
+const TEMPLATE_FIELDS = ['title', 'duration', 'event', 'maxPlayers', 'premise', 'checks'];
+
+export function libraryItem(act, id = '') {
+  const a = normalizeActivity({ ...structuredClone(act), players: [], npcs: [], start: null, result: null });
+  return { id, ...Object.fromEntries(TEMPLATE_FIELDS.map(k => [k, a[k]])) };
+}
+
+export function normalizeLibrary(raw) {
+  const items = [];
+  for (const item of Array.isArray(raw?.items) ? raw.items : []) {
+    if (!isObject(item)) continue;
+    const id = text(item.id).trim();
+    items.push(libraryItem(item, id && !items.some(x => x.id === id) ? id : newId(items, 'lib')));
+  }
+  return { version: PLAN_VERSION, items };
+}
+
+// Saves an activity to the library; one with the same title is replaced.
+// Returns 'added' or 'replaced'.
+export function saveToLibrary(library, act) {
+  const name = act.title.trim().toLowerCase();
+  const i = library.items.findIndex(x => x.title.trim().toLowerCase() === name);
+  if (i >= 0) {
+    library.items[i] = libraryItem(act, library.items[i].id);
+    return 'replaced';
+  }
+  library.items.push(libraryItem(act, newId(library.items, 'lib')));
+  return 'added';
+}
+
+// A library item as a new activity in the plan's tray.
+export function fromLibrary(plan, item) {
+  const { id: _id, ...fields } = structuredClone(item);
+  return addActivity(plan, { ...fields, start: null, players: [] });
 }
 
 // ---- Plan names ----------------------------------------------------------------

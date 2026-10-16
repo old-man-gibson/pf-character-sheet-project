@@ -17,6 +17,7 @@
     <form id="new-plan-form" class="inline-form" hidden>
       <input name="name" required maxlength="64" pattern="[A-Za-z0-9]([A-Za-z0-9 _\-]*[A-Za-z0-9_\-])?"
              aria-label="New plan name" title="Letters, digits, spaces, - and _">
+      <label class="carry" title="Copies of the open plan's activities with no result, in the new plan's tray"><input type="checkbox" name="carry"> Bring over what was not played</label>
       <button type="submit">Create</button>
       <button type="button" data-act="cancel-new-plan">Cancel</button>
     </form>

@@ -16,9 +16,14 @@
 //                                 -> { name, v }, or 409 { name, v, plan } with the file's
 //                                    current copy when it is no longer at version `base`
 //   DELETE plan?name=             deletes the plan file -> { name, deleted }
+//   GET  library                  { v, library } (v null before anything is saved)
+//   PUT  library  { base, library }
+//                                 -> { v }, or 409 { v, library } with the current copy
 
 import { json, readJson } from '../lib/http.mjs';
-import { createPlan, currentVersion, listPlans, readPlan, readPlayerView, removePlan, validName, writePlan } from './store.mjs';
+import {
+  createPlan, currentVersion, listPlans, readLibrary, readPlan, readPlayerView, removePlan, validName, writeLibrary, writePlan,
+} from './store.mjs';
 
 const BODY_LIMIT = 4 * 1024 * 1024;
 
@@ -48,6 +53,13 @@ export default function plannerApi({ dir }) {
       const { base, plan } = await readJson(req, BODY_LIMIT);
       const out = writePlan(dir, name, plan, base ?? null);
       return out.ok ? json(res, 200, { name, v: out.v }) : json(res, 409, { name, v: out.v, plan: out.plan });
+    }
+    if (route === 'library') {
+      if (req.method === 'GET') return json(res, 200, readLibrary(dir));
+      if (req.method !== 'PUT') return json(res, 405, { error: 'method not allowed' });
+      const { base, library } = await readJson(req, BODY_LIMIT);
+      const out = writeLibrary(dir, library, base ?? null);
+      return out.ok ? json(res, 200, { v: out.v }) : json(res, 409, { v: out.v, library: out.library });
     }
     if (route === 'players') {
       if (!validName(name)) return json(res, 400, { error: 'bad plan name' });

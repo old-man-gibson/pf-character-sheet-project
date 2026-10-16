@@ -20,6 +20,8 @@
 //                             stored plan is still at version `base`
 //   remove(name)              deletes the plan
 //   playerView(name, since)   null | { v, same: true } | { v, view }
+//   readLibrary()             { v, library } (the activity library; v null when empty)
+//   writeLibrary(library, base)   { ok: true, v } | { ok: false, v, library }
 //   writeOnExit(name, plan, base)   a write that may outlive the page
 // and `kind` ('files' | 'browser') and `where` (said on the page).
 //
@@ -29,7 +31,7 @@
 
 import { databaseOpener, finished, result } from '../../app/js/idb.js';
 import { isLocalHost } from '../../app/js/gm-tools.js';
-import { normalizePlan, planSummary, playerView, textHash, validName } from './plan.js';
+import { normalizeLibrary, normalizePlan, planSummary, playerView, textHash, validName } from './plan.js';
 
 const viewVersion = view => textHash(JSON.stringify(view));
 const byName = (x, y) => x.name.localeCompare(y.name, undefined, { numeric: true });
@@ -82,6 +84,17 @@ export function fileStore(api = 'api/', dir = '') {
       if (!res.ok) throw failed(res, out);
       return out.same ? { v: out.v, same: true } : { v: out.v, view: out.view };
     },
+    async readLibrary() {
+      const { res, out } = await call('library');
+      if (!res.ok) throw failed(res, out);
+      return { v: out.v, library: normalizeLibrary(out.library) };
+    },
+    async writeLibrary(library, base) {
+      const { res, out } = await call('library', send('PUT', { base, library }));
+      if (res.ok) return { ok: true, v: out.v };
+      if (res.status === 409) return { ok: false, v: out.v ?? null, library: normalizeLibrary(out.library) };
+      throw failed(res, out);
+    },
     // keepalive lets the request finish after the page has gone.
     writeOnExit(name, plan, base) {
       fetch(`${api}plan?${q(name)}`, { ...send('PUT', { base, plan }), keepalive: true }).catch(() => {});
@@ -95,6 +108,9 @@ export function fileStore(api = 'api/', dir = '') {
 // (a stand-in in the tests).
 
 const STORE = 'plans';
+// The activity library's record in the same store: not a valid plan name, so
+// list() never shows it.
+const LIBRARY = '_library';
 
 export function browserStore({ factory = null } = {}) {
   const openDb = databaseOpener({
@@ -123,7 +139,7 @@ export function browserStore({ factory = null } = {}) {
     where: 'this browser',
     async list() {
       const rows = await inTx('readonly', store => result(store.getAll()));
-      return rows.map(r => planSummary(r.name, normalizePlan(r.plan))).sort(byName);
+      return rows.filter(r => validName(r.name)).map(r => planSummary(r.name, normalizePlan(r.plan))).sort(byName);
     },
     async create(name, plan) {
       if (!validName(name)) return { ok: false, error: 'Plan names use letters, digits, spaces, - and _.' };
@@ -160,6 +176,21 @@ export function browserStore({ factory = null } = {}) {
       const view = playerView(normalizePlan(row.plan));
       const v = viewVersion(view);
       return v === since ? { v, same: true } : { v, view };
+    },
+    async readLibrary() {
+      const row = await inTx('readonly', store => get(store, LIBRARY));
+      return { v: row ? String(row.rev) : null, library: normalizeLibrary(row?.library) };
+    },
+    async writeLibrary(library, base) {
+      const clean = normalizeLibrary(library);
+      return inTx('readwrite', async store => {
+        const row = await get(store, LIBRARY);
+        const now = row ? String(row.rev) : null;
+        if (now !== (base ?? null)) return { ok: false, v: now, library: normalizeLibrary(row?.library) };
+        const rev = (row?.rev ?? 0) + 1;
+        store.put({ name: LIBRARY, rev, library: clean });
+        return { ok: true, v: String(rev) };
+      });
     },
     // An IndexedDB write started while the page goes away still commits.
     writeOnExit(name, plan, base) {

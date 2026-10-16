@@ -16,7 +16,8 @@ import path from 'node:path';
 import {
   activityState, addActivity, addCheck, addLink, addNote, addNpc, addPlayer, allClashes, blankPlan, checkNames,
   clashText, clashes, clock, deleteActivity, duplicateActivity, noteTitle, outcomeChoices, pruneRefs, refHappened,
-  recap, recapMarkdown, refText, removeLink, removeNote, resultText,
+  recap, recapMarkdown, refText, removeLink, removeNote, resultText, carryOver, fromLibrary, libraryItem, normalizeLibrary,
+  saveToLibrary,
   firstFree, freeName, ladder, limitText, minutesText, nameFrom, newPlan, normalizePlan, npcActivities, npcClashes,
   npcName, outcome, overLimit, placesText, playerLoad, playerView, removeCheck, removeNpc, removePlayer, span, updateActivity,
 } from '../gm-module/planner/plan.js';
@@ -398,6 +399,35 @@ function table() {
   check('but are in the recap', recap(plan).played.map(e => [e.title, e.event]), [['Patrol passes', true]]);
 }
 
+// ---- Activity library and carrying over ----------------------------------------
+
+{
+  const plan = table();
+  const npc = addNpc(plan, { name: 'Vey' });
+  updateActivity(plan, 'a1', { npcs: [npc.id], maxPlayers: 2, premise: 'Old lock', result: { outcome: 'done' },
+    checks: [{ id: 'c1', check: 'Disable Device', dc: 15, success: 'In', failure: 'Jammed', tiers: [] }] });
+  const item = libraryItem(plan.activities[0], 'lib1');
+  check('a library item keeps what any session can use', Object.keys(item).sort(), ['checks', 'duration', 'event', 'id', 'maxPlayers', 'premise', 'title']);
+  check('with its checks', [item.title, item.maxPlayers, item.premise, item.checks[0].check, item.checks[0].dc], ['A', 2, 'Old lock', 'Disable Device', 15]);
+
+  const lib = normalizeLibrary(null);
+  check('an empty library has no items', lib.items, []);
+  check('saving adds an item', [saveToLibrary(lib, plan.activities[0]), lib.items.length], ['added', 1]);
+  check('saving one with the same title replaces it', [saveToLibrary(lib, { ...plan.activities[0], title: ' a ', duration: 30 }), lib.items.length, lib.items[0].duration], ['replaced', 1, 30]);
+  check('items read back with ids, junk dropped', normalizeLibrary({ items: [{ title: 'X' }, { id: 'lib1', title: 'Y' }, 'junk'] }).items.map(i => [i.id, i.title]), [['lib1', 'X'], ['lib2', 'Y']]);
+
+  const added = fromLibrary(plan, lib.items[0]);
+  check('an item comes into the plan as a new activity in the tray', [added.ok, added.activity.start, added.activity.players, added.activity.result, added.activity.checks[0].check],
+    [true, null, [], null, 'Disable Device']);
+
+  const carried = carryOver(plan);
+  check('carrying over takes what was not played, without times or results', [carried.map(a => a.title), carried.every(a => a.start === null && a.result === null)],
+    [['B', 'D', ' a '], true]);
+  check('and keeps their players', carried.find(a => a.title === 'D').players, ['p3', 'p4']);
+  const next = newPlan('Next', { players: plan.players, activities: carried });
+  check('a new plan can start with them in its tray', next.activities.map(a => [a.title, a.start]), [['B', null], ['D', null], [' a ', null]]);
+}
+
 // ---- Recap -------------------------------------------------------------------
 
 {
@@ -690,6 +720,13 @@ try {
         ['contract', 'contract-2', 'contract-10']);
       await store.remove('contract-2');
       check(`${k}: deletes a plan`, [await store.read('contract-2'), (await store.list()).some(p => p.name === 'contract-2')], [null, false]);
+      const emptyLib = await store.readLibrary();
+      check(`${k}: an empty library reads as none`, [emptyLib.v, emptyLib.library.items], [null, []]);
+      const libSaved = await store.writeLibrary({ items: [{ title: 'Shop', duration: 20 }] }, null);
+      check(`${k}: the library saves`, [libSaved.ok, (await store.readLibrary()).library.items.map(i => i.title)], [true, ['Shop']]);
+      check(`${k}: refuses a stale library write and hands back the current copy`,
+        [(await store.writeLibrary({ items: [] }, null)).ok, (await store.writeLibrary({ items: [] }, null)).library.items.length], [false, 1]);
+      check(`${k}: the library is never listed as a plan`, (await store.list()).some(p => p.name.startsWith('_')), false);
       const gone = await store.write('contract-2', blankPlan(), '1');
       check(`${k}: a save to a deleted plan says it is gone`, [gone.ok, gone.v, gone.plan], [false, null, null]);
       check(`${k}: and can write it again from nothing`, (await store.write('contract-2', blankPlan(), null)).ok, true);
