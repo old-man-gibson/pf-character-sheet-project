@@ -685,6 +685,77 @@ export function removeLink(plan, id) {
   plan.links = plan.links.filter(l => l.id !== id);
 }
 
+// ---- Recap -------------------------------------------------------------------
+//
+// What a session came to, from the results recorded during play: what each
+// activity that happened came to, the rewards earned and by whom, what did not
+// happen (blocked, or never played), and the notes that happened. No times:
+// the clock is the GM's to bend, and the recap is about what happened.
+
+// What a result earned: the reward of the success or tier reached, or the
+// failure's consequence (with `failure` set), or nothing for "done".
+function resultOutcome(act) {
+  const r = act.result;
+  if (!r || r.outcome === 'done') return { text: '', failure: false };
+  const check = act.checks.find(c => c.id === r.check);
+  if (!check) return { text: '', failure: false };
+  if (r.outcome === 'failure') return { text: check.failure.trim(), failure: true };
+  if (r.outcome === 'success') return { text: check.success.trim(), failure: false };
+  return { text: check.tiers.find(t => t.id === r.outcome)?.reward.trim() ?? '', failure: false };
+}
+
+export function recap(plan) {
+  const ordered = [...plan.activities].sort((x, y) => (x.start ?? Infinity) - (y.start ?? Infinity));
+  const title = a => a.title.trim() || 'Untitled';
+  const names = a => a.players.map(p => playerName(plan, p));
+  const played = [];
+  const blocked = [];
+  const notPlayed = [];
+  for (const a of ordered) {
+    if (a.result) {
+      const { text: outcome, failure } = resultOutcome(a);
+      played.push({ title: title(a), players: names(a), event: a.event === true, result: resultText(a), outcome, failure });
+      continue;
+    }
+    const { state, blockedBy } = activityState(plan, a.id);
+    if (state === 'blocked') blocked.push({ title: title(a), players: names(a), by: blockedBy.map(l => refText(plan, l.from)) });
+    else notPlayed.push({ title: title(a), players: names(a) });
+  }
+  const rewards = played.filter(e => e.outcome && !e.failure).map(e => ({ players: e.players, text: e.outcome, from: e.title }));
+  const notes = plan.notes.filter(n => n.text.trim() && refHappened(plan, { note: n.id })).map(n => n.text.trim());
+  return { title: plan.title.trim() || 'Untitled session', played, rewards, blocked, notPlayed, notes };
+}
+
+// Markdown's own characters, escaped so a title cannot turn into formatting.
+const md = s => s.replace(/([\\`*_[\]#|<>])/g, '\\$1');
+const mdLines = s => md(s).split('\n').map(l => l.trim()).filter(Boolean).join(' ');
+const who = list => (list.length ? ` (${md(list.join(', '))})` : '');
+
+// The recap as Markdown, for a campaign log. `notes: false` leaves the notes
+// out (they may hold what the players must not read).
+export function recapMarkdown(plan, { notes = true } = {}) {
+  const r = recap(plan);
+  const out = [`# ${md(r.title)}: recap`, ''];
+  out.push('## What happened', '');
+  if (r.played.length) {
+    for (const e of r.played) out.push(`- **${md(e.title)}**${who(e.players)}: ${md(e.result)}.${e.outcome ? ` ${mdLines(e.outcome)}` : ''}`);
+  } else out.push('Nothing recorded yet.');
+  if (r.rewards.length) {
+    out.push('', '## Rewards', '');
+    for (const w of r.rewards) out.push(`- ${w.players.length ? `${md(w.players.join(', '))}: ` : ''}${mdLines(w.text)} (${md(w.from)})`);
+  }
+  if (r.blocked.length || r.notPlayed.length) {
+    out.push('', '## Did not happen', '');
+    for (const b of r.blocked) out.push(`- **${md(b.title)}**${who(b.players)}: blocked by ${md(b.by.join(', '))}.`);
+    for (const n of r.notPlayed) out.push(`- **${md(n.title)}**${who(n.players)}: not played.`);
+  }
+  if (notes && r.notes.length) {
+    out.push('', '## Notes', '');
+    for (const n of r.notes) out.push(`- ${mdLines(n)}`);
+  }
+  return out.join('\n') + '\n';
+}
+
 // ---- Player view -------------------------------------------------------------
 
 // What the players may see of a plan: the timeline's activities with their

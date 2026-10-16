@@ -16,7 +16,7 @@ import path from 'node:path';
 import {
   activityState, addActivity, addCheck, addLink, addNote, addNpc, addPlayer, allClashes, blankPlan, checkNames,
   clashText, clashes, clock, deleteActivity, duplicateActivity, noteTitle, outcomeChoices, pruneRefs, refHappened,
-  refText, removeLink, removeNote, resultText,
+  recap, recapMarkdown, refText, removeLink, removeNote, resultText,
   firstFree, freeName, ladder, limitText, minutesText, nameFrom, newPlan, normalizePlan, npcActivities, npcClashes,
   npcName, outcome, overLimit, placesText, playerLoad, playerView, removeCheck, removeNpc, removePlayer, span, updateActivity,
 } from '../gm-module/planner/plan.js';
@@ -372,6 +372,39 @@ function table() {
   check('links keep only those that are whole, once each', read.links.map(l => [l.id, l.kind, l.to]), [['l1', 'leads', 'a2'], ['l2', 'blocks', 'a1']]);
   check('a duplicate starts without a result', duplicateActivity(read, 'a1').activity.result, null);
   check('a plan without notes or links reads with none', [normalizePlan({}).notes, normalizePlan({}).links], [[], []]);
+}
+
+// ---- Recap -------------------------------------------------------------------
+
+{
+  const plan = normalizePlan({
+    title: 'Heist *night*',
+    players: [{ id: 'p1', name: 'Ana' }, { id: 'p2', name: 'Ben' }],
+    activities: [
+      { id: 'a4', title: 'Escape', start: 40, duration: 10, players: ['p1', 'p2'] },
+      { id: 'a1', title: 'Pick the lock', start: 0, duration: 10, players: ['p1'], result: { check: 'c1', outcome: 't1' },
+        checks: [{ id: 'c1', check: 'Disable Device', dc: 15, success: 'In.', failure: 'Jammed.', tiers: [{ id: 't1', label: 'Silent', dc: 20, reward: 'Nobody hears.' }] }] },
+      { id: 'a2', title: 'Keep watch', start: 5, duration: 10, players: ['p2'], result: { check: 'c1', outcome: 'failure' },
+        checks: [{ id: 'c1', check: 'Perception', dc: 12, failure: 'They are seen.' }] },
+      { id: 'a3', title: 'Grab the loot', start: 20, duration: 10, players: ['p1'] },
+      { id: 'a5', title: 'Shop', start: 50, duration: 10, players: ['p2'], result: { outcome: 'done' } },
+    ],
+    links: [{ from: { activity: 'a2', check: 'c1', outcome: 'failure' }, to: 'a3', kind: 'blocks' }],
+    notes: [{ id: 'n1', text: 'The guard saw Ben', happened: true }, { id: 'n2', text: 'The bell rings' }],
+  });
+  const r = recap(plan);
+  check('the recap lists what happened in time order', r.played.map(e => [e.title, e.result, e.outcome, e.failure]),
+    [['Pick the lock', 'Disable Device: Silent', 'Nobody hears.', false], ['Keep watch', 'Perception: Failure', 'They are seen.', true], ['Shop', 'Done', '', false]]);
+  check('rewards are what a success or tier earned, by whom', r.rewards, [{ players: ['Ana'], text: 'Nobody hears.', from: 'Pick the lock' }]);
+  check('what did not happen says why', [r.blocked.map(b => [b.title, b.by]), r.notPlayed.map(n => n.title)],
+    [[['Grab the loot', ['“Keep watch”: Perception: Failure']]], ['Escape']]);
+  check('only notes that happened are in it', r.notes, ['The guard saw Ben']);
+  const text = recapMarkdown(plan);
+  check('the Markdown recap has each part', ['# Heist \\*night\\*: recap','## What happened', '## Rewards', '## Did not happen', '## Notes', '- **Pick the lock** (Ana): Disable Device: Silent. Nobody hears.']
+    .filter(line => !text.includes(line)), []);
+  check('and can leave the notes out', recapMarkdown(plan, { notes: false }).includes('The guard saw Ben'), false);
+  check('a plan with nothing recorded says so', recapMarkdown(blankPlan('Empty')).includes('Nothing recorded yet.'), true);
+  check('no times or DCs are in it', /\d+:\d\d|DC/.test(text), false);
 }
 
 // ---- Checks and tiers --------------------------------------------------------

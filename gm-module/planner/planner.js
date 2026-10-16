@@ -13,7 +13,7 @@
 
 import {
   LINK_KINDS, SNAPS, activityState, addActivity, addCheck, addLink, addNote, addNpc, addPlayer, allClashes,
-  checkNames, clashText, clashes, clock, noteTitle, outcomeChoices, pruneRefs, refHappened, refKey, refText,
+  checkNames, clashText, clashes, clock, noteTitle, outcomeChoices, pruneRefs, recap, recapMarkdown, refHappened, refKey, refText,
   removeLink, removeNote, resultText,
   deleteActivity, duplicateActivity, end, firstFree, freeName, ladder, limitText, minutesText, nameFrom,
   newId, newPlan, normalizePlan, npcActivities, npcClashes, npcName, outcome, overLimit, overfills,
@@ -39,7 +39,7 @@ const el = {
   clashNote: $('#clash-note'), wrap: $('#timeline-wrap'), timeline: $('#timeline'),
   tray: $('#tray'), editor: $('#editor'), checks: $('#checks'), tip: $('#drag-tip'),
   notice: $('#notice'), offline: $('#offline'), offlineText: $('#offline-text'), main: $('#main'),
-  playerLink: $('#player-link'), npcs: $('#npcs'), notes: $('#notes'), where: $('#where'),
+  playerLink: $('#player-link'), npcs: $('#npcs'), notes: $('#notes'), recap: $('#recap'), where: $('#where'),
   exportPlan: $('#export-plan'), importPlan: $('#import-plan'), importFile: $('#import-file'),
   deletePlan: $('#delete-plan'),
 };
@@ -57,6 +57,7 @@ const S = {
   editingPlayer: null, // id of the player whose name cell is a form
   testRoll: '',        // the editor's "test a result" box
   testCheck: null,     // which of the activity's checks it tests (null: the first)
+  recapNotes: readPref('gm-planner:recap-notes', true) !== false, // the recap includes the notes
   zoom: zoomPref('gm-planner:zoom'),
   undo: [],
 };
@@ -316,6 +317,7 @@ function renderBar() {
   el.npcs.setAttribute('aria-pressed', String(sideIs('npcs', 'npc')));
   el.notes.textContent = plan.notes.length ? `Notes (${plan.notes.length})` : 'Notes';
   el.notes.setAttribute('aria-pressed', String(sideIs('notes', 'note')));
+  el.recap.setAttribute('aria-pressed', String(sideIs('recap')));
   document.title = `${plan.title.trim() || S.name} · Session Planner`;
 }
 
@@ -456,13 +458,14 @@ function renderEditor() {
   const a = selectedActivity();
   const kind = a ? 'activity' : S.side?.kind ?? null;
   el.editor.hidden = !kind;
-  el.editor.setAttribute('aria-label', { activity: 'Activity', npcs: 'NPCs', npc: 'NPC', notes: 'Notes', note: 'Note' }[kind] ?? '');
+  el.editor.setAttribute('aria-label', { activity: 'Activity', npcs: 'NPCs', npc: 'NPC', notes: 'Notes', note: 'Note', recap: 'Recap' }[kind] ?? '');
   if (a) return renderActivityEditor(a);
   const html = {
     npcs: () => npcListHtml(),
     npc: () => npcEditorHtml(openNpc()),
     notes: () => noteListHtml(),
     note: () => noteEditorHtml(openNote()),
+    recap: () => recapHtml(),
   }[kind];
   keepFocus(el.editor, () => { el.editor.innerHTML = html ? html() : ''; });
 }
@@ -553,6 +556,31 @@ function activityPlayHtml(a) {
         <span class="dim small">${n.about.check ? esc(refText(plan, n.about).replace(/^“[^”]*”: /, '')) : ''}</span></li>`).join('')}</ul>` : ''}
       <button type="button" class="align-start" data-act="new-note-here" data-key="new-note-here">Add a note</button>
     </section>`;
+}
+
+// The recap panel: the same recap the download holds, drawn for reading.
+function recapHtml() {
+  const r = recap(S.plan);
+  const who = list => (list.length ? ` <span class="dim">(${esc(list.join(', '))})</span>` : '');
+  const section = (title, items) => (items.length ? `<section class="recap-part"><h3>${title}</h3><ul>${items.join('')}</ul></section>` : '');
+  return `<div class="ed-head">
+      <h2 class="ed-heading">Recap</h2>
+      <button type="button" class="icon" data-act="close-editor" aria-label="Close">×</button>
+    </div>
+    <p class="dim small">What the session came to, from what happened in each activity. For the campaign log.</p>
+    <div class="link-add">
+      <button type="button" data-act="recap-download" data-key="recap-download">Download .md</button>
+      <button type="button" data-act="recap-copy" data-key="recap-copy">Copy</button>
+      <label class="pchip"><input type="checkbox" id="recap-notes" data-key="recap-notes"${S.recapNotes ? ' checked' : ''}> Include notes</label>
+    </div>
+    ${r.played.length ? '' : '<p class="dim">Nothing recorded yet: set <em>What happened</em> in an activity.</p>'}
+    ${section('What happened', r.played.map(e => `<li class="${e.failure ? 'failed' : ''}"><strong>${esc(e.title)}</strong>${who(e.players)}: ${esc(e.result)}.${e.outcome ? `<span class="recap-text">${esc(e.outcome)}</span>` : ''}</li>`))}
+    ${section('Rewards', r.rewards.map(w => `<li>${w.players.length ? `<strong>${esc(w.players.join(', '))}</strong>: ` : ''}${esc(w.text)} <span class="dim">(${esc(w.from)})</span></li>`))}
+    ${section('Did not happen', [
+      ...r.blocked.map(b => `<li><strong>${esc(b.title)}</strong>${who(b.players)}: blocked by ${esc(b.by.join(', '))}.</li>`),
+      ...r.notPlayed.map(n => `<li><strong>${esc(n.title)}</strong>${who(n.players)}: not played.</li>`),
+    ])}
+    ${S.recapNotes ? section('Notes', r.notes.map(n => `<li class="recap-text">${esc(n)}</li>`)) : ''}`;
 }
 
 function noteListHtml() {
@@ -1216,6 +1244,11 @@ document.addEventListener('click', e => {
     showSide({ kind: 'npc', id: button.dataset.npc });
   } else if (act === 'npc-list') {
     showSide({ kind: 'npcs' });
+  } else if (act === 'recap-download') {
+    downloadFile(`${S.name}-recap.md`, recapMarkdown(S.plan, { notes: S.recapNotes }), 'text/markdown');
+  } else if (act === 'recap-copy') {
+    navigator.clipboard.writeText(recapMarkdown(S.plan, { notes: S.recapNotes }))
+      .then(() => notice('Recap copied.'), () => notice('Copying is not allowed here; use Download.', 'warn'));
   } else if (act === 'open-note') {
     showSide({ kind: 'note', id: button.dataset.note });
   } else if (act === 'note-list') {
@@ -1360,6 +1393,12 @@ el.editor.addEventListener('input', e => {
 
 el.editor.addEventListener('change', e => {
   const t = e.target;
+  if (t.id === 'recap-notes') {
+    S.recapNotes = t.checked;
+    writePref('gm-planner:recap-notes', S.recapNotes);
+    renderEditor();
+    return;
+  }
   const note = openNote();
   if (note && (t.id === 'note-about' || t.id === 'note-happened')) {
     edit(() => {
@@ -1477,6 +1516,10 @@ el.npcs.addEventListener('click', () => {
 el.notes.addEventListener('click', () => {
   if (sideIs('notes', 'note')) closePanel();
   else showSide({ kind: 'notes' });
+});
+el.recap.addEventListener('click', () => {
+  if (sideIs('recap')) closePanel();
+  else showSide({ kind: 'recap' });
 });
 
 // ---- Plan files ----------------------------------------------------------------------
