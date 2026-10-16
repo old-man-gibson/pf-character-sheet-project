@@ -57,7 +57,8 @@ const S = {
                        // { kind: 'npcs' | 'notes' } or { kind: 'npc' | 'note', id }
   editingPlayer: null, // id of the player whose name cell is a form
   testRoll: '',        // the editor's "test a result" box
-  testCheck: null,     // which of the activity's checks it tests (null: the first)
+  testCheck: null,     // which of the activity's checks it tests (null: the first; 'all': every one)
+  outcomesAll: readPref('gm-planner:outcomes-all', false) === true, // the tester starts on All checks
   testMet: false,      // the tester's "has what it needs", for a hidden check's auto DCs
   recapNotes: readPref('gm-planner:recap-notes', true) !== false, // the recap includes the notes
   library: { v: null, library: { items: [] } }, // the activity library, as last read
@@ -488,6 +489,9 @@ function checksHtml(a) {
 
 // The check the outcome tester is on.
 const testedCheck = a => a.checks.find(c => c.id === S.testCheck) ?? a.checks[0] ?? null;
+// The checks the tester lists: the chosen one, or every one on All checks.
+const testingAll = a => S.testCheck === 'all' && a.checks.length > 1;
+const testedChecks = a => (testingAll(a) ? a.checks : [testedCheck(a)].filter(Boolean));
 const checkOf = (a, el) => a.checks.find(c => c.id === el.closest('.check-card')?.dataset.check) ?? null;
 
 // The side panel: the open activity's editor, or else the NPC list, an NPC,
@@ -996,11 +1000,11 @@ function renderActivityEditor(a) {
       <section class="ed-test">
         <h3>Outcomes</h3>
         ${a.checks.length > 1 ? `<label class="field">Check <select id="test-check" data-key="test-check">
-          ${a.checks.map((c, i) => `<option value="${esc(c.id)}"${c.id === testedCheck(a)?.id ? ' selected' : ''}>${i + 1}. ${esc(checkName(c) || 'Unnamed check')}</option>`).join('')}
+          <option value="all"${testingAll(a) ? ' selected' : ''}>All checks</option>
+          ${a.checks.map((c, i) => `<option value="${esc(c.id)}"${!testingAll(a) && c.id === testedCheck(a)?.id ? ' selected' : ''}>${i + 1}. ${esc(checkName(c) || 'Unnamed check')}</option>`).join('')}
         </select></label>` : ''}
         <label class="field">Test a result <input type="number" id="test-roll" data-key="test" value="${esc(S.testRoll)}" placeholder="Check total"></label>
-        ${testedCheck(a) && ladder(testedCheck(a)).some(t => t.auto) ? `<label class="test-met"><input type="checkbox" id="test-met" data-key="test-met"${S.testMet ? ' checked' : ''}>
-          Has ${esc(checkNeeds(testedCheck(a)) || 'what it needs')}</label>` : ''}
+        ${metHtml(a)}
         <div id="test-out"></div>
       </section>
       ${activityPlayHtml(a)}
@@ -1013,16 +1017,35 @@ function renderActivityEditor(a) {
   renderOutcomes();
 }
 
-// The editor's ladder for the tested check: failure, success and each tier
-// with its reward, the tested result's step marked.
+// The tester's "has what it needs" tick, when a check it lists has an Auto
+// step: named for that check's needs, or for all of them on All checks.
+function metHtml(a) {
+  const auto = testedChecks(a).filter(c => ladder(c).some(t => t.auto));
+  if (!auto.length) return '';
+  const needs = auto.length === 1 ? checkNeeds(auto[0]) || 'what it needs' : 'what the hidden checks need';
+  return `<label class="test-met"><input type="checkbox" id="test-met" data-key="test-met"${S.testMet ? ' checked' : ''}> Has ${esc(needs)}</label>`;
+}
+
+// The editor's outcomes: for the tested check (or each check, on All checks)
+// its ladder, failure, success and each tier with its reward, thresholds on
+// the left, the tested result's step marked.
 function renderOutcomes() {
   const box = $('#test-out');
   const a = selectedActivity();
   if (!box || !a) return;
-  const c = testedCheck(a);
-  if (!c) { box.innerHTML = '<p class="dim small">Add a check to see its outcomes.</p>'; return; }
+  const checks = testedChecks(a);
+  if (!checks.length) { box.innerHTML = '<p class="dim small">Add a check to see its outcomes.</p>'; return; }
+  if (!testingAll(a)) { box.innerHTML = outcomesHtml(checks[0]); return; }
+  box.innerHTML = checks.map((c, i) => `<section class="ladder-group${c.hidden ? ' secret' : ''}">
+      <h4>${i + 1}. ${esc(checkName(c) || 'Unnamed check')}${c.hidden ? ' <span class="tag">Hidden</span>' : ''}</h4>
+      ${outcomesHtml(c)}
+    </section>`).join('');
+}
+
+// One check's ladder, with the tested result on it.
+function outcomesHtml(c) {
   const steps = ladder(c);
-  if (!steps.length) { box.innerHTML = `<p class="dim small">${c.hidden ? 'Set a DC, or mark one Auto,' : 'Set a DC'} to see the outcomes.</p>`; return; }
+  if (!steps.length) return `<p class="dim small">${c.hidden ? 'Set a DC, or mark one Auto,' : 'Set a DC'} to see the outcomes.</p>`;
   const total = S.testRoll === '' ? NaN : Number(S.testRoll);
   const r = outcome(c, total, { met: S.testMet });
   const needs = checkNeeds(c) || 'what it needs';
@@ -1038,7 +1061,7 @@ function renderOutcomes() {
       : Number.isFinite(total) ? ` ${r.next.dc - total} more for ${r.next.label} (DC ${r.next.dc}).` : ` ${r.next.label} takes a roll of ${r.next.dc}.`;
     line = (r.auto ? `With ${needs}: ${r.tier.label}, no roll needed.` : `${total} reaches ${r.tier.label} (DC ${r.tier.dc}).`) + more;
   }
-  box.innerHTML = `<ol class="ladder">
+  return `<ol class="ladder">
       ${row('fail', lowest != null ? `below ${lowest}` : 'without it', 'Failure', c.failure, r?.failure)}
       ${steps.map(t => row(t.auto ? 'auto' : '', dcText(t), t.label, t.reward, r && !r.failure && r.tier.id === t.id)).join('')}
     </ol>${line ? `<p class="test-line">${esc(line)}</p>` : ''}`;
@@ -1047,7 +1070,7 @@ function renderOutcomes() {
 // ---- Selecting and editing ---------------------------------------------------
 
 function select(id) {
-  if (S.selected !== id) { S.testRoll = ''; S.testCheck = null; S.testMet = false; }
+  if (S.selected !== id) { S.testRoll = ''; S.testCheck = S.outcomesAll ? 'all' : null; S.testMet = false; }
   S.selected = id;
   S.side = null;
   renderBar();
@@ -1554,7 +1577,7 @@ document.addEventListener('click', e => {
     const hidden = act === 'add-hidden-check';
     let added = null;
     edit(() => { added = addCheck(a, { hidden }); });
-    S.testCheck = added.id;
+    if (S.testCheck !== 'all') S.testCheck = added.id;
     renderEditor();
     renderTimeline();
     renderTray();
@@ -1651,6 +1674,8 @@ el.editor.addEventListener('change', e => {
   if (!a) return;
   if (t.id === 'test-check') {
     S.testCheck = t.value;
+    S.outcomesAll = t.value === 'all';
+    writePref('gm-planner:outcomes-all', S.outcomesAll);
     renderEditor(); // (the "has what it needs" box follows the check)
   } else if (t.id === 'test-met') {
     S.testMet = t.checked;

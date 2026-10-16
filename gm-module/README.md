@@ -109,8 +109,10 @@ one lane per player:
   its checks. Each check is one way to try the activity, with its own DC, reward
   on success, further success tiers (each with its own DC and reward) and what
   happens on failure. **Add another check** starts a new one with the last one's
-  DC and outcomes, to change what differs. A test box shows which tier a check
-  total reaches on the chosen check.
+  DC and outcomes, to change what differs. Outcomes lists the chosen check's
+  thresholds and what each brings (failure, success, tiers and their rewards),
+  or every check in turn on *All checks* (the page remembers that choice); a
+  test box marks which step a check total reaches on each one listed.
 - A **hidden check** (*Add a hidden check*, or tick *Hidden check* on one) is a
   specialized way in that the players are not shown: one for a character with
   the right thing in their toolkit. It says what it *needs* ("Alchemist, or
