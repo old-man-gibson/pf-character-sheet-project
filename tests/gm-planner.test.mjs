@@ -23,6 +23,8 @@ import {
 } from '../gm-module/planner/plan.js';
 import { browserStore, fileStore } from '../gm-module/planner/stores.js';
 import { runSheetHtml } from '../gm-module/planner/runsheet.js';
+import { chance, checkBonus, loadCharacter } from '../gm-module/planner/characters.js';
+import { Character } from '../app/js/model.js';
 import { blockHtml, checkLabel, layout } from '../gm-module/planner/timeline.js';
 import { createPlan, currentVersion, listPlans, readPlan, readPlayerView, removePlan, validName, writePlan } from '../gm-module/planner/store.mjs';
 
@@ -457,6 +459,39 @@ function table() {
   check('titles are escaped', [html.includes('Heist &lt;night&gt;'), html.includes('<night>')], [true, false]);
 }
 
+// ---- Odds from the character sheets ----------------------------------------------
+
+{
+  // The public fixture character, read the way the sheet reads it.
+  const doc = JSON.parse(fs.readFileSync(path.resolve('tests/fixtures/public/characters/vesna.json'), 'utf8'));
+  const model = new Character(doc);
+  const bonus = name => checkBonus(model, name);
+  check('a skill check reads the sheet\'s total', [bonus('Perception').bonus, bonus('Stealth').bonus], [17, 13]);
+  check('Knowledge is found however it is written', ['Knowledge (arcana)', 'Kn. (arcana)', 'kn arcana'].map(n => bonus(n)?.bonus), [23, 23, 23]);
+  check('a trained-only skill with no ranks says so', [bonus('Disable Device').bonus, bonus('Disable Device').untrained], [6, true]);
+  check('saves, initiative and ability checks are found by name', ['Fortitude', 'Will save', 'Ref', 'Initiative', 'Strength', 'Str check'].map(n => bonus(n)?.bonus),
+    [11, 13, 17, 6, 2, 2]);
+  check('a save is marked as one', [bonus('Fortitude').save, bonus('Perception').save], [true, false]);
+  check('a skill is not mistaken for an ability that starts the same', bonus('Intimidate').label, 'Intimidate');
+  check('a name the sheet does not have finds nothing', [bonus('Basket weaving'), bonus('')], [null, null]);
+  check('the chance is what a d20 gives', [chance(6, 15), chance(17, 15), chance(0, 25), chance(5, 5)], [0.6, 1, 0, 1]);
+  check('a save fails on a 1 and succeeds on a 20', [chance(-5, 30, { save: true }), chance(30, 10, { save: true })], [0.05, 0.95]);
+
+  // A character the sheet keeps in this browser: its working copy, with no
+  // saved version (there is no IndexedDB in Node).
+  const stored = new Map([['character-sheet:zz-odds', JSON.stringify({ savedAt: 1, data: doc })]]);
+  globalThis.localStorage = { getItem: k => stored.get(k) ?? null, setItem: (k, v) => stored.set(k, v), removeItem: k => stored.delete(k) };
+  try {
+    const loaded = await loadCharacter({ id: 'zz-odds' });
+    check('a character loads from the sheet\'s working copy', checkBonus(loaded, 'Perception').bonus, 17);
+    let missing = null;
+    try { await loadCharacter({ id: 'zz-missing' }); } catch (err) { missing = err.message; }
+    check('one that is not there says so', missing, 'not in this browser');
+  } finally {
+    delete globalThis.localStorage;
+  }
+}
+
 // ---- Recap -------------------------------------------------------------------
 
 {
@@ -523,7 +558,7 @@ function secretPlan() {
   return normalizePlan({
     title: 'Open night',
     gmNotes: 'SECRET plan note',
-    players: [{ id: 'p1', name: 'Ana', secretFlag: 'SECRET player note' }, { id: 'p2', name: '' }],
+    players: [{ id: 'p1', name: 'Ana', secretFlag: 'SECRET player note', character: 'SECRET-character' }, { id: 'p2', name: '' }],
     npcs: [{ id: 'n1', name: 'SECRET npc', role: 'SECRET role', description: 'SECRET looks', notes: 'SECRET motive' }],
     notes: [{ id: 'note1', text: 'SECRET note', about: { activity: 'a1' }, happened: true }],
     links: [{ id: 'l1', from: { note: 'note1' }, to: 'a1', kind: 'blocks' }],

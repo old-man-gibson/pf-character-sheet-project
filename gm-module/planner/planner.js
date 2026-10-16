@@ -60,6 +60,8 @@ const S = {
   testCheck: null,     // which of the activity's checks it tests (null: the first)
   recapNotes: readPref('gm-planner:recap-notes', true) !== false, // the recap includes the notes
   library: { v: null, library: { items: [] } }, // the activity library, as last read
+  roster: null,        // the sheet's characters in this browser (null: not read yet)
+  chars: new Map(),    // character id -> { state: 'loading' | 'ok' | 'error', model, error }
   zoom: zoomPref('gm-planner:zoom'),
   undo: [],
 };
@@ -429,7 +431,7 @@ function tierHtml(t, checkId) {
 
 // One way to try the activity: the check, its DC, its outcomes. With several,
 // each is a numbered card and can be removed.
-function checkHtml(c, i, many) {
+function checkHtml(activity, c, i, many) {
   const k = esc(c.id);
   const n = i + 1;
   return `<div class="check-card${many ? ' boxed' : ''}" data-check="${k}">
@@ -440,6 +442,7 @@ function checkHtml(c, i, many) {
         value="${esc(c.check)}" placeholder="Skill or ability" aria-label="${many ? `Check ${n}` : 'Required check'}"></label>
       <label class="field dc">DC <input type="number" data-cf="dc" data-key="c:${k}:dc" value="${c.dc ?? ''}" aria-label="DC${many ? ` for check ${n}` : ''}"></label>
     </div>
+    ${oddsHtml(activity, c)}
     <label class="field">On success
       <textarea data-cf="success" data-key="c:${k}:success" rows="2" placeholder="Reward for meeting the DC">${esc(c.success)}</textarea></label>
     <div class="ed-tiers">
@@ -455,7 +458,7 @@ function checkHtml(c, i, many) {
 
 function checksHtml(a) {
   const many = a.checks.length > 1;
-  const cards = a.checks.map((c, i) => checkHtml(c, i, many)).join(many ? '<p class="check-or">or</p>' : '');
+  const cards = a.checks.map((c, i) => checkHtml(a, c, i, many)).join(many ? '<p class="check-or">or</p>' : '');
   return `<section class="ed-checks">
     ${cards || '<p class="dim small">No check: nothing to roll.</p>'}
     <button type="button" data-act="add-check" data-key="add-check"
@@ -572,6 +575,87 @@ function activityPlayHtml(a) {
         <span class="dim small">${n.about.check ? esc(refText(plan, n.about).replace(/^“[^”]*”: /, '')) : ''}</span></li>`).join('')}</ul>` : ''}
       <button type="button" class="align-start" data-act="new-note-here" data-key="new-note-here">Add a note</button>
     </section>`;
+}
+
+// ---- Characters and odds ----------------------------------------------------------
+//
+// A player can be linked to a character in the sheet app (player.character,
+// a character id). The sheet's model is loaded only once there is a link.
+
+let C = null;                 // characters.js, once loaded
+let charactersModule = null;
+const characters = () => (charactersModule ??= import('./characters.js').then(m => { C = m; return m; }));
+
+const afterCharacters = () => { if (selectedActivity()) renderEditor(); };
+
+function ensureRoster() {
+  if (S.roster !== null || ensureRoster.busy) return;
+  ensureRoster.busy = true;
+  characters().then(m => m.roster()).then(list => { S.roster = list; }, () => { S.roster = []; })
+    .finally(() => { ensureRoster.busy = false; afterCharacters(); });
+}
+
+function ensureCharacter(id) {
+  if (!id || S.chars.has(id)) return;
+  S.chars.set(id, { state: 'loading' });
+  characters()
+    .then(m => m.loadCharacter(S.roster?.find(e => e.id === id) ?? { id }))
+    .then(model => S.chars.set(id, { state: 'ok', model }), err => S.chars.set(id, { state: 'error', error: err.message }))
+    .finally(afterCharacters);
+}
+
+// When the sheet saves a character in another tab, read it again.
+addEventListener('storage', e => {
+  if (!e.key?.startsWith('character-sheet:')) return;
+  S.roster = null;
+  S.chars.clear();
+  afterCharacters();
+});
+
+const characterName = id => S.roster?.find(e => e.id === id)?.name ?? S.chars.get(id)?.model?.data?.name ?? 'their character';
+const pct = p => `${Math.round(p * 100)}%`;
+const signedText = n => (n >= 0 ? `+${n}` : `${n}`);
+
+// The activity editor's character links: one picker per player.
+function charactersHtml(a) {
+  if (a.event || !a.players.length) return '';
+  ensureRoster();
+  for (const pid of a.players) ensureCharacter(S.plan.players.find(p => p.id === pid)?.character);
+  const plan = S.plan;
+  const pickers = (S.roster ?? []).length ? a.players.map(pid => {
+    const p = plan.players.find(x => x.id === pid);
+    const options = S.roster.map(e => `<option value="${esc(e.id)}"${e.id === p.character ? ' selected' : ''}>${esc(e.name)}</option>`).join('');
+    const missing = p.character && !S.roster.some(e => e.id === p.character)
+      ? `<option value="${esc(p.character)}" selected>Not in this browser</option>` : '';
+    return `<label class="char-pick">${esc(playerName(plan, pid))}
+      <select data-character-for="${esc(pid)}" data-key="ch:${esc(pid)}"><option value="">No character</option>${missing}${options}</select></label>`;
+  }).join('') : '';
+  return `<section class="ed-chars">
+    <h3>Characters</h3>
+    ${S.roster === null ? '<p class="dim small">Looking for the character sheet’s characters…</p>'
+      : !S.roster.length ? '<p class="dim small">The character sheet has no characters in this browser. Linking a player to their character shows their odds on each check.</p>'
+      : `<div class="char-picks">${pickers}</div><p class="dim small">A player’s character applies to every activity. The odds under each check come from the sheet, conditions included.</p>`}
+  </section>`;
+}
+
+// Under a check: each linked player's bonus and their chance of each step.
+function oddsHtml(a, c) {
+  if (!C || a.event || !c.check.trim()) return '';
+  const steps = ladder(c);
+  const rows = a.players.map(pid => {
+    const p = S.plan.players.find(x => x.id === pid);
+    if (!p?.character) return '';
+    const who = `${esc(playerName(S.plan, pid))} <span class="dim">(${esc(characterName(p.character))})</span>`;
+    const st = S.chars.get(p.character);
+    if (!st || st.state === 'loading') return `<li class="dim">${who}: reading the sheet…</li>`;
+    if (st.state === 'error') return `<li class="dim">${who}: ${esc(st.error)}</li>`;
+    const b = C.checkBonus(st.model, c.check);
+    if (!b) return `<li class="dim">${who}: no “${esc(c.check.trim())}” on the sheet</li>`;
+    if (b.untrained) return `<li>${who} <span class="bonus">${signedText(b.bonus)}</span>: ${esc(b.label)} is trained only, and they have no ranks.</li>`;
+    const parts = steps.map(t => `${esc(t.label)} ${pct(C.chance(b.bonus, t.dc, { save: b.save }))}`);
+    return `<li>${who} <span class="bonus">${signedText(b.bonus)}</span>${parts.length ? `: ${parts.join(' · ')}` : ''}</li>`;
+  }).filter(Boolean);
+  return rows.length ? `<ul class="odds" aria-label="Odds">${rows.join('')}</ul>` : '';
 }
 
 // ---- Activity library -------------------------------------------------------------
@@ -873,6 +957,7 @@ function renderActivityEditor(a) {
       </div>
       <label class="field">Premise
         <textarea data-f="premise" data-key="f:premise" rows="4" placeholder="What the player wants to do, and what stands in the way">${esc(a.premise)}</textarea></label>
+      ${charactersHtml(a)}
       ${checksHtml(a)}
       <section class="ed-test">
         <h3>Outcomes</h3>
@@ -1481,6 +1566,14 @@ el.editor.addEventListener('input', e => {
   renderTimeline();
   renderTray();
   renderOutcomes();
+  // The odds under a check follow its name, its DC and its tiers' DCs.
+  if (c && (t.dataset.cf === 'check' || t.dataset.cf === 'dc' || t.dataset.tf === 'dc')) {
+    const card = el.editor.querySelector(`.check-card${attrSel('data-check', c.id)}`);
+    const odds = card?.querySelector(':scope > .odds');
+    const fresh = oddsHtml(a, c);
+    if (odds) odds.outerHTML = fresh || '';
+    else if (fresh) card?.querySelector(':scope > .ed-check')?.insertAdjacentHTML('afterend', fresh);
+  }
   // The tester's list names the checks.
   if (t.dataset.cf === 'check') {
     const option = el.editor.querySelector(`#test-check option${attrSel('value', c.id)}`);
@@ -1517,6 +1610,13 @@ el.editor.addEventListener('change', e => {
   if (t.id === 'test-check') {
     S.testCheck = t.value;
     renderOutcomes();
+  } else if (t.dataset.characterFor) {
+    const p = S.plan.players.find(x => x.id === t.dataset.characterFor);
+    edit(() => {
+      if (t.value) p.character = t.value;
+      else delete p.character;
+    });
+    renderEditor();
   } else if (t.id === 'result') {
     const result = t.value === '' ? null : t.value === 'done' ? { check: null, outcome: 'done' } : readRef(t.value);
     edit(plan => updateActivity(plan, a.id, { result }));
