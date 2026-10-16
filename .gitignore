@@ -5,12 +5,12 @@
 # not.
 private/
 
-# GM module: campaign state and rules references stay out of the repository
-# (player privacy + the engine ships content-free). The tooling under
-# gm-module/tools and gm-module/screen is content-free and may be committed
-# later if desired.
+# GM module: campaign state, session plans and rules references stay out of
+# the repository (player privacy + the engine ships content-free). The tooling
+# under gm-module/ itself is content-free and committed.
 gm-module/campaigns/
 gm-module/rules/
+gm-module/plans/
 gm-module/secret-rolls.log
 
 # Editor and OS noise

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Session</title>
+  <link rel="stylesheet" href="planner.css">
+</head>
+<body class="player-view">
+  <header class="bar">
+    <h1 id="pv-title" class="pv-title">Session</h1>
+    <span id="pv-when" class="pv-when"></span>
+    <label class="pv-toggle"><input id="show-checks" type="checkbox"> Show checks</label>
+    <span class="group" role="group" aria-label="Zoom">
+      <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+      <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+    </span>
+    <span id="live" class="save-state" aria-live="polite"></span>
+  </header>
+
+  <main id="main">
+    <section class="board">
+      <div id="timeline-wrap" class="timeline-wrap">
+        <div id="timeline" class="tl"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="missing" class="offline" hidden>
+    <h1>Player view</h1>
+    <p id="missing-text"></p>
+  </div>
+  <script type="module" src="players.js"></script>
+</body>
+</html>
