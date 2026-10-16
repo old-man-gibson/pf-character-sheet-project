@@ -40,7 +40,7 @@ const el = {
   clashNote: $('#clash-note'), wrap: $('#timeline-wrap'), timeline: $('#timeline'),
   tray: $('#tray'), editor: $('#editor'), checks: $('#checks'), tip: $('#drag-tip'),
   notice: $('#notice'), offline: $('#offline'), offlineText: $('#offline-text'), main: $('#main'),
-  playerLink: $('#player-link'), npcs: $('#npcs'), notes: $('#notes'), recap: $('#recap'), where: $('#where'),
+  playerLink: $('#player-link'), runsheetLink: $('#runsheet-link'), npcs: $('#npcs'), notes: $('#notes'), recap: $('#recap'), where: $('#where'),
   exportPlan: $('#export-plan'), importPlan: $('#import-plan'), importFile: $('#import-file'),
   deletePlan: $('#delete-plan'),
 };
@@ -311,6 +311,7 @@ function renderBar() {
   el.zoomIn.disabled = S.zoom === ZOOMS.length - 1;
   el.undo.disabled = !S.undo.length;
   el.playerLink.href = `players.html#${encodeURIComponent(S.name)}`;
+  el.runsheetLink.href = `runsheet.html#${encodeURIComponent(S.name)}`;
   el.where.textContent = store.kind === 'files' ? 'Plans are files' : 'Plans are kept in this browser';
   el.where.title = store.kind === 'files'
     ? `Saved as .json files in ${store.where}`

@@ -22,6 +22,7 @@ import {
   npcName, outcome, overLimit, placesText, playerLoad, playerView, removeCheck, removeNpc, removePlayer, span, updateActivity,
 } from '../gm-module/planner/plan.js';
 import { browserStore, fileStore } from '../gm-module/planner/stores.js';
+import { runSheetHtml } from '../gm-module/planner/runsheet.js';
 import { blockHtml, checkLabel, layout } from '../gm-module/planner/timeline.js';
 import { createPlan, currentVersion, listPlans, readPlan, readPlayerView, removePlan, validName, writePlan } from '../gm-module/planner/store.mjs';
 
@@ -426,6 +427,34 @@ function table() {
   check('and keeps their players', carried.find(a => a.title === 'D').players, ['p3', 'p4']);
   const next = newPlan('Next', { players: plan.players, activities: carried });
   check('a new plan can start with them in its tray', next.activities.map(a => [a.title, a.start]), [['B', null], ['D', null], [' a ', null]]);
+}
+
+// ---- Run sheet -------------------------------------------------------------------
+
+{
+  const plan = normalizePlan({
+    title: 'Heist <night>', startsAt: '19:00',
+    players: [{ id: 'p1', name: 'Ana' }],
+    npcs: [{ id: 'n1', name: 'Vey', role: 'Fence', description: 'Scarred', notes: 'Owes Ana' }],
+    activities: [
+      { id: 'a2', title: 'Escape', start: 30, duration: 10, players: ['p1'] },
+      { id: 'a1', title: 'Pick the lock', start: 0, duration: 10, players: ['p1'], npcs: ['n1'], premise: 'Old lock', maxPlayers: 1,
+        checks: [{ id: 'c1', check: 'Disable Device', dc: 15, success: 'In', failure: 'Jammed', tiers: [{ id: 't1', label: 'Silent', dc: 20, reward: 'Unheard' }] },
+          { id: 'c2', check: 'Strength', dc: 18, success: 'Forced' }] },
+      { id: 'e1', title: 'Patrol passes', event: true, start: 0, duration: 5 },
+      { id: 'a3', title: 'Later maybe', start: null, duration: 5, players: [] },
+    ],
+    links: [{ from: { activity: 'a1', check: 'c1', outcome: 'failure' }, to: 'a2', kind: 'blocks' }],
+    notes: [{ id: 'm1', text: 'Guard asleep', about: { activity: 'a1' } }, { id: 'm2', text: 'Bell at midnight' }],
+  });
+  const html = runSheetHtml(plan);
+  const order = ['Patrol passes', 'Pick the lock', 'Escape', 'Later maybe'].map(t => html.indexOf(t));
+  check('the run sheet runs in time order, events first at a time, unscheduled last', order.every((n, i) => n > 0 && (i === 0 || n > order[i - 1])), true);
+  check('it has every check with its DC, tiers and outcomes', ['Disable Device</strong> DC 15', 'Silent (20)', 'Unheard', 'Failure', 'Jammed', 'Strength</strong> DC 18', '>or<']
+    .filter(t => !html.includes(t)), []);
+  check('and the times, players, limit, premise, NPCs, links and notes', ['19:00–19:10', 'Ana · at most 1', 'Old lock', 'Vey', 'Fence', 'Blocks “Escape” on Disable Device: Failure', 'Blocked by “Pick the lock”: Disable Device: Failure', 'Guard asleep', 'Bell at midnight', 'Owes Ana', 'World event']
+    .filter(t => !html.includes(t)), []);
+  check('titles are escaped', [html.includes('Heist &lt;night&gt;'), html.includes('<night>')], [true, false]);
 }
 
 // ---- Recap -------------------------------------------------------------------
