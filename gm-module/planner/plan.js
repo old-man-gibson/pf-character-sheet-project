@@ -11,9 +11,10 @@
 // moves an activity or changes who is in it goes through `updateActivity` (or
 // `addActivity`), which refuses a change that would break either rule.
 //
-// A check has a DC to succeed and any number of further tiers, each with its
-// own DC and reward. A result reaches the tier with the highest DC it meets;
-// below every DC it is a failure.
+// An activity has any number of checks: the ways it can be tried ("Stealth,
+// or Bluff"). Each has a DC to succeed, any number of further tiers with
+// their own DC and reward, and a failure. A result reaches the tier with the
+// highest DC it meets; below every DC it is a failure.
 //
 // NPCs are the plan's cast. An activity links any number of them. Nothing
 // stops one NPC being linked to two activities at once (a link can mean "about
@@ -24,10 +25,12 @@
 //     players: [{ id, name, color }],
 //     npcs: [{ id, name, role, description, notes }],
 //     activities: [{ id, title, start (min) | null, duration (min), players: [ids],
-//                    maxPlayers | null, npcs: [ids], premise, check, dc | null,
-//                    success, failure,
-//                    tiers: [{ id, label, dc | null, reward }] }] }
-// Fields a plan carries beyond these are kept as they are.
+//                    maxPlayers | null, npcs: [ids], premise,
+//                    checks: [{ id, check, dc | null, success, failure,
+//                               tiers: [{ id, label, dc | null, reward }] }] }] }
+// Fields a plan carries beyond these are kept as they are. A plan from before
+// an activity could have several checks keeps `check`, `dc`, `success`,
+// `failure` and `tiers` on the activity; reading it makes them its one check.
 
 export const PLAN_VERSION = 1;
 export const DEFAULTS = Object.freeze({ title: 'Untitled session', length: 240, snap: 5, duration: 10 });
@@ -115,8 +118,12 @@ export function textHash(s) {
 export function blankActivity(id, fields = {}) {
   return {
     id, title: 'New activity', start: null, duration: DEFAULTS.duration, players: [], npcs: [],
-    premise: '', check: '', dc: null, success: '', failure: '', tiers: [], ...fields,
+    premise: '', checks: [blankCheck('c1')], ...fields,
   };
+}
+
+export function blankCheck(id, fields = {}) {
+  return { id, check: '', dc: null, success: '', failure: '', tiers: [], ...fields };
 }
 
 function normalizeTier(raw, taken) {
@@ -145,14 +152,41 @@ function idList(raw, allowed) {
 // The player and NPC ids a plan has, for normalizeActivity.
 export const knownIds = plan => ({ players: plan.players.map(p => p.id), npcs: plan.npcs.map(n => n.id) });
 
+function normalizeCheck(raw, taken) {
+  const c = isObject(raw) ? raw : {};
+  const id = text(c.id).trim();
+  const tiers = [];
+  for (const t of Array.isArray(c.tiers) ? c.tiers : []) tiers.push(normalizeTier(t, tiers));
+  return {
+    ...c,
+    id: id && !taken.some(x => x.id === id) ? id : newId(taken, 'c'),
+    check: text(c.check),
+    dc: whole(c.dc, null),
+    success: text(c.success),
+    failure: text(c.failure),
+    tiers,
+  };
+}
+
+const LEGACY_CHECK = ['check', 'dc', 'success', 'failure', 'tiers'];
+const filled = v => v != null && v !== '' && !(Array.isArray(v) && !v.length);
+
+// An activity's checks: its `checks`, or, in a plan from before an activity
+// could have several, the one check kept on the activity itself.
+function readChecks(a) {
+  if (Array.isArray(a.checks)) return a.checks;
+  return LEGACY_CHECK.some(k => filled(a[k])) ? [{ id: 'c1', ...Object.fromEntries(LEGACY_CHECK.map(k => [k, a[k]])) }] : [];
+}
+
 // One activity in canonical shape. `known` ({ players, npcs } id lists, when
 // given) drops players and NPCs the plan does not have. An activity with
 // nobody in it cannot sit in a lane, so it is unscheduled.
 export function normalizeActivity(raw, known = null) {
-  const a = isObject(raw) ? raw : {};
+  const src = isObject(raw) ? raw : {};
+  const checks = [];
+  for (const c of readChecks(src)) checks.push(normalizeCheck(c, checks));
+  const a = Object.fromEntries(Object.entries(src).filter(([k]) => !LEGACY_CHECK.includes(k)));
   const players = idList(a.players, known?.players);
-  const tiers = [];
-  for (const t of Array.isArray(a.tiers) ? a.tiers : []) tiers.push(normalizeTier(t, tiers));
   return {
     ...a,
     id: text(a.id),
@@ -163,11 +197,7 @@ export function normalizeActivity(raw, known = null) {
     maxPlayers: whole(a.maxPlayers, null, 1),
     npcs: idList(a.npcs, known?.npcs),
     premise: text(a.premise),
-    check: text(a.check),
-    dc: whole(a.dc, null),
-    success: text(a.success),
-    failure: text(a.failure),
-    tiers,
+    checks,
   };
 }
 
@@ -445,23 +475,36 @@ export function npcClashes(plan, act) {
 
 // ---- Checks ----------------------------------------------------------------
 
-// The DC to succeed and every further tier that has a DC, lowest DC first. The
-// success tier carries the id "success".
-export function ladder(act) {
+// Another way to try an activity. It starts with the last check's DC and
+// outcomes (often the same, whichever way it is tried), with no name.
+export function addCheck(act) {
+  const last = act.checks.at(-1);
+  const check = normalizeCheck(last ? { ...structuredClone(last), id: '', check: '' } : {}, act.checks);
+  act.checks.push(check);
+  return check;
+}
+
+export function removeCheck(act, id) {
+  act.checks = act.checks.filter(c => c.id !== id);
+}
+
+// One check's DC to succeed and every further tier that has a DC, lowest DC
+// first. The success tier carries the id "success".
+export function ladder(check) {
   const list = [];
-  if (act.dc != null) list.push({ id: 'success', label: 'Success', dc: act.dc, reward: act.success });
-  for (const t of act.tiers) if (t.dc != null) list.push({ ...t, label: t.label.trim() || 'Unnamed tier' });
+  if (check.dc != null) list.push({ id: 'success', label: 'Success', dc: check.dc, reward: check.success });
+  for (const t of check.tiers) if (t.dc != null) list.push({ ...t, label: t.label.trim() || 'Unnamed tier' });
   return list.sort((x, y) => x.dc - y.dc);
 }
 
-// What a check result of `total` earns: { failure: true, reward, next } below
-// every DC, otherwise { tier, reward, next } for the highest tier reached.
-// `next` is the tier above (or null). Null when the activity sets no DC.
-export function outcome(act, total) {
-  const steps = ladder(act);
+// What a result of `total` on a check earns: { failure: true, reward, next }
+// below every DC, otherwise { tier, reward, next } for the highest tier
+// reached. `next` is the tier above (or null). Null when the check sets no DC.
+export function outcome(check, total) {
+  const steps = ladder(check);
   if (!steps.length || !Number.isFinite(total)) return null;
   const reached = steps.filter(t => total >= t.dc).length;
-  if (!reached) return { failure: true, tier: null, reward: act.failure, next: steps[0] };
+  if (!reached) return { failure: true, tier: null, reward: check.failure, next: steps[0] };
   const tier = steps[reached - 1];
   return { failure: false, tier, reward: tier.reward, next: steps[reached] ?? null };
 }
@@ -469,7 +512,7 @@ export function outcome(act, total) {
 // ---- Player view -------------------------------------------------------------
 
 // What the players may see of a plan: the timeline's activities with their
-// titles, times, players and required check. Built from a list of the fields
+// titles, times, players and the names of their checks. Built from a list of the fields
 // to keep, so DCs, rewards, tiers, premises, unscheduled activities and any
 // field added to a plan later stay with the GM.
 export function playerView(plan) {
@@ -481,7 +524,10 @@ export function playerView(plan) {
     players: plan.players.map(p => ({ id: p.id, name: playerName(plan, p.id), color: p.color })),
     activities: plan.activities
       .filter(a => a.start != null)
-      .map(a => ({ id: a.id, title: a.title, start: a.start, duration: a.duration, players: [...a.players], check: a.check })),
+      .map(a => ({
+        id: a.id, title: a.title, start: a.start, duration: a.duration, players: [...a.players],
+        checks: a.checks.filter(c => c.check.trim()).map(c => ({ check: c.check })),
+      })),
   };
 }
 
@@ -489,8 +535,10 @@ export function playerView(plan) {
 export function checkNames(plan) {
   const seen = new Map();
   for (const a of plan.activities) {
-    const name = a.check.trim();
-    if (name && !seen.has(name.toLowerCase())) seen.set(name.toLowerCase(), name);
+    for (const c of a.checks) {
+      const name = c.check.trim();
+      if (name && !seen.has(name.toLowerCase())) seen.set(name.toLowerCase(), name);
+    }
   }
   return [...seen.values()].sort((x, y) => x.localeCompare(y));
 }

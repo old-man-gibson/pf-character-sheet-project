@@ -372,6 +372,13 @@ main {
 .ed-check .dc input { width: 70px; }
 .ed-tiers { display: flex; flex-direction: column; gap: 8px; }
 .editor h3 { font-size: 13px; }
+.editor h4 { font-size: 12px; color: var(--dim); font-weight: 600; }
+.ed-checks { display: flex; flex-direction: column; gap: 10px; }
+.ed-checks > button { align-self: flex-start; }
+.check-card { display: flex; flex-direction: column; gap: 10px; }
+.check-card.boxed { padding: 10px; border: 1px solid var(--line); border-radius: 8px; }
+.check-head { display: flex; align-items: center; justify-content: space-between; }
+.check-or { text-align: center; color: var(--dim); font-size: 12px; margin: -4px 0; }
 .ed-tiers > button { align-self: flex-start; }
 .tier {
   display: grid;

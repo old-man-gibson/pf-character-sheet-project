@@ -37,12 +37,14 @@ export function hue(id) {
   return Math.round((h * 137.508) % 360);
 }
 
-// "Perception DC 15", "Perception" or "DC 15". The player view's activities
-// carry no DC, so theirs is the check alone.
+// "Stealth DC 15 or Bluff DC 18". The player view's checks carry no DC, so
+// theirs are the names alone ("Stealth or Bluff").
 export function checkLabel(a) {
-  const check = (a.check ?? '').trim();
-  if (check) return a.dc != null ? `${check} DC ${a.dc}` : check;
-  return a.dc != null ? `DC ${a.dc}` : '';
+  return (a.checks ?? []).map((c) => {
+    const name = (c.check ?? '').trim();
+    if (name) return c.dc != null ? `${name} DC ${c.dc}` : name;
+    return c.dc != null ? `DC ${c.dc}` : '';
+  }).filter(Boolean).join(' or ');
 }
 
 // The measurements of a timeline drawn at `px` pixels per minute.

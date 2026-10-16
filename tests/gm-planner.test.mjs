@@ -1,5 +1,5 @@
 /** Tests the GM module's session planner: the plan model (one activity per
- *  player at a time, player limits, success tiers, NPCs), what the player view is allowed to see,
+ *  player at a time, player limits, several checks with success tiers, NPCs), what the player view is allowed to see,
  *  the timeline markup both pages draw, the plan files on disk (versioned
  *  writes that never overwrite a change made elsewhere), the planner API
  *  through tools/serve.mjs on a spare port against a temporary folder, and the
@@ -13,12 +13,12 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  addActivity, addNpc, addPlayer, allClashes, blankPlan, clashText, clashes, clock, duplicateActivity,
+  addActivity, addCheck, addNpc, addPlayer, allClashes, blankPlan, checkNames, clashText, clashes, clock, duplicateActivity,
   firstFree, freeName, ladder, limitText, minutesText, nameFrom, newPlan, normalizePlan, npcActivities, npcClashes,
-  npcName, outcome, overLimit, placesText, playerLoad, playerView, removeNpc, removePlayer, span, updateActivity,
+  npcName, outcome, overLimit, placesText, playerLoad, playerView, removeCheck, removeNpc, removePlayer, span, updateActivity,
 } from '../gm-module/planner/plan.js';
 import { browserStore, fileStore } from '../gm-module/planner/stores.js';
-import { blockHtml, layout } from '../gm-module/planner/timeline.js';
+import { blockHtml, checkLabel, layout } from '../gm-module/planner/timeline.js';
 import { createPlan, currentVersion, listPlans, readPlan, readPlayerView, removePlan, validName, writePlan } from '../gm-module/planner/store.mjs';
 
 let pass = 0;
@@ -114,10 +114,10 @@ function table() {
   check('a repeated player id is given a fresh one', plan.players.map(p => p.id), ['p1', 'p2']);
   check('players get colours', plan.players.every(p => /^#[0-9a-f]{6}$/i.test(p.color)), true);
   const [kept, other] = plan.activities;
-  check('numbers are read from strings and rounded', [kept.start, kept.duration, kept.dc], [15, 20, 18]);
+  check('numbers are read from strings and rounded', [kept.start, kept.duration, kept.checks[0].dc], [15, 20, 18]);
   check('unknown and repeated players are dropped', kept.players, ['p1']);
   check('fields the model does not know are kept', kept.gmNote, 'extra');
-  check('tiers get ids and a blank DC is null', kept.tiers.map(t => [t.id, t.dc]), [['t1', 23], ['t2', null]]);
+  check('tiers get ids and a blank DC is null', kept.checks[0].tiers.map(t => [t.id, t.dc]), [['t1', 23], ['t2', null]]);
   check('a repeated activity id is given a fresh one', other.id, 'a1');
   check('an activity left with nobody is unscheduled', [other.players, other.start], [[], null]);
 }
@@ -259,6 +259,45 @@ function table() {
   check('the other NPCs stay', plan.npcs.map(n => n.name), ['Mara']);
 }
 
+// ---- Several checks -------------------------------------------------------------
+
+{
+  const old = normalizePlan({
+    players: [{ id: 'p1' }],
+    activities: [
+      { id: 'a1', title: 'Old', players: ['p1'], check: 'Stealth', dc: 15, success: 'In', failure: 'Seen', tiers: [{ label: 'Ghost', dc: 20 }] },
+      { id: 'a2', title: 'No check', players: ['p1'] },
+    ],
+  });
+  const [a1, a2] = old.activities;
+  check('a plan from before several checks keeps its check as the first',
+    a1.checks.map(c => [c.id, c.check, c.dc, c.success, c.failure, c.tiers.map(t => t.label)]),
+    [['c1', 'Stealth', 15, 'In', 'Seen', ['Ghost']]]);
+  check('and the old fields do not stay beside it', ['check', 'dc', 'success', 'failure', 'tiers'].filter(k => k in a1), []);
+  check('an activity that never had a check has none', a2.checks, []);
+  check('a new activity starts with one empty check', addActivity(blankPlan(), {}).activity.checks.map(c => [c.id, c.check, c.dc]), [['c1', '', null]]);
+
+  const second = addCheck(a1);
+  check('another check starts with the last one\'s DC and outcomes, unnamed',
+    [second.id, second.check, second.dc, second.success, second.failure, second.tiers.map(t => t.label)],
+    ['c2', '', 15, 'In', 'Seen', ['Ghost']]);
+  second.check = 'Bluff';
+  second.dc = 18;
+  check('and is a copy, not the same check', a1.checks[0].dc, 15);
+  check('checks read as one line, each with its DC', checkLabel(a1), 'Stealth DC 15 or Bluff DC 18');
+  check('a check with no name and no DC is left out of it', checkLabel({ checks: [{ check: '', dc: null }, { check: 'Climb', dc: null }] }), 'Climb');
+  check('each check has its own outcome', [outcome(a1.checks[0], 16).tier.label, outcome(a1.checks[1], 16).failure], ['Success', true]);
+  check('suggestions come from every check', checkNames(old), ['Bluff', 'Stealth']);
+
+  const repeated = normalizePlan({ players: [{ id: 'p1' }], activities: [{ id: 'a1', players: ['p1'], checks: [{ id: 'c1', check: 'A' }, { id: 'c1', check: 'B' }, 'junk'] }] });
+  check('repeated check ids get fresh ones', repeated.activities[0].checks.map(c => [c.id, c.check]), [['c1', 'A'], ['c2', 'B'], ['c3', '']]);
+
+  removeCheck(a1, 'c1');
+  check('a check can be removed', a1.checks.map(c => c.check), ['Bluff']);
+  check('the player view names every check, nothing more', playerView({ ...old, activities: [{ ...a1, start: 0, checks: [...a1.checks, { ...a1.checks[0], id: 'c9', check: '' }] }] })
+    .activities[0].checks, [{ check: 'Bluff' }]);
+}
+
 // ---- Checks and tiers --------------------------------------------------------
 
 {
@@ -309,8 +348,8 @@ function secretPlan() {
   const view = playerView(secretPlan());
   const text = JSON.stringify(view);
   check('the player view leaves out every GM field', [text.includes('SECRET'), text.includes('1777'), text.includes('1888')], [false, false, false]);
-  check('and keeps the timeline', view.activities.map(a => [a.title, a.start, a.duration, a.players, a.check]),
-    [['Pick the lock', 0, 5, ['p1', 'p2'], 'Disable Device']]);
+  check('and keeps the timeline', view.activities.map(a => [a.title, a.start, a.duration, a.players, a.checks]),
+    [['Pick the lock', 0, 5, ['p1', 'p2'], [{ check: 'Disable Device' }]]]);
   check('players keep their colours and get a name when they have none', view.players.map(p => [p.name, !!p.color]),
     [['Ana', true], ['Player 2', true]]);
   check('the session times come through', [view.title, view.length, view.startsAt], ['Open night', 240, '']);
@@ -522,7 +561,7 @@ try {
     const exported = JSON.parse(fs.readFileSync(path.join(tmp, 'plans', 'contract.json'), 'utf8'));
     const into = browserStore({ factory: fakeIndexedDb() });
     check('a plan file imports into the browser store as it is',
-      [(await into.create('from-file', exported)).ok, (await into.read('from-file')).plan.activities[0].dc], [true, 1999]);
+      [(await into.create('from-file', exported)).ok, (await into.read('from-file')).plan.activities[0].checks[0].dc], [true, 1999]);
   } finally {
     server.kill();
   }

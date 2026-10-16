@@ -105,10 +105,12 @@ one lane per player:
 - Activities not on the timeline wait in the Unscheduled tray. Drag one onto a
   lane to place it (the lane's player joins it), or drag a block onto the tray
   to take it off.
-- Clicking a block opens it: title, players, start and duration, premise,
-  required check and DC, the reward on success, further success tiers (each
-  with its own DC and reward), and what happens on failure. A test box shows
-  which tier a check total reaches.
+- Clicking a block opens it: title, players, start and duration, premise, and
+  its checks. Each check is one way to try the activity, with its own DC, reward
+  on success, further success tiers (each with its own DC and reward) and what
+  happens on failure. **Add another check** starts a new one with the last one's
+  DC and outcomes, to change what differs. A test box shows which tier a check
+  total reaches on the chosen check.
 - Double-click a lane to add an activity there. Arrow keys move a focused block
   (Shift changes its duration; up and down move it to the next lane); Delete
   removes it; Ctrl+Z undoes.
@@ -123,8 +125,8 @@ everywhere; Undo brings it back.
 
 **Player view.** The Player view button opens `players.html#<plan>`: the same
 timeline, read-only, for a second screen or a screen share. It shows each
-scheduled activity's title, time, duration and players, and the required check
-when its Show checks box is ticked. It only ever gets a plan as `playerView` in
+scheduled activity's title, time, duration and players, and the names of its
+checks when its Show checks box is ticked ("Stealth or Bluff"). It only ever gets a plan as `playerView` in
 plan.js makes it, from a list of the fields players may see: DCs, rewards,
 success tiers, premises, NPCs and unscheduled activities are left out. It asks
 for changes every second, so it follows the GM page's edits about a second
@@ -151,10 +153,11 @@ deletes. A new plan starts with the open plan's players and NPCs.
 
 Plan shape: `title`, `startsAt` ("19:00" or ""), `length` and `snap` in minutes,
 `players` (`id/name/color`), `npcs` (`id/name/role/description/notes`),
-`activities` (`id/title/start/duration/players/maxPlayers/npcs`, `premise`, `check`, `dc`,
-`success`, `failure`, `tiers: [{id, label, dc, reward}]`). `start` is minutes
-from the start of the session, null when unscheduled. Other fields are kept as
-they are.
+`activities` (`id/title/start/duration/players/maxPlayers/npcs`, `premise`,
+`checks: [{id, check, dc, success, failure, tiers: [{id, label, dc, reward}]}]`).
+`start` is minutes from the start of the session, null when unscheduled. Other
+fields are kept as they are. A plan from before several checks, with `check`,
+`dc`, `success`, `failure` and `tiers` on the activity, reads as one check.
 
 ## Dice
 

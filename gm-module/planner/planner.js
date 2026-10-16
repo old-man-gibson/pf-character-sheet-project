@@ -12,10 +12,10 @@
 // with the focused control put back afterwards; a drag draws only its preview.
 
 import {
-  SNAPS, addActivity, addNpc, addPlayer, allClashes, checkNames, clashText, clashes, clock,
+  SNAPS, addActivity, addCheck, addNpc, addPlayer, allClashes, checkNames, clashText, clashes, clock,
   deleteActivity, duplicateActivity, end, firstFree, freeName, ladder, limitText, minutesText, nameFrom,
   newId, newPlan, normalizePlan, npcActivities, npcClashes, npcName, outcome, overLimit, overfills,
-  placesText, playerLoad, playerName, removeNpc, removePlayer, snapTo, span, updateActivity, whole,
+  placesText, playerLoad, playerName, removeCheck, removeNpc, removePlayer, snapTo, span, updateActivity, whole,
 } from './plan.js';
 import { openStore } from './stores.js';
 import { downloadFile } from '../../app/js/download.js';
@@ -53,6 +53,7 @@ const S = {
   npcPanel: null,      // with no activity open: 'list' for the NPC list, or an NPC's id
   editingPlayer: null, // id of the player whose name cell is a form
   testRoll: '',        // the editor's "test a result" box
+  testCheck: null,     // which of the activity's checks it tests (null: the first)
   zoom: zoomPref('gm-planner:zoom'),
   undo: [],
 };
@@ -384,15 +385,55 @@ function renderTray() {
   el.checks.innerHTML = checkNames(S.plan).map(c => `<option value="${esc(c)}"></option>`).join('');
 }
 
-function tierHtml(t) {
-  const k = esc(t.id);
-  return `<div class="tier" data-tier="${k}">
+function tierHtml(t, checkId) {
+  const k = `${esc(checkId)}:${esc(t.id)}`;
+  return `<div class="tier" data-tier="${esc(t.id)}">
     <input data-tf="label" data-key="tier:${k}:label" value="${esc(t.label)}" placeholder="Tier name" aria-label="Tier name">
     <input type="number" data-tf="dc" data-key="tier:${k}:dc" value="${t.dc ?? ''}" placeholder="DC" aria-label="Tier DC">
     <button type="button" class="icon" data-act="remove-tier" aria-label="Remove tier">×</button>
     <textarea data-tf="reward" data-key="tier:${k}:reward" rows="2" placeholder="Reward" aria-label="Tier reward">${esc(t.reward)}</textarea>
   </div>`;
 }
+
+// One way to try the activity: the check, its DC, its outcomes. With several,
+// each is a numbered card and can be removed.
+function checkHtml(c, i, many) {
+  const k = esc(c.id);
+  const n = i + 1;
+  return `<div class="check-card${many ? ' boxed' : ''}" data-check="${k}">
+    ${many ? `<div class="check-head"><h3>Check ${n}</h3>
+      <button type="button" class="icon" data-act="remove-check" aria-label="Remove check ${n}">×</button></div>` : ''}
+    <div class="ed-check">
+      <label class="field grow">${many ? 'Check' : 'Required check'} <input data-cf="check" data-key="c:${k}:check" list="checks"
+        value="${esc(c.check)}" placeholder="Skill or ability" aria-label="${many ? `Check ${n}` : 'Required check'}"></label>
+      <label class="field dc">DC <input type="number" data-cf="dc" data-key="c:${k}:dc" value="${c.dc ?? ''}" aria-label="DC${many ? ` for check ${n}` : ''}"></label>
+    </div>
+    <label class="field">On success
+      <textarea data-cf="success" data-key="c:${k}:success" rows="2" placeholder="Reward for meeting the DC">${esc(c.success)}</textarea></label>
+    <div class="ed-tiers">
+      <h4>Further success tiers</h4>
+      ${i === 0 ? '<p class="dim small">Each tier has its own DC and reward. A result earns the highest tier whose DC it meets.</p>' : ''}
+      ${c.tiers.map(t => tierHtml(t, c.id)).join('')}
+      <button type="button" data-act="add-tier" data-key="c:${k}:add-tier">Add tier</button>
+    </div>
+    <label class="field">On failure
+      <textarea data-cf="failure" data-key="c:${k}:failure" rows="2" placeholder="What happens below every DC">${esc(c.failure)}</textarea></label>
+  </div>`;
+}
+
+function checksHtml(a) {
+  const many = a.checks.length > 1;
+  const cards = a.checks.map((c, i) => checkHtml(c, i, many)).join(many ? '<p class="check-or">or</p>' : '');
+  return `<section class="ed-checks">
+    ${cards || '<p class="dim small">No check: nothing to roll.</p>'}
+    <button type="button" data-act="add-check" data-key="add-check"
+      title="Another way to try this, with its own DC and outcomes">${a.checks.length ? 'Add another check' : 'Add a check'}</button>
+  </section>`;
+}
+
+// The check the outcome tester is on.
+const testedCheck = a => a.checks.find(c => c.id === S.testCheck) ?? a.checks[0] ?? null;
+const checkOf = (a, el) => a.checks.find(c => c.id === el.closest('.check-card')?.dataset.check) ?? null;
 
 // The side panel: the open activity's editor, or else the NPC list or an NPC.
 function renderEditor() {
@@ -534,22 +575,12 @@ function renderActivityEditor(a) {
       </div>
       <label class="field">Premise
         <textarea data-f="premise" data-key="f:premise" rows="4" placeholder="What the player wants to do, and what stands in the way">${esc(a.premise)}</textarea></label>
-      <div class="ed-check">
-        <label class="field grow">Required check <input data-f="check" data-key="f:check" aria-label="Required check" list="checks" value="${esc(a.check)}" placeholder="Skill or ability"></label>
-        <label class="field dc">DC <input type="number" data-f="dc" data-key="f:dc" aria-label="DC" value="${a.dc ?? ''}"></label>
-      </div>
-      <label class="field">On success
-        <textarea data-f="success" data-key="f:success" rows="2" placeholder="Reward for meeting the DC">${esc(a.success)}</textarea></label>
-      <section class="ed-tiers">
-        <h3>Further success tiers</h3>
-        <p class="dim small">Each tier has its own DC and reward. A result earns the highest tier whose DC it meets.</p>
-        ${a.tiers.map(tierHtml).join('')}
-        <button type="button" data-act="add-tier" data-key="add-tier">Add tier</button>
-      </section>
-      <label class="field">On failure
-        <textarea data-f="failure" data-key="f:failure" rows="2" placeholder="What happens below every DC">${esc(a.failure)}</textarea></label>
+      ${checksHtml(a)}
       <section class="ed-test">
         <h3>Outcomes</h3>
+        ${a.checks.length > 1 ? `<label class="field">Check <select id="test-check" data-key="test-check">
+          ${a.checks.map((c, i) => `<option value="${esc(c.id)}"${c.id === testedCheck(a)?.id ? ' selected' : ''}>${i + 1}. ${esc(c.check.trim() || 'Unnamed check')}</option>`).join('')}
+        </select></label>` : ''}
         <label class="field">Test a result <input type="number" id="test-roll" data-key="test" value="${esc(S.testRoll)}" placeholder="Check total"></label>
         <div id="test-out"></div>
       </section>
@@ -561,16 +592,18 @@ function renderActivityEditor(a) {
   renderOutcomes();
 }
 
-// The editor's ladder: failure, success and each tier with its reward, the
-// tested result's step marked.
+// The editor's ladder for the tested check: failure, success and each tier
+// with its reward, the tested result's step marked.
 function renderOutcomes() {
   const box = $('#test-out');
   const a = selectedActivity();
   if (!box || !a) return;
-  const steps = ladder(a);
+  const c = testedCheck(a);
+  if (!c) { box.innerHTML = '<p class="dim small">Add a check to see its outcomes.</p>'; return; }
+  const steps = ladder(c);
   if (!steps.length) { box.innerHTML = '<p class="dim small">Set a DC to see the outcomes.</p>'; return; }
   const total = S.testRoll === '' ? NaN : Number(S.testRoll);
-  const r = outcome(a, total);
+  const r = outcome(c, total);
   const row = (cls, dc, name, reward, hit) => `<li class="${cls}${hit ? ' hit' : ''}"><span class="l-dc">${esc(dc)}</span>
     <span class="l-name">${esc(name)}</span>${reward.trim() ? `<span class="l-reward">${esc(reward)}</span>` : ''}</li>`;
   let line = '';
@@ -580,7 +613,7 @@ function renderOutcomes() {
       : `${total} reaches ${r.tier.label} (DC ${r.tier.dc}).` + (r.next ? ` ${r.next.dc - total} more for ${r.next.label} (DC ${r.next.dc}).` : '');
   }
   box.innerHTML = `<ol class="ladder">
-      ${row('fail', `below ${steps[0].dc}`, 'Failure', a.failure, r?.failure)}
+      ${row('fail', `below ${steps[0].dc}`, 'Failure', c.failure, r?.failure)}
       ${steps.map(t => row('', `DC ${t.dc}`, t.label, t.reward, r && !r.failure && r.tier.id === t.id)).join('')}
     </ol>${line ? `<p class="test-line">${esc(line)}</p>` : ''}`;
 }
@@ -588,7 +621,7 @@ function renderOutcomes() {
 // ---- Selecting and editing ---------------------------------------------------
 
 function select(id) {
-  if (S.selected !== id) S.testRoll = '';
+  if (S.selected !== id) { S.testRoll = ''; S.testCheck = null; }
   S.selected = id;
   S.npcPanel = null;
   renderBar();
@@ -999,22 +1032,38 @@ document.addEventListener('click', e => {
     edit(plan => updateActivity(plan, a.id, { npcs: a.npcs.filter(n => n !== button.dataset.npc) }));
     renderAll();
   } else if (act === 'add-tier') {
-    const top = Math.max(-Infinity, a.dc ?? -Infinity, ...a.tiers.map(t => t.dc ?? -Infinity));
-    const id = newId(a.tiers, 't');
-    edit(() => { a.tiers.push({ id, label: '', dc: Number.isFinite(top) ? top + 5 : null, reward: '' }); });
+    const c = checkOf(a, button);
+    const top = Math.max(-Infinity, c.dc ?? -Infinity, ...c.tiers.map(t => t.dc ?? -Infinity));
+    const id = newId(c.tiers, 't');
+    edit(() => { c.tiers.push({ id, label: '', dc: Number.isFinite(top) ? top + 5 : null, reward: '' }); });
     renderEditor();
-    el.editor.querySelector(attrSel('data-key', `tier:${id}:label`))?.focus();
+    el.editor.querySelector(attrSel('data-key', `tier:${c.id}:${id}:label`))?.focus();
   } else if (act === 'remove-tier') {
+    const c = checkOf(a, button);
     const id = button.closest('.tier').dataset.tier;
-    edit(() => { a.tiers = a.tiers.filter(t => t.id !== id); });
+    edit(() => { c.tiers = c.tiers.filter(t => t.id !== id); });
     renderEditor();
     renderTimeline();
+  } else if (act === 'add-check') {
+    let added = null;
+    edit(() => { added = addCheck(a); });
+    S.testCheck = added.id;
+    renderEditor();
+    renderTimeline();
+    renderTray();
+    el.editor.querySelector(attrSel('data-key', `c:${added.id}:check`))?.focus();
+  } else if (act === 'remove-check') {
+    const c = checkOf(a, button);
+    edit(() => { removeCheck(a, c.id); });
+    renderEditor();
+    renderTimeline();
+    renderTray();
   }
 });
 
 // ---- Fields ------------------------------------------------------------------------
 
-const TEXT_FIELDS = ['title', 'premise', 'check', 'success', 'failure'];
+const TEXT_FIELDS = ['title', 'premise'];
 
 el.editor.addEventListener('input', e => {
   const t = e.target;
@@ -1032,16 +1081,24 @@ el.editor.addEventListener('input', e => {
     return;
   }
   const f = t.dataset.f;
+  const c = checkOf(a, t);
   if (TEXT_FIELDS.includes(f)) typed(() => { a[f] = t.value; });
-  else if (f === 'dc') typed(() => { a.dc = whole(t.value, null); });
-  else if (t.dataset.tf) {
-    const tier = a.tiers.find(x => x.id === t.closest('.tier').dataset.tier);
+  else if (c && t.dataset.cf) {
+    const cf = t.dataset.cf;
+    typed(() => { c[cf] = cf === 'dc' ? whole(t.value, null) : t.value; });
+  } else if (c && t.dataset.tf) {
+    const tier = c.tiers.find(x => x.id === t.closest('.tier').dataset.tier);
     const tf = t.dataset.tf;
     typed(() => { tier[tf] = tf === 'dc' ? whole(t.value, null) : t.value; });
   } else return;
   renderTimeline();
   renderTray();
   renderOutcomes();
+  // The tester's list names the checks.
+  if (t.dataset.cf === 'check') {
+    const option = el.editor.querySelector(`#test-check option${attrSel('value', c.id)}`);
+    if (option) option.textContent = `${a.checks.indexOf(c) + 1}. ${c.check.trim() || 'Unnamed check'}`;
+  }
 });
 
 el.editor.addEventListener('change', e => {
@@ -1055,7 +1112,10 @@ el.editor.addEventListener('change', e => {
   }
   const a = selectedActivity();
   if (!a) return;
-  if (t.id === 'link-npc') {
+  if (t.id === 'test-check') {
+    S.testCheck = t.value;
+    renderOutcomes();
+  } else if (t.id === 'link-npc') {
     if (t.selectedOptions[0]?.dataset.new) newNpc(a);
     else if (t.value) {
       edit(plan => updateActivity(plan, a.id, { npcs: [...a.npcs, t.value] }));
