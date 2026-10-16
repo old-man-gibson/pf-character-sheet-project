@@ -111,6 +111,11 @@ one lane per player:
   happens on failure. **Add another check** starts a new one with the last one's
   DC and outcomes, to change what differs. A test box shows which tier a check
   total reaches on the chosen check.
+- The **World** row above the players holds world events: things that happen
+  at their time whoever is there (a patrol passes, a bell rings). Double-click
+  it to add one, or tick *World event* in an activity. An event has no players,
+  so it books nobody, and it is not in the player view; it can have checks, a
+  result and links like any activity.
 - Double-click a lane to add an activity there. Arrow keys move a focused block
   (Shift changes its duration; up and down move it to the next lane); Delete
   removes it; Ctrl+Z undoes.
@@ -145,6 +150,28 @@ activities they reach show it in their state. Deleting an activity, check, tier
 or note takes the results, notes and links that named it with it (Undo brings
 them back).
 
+**Characters and odds.** The activity editor's Characters section links each
+player to a character from the character sheet in this browser (the planner is
+served from the same site, so it can read the sheet's characters; it never
+writes them). Under each check it then shows each linked player's bonus and
+their chance of each step on a d20, read through the sheet's own roll code so
+conditions count. Checks are matched by name: skills (Knowledge either way it
+is written), saves, initiative, and ability checks by their exact name. A save
+fails on a 1 and succeeds on a 20; a trained-only skill with no ranks is
+flagged.
+
+**Library.** *Save to library* keeps an activity, with its checks, tiers and
+outcomes, for any session; the tray's *Library* button lists them and adds a
+copy to the plan. New plan can also *bring over what was not played*: copies of
+the open plan's activities without a result, in the new plan's tray.
+
+**Recap and run sheet.** *Recap* gathers what the session came to from the
+results: what each activity came to, the rewards earned and by whom, what did
+not happen and why, and the notes that happened; *Download .md* or *Copy* it
+for the campaign log (notes can be left out). *Run sheet* opens the session in
+time order, with every check, DC, tier, reward, failure, NPC, link and note,
+to read at the table or print.
+
 **Player view.** The Player view button opens `players.html#<plan>`: the same
 timeline, read-only, for a second screen or a screen share. It shows each
 scheduled activity's title, time, duration and players, and the names of its
@@ -159,7 +186,7 @@ after they are saved.
 
 - *Files*, when the sheet runs on this computer with `node tools/serve.mjs`:
   `<name>.json` in `gm-module/plans/` (git-ignored) or the `--gm-data` folder's
-  `plans/`. A file can be edited while the page is open: the page reloads it
+  `plans/`, with the activity library as `_library.json` beside them. A file can be edited while the page is open: the page reloads it
   within a couple of seconds, and never writes over a change it has not seen
   (it loads the newer copy and keeps its own for Undo). A hand edit that books a
   player twice is flagged on the page. The player view's data is built on the
@@ -175,8 +202,8 @@ the two, or between computers. **Delete plan** asks once more before it
 deletes. A new plan starts with the open plan's players and NPCs.
 
 Plan shape: `title`, `startsAt` ("19:00" or ""), `length` and `snap` in minutes,
-`players` (`id/name/color`), `npcs` (`id/name/role/description/notes`),
-`activities` (`id/title/start/duration/players/maxPlayers/npcs`, `premise`,
+`players` (`id/name/color/character`), `npcs` (`id/name/role/description/notes`),
+`activities` (`id/title/start/duration/event/players/maxPlayers/npcs`, `premise`,
 `checks: [{id, check, dc, success, failure, tiers: [{id, label, dc, reward}]}]`,
 `result`: null or `{check, outcome}` with outcome `done`/`failure`/`success`/a tier id),
 `notes` (`id/text/about/happened`) and `links` (`id/from/to/kind`, kind `leads` or
