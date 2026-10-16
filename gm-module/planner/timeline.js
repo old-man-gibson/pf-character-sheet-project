@@ -76,17 +76,25 @@ export function trackHtml(plan, L, blocks) {
 // and a data-key to put focus back after a redraw. `showCheck: false` leaves
 // the check out. Linked NPCs are named in the tooltip when the plan has them
 // (the player view's does not).
-export function blockHtml(plan, a, lane, L, { selected = false, clash = false, marked = false, editable = false, showCheck = true } = {}) {
+//
+// The GM page also passes how the links into it stand: `state` ('blocked',
+// 'waiting', 'open' or 'free'), `done` (a result is recorded) and `because`
+// (tooltip lines saying why).
+export function blockHtml(plan, a, lane, L, {
+  selected = false, clash = false, marked = false, editable = false, showCheck = true,
+  state = 'free', done = false, because = [],
+} = {}) {
   const others = a.players.filter(p => p !== lane).map(p => playerName(plan, p));
   const withText = lane ? (others.length ? `with ${others.join(', ')}` : '') : (others.join(', ') || 'No players yet');
   const when = a.start == null ? 'Not scheduled' : `${clock(a.start, plan.startsAt)}–${clock(end(a), plan.startsAt)}`;
   const check = showCheck ? checkLabel(a) : '';
   const npcs = plan.npcs && a.npcs?.length ? `NPCs: ${a.npcs.map(n => npcName(plan, n)).join(', ')}` : '';
   const places = placesText(a);
-  const tip = [a.title.trim() || 'Untitled', `${when} · ${minutesText(a.duration)}`, places, check, withText, npcs].filter(Boolean).join('\n');
+  const tip = [a.title.trim() || 'Untitled', `${when} · ${minutesText(a.duration)}`, places, check, withText, npcs, ...because].filter(Boolean).join('\n');
   const width = a.duration * L.px;
   const classes = ['block', lane ? '' : 'chip', editable ? '' : 'static', selected ? 'selected' : '',
-    lane && width < 64 ? 'narrow' : '', clash ? 'clash' : '', marked ? 'marked' : ''];
+    lane && width < 64 ? 'narrow' : '', clash ? 'clash' : '', marked ? 'marked' : '',
+    state === 'blocked' || state === 'waiting' ? state : '', done ? 'done' : ''];
   const style = `--hue:${hue(a.id)}` + (lane ? `;left:${a.start * L.px}px;width:${width}px` : '');
   const focus = editable
     ? ` data-key="${esc(`b:${a.id}:${lane ?? ''}`)}" tabindex="0" role="button" aria-label="${esc(tip.replace(/\n/g, ', '))}"`

@@ -12,7 +12,9 @@
 // with the focused control put back afterwards; a drag draws only its preview.
 
 import {
-  SNAPS, addActivity, addCheck, addNpc, addPlayer, allClashes, checkNames, clashText, clashes, clock,
+  LINK_KINDS, SNAPS, activityState, addActivity, addCheck, addLink, addNote, addNpc, addPlayer, allClashes,
+  checkNames, clashText, clashes, clock, noteTitle, outcomeChoices, pruneRefs, refHappened, refKey, refText,
+  removeLink, removeNote, resultText,
   deleteActivity, duplicateActivity, end, firstFree, freeName, ladder, limitText, minutesText, nameFrom,
   newId, newPlan, normalizePlan, npcActivities, npcClashes, npcName, outcome, overLimit, overfills,
   placesText, playerLoad, playerName, removeCheck, removeNpc, removePlayer, snapTo, span, updateActivity, whole,
@@ -37,7 +39,7 @@ const el = {
   clashNote: $('#clash-note'), wrap: $('#timeline-wrap'), timeline: $('#timeline'),
   tray: $('#tray'), editor: $('#editor'), checks: $('#checks'), tip: $('#drag-tip'),
   notice: $('#notice'), offline: $('#offline'), offlineText: $('#offline-text'), main: $('#main'),
-  playerLink: $('#player-link'), npcs: $('#npcs'), where: $('#where'),
+  playerLink: $('#player-link'), npcs: $('#npcs'), notes: $('#notes'), where: $('#where'),
   exportPlan: $('#export-plan'), importPlan: $('#import-plan'), importFile: $('#import-file'),
   deletePlan: $('#delete-plan'),
 };
@@ -50,7 +52,8 @@ const S = {
   plan: null,
   plans: [],           // [{ name, title }] in the folder
   selected: null,      // id of the activity open in the editor
-  npcPanel: null,      // with no activity open: 'list' for the NPC list, or an NPC's id
+  side: null,          // with no activity open, the side panel's other view:
+                       // { kind: 'npcs' | 'notes' } or { kind: 'npc' | 'note', id }
   editingPlayer: null, // id of the player whose name cell is a form
   testRoll: '',        // the editor's "test a result" box
   testCheck: null,     // which of the activity's checks it tests (null: the first)
@@ -62,12 +65,16 @@ const ppm = () => ZOOMS[S.zoom];
 const find = id => S.plan?.activities.find(a => a.id === id) ?? null;
 const selectedActivity = () => find(S.selected);
 const findNpc = id => S.plan?.npcs.find(n => n.id === id) ?? null;
-const openNpc = () => findNpc(S.npcPanel);
+const findNote = id => S.plan?.notes.find(n => n.id === id) ?? null;
+const sideIs = (...kinds) => !S.selected && kinds.includes(S.side?.kind);
+const openNpc = () => (sideIs('npc') ? findNpc(S.side.id) : null);
+const openNote = () => (sideIs('note') ? findNote(S.side.id) : null);
 
-// After an undo or a reload, an open NPC that is gone falls back to the list.
+// After an undo or a reload, an open NPC or note that is gone falls back to its list.
 function settlePanels() {
   if (!find(S.selected)) S.selected = null;
-  if (S.npcPanel && S.npcPanel !== 'list' && !openNpc()) S.npcPanel = 'list';
+  if (S.side?.kind === 'npc' && !findNpc(S.side.id)) S.side = { kind: 'npcs' };
+  if (S.side?.kind === 'note' && !findNote(S.side.id)) S.side = { kind: 'notes' };
   if (!S.plan.players.some(p => p.id === S.editingPlayer)) S.editingPlayer = null;
 }
 
@@ -115,6 +122,9 @@ function typed(fn) {
 function edit(fn) {
   const before = JSON.stringify(S.plan);
   const out = fn(S.plan);
+  // Whatever the change took away (an activity, a check, a tier, a note), the
+  // results, notes and links that named it go with it, in the same undo step.
+  pruneRefs(S.plan);
   if (out && out.ok === false) {
     if (out.full) notice(limitText(out.activity, out.before), 'warn');
     else if (out.clashes?.length) notice(clashText(S.plan, out.clashes), 'warn');
@@ -220,7 +230,7 @@ async function openPlan(name, loaded = null) {
   S.v = out.v;
   S.plan = out.plan;
   S.selected = null;
-  S.npcPanel = null;
+  S.side = null;
   S.editingPlayer = null;
   S.undo = [];
   el.undo.disabled = true;
@@ -303,7 +313,9 @@ function renderBar() {
     ? `Saved as .json files in ${store.where}`
     : 'Saved in this browser only, apart from the characters. Export a plan to keep a copy or move it to another computer.';
   el.npcs.textContent = plan.npcs.length ? `NPCs (${plan.npcs.length})` : 'NPCs';
-  el.npcs.setAttribute('aria-pressed', String(!S.selected && !!S.npcPanel));
+  el.npcs.setAttribute('aria-pressed', String(sideIs('npcs', 'npc')));
+  el.notes.textContent = plan.notes.length ? `Notes (${plan.notes.length})` : 'Notes';
+  el.notes.setAttribute('aria-pressed', String(sideIs('notes', 'note')));
   document.title = `${plan.title.trim() || S.name} · Session Planner`;
 }
 
@@ -331,15 +343,17 @@ function renderTimeline() {
   const L = layout(plan, ppm());
   // Booked twice, or over its player limit: only a hand-edited file can be.
   const clashing = new Set([...allClashes(plan).flatMap(c => [c.a.id, c.b.id]), ...plan.activities.filter(overLimit).map(a => a.id)]);
-  // With an NPC open, the activities it is linked to stand out.
-  const npc = !S.selected && openNpc();
-  const marked = new Set(npc ? npcActivities(plan, npc.id).map(a => a.id) : []);
+  // With an NPC or a note open, the activities it is linked to stand out.
+  const npc = openNpc();
+  const note = openNote();
+  const marked = new Set(npc ? npcActivities(plan, npc.id).map(a => a.id)
+    : note ? [note.about?.activity, ...plan.links.filter(l => l.from.note === note.id).map(l => l.to)].filter(Boolean) : []);
 
   const lanes = plan.players.map((p, i) => {
     const blocks = plan.activities
       .filter(a => a.start != null && a.players.includes(p.id))
       .map(a => blockHtml(plan, a, p.id, L, {
-        selected: a.id === S.selected, clash: clashing.has(a.id), marked: marked.has(a.id), editable: true,
+        selected: a.id === S.selected, clash: clashing.has(a.id), marked: marked.has(a.id), editable: true, ...linkState(a),
       }))
       .join('');
     return `<div class="row lane" data-player="${esc(p.id)}" style="--pc:${esc(p.color)}">
@@ -354,6 +368,7 @@ function renderTimeline() {
       ${lanes || '<p class="empty-lanes">Add a player to get a lane on the timeline.</p>'}
       <div class="row add-row"><div class="who"><button type="button" data-act="add-player" data-key="add-player">Add player</button></div></div>`;
   });
+  drawLinks();
 
   const found = allClashes(plan);
   const over = plan.activities.filter(overLimit);
@@ -378,7 +393,7 @@ function renderTray() {
         <button type="button" data-act="new-activity" data-key="new-activity">New activity</button>
       </header>
       <div class="tray-items">
-        ${waiting.map(a => blockHtml(S.plan, a, null, layout(S.plan, ppm()), { selected: a.id === S.selected, editable: true })).join('') || '<p class="empty">Drop a block here to take it off the timeline.</p>'}
+        ${waiting.map(a => blockHtml(S.plan, a, null, layout(S.plan, ppm()), { selected: a.id === S.selected, editable: true, ...linkState(a) })).join('') || '<p class="empty">Drop a block here to take it off the timeline.</p>'}
       </div>
       <p class="hint">Drag a block to move it, or onto another player's lane to hand it to them. Drag its right edge to change how long it takes. Double-click a lane to add an activity there. Click a block to edit it.</p>`;
   });
@@ -435,15 +450,208 @@ function checksHtml(a) {
 const testedCheck = a => a.checks.find(c => c.id === S.testCheck) ?? a.checks[0] ?? null;
 const checkOf = (a, el) => a.checks.find(c => c.id === el.closest('.check-card')?.dataset.check) ?? null;
 
-// The side panel: the open activity's editor, or else the NPC list or an NPC.
+// The side panel: the open activity's editor, or else the NPC list, an NPC,
+// the notes or a note.
 function renderEditor() {
   const a = selectedActivity();
-  const npcs = !a && (S.npcPanel === 'list' || !!openNpc());
-  el.editor.hidden = !a && !npcs;
-  el.editor.setAttribute('aria-label', a ? 'Activity' : 'NPCs');
-  if (a) renderActivityEditor(a);
-  else if (npcs) keepFocus(el.editor, () => { el.editor.innerHTML = openNpc() ? npcEditorHtml(openNpc()) : npcListHtml(); });
-  else el.editor.innerHTML = '';
+  const kind = a ? 'activity' : S.side?.kind ?? null;
+  el.editor.hidden = !kind;
+  el.editor.setAttribute('aria-label', { activity: 'Activity', npcs: 'NPCs', npc: 'NPC', notes: 'Notes', note: 'Note' }[kind] ?? '');
+  if (a) return renderActivityEditor(a);
+  const html = {
+    npcs: () => npcListHtml(),
+    npc: () => npcEditorHtml(openNpc()),
+    notes: () => noteListHtml(),
+    note: () => noteEditorHtml(openNote()),
+  }[kind];
+  keepFocus(el.editor, () => { el.editor.innerHTML = html ? html() : ''; });
+}
+
+// ---- Notes, links and what happened -------------------------------------------
+
+const refValue = ref => esc(JSON.stringify(ref));
+const readRef = value => { try { return value ? JSON.parse(value) : null; } catch { return null; } };
+const KIND_TEXT = { leads: 'leads to', blocks: 'blocks' };
+
+// What a block says about the links into it, for blockHtml: the state class,
+// and the lines its tooltip adds.
+function linkState(a) {
+  const plan = S.plan;
+  const { state, blockedBy, openedBy, leads } = activityState(plan, a.id);
+  const lines = [];
+  const done = resultText(a);
+  if (done) lines.push(`What happened: ${done}`);
+  if (state === 'blocked') lines.push(`Blocked by ${blockedBy.map(l => refText(plan, l.from)).join(', ')}`);
+  else if (state === 'waiting') lines.push(`Waits for ${leads.map(l => refText(plan, l.from)).join(' or ')}`);
+  else if (state === 'open') lines.push(`Opened by ${openedBy.map(l => refText(plan, l.from)).join(', ')}`);
+  return { state, done: !!done, because: lines };
+}
+
+// The other activities, scheduled first in time order, as <option>s.
+function activityOptions(exceptId, chosen = '') {
+  return byTime(S.plan.activities.filter(x => x.id !== exceptId)).map(x =>
+    `<option value="${esc(x.id)}"${x.id === chosen ? ' selected' : ''}>${esc(titleOf(x))}${x.start == null ? ' · unscheduled' : ` · ${esc(whenText(x))}`}</option>`).join('');
+}
+
+// One line of a link list: "Leads to “B”, when “A”: Failure  ×". `side` says
+// which end to name: 'to' in the source's list, 'from' in the target's.
+function linkRowHtml(link, side) {
+  const plan = S.plan;
+  const other = side === 'to'
+    ? `<button type="button" class="npc-act" data-act="open-activity" data-id="${esc(link.to)}">${esc(refText(plan, { activity: link.to }))}</button>`
+    : link.from.note !== undefined
+      ? `<button type="button" class="npc-act" data-act="open-note" data-note="${esc(link.from.note)}">${esc(refText(plan, link.from))}</button>`
+      : `<button type="button" class="npc-act" data-act="open-activity" data-id="${esc(link.from.activity)}">${esc(refText(plan, link.from))}</button>`;
+  const verb = side === 'to' ? { leads: 'Leads to', blocks: 'Blocks' }[link.kind] : { leads: 'Opened by', blocks: 'Blocked by' }[link.kind];
+  const when = side === 'to' && link.from.check ? `<span class="dim small">when ${esc(refText(plan, link.from).replace(/^“[^”]*”: /, ''))}</span>` : '';
+  const live = refHappened(plan, link.from);
+  return `<li class="${link.kind}${live ? ' live' : ''}"><span class="lk">${verb}</span>${other}${when}
+    <span class="dim small">${live ? 'in effect' : ''}</span>
+    <button type="button" class="icon" data-act="remove-link" data-link="${esc(link.id)}" aria-label="Remove link">×</button></li>`;
+}
+
+// The activity editor's "what happened", its links, and the notes about it.
+function activityPlayHtml(a) {
+  const plan = S.plan;
+  const r = a.result;
+  const resultValue = !r ? '' : r.outcome === 'done' ? 'done' : JSON.stringify({ check: r.check, outcome: r.outcome });
+  const results = [
+    `<option value=""${!r ? ' selected' : ''}>Not yet</option>`,
+    `<option value="done"${resultValue === 'done' ? ' selected' : ''}>Done</option>`,
+    ...outcomeChoices(a).map(o => {
+      const v = JSON.stringify({ check: o.check, outcome: o.outcome });
+      return `<option value="${esc(v)}"${v === resultValue ? ' selected' : ''}>${esc(o.label)}</option>`;
+    }),
+  ].join('');
+  const { state } = linkState(a);
+  const why = linkState(a).because.filter(l => !l.startsWith('What happened'));
+  const out = plan.links.filter(l => l.from.activity === a.id);
+  const into = plan.links.filter(l => l.to === a.id);
+  const notes = plan.notes.filter(n => n.about?.activity === a.id);
+  return `<section class="ed-play">
+      <h3>What happened</h3>
+      <select id="result" data-key="result" aria-label="What happened">${results}</select>
+      ${why.length ? `<p class="small state-${state}">${esc(why.join('. '))}.</p>` : ''}
+    </section>
+    <section class="ed-links">
+      <h3>Links</h3>
+      ${out.length || into.length ? `<ul class="link-list">${out.map(l => linkRowHtml(l, 'to')).join('')}${into.map(l => linkRowHtml(l, 'from')).join('')}</ul>`
+        : '<p class="dim small">Link another activity to this one: it leads to it (green) or blocks it (red) once this happens, or once a chosen outcome does.</p>'}
+      <div class="link-add">
+        <select id="link-from" data-key="link-from" aria-label="When">
+          <option value="">When this happens</option>
+          ${outcomeChoices(a).map(o => `<option value="${refValue({ activity: a.id, check: o.check, outcome: o.outcome })}">When ${esc(o.label)}</option>`).join('')}
+        </select>
+        <select id="link-kind" data-key="link-kind" aria-label="Link kind">${LINK_KINDS.map(k => `<option value="${k}">${KIND_TEXT[k]}</option>`).join('')}</select>
+        <select id="link-to" data-key="link-to" aria-label="Activity to link"><option value="">an activity…</option>${activityOptions(a.id)}</select>
+        <button type="button" data-act="add-link" data-key="add-link">Add</button>
+      </div>
+    </section>
+    <section class="ed-notes">
+      <h3>Notes</h3>
+      ${notes.length ? `<ul class="npc-acts">${notes.map(n => `<li><button type="button" class="npc-act" data-act="open-note" data-note="${esc(n.id)}">${esc(noteTitle(n))}</button>
+        <span class="dim small">${n.about.check ? esc(refText(plan, n.about).replace(/^“[^”]*”: /, '')) : ''}</span></li>`).join('')}</ul>` : ''}
+      <button type="button" class="align-start" data-act="new-note-here" data-key="new-note-here">Add a note</button>
+    </section>`;
+}
+
+function noteListHtml() {
+  const plan = S.plan;
+  const rows = plan.notes.map(n => {
+    const out = plan.links.filter(l => l.from.note === n.id);
+    const bits = [n.about ? `about ${refText(plan, n.about)}` : '', ...LINK_KINDS.map(k => {
+      const c = out.filter(l => l.kind === k).length;
+      return c ? `${KIND_TEXT[k]} ${c}` : '';
+    })].filter(Boolean);
+    return `<li><button type="button" class="npc-row" data-act="open-note" data-note="${esc(n.id)}" data-key="ml:${esc(n.id)}">
+      <span class="npc-name">${esc(noteTitle(n))}</span>
+      <span class="npc-count">${refHappened(plan, { note: n.id }) ? 'Happened' : ''}</span>
+      ${bits.length ? `<span class="npc-role">${esc(bits.join(' · '))}</span>` : ''}
+    </button></li>`;
+  }).join('');
+  return `<div class="ed-head">
+      <h2 class="ed-heading">Notes</h2>
+      <button type="button" class="icon" data-act="close-editor" aria-label="Close">×</button>
+    </div>
+    <button type="button" class="align-start" data-act="new-note" data-key="new-note">New note</button>
+    ${rows ? `<ul class="npc-list">${rows}</ul>`
+      : '<p class="dim">No notes yet. A note can be about an activity or one of its outcomes, and can lead to or block activities once it happens.</p>'}`;
+}
+
+function noteEditorHtml(n) {
+  const plan = S.plan;
+  const about = n.about ? JSON.stringify(n.about) : '';
+  const opt = (ref, label) => {
+    const v = JSON.stringify(ref);
+    return `<option value="${esc(v)}"${v === about ? ' selected' : ''}>${esc(label)}</option>`;
+  };
+  const groups = byTime(plan.activities).map(a => `<optgroup label="${esc(titleOf(a))}">
+      ${opt({ activity: a.id }, `${titleOf(a)}, whatever happens`)}
+      ${outcomeChoices(a).map(o => opt({ activity: a.id, check: o.check, outcome: o.outcome }, `${titleOf(a)}: ${o.label}`)).join('')}
+    </optgroup>`).join('');
+  const out = plan.links.filter(l => l.from.note === n.id);
+  const happened = refHappened(plan, { note: n.id });
+  return `<div class="ed-head">
+      <h2 class="ed-heading">Note</h2>
+      <button type="button" class="icon" data-act="close-editor" aria-label="Close">×</button>
+    </div>
+    <button type="button" class="back" data-act="note-list" data-key="note-list">‹ All notes</button>
+    <label class="field">Note
+      <textarea data-mf="text" data-key="mf:text" rows="5" placeholder="What happened, or what might">${esc(n.text)}</textarea></label>
+    <label class="field">About
+      <select id="note-about" data-key="note-about"><option value=""${about ? '' : ' selected'}>Nothing in particular</option>${groups}</select></label>
+    <label class="pchip happened"><input type="checkbox" id="note-happened" data-key="note-happened"${n.happened ? ' checked' : ''}> It happened</label>
+    <p class="dim small">${n.about
+      ? `It also counts as happened once ${esc(refText(plan, n.about))} is recorded as what happened.${happened && !n.happened ? ' It has been.' : ''}`
+      : 'Tick it when it happens; its links then take effect.'}</p>
+    <section class="ed-links">
+      <h3>Links</h3>
+      ${out.length ? `<ul class="link-list">${out.map(l => linkRowHtml(l, 'to')).join('')}</ul>` : ''}
+      <div class="link-add">
+        <span class="dim small">Once it happens, it</span>
+        <select id="note-link-kind" data-key="note-link-kind" aria-label="Link kind">${LINK_KINDS.map(k => `<option value="${k}">${KIND_TEXT[k]}</option>`).join('')}</select>
+        <select id="note-link-to" data-key="note-link-to" aria-label="Activity to link"><option value="">an activity…</option>${activityOptions(null)}</select>
+        <button type="button" data-act="add-note-link" data-key="add-note-link">Add</button>
+      </div>
+    </section>
+    <div class="ed-foot"><span></span><button type="button" class="danger" data-act="delete-note" data-key="delete-note">Delete note</button></div>`;
+}
+
+// Lines between linked activities on the timeline: from the end of the source
+// block to the start of the target, between the copies closest in height.
+// Green leads, red blocks; dashed until the link is in effect. Links from
+// notes have no line (a note has no place on the timeline); their targets show
+// it in their state.
+function drawLinks() {
+  const plan = S.plan;
+  const box = el.timeline.getBoundingClientRect();
+  const copies = id => [...el.timeline.querySelectorAll(`.lane .block${attrSel('data-id', id)}`)].map(b => b.getBoundingClientRect());
+  const paths = [];
+  for (const link of plan.links) {
+    if (link.from.activity === undefined) continue;
+    const from = copies(link.from.activity);
+    const to = copies(link.to);
+    let best = null;
+    for (const f of from) for (const t of to) {
+      const d = Math.abs((f.top + f.bottom) - (t.top + t.bottom));
+      if (!best || d < best.d) best = { f, t, d };
+    }
+    if (!best) continue;
+    const x1 = best.f.right - box.left;
+    const y1 = (best.f.top + best.f.bottom) / 2 - box.top;
+    const x2 = best.t.left - box.left;
+    const y2 = (best.t.top + best.t.bottom) / 2 - box.top;
+    const bend = Math.max(28, Math.abs(x2 - x1) / 2);
+    const live = refHappened(plan, link.from);
+    paths.push(`<path class="link ${link.kind}${live ? ' live' : ''}" data-link="${esc(link.id)}"
+      d="M${x1.toFixed(1)},${y1.toFixed(1)} C${(x1 + bend).toFixed(1)},${y1.toFixed(1)} ${(x2 - bend).toFixed(1)},${y2.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}"
+      marker-end="url(#arrow-${link.kind})"/>`);
+  }
+  if (!paths.length) return;
+  el.timeline.insertAdjacentHTML('beforeend', `<svg class="links" width="${el.timeline.scrollWidth}" height="${el.timeline.scrollHeight}" aria-hidden="true">
+    <defs>${LINK_KINDS.map(k => `<marker id="arrow-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow ${k}" d="M0,0 L10,5 L0,10 z"/></marker>`).join('')}</defs>
+    ${paths.join('')}
+  </svg>`);
 }
 
 const whenText = a => `${clock(a.start, S.plan.startsAt)}–${clock(end(a), S.plan.startsAt)}`;
@@ -584,6 +792,7 @@ function renderActivityEditor(a) {
         <label class="field">Test a result <input type="number" id="test-roll" data-key="test" value="${esc(S.testRoll)}" placeholder="Check total"></label>
         <div id="test-out"></div>
       </section>
+      ${activityPlayHtml(a)}
       <div class="ed-foot">
         <button type="button" data-act="duplicate" data-key="duplicate">Duplicate</button>
         <button type="button" class="danger" data-act="delete" data-key="delete">Delete</button>
@@ -623,18 +832,19 @@ function renderOutcomes() {
 function select(id) {
   if (S.selected !== id) { S.testRoll = ''; S.testCheck = null; }
   S.selected = id;
-  S.npcPanel = null;
+  S.side = null;
   renderBar();
   renderTimeline();
   renderTray();
   renderEditor();
 }
 
-// Opens the side panel on the NPC list ('list') or on one NPC (its id).
-function showNpcs(panel) {
+// Opens the side panel on a list ({ kind: 'npcs' | 'notes' }) or one NPC or
+// note ({ kind: 'npc' | 'note', id }).
+function showSide(side) {
   S.selected = null;
   S.testRoll = '';
-  S.npcPanel = panel;
+  S.side = side;
   renderBar();
   renderTimeline();
   renderTray();
@@ -642,8 +852,15 @@ function showNpcs(panel) {
 }
 
 function closePanel() {
-  S.npcPanel = null;
+  S.side = null;
   select(null);
+}
+
+function newNote(about = null) {
+  let id = null;
+  edit(plan => { id = addNote(plan, { about }).id; });
+  showSide({ kind: 'note', id });
+  el.editor.querySelector('[data-mf="text"]')?.focus();
 }
 
 function newNpc(link = null) {
@@ -652,7 +869,7 @@ function newNpc(link = null) {
     id = addNpc(plan).id;
     if (link) updateActivity(plan, link.id, { npcs: [...link.npcs, id] });
   });
-  showNpcs(id);
+  showSide({ kind: 'npc', id });
   el.editor.querySelector('[data-nf="name"]')?.focus();
 }
 
@@ -958,7 +1175,7 @@ document.addEventListener('keydown', e => {
   } else if (e.key === 'Escape' && S.editingPlayer) {
     S.editingPlayer = null;
     renderTimeline();
-  } else if (e.key === 'Escape' && (S.selected || S.npcPanel) && !inText) {
+  } else if (e.key === 'Escape' && (S.selected || S.side) && !inText) {
     closePanel();
   }
 });
@@ -996,9 +1213,32 @@ document.addEventListener('click', e => {
   } else if (act === 'close-editor') {
     closePanel();
   } else if (act === 'open-npc') {
-    showNpcs(button.dataset.npc);
+    showSide({ kind: 'npc', id: button.dataset.npc });
   } else if (act === 'npc-list') {
-    showNpcs('list');
+    showSide({ kind: 'npcs' });
+  } else if (act === 'open-note') {
+    showSide({ kind: 'note', id: button.dataset.note });
+  } else if (act === 'note-list') {
+    showSide({ kind: 'notes' });
+  } else if (act === 'new-note') {
+    newNote();
+  } else if (act === 'remove-link') {
+    edit(plan => removeLink(plan, button.dataset.link));
+    renderAll();
+  } else if (act === 'add-note-link' && openNote()) {
+    const note = openNote();
+    const to = el.editor.querySelector('#note-link-to').value;
+    const kind = el.editor.querySelector('#note-link-kind').value;
+    if (!to) { notice('Pick the activity it leads to or blocks.', 'warn'); return; }
+    const out = edit(plan => addLink(plan, { note: note.id }, to, kind));
+    if (out.ok === false) notice(out.error, 'warn');
+    renderAll();
+  } else if (act === 'delete-note' && openNote()) {
+    const note = openNote();
+    edit(plan => removeNote(plan, note.id));
+    S.side = { kind: 'notes' };
+    renderAll();
+    notice(`Deleted the note “${noteTitle(note)}”, and its links. Undo brings them back.`);
   } else if (act === 'new-npc') {
     newNpc();
   } else if (act === 'open-activity') {
@@ -1013,7 +1253,7 @@ document.addEventListener('click', e => {
     const name = npcName(S.plan, npc.id);
     let linked = [];
     edit(plan => { linked = removeNpc(plan, npc.id); });
-    S.npcPanel = 'list';
+    S.side = { kind: 'npcs' };
     renderAll();
     notice(`Deleted ${name}.` + (linked.length ? ` Unlinked from ${linked.length} ${linked.length === 1 ? 'activity' : 'activities'}.` : '') + ' Undo brings them back.');
   } else if (!a) {
@@ -1028,6 +1268,16 @@ document.addEventListener('click', e => {
     notice('Duplicated.' + (out.activity.start != null ? ' The copy starts when its players are next free.' : ''));
   } else if (act === 'delete') {
     removeActivity(a.id);
+  } else if (act === 'new-note-here') {
+    newNote({ activity: a.id });
+  } else if (act === 'add-link') {
+    const from = readRef(el.editor.querySelector('#link-from').value) ?? { activity: a.id };
+    const to = el.editor.querySelector('#link-to').value;
+    const kind = el.editor.querySelector('#link-kind').value;
+    if (!to) { notice('Pick the activity it leads to or blocks.', 'warn'); return; }
+    const out = edit(plan => addLink(plan, from, to, kind));
+    if (out.ok === false) notice(out.error, 'warn');
+    renderAll();
   } else if (act === 'unlink-npc') {
     edit(plan => updateActivity(plan, a.id, { npcs: a.npcs.filter(n => n !== button.dataset.npc) }));
     renderAll();
@@ -1067,6 +1317,13 @@ const TEXT_FIELDS = ['title', 'premise'];
 
 el.editor.addEventListener('input', e => {
   const t = e.target;
+  const note = openNote();
+  if (t.dataset.mf && note) {
+    typed(() => { note[t.dataset.mf] = t.value; });
+    renderTimeline();
+    renderTray();
+    return;
+  }
   const npc = openNpc();
   if (t.dataset.nf && npc && !S.selected) {
     typed(() => { npc[t.dataset.nf] = t.value; });
@@ -1103,6 +1360,15 @@ el.editor.addEventListener('input', e => {
 
 el.editor.addEventListener('change', e => {
   const t = e.target;
+  const note = openNote();
+  if (note && (t.id === 'note-about' || t.id === 'note-happened')) {
+    edit(() => {
+      if (t.id === 'note-about') note.about = readRef(t.value);
+      else note.happened = t.checked;
+    });
+    renderAll();
+    return;
+  }
   const npc = openNpc();
   if (t.id === 'link-activity' && npc && t.value) {
     const target = find(t.value);
@@ -1115,6 +1381,10 @@ el.editor.addEventListener('change', e => {
   if (t.id === 'test-check') {
     S.testCheck = t.value;
     renderOutcomes();
+  } else if (t.id === 'result') {
+    const result = t.value === '' ? null : t.value === 'done' ? { check: null, outcome: 'done' } : readRef(t.value);
+    edit(plan => updateActivity(plan, a.id, { result }));
+    renderAll();
   } else if (t.id === 'link-npc') {
     if (t.selectedOptions[0]?.dataset.new) newNpc(a);
     else if (t.value) {
@@ -1201,8 +1471,12 @@ el.zoomOut.addEventListener('click', () => zoom(-1));
 el.zoomIn.addEventListener('click', () => zoom(1));
 el.undo.addEventListener('click', undo);
 el.npcs.addEventListener('click', () => {
-  if (!S.selected && S.npcPanel) closePanel();
-  else showNpcs('list');
+  if (sideIs('npcs', 'npc')) closePanel();
+  else showSide({ kind: 'npcs' });
+});
+el.notes.addEventListener('click', () => {
+  if (sideIs('notes', 'note')) closePanel();
+  else showSide({ kind: 'notes' });
 });
 
 // ---- Plan files ----------------------------------------------------------------------

@@ -137,7 +137,7 @@ main {
 
 /* The timeline: a ruler row, one lane per player, and an add-player row. The
    name column stays put while the lanes scroll sideways. */
-.tl { display: inline-block; min-width: 100%; padding-bottom: 12px; }
+.tl { position: relative; display: inline-block; min-width: 100%; padding-bottom: 12px; }
 .row { display: flex; }
 .who {
   position: sticky;
@@ -253,6 +253,19 @@ main {
 .block.src { opacity: .35; }
 .block.static { cursor: default; touch-action: auto; }
 .block.marked { box-shadow: 0 0 0 2px var(--accent); }
+.block.waiting { opacity: .55; border-style: dashed; }
+.block.blocked { opacity: .65; border-color: var(--bad); }
+.block.blocked .b-title { text-decoration: line-through 2px var(--bad); }
+.block.done .b-title::before { content: "✓ "; color: var(--ok); }
+
+/* Lines between linked activities: green leads, red blocks, dashed until in effect. */
+svg.links { position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; overflow: visible; }
+svg.links .link { fill: none; stroke-width: 2; stroke-dasharray: 6 4; opacity: .75; }
+svg.links .link.live { stroke-dasharray: none; opacity: 1; }
+svg.links .link.leads { stroke: var(--ok); }
+svg.links .link.blocks { stroke: var(--bad); }
+svg.links .arrow.leads { fill: var(--ok); }
+svg.links .arrow.blocks { fill: var(--bad); }
 .block .grip {
   position: absolute;
   top: 0;
@@ -409,7 +422,22 @@ main {
 .ed-foot { display: flex; gap: 8px; justify-content: space-between; margin-top: 4px; }
 
 /* NPCs: the list, an NPC's editor, and the links in the activity editor */
-#npcs[aria-pressed="true"] { border-color: var(--accent); }
+#npcs[aria-pressed="true"], #notes[aria-pressed="true"] { border-color: var(--accent); }
+.ed-play, .ed-links, .ed-notes { display: flex; flex-direction: column; gap: 6px; }
+.state-blocked { color: var(--bad); }
+.state-waiting { color: var(--warn); }
+.state-open { color: var(--ok); }
+.link-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.link-list li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 2px 4px; border-left: 3px solid; border-radius: 3px; }
+.link-list li.leads { border-color: var(--ok); }
+.link-list li.blocks { border-color: var(--bad); }
+.link-list li:not(.live) { border-left-style: dashed; }
+.link-list .lk { font-size: 12px; color: var(--dim); white-space: nowrap; }
+.link-list .npc-act { flex: 0 1 auto; }
+.link-list .icon { margin-left: auto; }
+.link-add { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.link-add select { max-width: 100%; }
+.pchip.happened { align-self: flex-start; }
 .ed-heading { flex: 1; font-size: 16px; }
 .align-start, .editor select { align-self: flex-start; }
 .editor select { max-width: 100%; color: var(--text); }

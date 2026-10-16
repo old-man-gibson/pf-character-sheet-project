@@ -20,14 +20,26 @@
 // stops one NPC being linked to two activities at once (a link can mean "about
 // them" as well as "with them"), but `npcClashes` reports it.
 //
+// During play the GM records what happened in an activity (`result`): done,
+// or one outcome of one of its checks. Notes are free text, each about an
+// activity or one of its outcomes, or about nothing in particular. Links run
+// from an activity, one of its outcomes, or a note, to an activity: they lead
+// to it (green) or block it (red), and are in effect once their source has
+// happened (see "Notes, links and what happened" below).
+//
 // Plan shape (one JSON file per session):
 //   { version, title, startsAt: "19:00" | "", length (min), snap (min),
 //     players: [{ id, name, color }],
 //     npcs: [{ id, name, role, description, notes }],
+//     notes: [{ id, text, about: Ref | null, happened }],
+//     links: [{ id, from: Ref, to: activity id, kind: 'leads' | 'blocks' }],
 //     activities: [{ id, title, start (min) | null, duration (min), players: [ids],
-//                    maxPlayers | null, npcs: [ids], premise,
+//                    maxPlayers | null, npcs: [ids], premise, result | null,
 //                    checks: [{ id, check, dc | null, success, failure,
 //                               tiers: [{ id, label, dc | null, reward }] }] }] }
+//   result  { check: id | null, outcome: 'done' | 'failure' | 'success' | tier id }
+//   Ref     { activity } (it happened), { activity, check, outcome } (that
+//           outcome happened) or { note }
 // Fields a plan carries beyond these are kept as they are. A plan from before
 // an activity could have several checks keeps `check`, `dc`, `success`,
 // `failure` and `tiers` on the activity; reading it makes them its one check.
@@ -63,7 +75,7 @@ export function newId(list, prefix) {
 export function blankPlan(title = DEFAULTS.title) {
   return {
     version: PLAN_VERSION, title, startsAt: '', length: DEFAULTS.length, snap: DEFAULTS.snap,
-    players: [], npcs: [], activities: [],
+    players: [], npcs: [], activities: [], notes: [], links: [],
   };
 }
 
@@ -118,7 +130,7 @@ export function textHash(s) {
 export function blankActivity(id, fields = {}) {
   return {
     id, title: 'New activity', start: null, duration: DEFAULTS.duration, players: [], npcs: [],
-    premise: '', checks: [blankCheck('c1')], ...fields,
+    premise: '', checks: [blankCheck('c1')], result: null, ...fields,
   };
 }
 
@@ -198,11 +210,13 @@ export function normalizeActivity(raw, known = null) {
     npcs: idList(a.npcs, known?.npcs),
     premise: text(a.premise),
     checks,
+    result: normalizeResult(a.result, { checks }),
   };
 }
 
 export function normalizePlan(raw) {
   const src = isObject(raw) ? raw : {};
+  let plan;
   const players = [];
   for (const p of Array.isArray(src.players) ? src.players : []) {
     if (!isObject(p)) continue;
@@ -226,7 +240,7 @@ export function normalizePlan(raw) {
     if (!a.id.trim() || activities.some(x => x.id === a.id)) a.id = newId(activities, 'a');
     activities.push(a);
   }
-  return {
+  plan = {
     ...src,
     version: PLAN_VERSION,
     title: src.title === undefined ? DEFAULTS.title : text(src.title),
@@ -236,7 +250,15 @@ export function normalizePlan(raw) {
     players,
     npcs,
     activities,
+    notes: (Array.isArray(src.notes) ? src.notes : []).filter(isObject).reduce((list, n) => {
+      const id = text(n.id).trim();
+      list.push({ ...n, id: id && !list.some(x => x.id === id) ? id : newId(list, 'note'), text: text(n.text), about: n.about ?? null, happened: n.happened === true });
+      return list;
+    }, []),
+    links: Array.isArray(src.links) ? src.links : [],
   };
+  pruneRefs(plan);
+  return plan;
 }
 
 function normalizeNpc(raw, taken) {
@@ -401,7 +423,7 @@ export const placesText = a => (a.maxPlayers == null ? '' : `${a.players.length}
 export function duplicateActivity(plan, id) {
   const src = plan.activities.find(a => a.id === id);
   if (!src) return { ok: false, clashes: [], activity: null };
-  const copy = { ...structuredClone(src), id: newId(plan.activities, 'a') };
+  const copy = { ...structuredClone(src), id: newId(plan.activities, 'a'), result: null };
   if (copy.start != null) copy.start = firstFree(plan, copy, end(src));
   plan.activities.splice(plan.activities.indexOf(src) + 1, 0, copy);
   return { ok: true, activity: copy };
@@ -409,6 +431,7 @@ export function duplicateActivity(plan, id) {
 
 export function deleteActivity(plan, id) {
   plan.activities = plan.activities.filter(a => a.id !== id);
+  pruneRefs(plan);
 }
 
 export function addPlayer(plan, name = '') {
@@ -484,6 +507,7 @@ export function addCheck(act) {
   return check;
 }
 
+// Results, notes and links that named the check are cleared by pruneRefs.
 export function removeCheck(act, id) {
   act.checks = act.checks.filter(c => c.id !== id);
 }
@@ -507,6 +531,158 @@ export function outcome(check, total) {
   if (!reached) return { failure: true, tier: null, reward: check.failure, next: steps[0] };
   const tier = steps[reached - 1];
   return { failure: false, tier, reward: tier.reward, next: steps[reached] ?? null };
+}
+
+// ---- Notes, links and what happened ---------------------------------------------
+
+export const LINK_KINDS = Object.freeze(['leads', 'blocks']);
+const BASE_OUTCOMES = ['failure', 'success'];
+
+// The outcomes one check can have: failure, success, and its tiers.
+const outcomesOf = check => [...BASE_OUTCOMES, ...check.tiers.map(t => t.id)];
+
+function normalizeResult(raw, act) {
+  if (!isObject(raw)) return null;
+  if (raw.outcome === 'done') return { check: null, outcome: 'done' };
+  const check = act.checks.find(c => c.id === raw.check);
+  return check && outcomesOf(check).includes(raw.outcome) ? { check: check.id, outcome: raw.outcome } : null;
+}
+
+// A Ref in canonical shape, or null when what it names is not in the plan.
+// `notes` false: a note may not be about another note.
+function normalizeRef(raw, plan, { notes = true } = {}) {
+  if (!isObject(raw)) return null;
+  if (raw.note !== undefined) return notes && plan.notes.some(n => n.id === raw.note) ? { note: raw.note } : null;
+  const act = plan.activities.find(a => a.id === raw.activity);
+  if (!act) return null;
+  if (raw.check === undefined && raw.outcome === undefined) return { activity: act.id };
+  const check = act.checks.find(c => c.id === raw.check);
+  return check && outcomesOf(check).includes(raw.outcome) ? { activity: act.id, check: check.id, outcome: raw.outcome } : null;
+}
+
+export const refKey = r => (r.note !== undefined ? `n:${r.note}` : r.check ? `a:${r.activity}:${r.check}:${r.outcome}` : `a:${r.activity}`);
+
+// Clears what no longer exists: results naming a removed check or tier, notes
+// about something gone, links from or to something gone. Also drops a link from
+// an activity to itself and a link that repeats another. Runs after every edit
+// and whenever a plan is read.
+export function pruneRefs(plan) {
+  for (const a of plan.activities) a.result = normalizeResult(a.result, a);
+  for (const n of plan.notes) n.about = normalizeRef(n.about, plan, { notes: false });
+  const seen = new Set();
+  const links = [];
+  for (const raw of plan.links) {
+    if (!isObject(raw)) continue;
+    const from = normalizeRef(raw.from, plan);
+    const to = plan.activities.find(a => a.id === raw.to)?.id;
+    const kind = LINK_KINDS.includes(raw.kind) ? raw.kind : null;
+    if (!from || !to || !kind || from.activity === to) continue;
+    const key = `${refKey(from)}>${to}>${kind}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const id = text(raw.id).trim();
+    links.push({ ...raw, id: id && !links.some(l => l.id === id) ? id : newId(links, 'l'), from, to, kind });
+  }
+  plan.links = links;
+}
+
+// Whether what a Ref names has happened.
+export function refHappened(plan, ref) {
+  if (!ref) return false;
+  if (ref.note !== undefined) {
+    const note = plan.notes.find(n => n.id === ref.note);
+    return !!note && (note.happened || refHappened(plan, note.about));
+  }
+  const act = plan.activities.find(a => a.id === ref.activity);
+  if (!act?.result) return false;
+  return !ref.check || (act.result.check === ref.check && act.result.outcome === ref.outcome);
+}
+
+// Where an activity stands because of the links into it: 'blocked' (a link
+// blocking it is in effect), 'waiting' (links lead to it, none in effect yet),
+// 'open' (one leading to it is in effect) or 'free' (none lead to it).
+export function activityState(plan, id) {
+  const into = plan.links.filter(l => l.to === id);
+  const live = into.filter(l => refHappened(plan, l.from));
+  const blockedBy = live.filter(l => l.kind === 'blocks');
+  const leads = into.filter(l => l.kind === 'leads');
+  const openedBy = live.filter(l => l.kind === 'leads');
+  const state = blockedBy.length ? 'blocked' : leads.length ? (openedBy.length ? 'open' : 'waiting') : 'free';
+  return { state, blockedBy, openedBy, leads };
+}
+
+// The outcomes an activity can have, for choosing a result or a link's source:
+// [{ check, outcome, label }], each check's failure, success and tiers.
+export function outcomeChoices(act) {
+  const many = act.checks.length > 1;
+  return act.checks.flatMap((c, i) => {
+    const name = c.check.trim() || `Check ${i + 1}`;
+    const label = o => (many || c.check.trim() ? `${name}: ${o}` : o);
+    return [
+      { check: c.id, outcome: 'failure', label: label('Failure') },
+      { check: c.id, outcome: 'success', label: label('Success') },
+      ...c.tiers.map(t => ({ check: c.id, outcome: t.id, label: label(t.label.trim() || 'Unnamed tier') })),
+    ];
+  });
+}
+
+// "Done", "Stealth: Success", or '' for no result.
+export function resultText(act) {
+  const r = act.result;
+  if (!r) return '';
+  if (r.outcome === 'done') return 'Done';
+  return outcomeChoices(act).find(o => o.check === r.check && o.outcome === r.outcome)?.label ?? '';
+}
+
+const firstLine = s => {
+  const line = s.split('\n').find(l => l.trim())?.trim() ?? '';
+  return line.length > 60 ? `${line.slice(0, 57)}…` : line;
+};
+export const noteTitle = note => firstLine(note.text) || 'Empty note';
+
+// What a Ref names, for the page: "“Pick the lock”", "“Pick the lock”: Failure",
+// "the note “The guard saw them”".
+export function refText(plan, ref) {
+  if (!ref) return 'nothing';
+  if (ref.note !== undefined) {
+    const note = plan.notes.find(n => n.id === ref.note);
+    return note ? `the note “${noteTitle(note)}”` : 'a deleted note';
+  }
+  const act = plan.activities.find(a => a.id === ref.activity);
+  if (!act) return 'a deleted activity';
+  const title = `“${act.title.trim() || 'Untitled'}”`;
+  if (!ref.check) return title;
+  const o = outcomeChoices(act).find(x => x.check === ref.check && x.outcome === ref.outcome);
+  return o ? `${title}: ${o.label}` : title;
+}
+
+export function addNote(plan, fields = {}) {
+  const note = { id: newId(plan.notes, 'note'), text: '', about: null, happened: false, ...fields };
+  plan.notes.push(note);
+  pruneRefs(plan);
+  return note;
+}
+
+export function removeNote(plan, id) {
+  plan.notes = plan.notes.filter(n => n.id !== id);
+  pruneRefs(plan);
+}
+
+// A link from `from` (a Ref) to activity `to`. Refused when either end is not
+// in the plan, it would link an activity to itself, or the same link exists.
+export function addLink(plan, from, to, kind) {
+  const before = plan.links.length;
+  const link = { id: newId(plan.links, 'l'), from, to, kind };
+  plan.links.push(link);
+  pruneRefs(plan);
+  if (plan.links.length === before) {
+    return { ok: false, error: from?.activity === to ? 'An activity cannot lead to or block itself.' : 'That link is already there, or names something not in the plan.' };
+  }
+  return { ok: true, link: plan.links.at(-1) };
+}
+
+export function removeLink(plan, id) {
+  plan.links = plan.links.filter(l => l.id !== id);
 }
 
 // ---- Player view -------------------------------------------------------------

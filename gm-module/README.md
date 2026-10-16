@@ -123,10 +123,33 @@ activities at the same time is allowed, since a link can mean "about them" as
 well as "with them", but both panels point it out. Deleting an NPC unlinks it
 everywhere; Undo brings it back.
 
+**Notes, links and what happened.** During play, each activity's editor records
+*what happened*: done, or one outcome of one of its checks (failure, success or
+a tier). The Notes button opens the plan's notes: free text, each about an
+activity, about one of its outcomes, or about nothing in particular. Links run
+from an activity, one of its outcomes, or a note, to another activity, and
+either *lead to* it or *block* it. Add them in the activity editor's Links
+section or in a note. A link is in effect once its source has happened: the
+activity has a result, that outcome was the result, or the note is ticked or
+what it is about was recorded. On the timeline:
+
+- links between activities are lines from the end of one block to the start
+  of the other, green for *leads to* and red for *blocks*, dashed until in effect;
+- a blocked activity is struck through in red, and one that something leads to
+  waits (dimmed, dashed) until one of those links is in effect. Blocking wins;
+- an activity with a result shows ✓, and every block's tooltip says why it is
+  where it is.
+
+Links from notes have no line, since a note has no place on the timeline; the
+activities they reach show it in their state. Deleting an activity, check, tier
+or note takes the results, notes and links that named it with it (Undo brings
+them back).
+
 **Player view.** The Player view button opens `players.html#<plan>`: the same
 timeline, read-only, for a second screen or a screen share. It shows each
 scheduled activity's title, time, duration and players, and the names of its
-checks when its Show checks box is ticked ("Stealth or Bluff"). It only ever gets a plan as `playerView` in
+checks when its Show checks box is ticked ("Stealth or Bluff"). Notes, links,
+results and NPCs are not part of it. It only ever gets a plan as `playerView` in
 plan.js makes it, from a list of the fields players may see: DCs, rewards,
 success tiers, premises, NPCs and unscheduled activities are left out. It asks
 for changes every second, so it follows the GM page's edits about a second
@@ -154,7 +177,11 @@ deletes. A new plan starts with the open plan's players and NPCs.
 Plan shape: `title`, `startsAt` ("19:00" or ""), `length` and `snap` in minutes,
 `players` (`id/name/color`), `npcs` (`id/name/role/description/notes`),
 `activities` (`id/title/start/duration/players/maxPlayers/npcs`, `premise`,
-`checks: [{id, check, dc, success, failure, tiers: [{id, label, dc, reward}]}]`).
+`checks: [{id, check, dc, success, failure, tiers: [{id, label, dc, reward}]}]`,
+`result`: null or `{check, outcome}` with outcome `done`/`failure`/`success`/a tier id),
+`notes` (`id/text/about/happened`) and `links` (`id/from/to/kind`, kind `leads` or
+`blocks`; `from` and `about` are `{activity}`, `{activity, check, outcome}` or
+`{note}`).
 `start` is minutes from the start of the session, null when unscheduled. Other
 fields are kept as they are. A plan from before several checks, with `check`,
 `dc`, `success`, `failure` and `tiers` on the activity, reads as one check.

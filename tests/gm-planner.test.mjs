@@ -1,5 +1,6 @@
 /** Tests the GM module's session planner: the plan model (one activity per
- *  player at a time, player limits, several checks with success tiers, NPCs), what the player view is allowed to see,
+ *  player at a time, player limits, several checks with success tiers, NPCs,
+ *  notes, links and what happened), what the player view is allowed to see,
  *  the timeline markup both pages draw, the plan files on disk (versioned
  *  writes that never overwrite a change made elsewhere), the planner API
  *  through tools/serve.mjs on a spare port against a temporary folder, and the
@@ -13,7 +14,9 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  addActivity, addCheck, addNpc, addPlayer, allClashes, blankPlan, checkNames, clashText, clashes, clock, duplicateActivity,
+  activityState, addActivity, addCheck, addLink, addNote, addNpc, addPlayer, allClashes, blankPlan, checkNames,
+  clashText, clashes, clock, deleteActivity, duplicateActivity, noteTitle, outcomeChoices, pruneRefs, refHappened,
+  refText, removeLink, removeNote, resultText,
   firstFree, freeName, ladder, limitText, minutesText, nameFrom, newPlan, normalizePlan, npcActivities, npcClashes,
   npcName, outcome, overLimit, placesText, playerLoad, playerView, removeCheck, removeNpc, removePlayer, span, updateActivity,
 } from '../gm-module/planner/plan.js';
@@ -298,6 +301,79 @@ function table() {
     .activities[0].checks, [{ check: 'Bluff' }]);
 }
 
+// ---- Notes, links and what happened ----------------------------------------------
+
+{
+  const plan = table();
+  const [a, b, d] = plan.activities;
+  a.title = 'Pick the lock';
+  a.checks = [{ id: 'c1', check: 'Disable Device', dc: 15, success: '', failure: '', tiers: [{ id: 't1', label: 'Silent', dc: 20, reward: '' }] }];
+  check('an activity\'s outcomes are its check\'s failure, success and tiers', outcomeChoices(a).map(o => [o.outcome, o.label]),
+    [['failure', 'Disable Device: Failure'], ['success', 'Disable Device: Success'], ['t1', 'Disable Device: Silent']]);
+
+  const leads = addLink(plan, { activity: a.id }, b.id, 'leads');
+  const onFail = addLink(plan, { activity: a.id, check: 'c1', outcome: 'failure' }, d.id, 'blocks');
+  check('links are added from an activity and from one of its outcomes', [leads.ok, onFail.ok, plan.links.length], [true, true, 2]);
+  check('an activity cannot lead to itself', addLink(plan, { activity: a.id }, a.id, 'leads').ok, false);
+  check('nor the same link be added twice', addLink(plan, { activity: a.id }, b.id, 'leads').ok, false);
+  check('a link to something not in the plan is refused', addLink(plan, { activity: 'nope' }, b.id, 'blocks').ok, false);
+  check('a link of an unknown kind is refused', addLink(plan, { activity: a.id }, b.id, 'maybe').ok, false);
+
+  check('before anything happens, a led-to activity waits', [activityState(plan, b.id).state, activityState(plan, d.id).state], ['waiting', 'free']);
+  updateActivity(plan, a.id, { result: { check: 'c1', outcome: 't1' } });
+  check('a result says what happened', resultText(plan.activities[0]), 'Disable Device: Silent');
+  check('any result sets off links from the activity', activityState(plan, b.id).state, 'open');
+  check('but only the named outcome sets off a link from it', activityState(plan, d.id).state, 'free');
+  updateActivity(plan, a.id, { result: { check: 'c1', outcome: 'failure' } });
+  check('when that outcome happens the link blocks', [activityState(plan, d.id).state, activityState(plan, d.id).blockedBy.length], ['blocked', 1]);
+  check('a result naming no outcome of the activity is dropped', updateActivity(plan, a.id, { result: { check: 'c1', outcome: 'gone' } }).activity.result, null);
+  check('and "done" is a result', updateActivity(plan, a.id, { result: { outcome: 'done' } }).activity.result, { check: null, outcome: 'done' });
+
+  const note = addNote(plan, { text: 'The guard saw them\nand called for help', about: { activity: a.id, check: 'c1', outcome: 'failure' } });
+  check('a note is titled by its first line', noteTitle(note), 'The guard saw them');
+  check('refs read as text', [refText(plan, { activity: a.id }), refText(plan, note.about), refText(plan, { note: note.id })],
+    ['“Pick the lock”', '“Pick the lock”: Disable Device: Failure', 'the note “The guard saw them”']);
+  addLink(plan, { note: note.id }, b.id, 'blocks');
+  check('a note about an outcome has not happened until that outcome does', refHappened(plan, { note: note.id }), false);
+  updateActivity(plan, a.id, { result: { check: 'c1', outcome: 'failure' } });
+  check('then it has, and its links take effect', [refHappened(plan, { note: note.id }), activityState(plan, b.id).state], [true, 'blocked']);
+  check('blocking wins over leading', activityState(plan, b.id).openedBy.length, 1);
+  const loose = addNote(plan, { text: 'The bell rings' });
+  addLink(plan, { note: loose.id }, d.id, 'leads');
+  check('a note about nothing happens when it is ticked', refHappened(plan, { note: loose.id }), false);
+  loose.happened = true;
+  check('and then it has', refHappened(plan, { note: loose.id }), true);
+
+  const linksBefore = plan.links.length;
+  removeNote(plan, loose.id);
+  check('removing a note removes its links', plan.links.length, linksBefore - 1);
+  plan.activities[0].checks[0].tiers = [];
+  pruneRefs(plan);
+  check('a removed tier takes nothing named after it with it but what named it', plan.links.length, linksBefore - 1);
+  plan.activities[0].checks = [];
+  pruneRefs(plan);
+  check('a removed check clears the result and the links and notes that named its outcomes',
+    [plan.activities[0].result, plan.links.map(l => l.kind + ':' + (l.from.note ? 'note' : l.from.check ?? 'activity')), plan.notes[0].about],
+    [null, ['leads:activity', 'blocks:note'], null]);
+  removeLink(plan, plan.links[0].id);
+  check('a link can be removed', plan.links.length, 1);
+  deleteActivity(plan, b.id);
+  check('deleting an activity removes the links into it', plan.links.length, 0);
+
+  const read = normalizePlan({
+    players: [{ id: 'p1' }],
+    activities: [{ id: 'a1', players: ['p1'], checks: [{ id: 'c1', check: 'X' }], result: { check: 'c1', outcome: 'success' } }, { id: 'a2', players: ['p1'] }],
+    notes: [{ id: 'm', text: 'One', about: { note: 'm' } }, { id: 'm', text: 'Two', about: { activity: 'gone' } }, 'junk'],
+    links: [{ from: { activity: 'a1' }, to: 'a2', kind: 'leads' }, { from: { activity: 'a1' }, to: 'a2', kind: 'leads' },
+      { from: { note: 'm' }, to: 'a1', kind: 'blocks' }, { from: { activity: 'a2' }, to: 'a2', kind: 'blocks' }, { from: { activity: 'a1' }, to: 'nope', kind: 'leads' }],
+  });
+  check('a read plan keeps its results', read.activities[0].result, { check: 'c1', outcome: 'success' });
+  check('notes get ids, and lose what they were about if it is not there', read.notes.map(n => [n.id, n.about]), [['m', null], ['note1', null]]);
+  check('links keep only those that are whole, once each', read.links.map(l => [l.id, l.kind, l.to]), [['l1', 'leads', 'a2'], ['l2', 'blocks', 'a1']]);
+  check('a duplicate starts without a result', duplicateActivity(read, 'a1').activity.result, null);
+  check('a plan without notes or links reads with none', [normalizePlan({}).notes, normalizePlan({}).links], [[], []]);
+}
+
 // ---- Checks and tiers --------------------------------------------------------
 
 {
@@ -333,13 +409,15 @@ function secretPlan() {
     gmNotes: 'SECRET plan note',
     players: [{ id: 'p1', name: 'Ana', secretFlag: 'SECRET player note' }, { id: 'p2', name: '' }],
     npcs: [{ id: 'n1', name: 'SECRET npc', role: 'SECRET role', description: 'SECRET looks', notes: 'SECRET motive' }],
+    notes: [{ id: 'note1', text: 'SECRET note', about: { activity: 'a1' }, happened: true }],
+    links: [{ id: 'l1', from: { note: 'note1' }, to: 'a1', kind: 'blocks' }],
     activities: [
       {
         id: 'a1', title: 'Pick the lock', start: 0, duration: 5, players: ['p1', 'p2'], maxPlayers: 3, npcs: ['n1'], check: 'Disable Device',
         dc: 1777, premise: 'SECRET premise', success: 'SECRET success', failure: 'SECRET failure',
         tiers: [{ id: 't1', label: 'SECRET tier', dc: 1888, reward: 'SECRET tier reward' }], gmNote: 'SECRET field',
       },
-      { id: 'a2', title: 'SECRET unscheduled', start: null, duration: 10, players: ['p1'] },
+      { id: 'a2', title: 'SECRET unscheduled', start: null, duration: 10, players: ['p1'], result: { outcome: 'done' } },
     ],
   });
 }
@@ -354,6 +432,7 @@ function secretPlan() {
     [['Ana', true], ['Player 2', true]]);
   check('the session times come through', [view.title, view.length, view.startsAt], ['Open night', 240, '']);
   check('the player limit stays with the GM', 'maxPlayers' in view.activities[0], false);
+  check('and so do notes, links and what happened', ['notes', 'links'].filter(k => k in view).concat(view.activities.filter(a => 'result' in a).map(() => 'result')), []);
 }
 
 {
