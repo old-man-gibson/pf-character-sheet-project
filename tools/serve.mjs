@@ -1,18 +1,43 @@
 // Dependency-free static file server — the Node equivalent of `python -m http.server`.
 //
-//   node tools/serve.mjs [port]        (default 8777)
+//   node tools/serve.mjs [port] [--gm-data <folder>]       (default 8777)
 //
 // Serves the repository root, so http://localhost:8777/app/index.html is the app
 // and any /data/characters/*.json a deployment bundles load the way the sheet expects.
+//
+// It also mounts the GM tools in gm-module/ (see gm-module/lib/gm-tools.mjs): the
+// list behind the sheet's GM tools button, and each tool's server part. Everything
+// under gm-module/ answers this machine only. The tools keep their saved files in
+// folders of their own under --gm-data (default gm-module/), apart from the
+// characters, which stay in the browser.
 
 import { createServer } from 'node:http';
-import { createReadStream } from 'node:fs';
-import { stat, readdir } from 'node:fs/promises';
+import { createReadStream, existsSync, mkdirSync, realpathSync } from 'node:fs';
+import { stat, readdir, realpath } from 'node:fs/promises';
 import { join, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const port = Number(process.argv[2] ?? process.env.PORT ?? 8777);
+const args = process.argv.slice(2);
+let port = Number(process.env.PORT ?? 8777);
+let gmData = null;
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--gm-data') gmData = resolve(args[++i]);
+  else if (/^\d+$/.test(args[i])) port = Number(args[i]);
+}
+
+// GM tools, when the checkout has them. The sheet works the same without.
+const gmRoot = join(root, 'gm-module');
+const gm = existsSync(gmRoot)
+  ? await import('../gm-module/lib/gm-tools.mjs')
+    .then(m => m.mountGmTools({ root: gmRoot, data: gmData ?? gmRoot }))
+    .catch(err => { console.warn(`GM tools not loaded: ${err.message}`); return null; })
+  : null;
+// The folders only this machine may read: gm-module/ and, when it is somewhere
+// else in the repository, the GM data folder.
+if (gm && gmData) mkdirSync(gmData, { recursive: true });
+const gmFolders = gm ? [...new Set([gmRoot, gmData].filter(Boolean).map(d => realpathSync.native(d)))] : [];
+const inside = (path, dir) => path === dir || path.startsWith(dir + sep);
 
 const types = {
   '.html': 'text/html; charset=utf-8',
@@ -50,6 +75,16 @@ const server = createServer(async (req, res) => {
   // Resolve inside the root and refuse anything that escapes it.
   const target = resolve(join(root, pathname));
   if (target !== root && !target.startsWith(root + sep)) return send(res, 403, '403 Forbidden');
+
+  // Anything that lands in a GM folder goes past the GM tools first: they answer
+  // their own requests and refuse any that are not from this machine. Judged by
+  // where the path really leads, since Windows also opens "GM-MODULE" or
+  // "GM-MOD~1" as gm-module.
+  if (gm) {
+    const real = await realpath(target).catch(() => target);
+    const gmPath = pathname === '/gm-module' || pathname.startsWith('/gm-module/') || gmFolders.some(d => inside(real, d));
+    if (gmPath && await gm(req, res, pathname, new URL(req.url, 'http://localhost'))) return;
+  }
 
   let info;
   try {
@@ -98,6 +133,10 @@ server.on('error', err => {
 
 server.listen(port, () => {
   console.log(`Serving ${root}`);
-  console.log(`  http://localhost:${port}/app/index.html`);
+  console.log(`  http://localhost:${server.address().port}/app/index.html`);
+  if (gm) {
+    console.log(`  GM tools: ${gm.tools.map(t => t.name).join(', ') || 'none'} (this machine only)`);
+    for (const problem of gm.problems) console.warn(`  GM tool not loaded: ${problem}`);
+  }
   console.log('Press Ctrl+C to stop.');
 });

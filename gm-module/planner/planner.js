@@ -44,7 +44,7 @@ const S = {
   npcPanel: null,      // with no activity open: 'list' for the NPC list, or an NPC's id
   editingPlayer: null, // id of the player whose name cell is a form
   testRoll: '',        // the editor's "test a result" box
-  zoom: zoomPref('planner-zoom'),
+  zoom: zoomPref('gm-planner:zoom'),
   undo: [],
 };
 
@@ -142,7 +142,7 @@ function changed() {
   saveTimer = setTimeout(save, SAVE_DELAY);
 }
 
-const planUrl = (name, extra = '') => `/api/plan?name=${encodeURIComponent(name)}${extra}`;
+const planUrl = (name, extra = '') => `api/plan?name=${encodeURIComponent(name)}${extra}`;
 
 async function save() {
   clearTimeout(saveTimer);
@@ -209,7 +209,7 @@ async function api(url, options = {}) {
 }
 
 async function refreshPlanList() {
-  const out = await api('/api/plans');
+  const out = await api('api/plans');
   S.plans = out.plans;
   renderPlanSelect();
   return out.plans;
@@ -228,7 +228,7 @@ async function openPlan(name, loaded = null) {
   el.undo.disabled = true;
   dirty = false;
   setSaveState('Saved');
-  writePref('planner-last', name);
+  writePref('gm-planner:last', name);
   history.replaceState(null, '', `#${encodeURIComponent(name)}`);
   renderAll();
 }
@@ -236,7 +236,7 @@ async function openPlan(name, loaded = null) {
 // A new plan starts with the open plan's players and NPCs: most sessions have
 // the same table and many of the same people.
 async function createPlan(name, title) {
-  const out = await api('/api/plans', {
+  const out = await api('api/plans', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ name, title, players: S.plan?.players ?? [], npcs: S.plan?.npcs ?? [] }),
@@ -1110,7 +1110,7 @@ el.snap.addEventListener('change', () => {
 function zoom(dir) {
   const before = ppm();
   S.zoom = Math.min(ZOOMS.length - 1, Math.max(0, S.zoom + dir));
-  writePref('planner-zoom', S.zoom);
+  writePref('gm-planner:zoom', S.zoom);
   rescale(el.wrap, before, ppm(), () => {
     renderBar();
     renderTimeline();
@@ -1181,7 +1181,7 @@ async function boot() {
     el.offline.hidden = false;
     return;
   }
-  let wanted = readPref('planner-last', '');
+  let wanted = readPref('gm-planner:last', '');
   try { wanted = decodeURIComponent(location.hash.slice(1)) || wanted; } catch { /* a mangled address: use the last plan */ }
   const names = plans.map(p => p.name);
   if (names.includes(wanted)) await openPlan(wanted);

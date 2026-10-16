@@ -213,6 +213,11 @@
   <div class="tools">
     <button type="button" class="btn" id="extBtn" title="Content packs: catalogues, tables and building blocks">Extensions</button>
     <a class="btn" href="../forge/" title="Homebrew Workbench: write homebrew here, publish it to this sheet as a pack">Workbench</a>
+    <div class="menu" id="gmTools" hidden>
+      <button type="button" class="btn" id="gmToolsBtn" aria-haspopup="true" aria-expanded="false" aria-controls="gmToolsList"
+              title="Tools for running a game, from gm-module/ on this computer. Each opens in its own tab and keeps its own files.">GM tools ▾</button>
+      <div class="drop" id="gmToolsList"></div>
+    </div>
     <button type="button" class="btn" id="helpBtn" title="How this app works: new characters, importing, saving and history">? Help</button>
     <label class="role">
       <input type="checkbox" id="adminToggle"> GM / inspector view
@@ -337,6 +342,7 @@
   import { mountExtensionManager, looksLikeExtension, looksLikeLibrary } from './js/extension-manager.js';
   import { mountMonsterTool } from './js/monster/picker.js';
   import { normalizeHex, readableOn } from './js/tracker-style.js';
+  import { esc } from './js/html-escape.js';
 
   const sheet = document.getElementById('sheet');
   const picker = document.getElementById('picker');
@@ -369,6 +375,40 @@
   try {
     if (!localStorage.getItem(HELP_SEEN)) helpDialog.showModal();
   } catch { /* no storage: no first-visit popup either */ }
+  // GM tools: the tools in gm-module/ that tools/serve.mjs mounts when it runs
+  // on this computer (see gm-module/lib/gm-tools.mjs). They answer this computer
+  // only, so the list is asked for only when the sheet is opened from here; the
+  // public site never asks and never shows the button. Each tool opens in a tab
+  // of its own and keeps its saved files in its own folder, apart from the
+  // characters in this browser.
+  const gmTools = document.getElementById('gmTools');
+  const gmToolsBtn = document.getElementById('gmToolsBtn');
+  const setGmToolsOpen = (open) => {
+    gmTools.classList.toggle('open', open);
+    gmToolsBtn.setAttribute('aria-expanded', String(open));
+  };
+  if (['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) {
+    fetch('../gm-module/tools')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((out) => {
+        const tools = Array.isArray(out?.tools) ? out.tools : [];
+        if (!tools.length) return;
+        document.getElementById('gmToolsList').innerHTML = tools.map((t) =>
+          `<a href="../gm-module/${esc(encodeURI(t.href))}" target="_blank" rel="noopener">${esc(t.name)}<small>${esc(t.description)}</small></a>`).join('');
+        gmTools.hidden = false;
+      })
+      .catch(() => { /* this server has no GM tools */ });
+  }
+  gmToolsBtn.addEventListener('click', () => setGmToolsOpen(!gmTools.classList.contains('open')));
+  gmTools.addEventListener('click', (e) => { if (e.target.closest('a')) setGmToolsOpen(false); });
+  document.addEventListener('click', (e) => { if (!e.target.closest('#gmTools')) setGmToolsOpen(false); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && gmTools.classList.contains('open')) {
+      setGmToolsOpen(false);
+      gmToolsBtn.focus();
+    }
+  });
+
   const removeForm = document.getElementById('removeForm');
   document.getElementById('removeCancel').addEventListener('click', () => removeDialog.close());
   document.getElementById('welcomeNew').addEventListener('click', () => newDialog.showModal());
@@ -484,9 +524,7 @@
   }
 
   // Names and ids in an imported file are arbitrary text, so nothing reaches
-  // the picker's markup unescaped.
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
-    (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  // the picker's markup unescaped (esc, from html-escape.js).
 
   /*
    * The picker can fold to just the open character -- on a phone the full

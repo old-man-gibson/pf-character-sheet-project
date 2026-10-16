@@ -27,8 +27,8 @@ const S = {
   name: null,   // plan shown
   v: null,      // version of the view shown
   view: null,
-  zoom: zoomPref('players-zoom'),
-  showChecks: readPref('players-show-checks', false) === true,
+  zoom: zoomPref('gm-planner:player-view-zoom'),
+  showChecks: readPref('gm-planner:show-checks', false) === true,
 };
 
 function planName() {
@@ -82,7 +82,7 @@ function render() {
 let polling = false;
 async function poll() {
   if (polling) return;
-  const name = planName() || readPref('planner-last', '');
+  const name = planName() || readPref('gm-planner:last', '');
   if (!name) {
     showMissing('Open this page with the Player view link in the planner.');
     return;
@@ -90,7 +90,7 @@ async function poll() {
   polling = true;
   try {
     const since = S.name === name ? S.v ?? '' : '';
-    const res = await fetch(`/api/players?name=${encodeURIComponent(name)}&since=${encodeURIComponent(since)}`);
+    const res = await fetch(`api/players?name=${encodeURIComponent(name)}&since=${encodeURIComponent(since)}`);
     if (res.status === 404 || res.status === 400) {
       showMissing(`There is no plan named “${name}”.`);
       setLive('');
@@ -114,14 +114,14 @@ async function poll() {
 
 el.showChecks.addEventListener('change', () => {
   S.showChecks = el.showChecks.checked;
-  writePref('players-show-checks', S.showChecks);
+  writePref('gm-planner:show-checks', S.showChecks);
   render();
 });
 
 function zoom(dir) {
   const before = ZOOMS[S.zoom];
   S.zoom = Math.min(ZOOMS.length - 1, Math.max(0, S.zoom + dir));
-  writePref('players-zoom', S.zoom);
+  writePref('gm-planner:player-view-zoom', S.zoom);
   rescale(el.wrap, before, ZOOMS[S.zoom], render);
 }
 el.zoomOut.addEventListener('click', () => zoom(-1));

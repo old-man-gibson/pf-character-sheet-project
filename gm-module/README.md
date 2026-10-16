@@ -8,6 +8,7 @@ content-free, so everything with game or campaign content in it
 
 ```
 tools/roll.mjs      crypto-backed dice roller (see header comment for usage)
+lib/gm-tools.mjs    the GM tools menu: finds gm-tool.json files, mounts their APIs
 screen/             session screen: server.mjs + board page
 planner/            session planner: server.mjs, the GM page and the player view
                     (plan.js is the model, timeline.js the markup both pages draw)
@@ -43,14 +44,51 @@ The player drags tokens; moves write back into the same file.
 (`id/name/faction/x/y/size/hp:[cur,max]`, optional `hidden`, `gmNote`,
 `color`). Factions: `pc`, `ally`, `enemy`, `neutral`.
 
+## GM tools menu
+
+When the sheet runs on `node tools/serve.mjs`, its top bar has a **GM tools**
+button listing the tools here; each opens in a tab of its own. The public site
+has no GM tools and shows no button.
+
+- Everything under `/gm-module/` (the menu, the pages, the APIs, the saved
+  files) answers this computer only, so players on the same network see
+  nothing of it.
+- Each tool keeps its saved files in a folder of its own under the GM data
+  folder: `gm-module/` by default (git-ignored folders such as `plans/`), or
+  another with `node tools/serve.mjs --gm-data <folder>`. Characters stay in the
+  browser, as before.
+
+A tool joins the menu with a `gm-tool.json` in its folder:
+
+```json
+{
+  "tools": [{ "id": "planner", "name": "Session planner",
+              "description": "One line for the menu", "page": "index.html" }],
+  "api": "api.mjs",
+  "data": "plans"
+}
+```
+
+Each entry in `tools` is a menu line opening `page` (a path inside the folder);
+a folder may list several. `api` and `data` are for a tool with a server part:
+`api` is a module whose default export takes `{ dir }` (the `data` folder under
+the GM data folder) and returns a handler `(req, res, route, url)` for requests
+to `/gm-module/<folder>/api/<route>`; pages ask for it by the relative address
+`api/<route>`. The mount has already checked that the request is from this
+computer and that a write is JSON. A tool whose manifest or server part fails
+to load is left out of the menu and named in the server's startup output.
+`planner/` is the worked example (`gm-tool.json`, `api.mjs`).
+
 ## Session planner
+
+Open it from the sheet's GM tools button, or run it on its own:
 
 ```
 node gm-module/planner/server.mjs 8766 [--dir <folder of plan files>]
 ```
 
-Then open `http://localhost:8766`. It plans a session as a timeline with one
-lane per player:
+and open `http://localhost:8766`. Both use `gm-module/plans/` unless told
+otherwise. It plans a session as a timeline with one lane per player:
 
 - Activities run in parallel, but a player is in one activity at a time. A
   move, resize or edit that would put a player in two overlapping activities

@@ -1,0 +1,18 @@
+{
+  "tools": [
+    {
+      "id": "planner",
+      "name": "Session planner",
+      "description": "Plan a session on a timeline: activities, checks, success tiers and NPCs",
+      "page": "index.html"
+    },
+    {
+      "id": "player-view",
+      "name": "Player view",
+      "description": "The last opened plan's timeline without DCs or rewards, for a second screen",
+      "page": "players.html"
+    }
+  ],
+  "api": "api.mjs",
+  "data": "plans"
+}

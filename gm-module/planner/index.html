@@ -44,9 +44,11 @@
 
   <div id="offline" class="offline" hidden>
     <h1>Session planner</h1>
-    <p>This page needs the planner server, which keeps the plan files:</p>
+    <p>This page needs a server that keeps the plan files. Either open it from the
+      character sheet's GM tools button, with the sheet run by</p>
+    <pre>node tools/serve.mjs</pre>
+    <p>or run the planner on its own and open <code>http://localhost:8766</code>:</p>
     <pre>node gm-module/planner/server.mjs 8766</pre>
-    <p>Then open <code>http://localhost:8766</code>.</p>
   </div>
 
   <datalist id="checks"></datalist>
