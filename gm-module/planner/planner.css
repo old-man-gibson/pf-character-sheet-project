@@ -56,7 +56,7 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 body.resizing, body.resizing * { cursor: ew-resize !important; user-select: none; }
 
 button, input, select, textarea { font: inherit; color: inherit; }
-button {
+button, a.button {
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -64,7 +64,8 @@ button {
   cursor: pointer;
   white-space: nowrap;
 }
-button:hover:not(:disabled) { border-color: var(--dim); }
+a.button { color: var(--text); text-decoration: none; }
+button:hover:not(:disabled), a.button:hover { border-color: var(--dim); }
 button:disabled { opacity: .45; cursor: default; }
 button.danger { color: var(--bad); }
 button.icon { padding: 0 8px; font-size: 18px; line-height: 1.4; }
@@ -250,6 +251,7 @@ main {
   background-image: repeating-linear-gradient(45deg, transparent 0 6px, color-mix(in srgb, var(--bad) 30%, transparent) 6px 12px);
 }
 .block.src { opacity: .35; }
+.block.static { cursor: default; touch-action: auto; }
 .block .grip {
   position: absolute;
   top: 0;
@@ -393,6 +395,12 @@ main {
 .ladder li.fail.hit { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
 .test-line { font-size: 13px; }
 .ed-foot { display: flex; gap: 8px; justify-content: space-between; margin-top: 4px; }
+
+/* ---- Player view ------------------------------------------------------ */
+
+.pv-title { font-size: 16px; font-weight: 600; }
+.pv-when { color: var(--dim); font-variant-numeric: tabular-nums; }
+.bar .pv-toggle { margin-left: auto; color: var(--text); }
 
 /* ---- Messages --------------------------------------------------------- */
 

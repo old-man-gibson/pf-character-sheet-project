@@ -1,10 +1,15 @@
-// Session planner server. Serves the planner page and the plan files in one
-// folder (default gm-module/plans/, which git ignores). Plans hold DCs and
-// rewards, so this is a GM page: the server listens on this machine only and
-// refuses a request addressed to any other host name.
+// Session planner server. Serves the planner page, the player view
+// (players.html) and the plan files in one folder (default gm-module/plans/,
+// which git ignores). Plans hold DCs and rewards, so the server listens on
+// this machine only and refuses a request addressed to any other host name.
+// The player view is meant for a second screen or a screen share; it gets its
+// data from /api/players, which leaves the GM's fields out.
 //
 // Usage: node server.mjs [port] [--dir <folder of plan files>]
 //
+//   GET  /api/players?name=&since=
+//                                 { name, v, view } (see playerView in plan.js), or
+//                                 { name, v, same: true } when the view is unchanged
 //   GET  /api/plans               { dir, plans: [{ name, title, players, activities }] }
 //   POST /api/plans  { name, title?, players? }
 //                                 creates a plan with no activities -> { name, v, plan }
@@ -19,7 +24,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { json, readJson, serveFile } from '../lib/http.mjs';
-import { createPlan, currentVersion, listPlans, readPlan, validName, writePlan } from './store.mjs';
+import { createPlan, currentVersion, listPlans, readPlan, readPlayerView, validName, writePlan } from './store.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -73,6 +78,15 @@ const server = http.createServer(async (req, res) => {
         return out.ok ? json(res, 200, { name, v: out.v }) : json(res, 409, { name, v: out.v, plan: out.plan });
       }
       return json(res, 405, { error: 'method not allowed' });
+    }
+    if (url.pathname === '/api/players') {
+      const name = url.searchParams.get('name');
+      if (!validName(name)) return json(res, 400, { error: 'bad plan name' });
+      if (req.method !== 'GET') return json(res, 405, { error: 'method not allowed' });
+      const out = readPlayerView(dir, name);
+      if (!out) return json(res, 404, { error: 'no such plan' });
+      if (url.searchParams.get('since') === out.v) return json(res, 200, { name, v: out.v, same: true });
+      return json(res, 200, { name, ...out });
     }
     if (url.pathname.startsWith('/api/')) return json(res, 404, { error: 'not found' });
     if (req.method === 'GET') return serveFile(res, here, url.pathname);

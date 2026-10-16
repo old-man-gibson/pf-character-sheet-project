@@ -13,13 +13,13 @@ import {
   deleteActivity, duplicateActivity, end, firstFree, ladder, minutesText, newId, outcome,
   playerLoad, playerName, removePlayer, snapTo, span, updateActivity, whole,
 } from './plan.js';
+import {
+  ROOM, ZOOMS, blockHtml, esc, layout, readPref, rescale, rulerHtml, trackHtml, writePref, zoomPref,
+} from './timeline.js';
 
 const $ = sel => document.querySelector(sel);
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const attrSel = (name, value) => `[${name}="${CSS.escape(value)}"]`;
 
-const ZOOMS = [1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24]; // pixels per minute
-const ROOM = 60;          // minutes of empty track after the last activity, to drag into
 const UNDO_LIMIT = 100;
 const SAVE_DELAY = 400;
 const POLL_EVERY = 2000;
@@ -30,15 +30,8 @@ const el = {
   zoomOut: $('#zoom-out'), zoomIn: $('#zoom-in'), undo: $('#undo'), saveState: $('#save-state'),
   clashNote: $('#clash-note'), wrap: $('#timeline-wrap'), timeline: $('#timeline'),
   tray: $('#tray'), editor: $('#editor'), checks: $('#checks'), tip: $('#drag-tip'),
-  notice: $('#notice'), offline: $('#offline'), main: $('#main'),
+  notice: $('#notice'), offline: $('#offline'), main: $('#main'), playerLink: $('#player-link'),
 };
-
-function readPref(key, fallback) {
-  try { const v = localStorage.getItem(key); return v === null ? fallback : JSON.parse(v); } catch { return fallback; }
-}
-function writePref(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage blocked: the preference just isn't kept */ }
-}
 
 const S = {
   name: null,          // plan file name
@@ -48,7 +41,7 @@ const S = {
   selected: null,      // id of the activity open in the editor
   editingPlayer: null, // id of the player whose name cell is a form
   testRoll: '',        // the editor's "test a result" box
-  zoom: Math.min(ZOOMS.length - 1, Math.max(0, whole(readPref('planner-zoom', 5), 5))),
+  zoom: zoomPref('planner-zoom'),
   undo: [],
 };
 
@@ -296,47 +289,8 @@ function renderBar() {
   el.zoomOut.disabled = S.zoom === 0;
   el.zoomIn.disabled = S.zoom === ZOOMS.length - 1;
   el.undo.disabled = !S.undo.length;
+  el.playerLink.href = `players.html#${encodeURIComponent(S.name)}`;
   document.title = `${plan.title.trim() || S.name} · Session Planner`;
-}
-
-// Ruler labels at least ~64px apart; finer lines at the snap step when they
-// are not crowded.
-function gridSteps(px, snap) {
-  const major = [5, 10, 15, 30, 60, 120, 240].find(s => s * px >= 64) ?? 240;
-  const minor = [snap, 5, 10, 15, 30].find(s => s * px >= 8 && s < major && major % s === 0) ?? major;
-  return { major, minor };
-}
-
-// A stable colour per activity, spread round the wheel.
-function hue(id) {
-  let h = 0;
-  for (const c of id) h = (h * 31 + c.codePointAt(0)) >>> 0;
-  return Math.round((h * 137.508) % 360);
-}
-
-function checkLabel(a) {
-  const check = a.check.trim();
-  if (check) return a.dc != null ? `${check} DC ${a.dc}` : check;
-  return a.dc != null ? `DC ${a.dc}` : '';
-}
-
-function blockHtml(a, lane, { left = null, clash = false } = {}) {
-  const plan = S.plan;
-  const others = a.players.filter(p => p !== lane).map(p => playerName(plan, p));
-  const withText = lane ? (others.length ? `with ${others.join(', ')}` : '') : (others.join(', ') || 'No players yet');
-  const when = a.start == null ? 'Not scheduled' : `${clock(a.start, plan.startsAt)}–${clock(end(a), plan.startsAt)}`;
-  const tip = [a.title.trim() || 'Untitled', `${when} · ${minutesText(a.duration)}`, checkLabel(a), withText].filter(Boolean).join('\n');
-  const width = a.duration * ppm();
-  const classes = ['block', lane ? '' : 'chip', a.id === S.selected ? 'selected' : '', lane && width < 64 ? 'narrow' : '', clash ? 'clash' : ''];
-  const style = `--hue:${hue(a.id)}` + (left != null ? `;left:${left}px;width:${width}px` : '');
-  const key = `b:${a.id}:${lane ?? ''}`;
-  return `<div class="${classes.filter(Boolean).join(' ')}" data-id="${esc(a.id)}" data-lane="${esc(lane ?? '')}" data-key="${esc(key)}"
-      style="${style}" tabindex="0" role="button" aria-label="${esc(tip.replace(/\n/g, ', '))}" title="${esc(tip)}">
-    <span class="b-title">${esc(a.title.trim() || 'Untitled')}</span>
-    <span class="b-meta">${esc([minutesText(a.duration), checkLabel(a)].filter(Boolean).join(' · '))}</span>
-    ${withText ? `<span class="b-with">${esc(withText)}</span>` : ''}
-    ${lane ? '<span class="grip" data-grip aria-hidden="true"></span>' : ''}
-  </div>`;
 }
 
 function whoHtml(p, i) {
@@ -360,37 +314,23 @@ function whoHtml(p, i) {
 
 function renderTimeline() {
   const plan = S.plan;
-  const px = ppm();
-  const reach = span(plan) + ROOM;
-  const width = Math.round(reach * px);
-  const { major, minor } = gridSteps(px, plan.snap);
+  const L = layout(plan, ppm());
   const clashing = new Set(allClashes(plan).flatMap(c => [c.a.id, c.b.id]));
-
-  let ticks = '';
-  for (let t = 0; t <= reach; t += major) {
-    ticks += `<span class="tick" style="left:${t * px}px">${esc(clock(t, plan.startsAt))}</span>`;
-  }
-  ticks += `<span class="tick end" style="left:${plan.length * px}px" title="Planned end of the session">End</span>`;
 
   const lanes = plan.players.map((p, i) => {
     const blocks = plan.activities
       .filter(a => a.start != null && a.players.includes(p.id))
-      .map(a => blockHtml(a, p.id, { left: a.start * px, clash: clashing.has(a.id) }))
+      .map(a => blockHtml(plan, a, p.id, L, { selected: a.id === S.selected, clash: clashing.has(a.id), editable: true }))
       .join('');
     return `<div class="row lane" data-player="${esc(p.id)}" style="--pc:${esc(p.color)}">
       ${whoHtml(p, i)}
-      <div class="track" style="width:${width}px;--major:${major * px}px;--minor:${minor * px}px">
-        <span class="overtime" style="left:${plan.length * px}px"></span>
-        <span class="end-mark" style="left:${plan.length * px}px"></span>
-        ${blocks}
-      </div>
+      ${trackHtml(plan, L, blocks)}
     </div>`;
   }).join('');
 
   keepFocus(el.timeline, () => {
     el.timeline.innerHTML = `
-      <div class="row ruler"><div class="who">${plan.players.length ? 'Players' : ''}</div>
-        <div class="track" style="width:${width}px">${ticks}</div></div>
+      ${rulerHtml(plan, L, plan.players.length ? 'Players' : '')}
       ${lanes || '<p class="empty-lanes">Add a player to get a lane on the timeline.</p>'}
       <div class="row add-row"><div class="who"><button type="button" data-act="add-player" data-key="add-player">Add player</button></div></div>`;
   });
@@ -412,7 +352,7 @@ function renderTray() {
         <button type="button" data-act="new-activity" data-key="new-activity">New activity</button>
       </header>
       <div class="tray-items">
-        ${waiting.map(a => blockHtml(a, null)).join('') || '<p class="empty">Drop a block here to take it off the timeline.</p>'}
+        ${waiting.map(a => blockHtml(S.plan, a, null, layout(S.plan, ppm()), { selected: a.id === S.selected, editable: true })).join('') || '<p class="empty">Drop a block here to take it off the timeline.</p>'}
       </div>
       <p class="hint">Drag a block to move it, or onto another player's lane to hand it to them. Drag its right edge to change how long it takes. Double-click a lane to add an activity there. Click a block to edit it.</p>`;
   });
@@ -979,18 +919,15 @@ el.snap.addEventListener('change', () => {
   renderAll();
 });
 
-// Zooms about the middle of the visible lanes, or keeps the start of the
-// session in view when the timeline is scrolled to it.
 function zoom(dir) {
-  const half = (el.wrap.clientWidth - el.timeline.querySelector('.who').offsetWidth) / 2;
-  const atStart = el.wrap.scrollLeft === 0;
-  const centre = (el.wrap.scrollLeft + half) / ppm();
+  const before = ppm();
   S.zoom = Math.min(ZOOMS.length - 1, Math.max(0, S.zoom + dir));
   writePref('planner-zoom', S.zoom);
-  renderBar();
-  renderTimeline();
-  renderTray();
-  el.wrap.scrollLeft = atStart ? 0 : centre * ppm() - half;
+  rescale(el.wrap, before, ppm(), () => {
+    renderBar();
+    renderTimeline();
+    renderTray();
+  });
 }
 el.zoomOut.addEventListener('click', () => zoom(-1));
 el.zoomIn.addEventListener('click', () => zoom(1));

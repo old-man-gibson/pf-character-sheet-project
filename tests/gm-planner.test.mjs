@@ -1,7 +1,8 @@
 /** Tests the GM module's session planner: the plan model (one activity per
- *  player at a time, success tiers), the plan files on disk (versioned writes
- *  that never overwrite a change made elsewhere), and the server in front of
- *  them, run on a spare port against a temporary folder.
+ *  player at a time, success tiers), what the player view is allowed to see,
+ *  the timeline markup both pages draw, the plan files on disk (versioned
+ *  writes that never overwrite a change made elsewhere), and the server in
+ *  front of them, run on a spare port against a temporary folder.
  *
  *  Run: node tests/gm-planner.test.mjs */
 import { spawn } from 'node:child_process';
@@ -11,9 +12,10 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   addActivity, addPlayer, allClashes, blankPlan, clashText, clashes, clock, duplicateActivity,
-  firstFree, ladder, minutesText, normalizePlan, outcome, playerLoad, removePlayer, span, updateActivity,
+  firstFree, ladder, minutesText, normalizePlan, outcome, playerLoad, playerView, removePlayer, span, updateActivity,
 } from '../gm-module/planner/plan.js';
-import { createPlan, currentVersion, listPlans, readPlan, validName, writePlan } from '../gm-module/planner/store.mjs';
+import { blockHtml, layout } from '../gm-module/planner/timeline.js';
+import { createPlan, currentVersion, listPlans, readPlan, readPlayerView, validName, writePlan } from '../gm-module/planner/store.mjs';
 
 let pass = 0;
 let fail = 0;
@@ -156,6 +158,52 @@ function table() {
     outcome({ dc: 15, success: '', failure: '', tiers: [{ id: 't1', label: 'Partial', dc: 10, reward: 'Half' }] }, 12).tier.label, 'Partial');
 }
 
+// ---- Player view ------------------------------------------------------------
+
+// A plan with every kind of GM-only content in it, each marked SECRET.
+function secretPlan() {
+  return normalizePlan({
+    title: 'Open night',
+    gmNotes: 'SECRET plan note',
+    players: [{ id: 'p1', name: 'Ana', secretFlag: 'SECRET player note' }, { id: 'p2', name: '' }],
+    activities: [
+      {
+        id: 'a1', title: 'Pick the lock', start: 0, duration: 5, players: ['p1', 'p2'], check: 'Disable Device',
+        dc: 1777, premise: 'SECRET premise', success: 'SECRET success', failure: 'SECRET failure',
+        tiers: [{ id: 't1', label: 'SECRET tier', dc: 1888, reward: 'SECRET tier reward' }], gmNote: 'SECRET field',
+      },
+      { id: 'a2', title: 'SECRET unscheduled', start: null, duration: 10, players: ['p1'] },
+    ],
+  });
+}
+
+{
+  const view = playerView(secretPlan());
+  const text = JSON.stringify(view);
+  check('the player view leaves out every GM field', [text.includes('SECRET'), text.includes('1777'), text.includes('1888')], [false, false, false]);
+  check('and keeps the timeline', view.activities.map(a => [a.title, a.start, a.duration, a.players, a.check]),
+    [['Pick the lock', 0, 5, ['p1', 'p2'], 'Disable Device']]);
+  check('players keep their colours and get a name when they have none', view.players.map(p => [p.name, !!p.color]),
+    [['Ana', true], ['Player 2', true]]);
+  check('the session times come through', [view.title, view.length, view.startsAt], ['Open night', 240, '']);
+}
+
+{
+  const view = playerView(secretPlan());
+  const L = layout(view, 8);
+  const [act] = view.activities;
+  const withCheck = blockHtml(view, act, 'p1', L, { showCheck: true });
+  const without = blockHtml(view, act, 'p1', L, { showCheck: false });
+  check('a player block can show the check', withCheck.includes('Disable Device'), true);
+  check('or leave it out, tooltip included', without.includes('Disable Device'), false);
+  check('a player block cannot be dragged or resized', [without.includes('data-grip'), without.includes('tabindex'), without.includes('static')], [false, false, true]);
+  check('and names the others in it', without.includes('with Player 2'), true);
+  const gm = blockHtml(secretPlan(), secretPlan().activities[0], 'p1', L, { editable: true });
+  check('the GM block shows the DC and can be dragged', [gm.includes('Disable Device DC 1777'), gm.includes('data-grip'), gm.includes('tabindex="0"')], [true, true, true]);
+  const odd = blockHtml(view, { ...act, title: '<b>"x"</b>' }, 'p1', L);
+  check('titles are escaped', odd.includes('&lt;b&gt;&quot;x&quot;&lt;/b&gt;') && !odd.includes('<b>'), true);
+}
+
 // ---- Times -----------------------------------------------------------------
 
 check('times count from the start of the session', clock(75), '1:15');
@@ -200,6 +248,19 @@ try {
   check('a plan written from scratch must not exist yet', writePlan(dir, 'session-2', plan, null).ok, false);
   check('no temporary files are left behind', fs.readdirSync(dir).filter(f => f.endsWith('.tmp')), []);
 
+  writePlan(dir, 'secrets', secretPlan(), null);
+  const shown = readPlayerView(dir, 'secrets');
+  const dcOnly = readPlan(dir, 'secrets');
+  dcOnly.plan.activities[0].dc = 1999;
+  dcOnly.plan.activities[0].success = 'SECRET changed';
+  writePlan(dir, 'secrets', dcOnly.plan, dcOnly.v);
+  check('a change only the GM sees leaves the player view version alone', readPlayerView(dir, 'secrets').v, shown.v);
+  const retitled = readPlan(dir, 'secrets');
+  retitled.plan.activities[0].title = 'Pick the other lock';
+  writePlan(dir, 'secrets', retitled.plan, retitled.v);
+  check('a change the players see gives it a new version', readPlayerView(dir, 'secrets').v !== shown.v, true);
+  check('a missing plan has no player view', readPlayerView(dir, 'nope'), null);
+
   // ---- The server ----------------------------------------------------------
 
   const server = spawn(process.execPath, [path.resolve('gm-module/planner/server.mjs'), '0', '--dir', dir], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -234,7 +295,7 @@ try {
       });
 
     const list = await request('GET', '/api/plans');
-    check('the server lists the folder', [list.status, list.json.plans.map(p => p.name)], [200, ['broken', 'session-2', 'session-10']]);
+    check('the server lists the folder', [list.status, list.json.plans.map(p => p.name)], [200, ['broken', 'secrets', 'session-2', 'session-10']]);
     check('a request under another host name is refused', (await request('GET', '/api/plans', { host: 'evil.example:80' })).status, 403);
     check('a write that is not JSON is refused', (await request('POST', '/api/plans', { body: { name: 'x' }, type: 'text/plain' })).status, 415);
     check('a bad plan name is refused', (await request('POST', '/api/plans', { body: { name: '../up' } })).status, 400);
@@ -254,6 +315,16 @@ try {
     const got = await request('GET', `/api/plan?name=session-3&since=${v}`);
     check('polling a changed plan returns it', [got.status, got.json.v, got.json.plan.activities.length], [200, put.json.v, 3]);
     check('a missing plan is a 404', (await request('GET', '/api/plan?name=nope')).status, 404);
+
+    const players = await request('GET', '/api/players?name=secrets');
+    check('the player feed carries the timeline', [players.status, players.json.view.activities[0].title], [200, 'Pick the other lock']);
+    check('and nothing the GM keeps back', /SECRET|1777|1888|1999/.test(players.text), false);
+    const still = await request('GET', `/api/players?name=secrets&since=${players.json.v}`);
+    check('polling an unchanged player view returns no copy', [still.json.same, still.json.view], [true, undefined]);
+    check('the player feed is read-only', (await request('PUT', '/api/players?name=secrets', { body: {} })).status, 405);
+    check('a missing plan has no player feed', (await request('GET', '/api/players?name=nope')).status, 404);
+    const pv = await request('GET', '/players.html');
+    check('the player view page is served', [pv.status, pv.text.includes('players.js')], [200, true]);
 
     const page = await request('GET', '/');
     check('the page is served', [page.status, page.type.startsWith('text/html'), page.text.includes('planner.js')], [200, true, true]);

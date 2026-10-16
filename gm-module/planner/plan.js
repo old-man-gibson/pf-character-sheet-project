@@ -309,6 +309,25 @@ export function outcome(act, total) {
   return { failure: false, tier, reward: tier.reward, next: steps[reached] ?? null };
 }
 
+// ---- Player view -------------------------------------------------------------
+
+// What the players may see of a plan: the timeline's activities with their
+// titles, times, players and required check. Built from a list of the fields
+// to keep, so DCs, rewards, tiers, premises, unscheduled activities and any
+// field added to a plan later stay with the GM.
+export function playerView(plan) {
+  return {
+    title: plan.title,
+    startsAt: plan.startsAt,
+    length: plan.length,
+    snap: plan.snap,
+    players: plan.players.map(p => ({ id: p.id, name: playerName(plan, p.id), color: p.color })),
+    activities: plan.activities
+      .filter(a => a.start != null)
+      .map(a => ({ id: a.id, title: a.title, start: a.start, duration: a.duration, players: [...a.players], check: a.check })),
+  };
+}
+
 // The checks the plan already names, for suggestions while typing another.
 export function checkNames(plan) {
   const seen = new Map();

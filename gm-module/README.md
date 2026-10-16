@@ -9,7 +9,8 @@ content-free, so everything with game or campaign content in it
 ```
 tools/roll.mjs      crypto-backed dice roller (see header comment for usage)
 screen/             session screen: server.mjs + board page
-planner/            session planner: server.mjs + timeline page (plan.js is the model)
+planner/            session planner: server.mjs, the GM page and the player view
+                    (plan.js is the model, timeline.js the markup both pages draw)
 lib/http.mjs        HTTP helpers both servers use
 plans/              (git-ignored) the planner's plan files, one JSON file per session
 rules/              (git-ignored) homebrew docs and rules references, grep-able
@@ -68,6 +69,15 @@ lane per player:
 - Double-click a lane to add an activity there. Arrow keys move a focused block
   (Shift changes its duration; up and down move it to the next lane); Delete
   removes it; Ctrl+Z undoes.
+
+**Player view.** The Player view button opens `players.html#<plan>`: the same
+timeline, read-only, for a second screen or a screen share. It shows each
+scheduled activity's title, time, duration and players, and the required check
+when its Show checks box is ticked. DCs, rewards, success tiers, premises and
+unscheduled activities are never sent to it: the server builds its data from a
+list of the fields players may see (`playerView` in plan.js). It asks for
+changes every second, so it follows the GM page's edits about a second after
+they are saved.
 
 Plans are saved as `<name>.json` in `gm-module/plans/` (git-ignored) or the
 `--dir` folder. A new plan starts with the open plan's players. The file can be

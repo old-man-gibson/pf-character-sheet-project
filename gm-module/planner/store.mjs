@@ -7,7 +7,7 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { blankPlan, normalizePlan } from './plan.js';
+import { blankPlan, normalizePlan, playerView } from './plan.js';
 
 // A plan's name is its file name without ".json": letters, digits, spaces,
 // dashes and underscores, so a name never reaches outside the folder. Windows
@@ -32,6 +32,15 @@ export function currentVersion(dir, name) {
 export function readPlan(dir, name) {
   const raw = fs.readFileSync(fileOf(dir, name), 'utf8');
   return { v: versionOf(raw), plan: normalizePlan(JSON.parse(raw)) };
+}
+
+// The players' view of a plan, or null when there is no such file. Its
+// version is a hash of the view itself, so a change only the GM can see (a DC,
+// a reward) does not register as a change for the players.
+export function readPlayerView(dir, name) {
+  if (currentVersion(dir, name) === null) return null;
+  const view = playerView(readPlan(dir, name).plan);
+  return { v: versionOf(JSON.stringify(view)), view };
 }
 
 export function listPlans(dir) {
