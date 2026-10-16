@@ -257,6 +257,11 @@ main {
 .block.blocked { opacity: .65; border-color: var(--bad); }
 .block.blocked .b-title { text-decoration: line-through 2px var(--bad); }
 .block.done .b-title::before { content: "✓ "; color: var(--ok); }
+.block.event { border-radius: 14px; }
+.block.event .b-title { font-style: italic; }
+.lane.world .who { font-style: italic; color: var(--dim); }
+.lane.world .dot { background: var(--warn); }
+.lane.world .track { background-color: color-mix(in srgb, var(--warn) 5%, transparent); }
 
 /* Lines between linked activities: green leads, red blocks, dashed until in effect. */
 svg.links { position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; overflow: visible; }

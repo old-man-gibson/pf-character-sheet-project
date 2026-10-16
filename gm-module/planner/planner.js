@@ -22,7 +22,7 @@ import {
 import { openStore } from './stores.js';
 import { downloadFile } from '../../app/js/download.js';
 import {
-  ROOM, ZOOMS, blockHtml, esc, layout, readPref, rescale, rulerHtml, trackHtml, writePref, zoomPref,
+  ROOM, WORLD, ZOOMS, blockHtml, esc, layout, readPref, rescale, rulerHtml, trackHtml, writePref, zoomPref,
 } from './timeline.js';
 
 const $ = sel => document.querySelector(sel);
@@ -363,10 +363,21 @@ function renderTimeline() {
       ${trackHtml(plan, L, blocks)}
     </div>`;
   }).join('');
+  // World events: their own row above the players, for what happens at a
+  // time whoever is there.
+  const events = plan.activities
+    .filter(a => a.start != null && a.event)
+    .map(a => blockHtml(plan, a, WORLD, L, { selected: a.id === S.selected, marked: marked.has(a.id), editable: true, ...linkState(a) }))
+    .join('');
+  const world = `<div class="row lane world" data-player="${WORLD}">
+      <div class="who"><span class="pname" title="Events that happen at their time, whoever is there. Double-click the row to add one."><i class="dot"></i><span>World</span></span></div>
+      ${trackHtml(plan, L, events)}
+    </div>`;
 
   keepFocus(el.timeline, () => {
     el.timeline.innerHTML = `
       ${rulerHtml(plan, L, plan.players.length ? 'Players' : '')}
+      ${world}
       ${lanes || '<p class="empty-lanes">Add a player to get a lane on the timeline.</p>'}
       <div class="row add-row"><div class="who"><button type="button" data-act="add-player" data-key="add-player">Add player</button></div></div>`;
   });
@@ -793,11 +804,15 @@ function renderActivityEditor(a) {
         <input class="ed-title" data-f="title" data-key="f:title" value="${esc(a.title)}" placeholder="Activity name" aria-label="Activity name">
         <button type="button" class="icon" data-act="close-editor" aria-label="Close">×</button>
       </div>
-      <fieldset class="ed-players"><legend>Players${a.maxPlayers != null ? ` <span class="count">${a.players.length} of ${a.maxPlayers}</span>` : ''}</legend>
+      ${a.event ? `<fieldset class="ed-players"><legend>World event</legend>
+        <p class="dim small">It happens at its time, whoever is there. It sits in the World row and is not in the player view.</p>
+        <label class="pchip"><input type="checkbox" id="is-event" data-key="is-event" checked> World event</label>
+      </fieldset>` : `<fieldset class="ed-players"><legend>Players${a.maxPlayers != null ? ` <span class="count">${a.players.length} of ${a.maxPlayers}</span>` : ''}</legend>
         ${players || '<p class="dim">Add players first.</p>'}
         <label class="ed-max">At most <input type="number" data-f="maxPlayers" data-key="f:maxPlayers" min="1" step="1"
           value="${a.maxPlayers ?? ''}" placeholder="any" aria-label="Most players this activity takes; empty for no limit"> players</label>
-      </fieldset>
+        <label class="pchip" title="No players: something that happens at its time, whoever is there"><input type="checkbox" id="is-event" data-key="is-event"> World event</label>
+      </fieldset>`}
       ${activityNpcsHtml(a)}
       <div class="ed-when">
         <label>Start<span class="unit"><input type="number" data-f="start" data-key="f:start" aria-label="Start, minutes from the start of the session" min="0" step="${plan.snap}"
@@ -909,8 +924,16 @@ function setStart(id, start) {
 
 function schedule(id) {
   const a = find(id);
-  if (!a.players.length) { notice('Pick at least one player first.', 'warn'); return; }
+  if (!a.players.length && !a.event) { notice('Pick at least one player first.', 'warn'); return; }
   setStart(id, firstFree(S.plan, a, 0));
+}
+
+function newEventAt(minutes) {
+  const out = edit(p => addActivity(p, { event: true, title: 'New event', start: Math.max(0, minutes), duration: Math.max(S.plan.snap, 5) }));
+  select(out.activity.id);
+  const title = el.editor.querySelector('[data-f="title"]');
+  title?.focus();
+  title?.select();
 }
 
 function newActivityAt(player, minutes) {
@@ -1016,9 +1039,14 @@ function candidateAt(x, y) {
   if (hit?.closest('#tray')) return { cand: { ...a, start: null } };
   const lane = hit?.closest('.lane')?.dataset.player;
   if (!lane) return { cand: null };
+  if (a.event !== (lane === WORLD)) {
+    return { cand: null, why: a.event ? 'World events stay in the World row.' : 'Only world events go in the World row.' };
+  }
   let players = a.players;
   let note = '';
-  if (drag.lane && lane !== drag.lane) {
+  if (a.event) {
+    players = [];
+  } else if (drag.lane && lane !== drag.lane) {
     players = swapPlayers(a, drag.lane, lane);
     if (!players) return { cand: null, why: `${playerName(plan, lane)} is already in this activity.` };
     note = `${playerName(plan, drag.lane)} → ${playerName(plan, lane)}`;
@@ -1146,7 +1174,8 @@ el.timeline.addEventListener('dblclick', e => {
   const lane = e.target.closest('.lane .track') && e.target.closest('.lane').dataset.player;
   if (!lane) return;
   const at = Math.floor(minuteAt(e.clientX) / S.plan.snap) * S.plan.snap;
-  newActivityAt(lane, at);
+  if (lane === WORLD) newEventAt(at);
+  else newActivityAt(lane, at);
 });
 
 el.timeline.addEventListener('click', e => {
@@ -1179,7 +1208,7 @@ el.main.addEventListener('keydown', e => {
     edit(plan => updateActivity(plan, a.id, changes));
     renderAll();
     focusAfter();
-  } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && lane) {
+  } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && lane && lane !== WORLD) {
     e.preventDefault();
     const to = laneBeside(lane, e.key === 'ArrowUp' ? -1 : 1);
     if (!to) return;
@@ -1438,6 +1467,11 @@ el.editor.addEventListener('change', e => {
     const value = whole(t.value, a[f], f === 'start' ? 0 : 1);
     edit(plan => updateActivity(plan, a.id, { [f]: value }));
     renderAll();
+  } else if (t.id === 'is-event') {
+    const wasOn = a.start != null;
+    const out = edit(plan => updateActivity(plan, a.id, t.checked ? { event: true, players: [] } : { event: false }));
+    renderAll();
+    if (out.ok && !t.checked && wasOn) notice('It has no players yet, so it moved to the tray. Tick its players, then put it on the timeline.');
   } else if (t.type === 'checkbox' && t.dataset.player) {
     const wanted = new Set(a.players);
     if (t.checked) wanted.add(t.dataset.player); else wanted.delete(t.dataset.player);

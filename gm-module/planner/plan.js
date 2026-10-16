@@ -6,7 +6,10 @@
 // Times are whole minutes from the start of the session. An activity whose
 // `start` is null is unscheduled and waits in the tray. Activities run in
 // parallel, but a player takes part in one at a time: two activities that
-// share a player may meet end to start, never overlap. An activity may also
+// share a player may meet end to start, never overlap. A world event
+// (`event: true`) is an activity with no players: something that happens at
+// its time whoever is there (the patrol passes, the bell rings). It sits on
+// the timeline anyway, and the player rules do not touch it. An activity may also
 // set `maxPlayers`, the most players it takes (null: no limit). Every edit that
 // moves an activity or changes who is in it goes through `updateActivity` (or
 // `addActivity`), which refuses a change that would break either rule.
@@ -34,7 +37,7 @@
 //     notes: [{ id, text, about: Ref | null, happened }],
 //     links: [{ id, from: Ref, to: activity id, kind: 'leads' | 'blocks' }],
 //     activities: [{ id, title, start (min) | null, duration (min), players: [ids],
-//                    maxPlayers | null, npcs: [ids], premise, result | null,
+//                    event, maxPlayers | null, npcs: [ids], premise, result | null,
 //                    checks: [{ id, check, dc | null, success, failure,
 //                               tiers: [{ id, label, dc | null, reward }] }] }] }
 //   result  { check: id | null, outcome: 'done' | 'failure' | 'success' | tier id }
@@ -129,7 +132,7 @@ export function textHash(s) {
 
 export function blankActivity(id, fields = {}) {
   return {
-    id, title: 'New activity', start: null, duration: DEFAULTS.duration, players: [], npcs: [],
+    id, title: fields.event ? 'New event' : 'New activity', start: null, duration: DEFAULTS.duration, players: [], npcs: [],
     premise: '', checks: [blankCheck('c1')], result: null, ...fields,
   };
 }
@@ -198,15 +201,17 @@ export function normalizeActivity(raw, known = null) {
   const checks = [];
   for (const c of readChecks(src)) checks.push(normalizeCheck(c, checks));
   const a = Object.fromEntries(Object.entries(src).filter(([k]) => !LEGACY_CHECK.includes(k)));
-  const players = idList(a.players, known?.players);
+  const event = a.event === true;
+  const players = event ? [] : idList(a.players, known?.players);
   return {
     ...a,
     id: text(a.id),
-    title: a.title === undefined ? 'New activity' : text(a.title),
-    start: players.length ? whole(a.start, null, 0) : null,
+    title: a.title === undefined ? (event ? 'New event' : 'New activity') : text(a.title),
+    start: players.length || event ? whole(a.start, null, 0) : null,
     duration: whole(a.duration, DEFAULTS.duration, 1),
+    event,
     players,
-    maxPlayers: whole(a.maxPlayers, null, 1),
+    maxPlayers: event ? null : whole(a.maxPlayers, null, 1),
     npcs: idList(a.npcs, known?.npcs),
     premise: text(a.premise),
     checks,
@@ -758,8 +763,9 @@ export function recapMarkdown(plan, { notes = true } = {}) {
 
 // ---- Player view -------------------------------------------------------------
 
-// What the players may see of a plan: the timeline's activities with their
-// titles, times, players and the names of their checks. Built from a list of the fields
+// What the players may see of a plan: the timeline's activities (not world
+// events) with their titles, times, players and the names of their checks.
+// Built from a list of the fields
 // to keep, so DCs, rewards, tiers, premises, unscheduled activities and any
 // field added to a plan later stay with the GM.
 export function playerView(plan) {
@@ -770,7 +776,7 @@ export function playerView(plan) {
     snap: plan.snap,
     players: plan.players.map(p => ({ id: p.id, name: playerName(plan, p.id), color: p.color })),
     activities: plan.activities
-      .filter(a => a.start != null)
+      .filter(a => a.start != null && !a.event)
       .map(a => ({
         id: a.id, title: a.title, start: a.start, duration: a.duration, players: [...a.players],
         checks: a.checks.filter(c => c.check.trim()).map(c => ({ check: c.check })),

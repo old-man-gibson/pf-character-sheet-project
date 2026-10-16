@@ -374,6 +374,30 @@ function table() {
   check('a plan without notes or links reads with none', [normalizePlan({}).notes, normalizePlan({}).links], [[], []]);
 }
 
+// ---- World events ----------------------------------------------------------------
+
+{
+  const plan = normalizePlan({
+    players: [{ id: 'p1', name: 'Ana' }],
+    activities: [
+      { id: 'e1', title: 'Patrol passes', event: true, start: 30, duration: 5, players: ['p1'], maxPlayers: 2 },
+      { id: 'a1', title: 'Sneak', start: 25, duration: 15, players: ['p1'] },
+    ],
+  });
+  const [e1] = plan.activities;
+  check('a world event has no players, keeps its time, and has no limit', [e1.event, e1.players, e1.start, e1.maxPlayers], [true, [], 30, null]);
+  check('it books nobody, so it overlaps anything', [allClashes(plan), clashes(plan, e1)], [[], []]);
+  check('a new event is called so', addActivity(blankPlan(), { event: true }).activity.title, 'New event');
+  check('it can be moved', updateActivity(plan, 'e1', { start: 60 }).activity.start, 60);
+  check('turning an activity into an event takes its players out', updateActivity(plan, 'a1', { event: true }).activity.players, []);
+  check('and back, with nobody in it, sends it to the tray', updateActivity(plan, 'a1', { event: false }).activity.start, null);
+  addLink(plan, { activity: 'e1' }, 'a1', 'blocks');
+  updateActivity(plan, 'e1', { result: { outcome: 'done' } });
+  check('an event can block an activity once it happens', activityState(plan, 'a1').state, 'blocked');
+  check('events are not in the player view', playerView({ ...plan, activities: [{ ...plan.activities[0] }] }).activities, []);
+  check('but are in the recap', recap(plan).played.map(e => [e.title, e.event]), [['Patrol passes', true]]);
+}
+
 // ---- Recap -------------------------------------------------------------------
 
 {
