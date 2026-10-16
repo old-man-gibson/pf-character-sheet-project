@@ -14,11 +14,16 @@
 // own DC and reward. A result reaches the tier with the highest DC it meets;
 // below every DC it is a failure.
 //
+// NPCs are the plan's cast. An activity links any number of them. Nothing
+// stops one NPC being linked to two activities at once (a link can mean "about
+// them" as well as "with them"), but `npcClashes` reports it.
+//
 // Plan shape (one JSON file per session):
 //   { version, title, startsAt: "19:00" | "", length (min), snap (min),
 //     players: [{ id, name, color }],
+//     npcs: [{ id, name, role, description, notes }],
 //     activities: [{ id, title, start (min) | null, duration (min), players: [ids],
-//                    premise, check, dc | null, success, failure,
+//                    npcs: [ids], premise, check, dc | null, success, failure,
 //                    tiers: [{ id, label, dc | null, reward }] }] }
 // Fields a plan carries beyond these are kept as they are.
 
@@ -53,13 +58,13 @@ export function newId(list, prefix) {
 export function blankPlan(title = DEFAULTS.title) {
   return {
     version: PLAN_VERSION, title, startsAt: '', length: DEFAULTS.length, snap: DEFAULTS.snap,
-    players: [], activities: [],
+    players: [], npcs: [], activities: [],
   };
 }
 
 export function blankActivity(id, fields = {}) {
   return {
-    id, title: 'New activity', start: null, duration: DEFAULTS.duration, players: [],
+    id, title: 'New activity', start: null, duration: DEFAULTS.duration, players: [], npcs: [],
     premise: '', check: '', dc: null, success: '', failure: '', tiers: [], ...fields,
   };
 }
@@ -76,16 +81,26 @@ function normalizeTier(raw, taken) {
   };
 }
 
-// One activity in canonical shape. `playerIds` (when given) drops players the
-// plan does not have. An activity with nobody in it cannot sit in a lane, so it
-// is unscheduled.
-export function normalizeActivity(raw, playerIds = null) {
-  const a = isObject(raw) ? raw : {};
-  const players = [];
-  for (const p of Array.isArray(a.players) ? a.players : []) {
-    const id = text(p);
-    if (id && !players.includes(id) && (!playerIds || playerIds.includes(id))) players.push(id);
+// A list of ids without blanks or repeats, and (when `allowed` is given) only
+// the ids in it.
+function idList(raw, allowed) {
+  const out = [];
+  for (const v of Array.isArray(raw) ? raw : []) {
+    const id = text(v);
+    if (id && !out.includes(id) && (!allowed || allowed.includes(id))) out.push(id);
   }
+  return out;
+}
+
+// The player and NPC ids a plan has, for normalizeActivity.
+export const knownIds = plan => ({ players: plan.players.map(p => p.id), npcs: plan.npcs.map(n => n.id) });
+
+// One activity in canonical shape. `known` ({ players, npcs } id lists, when
+// given) drops players and NPCs the plan does not have. An activity with
+// nobody in it cannot sit in a lane, so it is unscheduled.
+export function normalizeActivity(raw, known = null) {
+  const a = isObject(raw) ? raw : {};
+  const players = idList(a.players, known?.players);
   const tiers = [];
   for (const t of Array.isArray(a.tiers) ? a.tiers : []) tiers.push(normalizeTier(t, tiers));
   return {
@@ -95,6 +110,7 @@ export function normalizeActivity(raw, playerIds = null) {
     start: players.length ? whole(a.start, null, 0) : null,
     duration: whole(a.duration, DEFAULTS.duration, 1),
     players,
+    npcs: idList(a.npcs, known?.npcs),
     premise: text(a.premise),
     check: text(a.check),
     dc: whole(a.dc, null),
@@ -117,11 +133,15 @@ export function normalizePlan(raw) {
       color: COLOR.test(p.color) ? p.color : PLAYER_COLORS[players.length % PLAYER_COLORS.length],
     });
   }
-  const ids = players.map(p => p.id);
+  const npcs = [];
+  for (const n of Array.isArray(src.npcs) ? src.npcs : []) {
+    if (isObject(n)) npcs.push(normalizeNpc(n, npcs));
+  }
+  const known = { players: players.map(p => p.id), npcs: npcs.map(n => n.id) };
   const activities = [];
   for (const raw of Array.isArray(src.activities) ? src.activities : []) {
     if (!isObject(raw)) continue;
-    const a = normalizeActivity(raw, ids);
+    const a = normalizeActivity(raw, known);
     if (!a.id.trim() || activities.some(x => x.id === a.id)) a.id = newId(activities, 'a');
     activities.push(a);
   }
@@ -133,7 +153,20 @@ export function normalizePlan(raw) {
     length: whole(src.length, DEFAULTS.length, 1),
     snap: SNAPS.includes(Number(src.snap)) ? Number(src.snap) : DEFAULTS.snap,
     players,
+    npcs,
     activities,
+  };
+}
+
+function normalizeNpc(raw, taken) {
+  const id = text(raw.id).trim();
+  return {
+    ...raw,
+    id: id && !taken.some(x => x.id === id) ? id : newId(taken, 'n'),
+    name: text(raw.name),
+    role: text(raw.role),
+    description: text(raw.description),
+    notes: text(raw.notes),
   };
 }
 
@@ -235,7 +268,7 @@ export function firstFree(plan, act, from = 0) {
 export function updateActivity(plan, id, changes) {
   const i = plan.activities.findIndex(a => a.id === id);
   if (i < 0) return { ok: false, clashes: [], activity: null };
-  const next = normalizeActivity({ ...plan.activities[i], ...changes }, plan.players.map(p => p.id));
+  const next = normalizeActivity({ ...plan.activities[i], ...changes }, knownIds(plan));
   const found = clashes(plan, next);
   if (found.length) return { ok: false, clashes: found, activity: next };
   plan.activities[i] = next;
@@ -243,7 +276,7 @@ export function updateActivity(plan, id, changes) {
 }
 
 export function addActivity(plan, fields = {}) {
-  const act = normalizeActivity(blankActivity(newId(plan.activities, 'a'), fields), plan.players.map(p => p.id));
+  const act = normalizeActivity(blankActivity(newId(plan.activities, 'a'), fields), knownIds(plan));
   const found = clashes(plan, act);
   if (found.length) return { ok: false, clashes: found, activity: act };
   plan.activities.push(act);
@@ -284,6 +317,47 @@ export function removePlayer(plan, id) {
     if (!a.players.length && a.start != null) { a.start = null; emptied.push(a); }
   }
   return emptied;
+}
+
+// ---- NPCs ------------------------------------------------------------------
+
+export function npcName(plan, id) {
+  return plan.npcs.find(n => n.id === id)?.name.trim() || 'Unnamed NPC';
+}
+
+export function addNpc(plan, fields = {}) {
+  const npc = normalizeNpc({ name: '', ...fields, id: newId(plan.npcs, 'n') }, plan.npcs);
+  plan.npcs.push(npc);
+  return npc;
+}
+
+// Takes the NPC out of the plan and out of every activity. Returns the
+// activities that linked them.
+export function removeNpc(plan, id) {
+  plan.npcs = plan.npcs.filter(n => n.id !== id);
+  const linked = plan.activities.filter(a => a.npcs.includes(id));
+  for (const a of linked) a.npcs = a.npcs.filter(n => n !== id);
+  return linked;
+}
+
+// The activities that link an NPC: scheduled ones in time order, then the
+// unscheduled ones.
+export function npcActivities(plan, id) {
+  const linked = plan.activities.filter(a => a.npcs.includes(id));
+  const on = linked.filter(a => a.start != null).sort((x, y) => x.start - y.start);
+  return [...on, ...linked.filter(a => a.start == null)];
+}
+
+// The other scheduled activities that link one of `act`'s NPCs at an
+// overlapping time, as { npc, activity } pairs.
+export function npcClashes(plan, act) {
+  if (act.start == null) return [];
+  const found = [];
+  for (const other of plan.activities) {
+    if (other.id === act.id || other.start == null || !overlaps(act, other)) continue;
+    for (const n of act.npcs) if (other.npcs.includes(n)) found.push({ npc: n, activity: other });
+  }
+  return found;
 }
 
 // ---- Checks ----------------------------------------------------------------

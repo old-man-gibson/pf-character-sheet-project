@@ -81,9 +81,10 @@ export function writePlan(dir, name, plan, base) {
   return { ok: true, v: versionOf(bytes) };
 }
 
-// A blank plan, with the given players (a new session usually has the same table).
-export function createPlan(dir, name, title, players = []) {
-  const plan = { ...blankPlan(title || name), players };
+// A plan with no activities, starting with the given players and NPCs (a new
+// session usually has the same table and many of the same people).
+export function createPlan(dir, name, title, { players = [], npcs = [] } = {}) {
+  const plan = { ...blankPlan(title || name), players, npcs };
   const out = writePlan(dir, name, plan, null);
   return out.ok ? { ok: true, v: out.v, plan: normalizePlan(plan) } : out;
 }

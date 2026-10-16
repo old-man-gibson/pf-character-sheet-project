@@ -1,6 +1,6 @@
 // Session planner page. Draws the plan as one lane per player along a time
-// ruler, the unscheduled activities in a tray below, and an editor for the
-// selected activity. Every change goes through plan.js (which refuses to put
+// ruler, the unscheduled activities in a tray below, and a side panel with
+// the selected activity's editor or the plan's NPCs. Every change goes through plan.js (which refuses to put
 // a player in two activities at once), is kept for undo, and is saved to the
 // plan file through the planner server. The page re-reads the file when it
 // changes on disk, so the file can also be edited by hand while it is open.
@@ -9,9 +9,10 @@
 // with the focused control put back afterwards; a drag draws only its preview.
 
 import {
-  SNAPS, addActivity, addPlayer, allClashes, checkNames, clashText, clashes, clock,
-  deleteActivity, duplicateActivity, end, firstFree, ladder, minutesText, newId, outcome,
-  playerLoad, playerName, removePlayer, snapTo, span, updateActivity, whole,
+  SNAPS, addActivity, addNpc, addPlayer, allClashes, checkNames, clashText, clashes, clock,
+  deleteActivity, duplicateActivity, end, firstFree, ladder, minutesText, newId, npcActivities,
+  npcClashes, npcName, outcome, playerLoad, playerName, removeNpc, removePlayer, snapTo, span,
+  updateActivity, whole,
 } from './plan.js';
 import {
   ROOM, ZOOMS, blockHtml, esc, layout, readPref, rescale, rulerHtml, trackHtml, writePref, zoomPref,
@@ -31,6 +32,7 @@ const el = {
   clashNote: $('#clash-note'), wrap: $('#timeline-wrap'), timeline: $('#timeline'),
   tray: $('#tray'), editor: $('#editor'), checks: $('#checks'), tip: $('#drag-tip'),
   notice: $('#notice'), offline: $('#offline'), main: $('#main'), playerLink: $('#player-link'),
+  npcs: $('#npcs'),
 };
 
 const S = {
@@ -39,6 +41,7 @@ const S = {
   plan: null,
   plans: [],           // [{ name, title }] in the folder
   selected: null,      // id of the activity open in the editor
+  npcPanel: null,      // with no activity open: 'list' for the NPC list, or an NPC's id
   editingPlayer: null, // id of the player whose name cell is a form
   testRoll: '',        // the editor's "test a result" box
   zoom: zoomPref('planner-zoom'),
@@ -48,6 +51,15 @@ const S = {
 const ppm = () => ZOOMS[S.zoom];
 const find = id => S.plan?.activities.find(a => a.id === id) ?? null;
 const selectedActivity = () => find(S.selected);
+const findNpc = id => S.plan?.npcs.find(n => n.id === id) ?? null;
+const openNpc = () => findNpc(S.npcPanel);
+
+// After an undo or a reload, an open NPC that is gone falls back to the list.
+function settlePanels() {
+  if (!find(S.selected)) S.selected = null;
+  if (S.npcPanel && S.npcPanel !== 'list' && !openNpc()) S.npcPanel = 'list';
+  if (!S.plan.players.some(p => p.id === S.editingPlayer)) S.editingPlayer = null;
+}
 
 // ---- Messages --------------------------------------------------------------
 
@@ -110,8 +122,7 @@ function undo() {
   el.undo.disabled = !S.undo.length;
   if (!prev) return;
   S.plan = JSON.parse(prev);
-  if (!find(S.selected)) S.selected = null;
-  if (!S.plan.players.some(p => p.id === S.editingPlayer)) S.editingPlayer = null;
+  settlePanels();
   rebaseTyping();
   changed();
   renderAll();
@@ -185,8 +196,7 @@ async function flush() {
 function takePlan(plan, v) {
   S.plan = plan;
   S.v = v;
-  if (!find(S.selected)) S.selected = null;
-  if (!plan.players.some(p => p.id === S.editingPlayer)) S.editingPlayer = null;
+  settlePanels();
   rebaseTyping();
   renderAll();
 }
@@ -212,6 +222,7 @@ async function openPlan(name, loaded = null) {
   S.v = out.v;
   S.plan = out.plan;
   S.selected = null;
+  S.npcPanel = null;
   S.editingPlayer = null;
   S.undo = [];
   el.undo.disabled = true;
@@ -222,12 +233,13 @@ async function openPlan(name, loaded = null) {
   renderAll();
 }
 
-// A new plan starts with the open plan's players: most sessions have the same table.
+// A new plan starts with the open plan's players and NPCs: most sessions have
+// the same table and many of the same people.
 async function createPlan(name, title) {
   const out = await api('/api/plans', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name, title, players: S.plan?.players ?? [] }),
+    body: JSON.stringify({ name, title, players: S.plan?.players ?? [], npcs: S.plan?.npcs ?? [] }),
   });
   await refreshPlanList();
   await openPlan(name, out);
@@ -290,6 +302,8 @@ function renderBar() {
   el.zoomIn.disabled = S.zoom === ZOOMS.length - 1;
   el.undo.disabled = !S.undo.length;
   el.playerLink.href = `players.html#${encodeURIComponent(S.name)}`;
+  el.npcs.textContent = plan.npcs.length ? `NPCs (${plan.npcs.length})` : 'NPCs';
+  el.npcs.setAttribute('aria-pressed', String(!S.selected && !!S.npcPanel));
   document.title = `${plan.title.trim() || S.name} · Session Planner`;
 }
 
@@ -316,11 +330,16 @@ function renderTimeline() {
   const plan = S.plan;
   const L = layout(plan, ppm());
   const clashing = new Set(allClashes(plan).flatMap(c => [c.a.id, c.b.id]));
+  // With an NPC open, the activities it is linked to stand out.
+  const npc = !S.selected && openNpc();
+  const marked = new Set(npc ? npcActivities(plan, npc.id).map(a => a.id) : []);
 
   const lanes = plan.players.map((p, i) => {
     const blocks = plan.activities
       .filter(a => a.start != null && a.players.includes(p.id))
-      .map(a => blockHtml(plan, a, p.id, L, { selected: a.id === S.selected, clash: clashing.has(a.id), editable: true }))
+      .map(a => blockHtml(plan, a, p.id, L, {
+        selected: a.id === S.selected, clash: clashing.has(a.id), marked: marked.has(a.id), editable: true,
+      }))
       .join('');
     return `<div class="row lane" data-player="${esc(p.id)}" style="--pc:${esc(p.color)}">
       ${whoHtml(p, i)}
@@ -369,10 +388,107 @@ function tierHtml(t) {
   </div>`;
 }
 
+// The side panel: the open activity's editor, or else the NPC list or an NPC.
 function renderEditor() {
   const a = selectedActivity();
-  el.editor.hidden = !a;
-  if (!a) { el.editor.innerHTML = ''; return; }
+  const npcs = !a && (S.npcPanel === 'list' || !!openNpc());
+  el.editor.hidden = !a && !npcs;
+  el.editor.setAttribute('aria-label', a ? 'Activity' : 'NPCs');
+  if (a) renderActivityEditor(a);
+  else if (npcs) keepFocus(el.editor, () => { el.editor.innerHTML = openNpc() ? npcEditorHtml(openNpc()) : npcListHtml(); });
+  else el.editor.innerHTML = '';
+}
+
+const whenText = a => `${clock(a.start, S.plan.startsAt)}–${clock(end(a), S.plan.startsAt)}`;
+const titleOf = a => a.title.trim() || 'Untitled';
+
+// NPCs by name, the unnamed last.
+const sortedNpcs = plan => [...plan.npcs].sort((x, y) =>
+  (!x.name.trim() - !y.name.trim()) || x.name.localeCompare(y.name));
+
+// Activities scheduled first, in time order, then the unscheduled ones.
+const byTime = list => [...list].sort((x, y) => (x.start ?? Infinity) - (y.start ?? Infinity));
+
+// The activity editor's NPC links: a chip per NPC (its name opens it), a note
+// when one of them is linked to another activity at the same time, and a list
+// to link another or a new one.
+function activityNpcsHtml(a) {
+  const plan = S.plan;
+  const found = npcClashes(plan, a);
+  const chips = a.npcs.map(id => {
+    const role = findNpc(id)?.role.trim();
+    return `<span class="nchip${found.some(c => c.npc === id) ? ' warn' : ''}">
+      <button type="button" data-act="open-npc" data-npc="${esc(id)}" data-key="en:${esc(id)}"
+              title="${esc(role || 'Open this NPC')}">${esc(npcName(plan, id))}</button>
+      <button type="button" class="icon" data-act="unlink-npc" data-npc="${esc(id)}" aria-label="Unlink ${esc(npcName(plan, id))}">×</button>
+    </span>`;
+  }).join('');
+  const warn = found.map(c => `${npcName(plan, c.npc)} is also in “${titleOf(c.activity)}” (${whenText(c.activity)}).`).join(' ');
+  const others = sortedNpcs(plan).filter(n => !a.npcs.includes(n.id));
+  return `<section class="ed-npcs">
+    <h3>NPCs</h3>
+    ${chips ? `<div class="nchips">${chips}</div>` : ''}
+    ${warn ? `<p class="warn-line small">${esc(warn)}</p>` : ''}
+    <select id="link-npc" data-key="link-npc" aria-label="Link an NPC">
+      <option value="">Link an NPC…</option>
+      ${others.map(n => `<option value="${esc(n.id)}">${esc(npcName(plan, n.id))}${n.role.trim() ? ` · ${esc(n.role.trim())}` : ''}</option>`).join('')}
+      <option value="" data-new="1">New NPC…</option>
+    </select>
+  </section>`;
+}
+
+function npcListHtml() {
+  const plan = S.plan;
+  const rows = sortedNpcs(plan).map(n => {
+    const count = npcActivities(plan, n.id).length;
+    return `<li><button type="button" class="npc-row" data-act="open-npc" data-npc="${esc(n.id)}" data-key="nl:${esc(n.id)}">
+      <span class="npc-name">${esc(npcName(plan, n.id))}</span>
+      <span class="npc-count">${count ? `${count} ${count === 1 ? 'activity' : 'activities'}` : 'No activities'}</span>
+      ${n.role.trim() ? `<span class="npc-role">${esc(n.role.trim())}</span>` : ''}
+    </button></li>`;
+  }).join('');
+  return `<div class="ed-head">
+      <h2 class="ed-heading">NPCs</h2>
+      <button type="button" class="icon" data-act="close-editor" aria-label="Close">×</button>
+    </div>
+    <button type="button" class="align-start" data-act="new-npc" data-key="new-npc">New NPC</button>
+    ${rows ? `<ul class="npc-list">${rows}</ul>`
+      : '<p class="dim">No NPCs yet. Add the people the players may meet, then link them to activities here or from an activity.</p>'}`;
+}
+
+function npcEditorHtml(n) {
+  const plan = S.plan;
+  const linked = npcActivities(plan, n.id);
+  const busy = new Set(linked.filter(a => npcClashes(plan, a).some(c => c.npc === n.id)).map(a => a.id));
+  const rows = linked.map(a => `<li class="${busy.has(a.id) ? 'warn' : ''}">
+      <button type="button" class="npc-act" data-act="open-activity" data-id="${esc(a.id)}" data-key="na:${esc(a.id)}">${esc(titleOf(a))}</button>
+      <span class="dim small">${esc(a.start == null ? 'Unscheduled' : whenText(a))}</span>
+      <button type="button" class="icon" data-act="unlink-activity" data-id="${esc(a.id)}" aria-label="Unlink ${esc(titleOf(a))}">×</button>
+    </li>`).join('');
+  const others = byTime(plan.activities.filter(a => !a.npcs.includes(n.id)));
+  return `<div class="ed-head">
+      <input class="ed-title" data-nf="name" data-key="nf:name" value="${esc(n.name)}" placeholder="NPC name" aria-label="NPC name">
+      <button type="button" class="icon" data-act="close-editor" aria-label="Close">×</button>
+    </div>
+    <button type="button" class="back" data-act="npc-list" data-key="npc-list">‹ All NPCs</button>
+    <label class="field">Role <input data-nf="role" data-key="nf:role" value="${esc(n.role)}" placeholder="Who they are, in a few words"></label>
+    <label class="field">Description
+      <textarea data-nf="description" data-key="nf:description" rows="3" placeholder="Appearance and manner">${esc(n.description)}</textarea></label>
+    <label class="field">Notes
+      <textarea data-nf="notes" data-key="nf:notes" rows="5" placeholder="What they want, what they know">${esc(n.notes)}</textarea></label>
+    <section class="ed-npc-acts">
+      <h3>Activities</h3>
+      ${rows ? `<ul class="npc-acts">${rows}</ul>` : '<p class="dim small">Not linked to an activity yet.</p>'}
+      ${busy.size ? '<p class="warn-line small">The marked activities overlap: this NPC is linked to both at the same time.</p>' : ''}
+      ${others.length ? `<select id="link-activity" data-key="link-activity" aria-label="Link to an activity">
+        <option value="">Link to an activity…</option>
+        ${others.map(a => `<option value="${esc(a.id)}">${esc(titleOf(a))} · ${esc(a.start == null ? 'unscheduled' : whenText(a))}</option>`).join('')}
+      </select>` : ''}
+    </section>
+    <div class="ed-foot"><span></span><button type="button" class="danger" data-act="delete-npc" data-key="delete-npc">Delete NPC</button></div>`;
+}
+
+function renderActivityEditor(a) {
   const plan = S.plan;
   const when = a.start == null
     ? 'Not on the timeline yet.'
@@ -389,6 +505,7 @@ function renderEditor() {
         <button type="button" class="icon" data-act="close-editor" aria-label="Close">×</button>
       </div>
       <fieldset><legend>Players</legend>${players || '<p class="dim">Add players first.</p>'}</fieldset>
+      ${activityNpcsHtml(a)}
       <div class="ed-when">
         <label>Start<span class="unit"><input type="number" data-f="start" data-key="f:start" aria-label="Start, minutes from the start of the session" min="0" step="${plan.snap}"
           value="${a.start ?? ''}"${a.start == null ? ' disabled' : ''}> min</span></label>
@@ -457,9 +574,37 @@ function renderOutcomes() {
 function select(id) {
   if (S.selected !== id) S.testRoll = '';
   S.selected = id;
+  S.npcPanel = null;
+  renderBar();
   renderTimeline();
   renderTray();
   renderEditor();
+}
+
+// Opens the side panel on the NPC list ('list') or on one NPC (its id).
+function showNpcs(panel) {
+  S.selected = null;
+  S.testRoll = '';
+  S.npcPanel = panel;
+  renderBar();
+  renderTimeline();
+  renderTray();
+  renderEditor();
+}
+
+function closePanel() {
+  S.npcPanel = null;
+  select(null);
+}
+
+function newNpc(link = null) {
+  let id = null;
+  edit(plan => {
+    id = addNpc(plan).id;
+    if (link) updateActivity(plan, link.id, { npcs: [...link.npcs, id] });
+  });
+  showNpcs(id);
+  el.editor.querySelector('[data-nf="name"]')?.focus();
 }
 
 function setStart(id, start) {
@@ -763,8 +908,8 @@ document.addEventListener('keydown', e => {
   } else if (e.key === 'Escape' && S.editingPlayer) {
     S.editingPlayer = null;
     renderTimeline();
-  } else if (e.key === 'Escape' && S.selected && !inText) {
-    select(null);
+  } else if (e.key === 'Escape' && (S.selected || S.npcPanel) && !inText) {
+    closePanel();
   }
 });
 
@@ -799,7 +944,28 @@ document.addEventListener('click', e => {
   } else if (act === 'new-activity') {
     newActivity();
   } else if (act === 'close-editor') {
-    select(null);
+    closePanel();
+  } else if (act === 'open-npc') {
+    showNpcs(button.dataset.npc);
+  } else if (act === 'npc-list') {
+    showNpcs('list');
+  } else if (act === 'new-npc') {
+    newNpc();
+  } else if (act === 'open-activity') {
+    select(button.dataset.id);
+  } else if (act === 'unlink-activity' && openNpc()) {
+    const npc = openNpc();
+    const target = find(button.dataset.id);
+    edit(plan => updateActivity(plan, target.id, { npcs: target.npcs.filter(n => n !== npc.id) }));
+    renderAll();
+  } else if (act === 'delete-npc' && openNpc()) {
+    const npc = openNpc();
+    const name = npcName(S.plan, npc.id);
+    let linked = [];
+    edit(plan => { linked = removeNpc(plan, npc.id); });
+    S.npcPanel = 'list';
+    renderAll();
+    notice(`Deleted ${name}.` + (linked.length ? ` Unlinked from ${linked.length} ${linked.length === 1 ? 'activity' : 'activities'}.` : '') + ' Undo brings them back.');
   } else if (!a) {
     // the rest act on the open activity
   } else if (act === 'schedule') {
@@ -812,6 +978,9 @@ document.addEventListener('click', e => {
     notice('Duplicated.' + (out.activity.start != null ? ' The copy starts when its players are next free.' : ''));
   } else if (act === 'delete') {
     removeActivity(a.id);
+  } else if (act === 'unlink-npc') {
+    edit(plan => updateActivity(plan, a.id, { npcs: a.npcs.filter(n => n !== button.dataset.npc) }));
+    renderAll();
   } else if (act === 'add-tier') {
     const top = Math.max(-Infinity, a.dc ?? -Infinity, ...a.tiers.map(t => t.dc ?? -Infinity));
     const id = newId(a.tiers, 't');
@@ -832,6 +1001,12 @@ const TEXT_FIELDS = ['title', 'premise', 'check', 'success', 'failure'];
 
 el.editor.addEventListener('input', e => {
   const t = e.target;
+  const npc = openNpc();
+  if (t.dataset.nf && npc && !S.selected) {
+    typed(() => { npc[t.dataset.nf] = t.value; });
+    if (t.dataset.nf === 'name') { renderTimeline(); renderTray(); }
+    return;
+  }
   const a = selectedActivity();
   if (!a) return;
   if (t.id === 'test-roll') {
@@ -854,9 +1029,22 @@ el.editor.addEventListener('input', e => {
 
 el.editor.addEventListener('change', e => {
   const t = e.target;
+  const npc = openNpc();
+  if (t.id === 'link-activity' && npc && t.value) {
+    const target = find(t.value);
+    edit(plan => updateActivity(plan, target.id, { npcs: [...target.npcs, npc.id] }));
+    renderAll();
+    return;
+  }
   const a = selectedActivity();
   if (!a) return;
-  if (t.dataset.f === 'start' || t.dataset.f === 'duration') {
+  if (t.id === 'link-npc') {
+    if (t.selectedOptions[0]?.dataset.new) newNpc(a);
+    else if (t.value) {
+      edit(plan => updateActivity(plan, a.id, { npcs: [...a.npcs, t.value] }));
+      renderAll();
+    }
+  } else if (t.dataset.f === 'start' || t.dataset.f === 'duration') {
     const f = t.dataset.f;
     const value = whole(t.value, a[f], f === 'start' ? 0 : 1);
     edit(plan => updateActivity(plan, a.id, { [f]: value }));
@@ -932,6 +1120,10 @@ function zoom(dir) {
 el.zoomOut.addEventListener('click', () => zoom(-1));
 el.zoomIn.addEventListener('click', () => zoom(1));
 el.undo.addEventListener('click', undo);
+el.npcs.addEventListener('click', () => {
+  if (!S.selected && S.npcPanel) closePanel();
+  else showNpcs('list');
+});
 
 // ---- Plan files ----------------------------------------------------------------------
 

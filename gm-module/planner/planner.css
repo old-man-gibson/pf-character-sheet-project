@@ -252,6 +252,7 @@ main {
 }
 .block.src { opacity: .35; }
 .block.static { cursor: default; touch-action: auto; }
+.block.marked { box-shadow: 0 0 0 2px var(--accent); }
 .block .grip {
   position: absolute;
   top: 0;
@@ -366,7 +367,7 @@ main {
 .ed-check .grow { flex: 1; }
 .ed-check .dc input { width: 70px; }
 .ed-tiers { display: flex; flex-direction: column; gap: 8px; }
-.ed-tiers h3, .ed-test h3 { font-size: 13px; }
+.editor h3 { font-size: 13px; }
 .ed-tiers > button { align-self: flex-start; }
 .tier {
   display: grid;
@@ -395,6 +396,58 @@ main {
 .ladder li.fail.hit { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
 .test-line { font-size: 13px; }
 .ed-foot { display: flex; gap: 8px; justify-content: space-between; margin-top: 4px; }
+
+/* NPCs: the list, an NPC's editor, and the links in the activity editor */
+#npcs[aria-pressed="true"] { border-color: var(--accent); }
+.ed-heading { flex: 1; font-size: 16px; }
+.align-start, .editor select { align-self: flex-start; }
+.editor select { max-width: 100%; color: var(--text); }
+.ed-npcs, .ed-npc-acts { display: flex; flex-direction: column; gap: 6px; }
+.nchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.nchip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel-2);
+}
+.nchip button { border: 0; background: none; padding: 2px 4px 2px 10px; }
+.nchip button.icon { padding: 0 8px 0 2px; font-size: 15px; color: var(--dim); }
+.nchip.warn { border-color: var(--warn); }
+.warn-line { color: var(--warn); }
+.npc-list, .npc-acts { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.npc-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 8px;
+  padding: 6px 10px;
+  text-align: left;
+  white-space: normal;
+}
+.npc-name { font-weight: 600; }
+.npc-count { color: var(--dim); font-size: 12px; align-self: center; }
+.npc-role { grid-column: 1 / -1; color: var(--dim); font-size: 12px; }
+.npc-acts li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 1px 2px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+.npc-acts li.warn { border-color: var(--warn); }
+.npc-act {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 6px;
+  background: none;
+  border-color: transparent;
+  text-align: left;
+}
+button.back { align-self: flex-start; padding: 0 2px; background: none; border-color: transparent; color: var(--accent); }
 
 /* ---- Player view ------------------------------------------------------ */
 

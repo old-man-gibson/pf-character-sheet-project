@@ -70,17 +70,25 @@ lane per player:
   (Shift changes its duration; up and down move it to the next lane); Delete
   removes it; Ctrl+Z undoes.
 
+**NPCs.** The NPCs button opens the plan's NPC list in the side panel. Each NPC
+has a name, a role, a description and notes. Link NPCs to an activity from the
+activity's editor (or make a new one there), or from the NPC's own panel, which
+lists its activities and outlines them on the timeline. Linking one NPC to two
+activities at the same time is allowed, since a link can mean "about them" as
+well as "with them", but both panels point it out. Deleting an NPC unlinks it
+everywhere; Undo brings it back.
+
 **Player view.** The Player view button opens `players.html#<plan>`: the same
 timeline, read-only, for a second screen or a screen share. It shows each
 scheduled activity's title, time, duration and players, and the required check
-when its Show checks box is ticked. DCs, rewards, success tiers, premises and
-unscheduled activities are never sent to it: the server builds its data from a
+when its Show checks box is ticked. DCs, rewards, success tiers, premises, NPCs
+and unscheduled activities are never sent to it: the server builds its data from a
 list of the fields players may see (`playerView` in plan.js). It asks for
 changes every second, so it follows the GM page's edits about a second after
 they are saved.
 
 Plans are saved as `<name>.json` in `gm-module/plans/` (git-ignored) or the
-`--dir` folder. A new plan starts with the open plan's players. The file can be
+`--dir` folder. A new plan starts with the open plan's players and NPCs. The file can be
 edited while the page is open: the page reloads it within a couple of seconds,
 and never writes over a change it has not seen (it loads the newer copy and
 keeps its own for Undo). A hand edit that books a player twice is flagged on
@@ -88,9 +96,9 @@ the page. The server answers requests from this machine only, since plans hold
 DCs and rewards.
 
 Plan shape: `title`, `startsAt` ("19:00" or ""), `length` and `snap` in minutes,
-`players` (`id/name/color`), `activities` (`id/title/start/duration/players`,
-`premise`, `check`, `dc`, `success`, `failure`, `tiers: [{id, label, dc,
-reward}]`). `start` is minutes from the start of the session, null when
+`players` (`id/name/color`), `npcs` (`id/name/role/description/notes`),
+`activities` (`id/title/start/duration/players/npcs`, `premise`, `check`, `dc`,
+`success`, `failure`, `tiers: [{id, label, dc, reward}]`). `start` is minutes from the start of the session, null when
 unscheduled. Other fields are kept as they are.
 
 ## Dice

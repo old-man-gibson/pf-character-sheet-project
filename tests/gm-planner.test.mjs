@@ -1,5 +1,5 @@
 /** Tests the GM module's session planner: the plan model (one activity per
- *  player at a time, success tiers), what the player view is allowed to see,
+ *  player at a time, success tiers, NPCs), what the player view is allowed to see,
  *  the timeline markup both pages draw, the plan files on disk (versioned
  *  writes that never overwrite a change made elsewhere), and the server in
  *  front of them, run on a spare port against a temporary folder.
@@ -11,8 +11,9 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  addActivity, addPlayer, allClashes, blankPlan, clashText, clashes, clock, duplicateActivity,
-  firstFree, ladder, minutesText, normalizePlan, outcome, playerLoad, playerView, removePlayer, span, updateActivity,
+  addActivity, addNpc, addPlayer, allClashes, blankPlan, clashText, clashes, clock, duplicateActivity,
+  firstFree, ladder, minutesText, normalizePlan, npcActivities, npcClashes, npcName, outcome, playerLoad,
+  playerView, removeNpc, removePlayer, span, updateActivity,
 } from '../gm-module/planner/plan.js';
 import { blockHtml, layout } from '../gm-module/planner/timeline.js';
 import { createPlan, currentVersion, listPlans, readPlan, readPlayerView, validName, writePlan } from '../gm-module/planner/store.mjs';
@@ -132,6 +133,45 @@ function table() {
   check('and the timeline grows to the last end', span({ ...plan, length: 30 }), 40);
 }
 
+// ---- NPCs ------------------------------------------------------------------
+
+{
+  const plan = normalizePlan({
+    players: [{ id: 'p1', name: 'Ana' }],
+    npcs: [{ id: 'n1', name: 'Vey', role: 'Fence', extra: 'kept' }, { id: 'n1', name: 'Twin' }, { name: '' }],
+    activities: [{ id: 'a1', title: 'Haggle', start: 0, duration: 10, players: ['p1'], npcs: ['n1', 'n1', 'ghost', 'n2'] }],
+  });
+  check('NPCs get ids, repeated ones a fresh one', plan.npcs.map(n => n.id), ['n1', 'n2', 'n3']);
+  check('NPC fields are filled in and extra ones kept', [plan.npcs[0].description, plan.npcs[0].notes, plan.npcs[0].extra], ['', '', 'kept']);
+  check('an activity links only NPCs the plan has, once each', plan.activities[0].npcs, ['n1', 'n2']);
+  check('an NPC with no name is called so', npcName(plan, 'n3'), 'Unnamed NPC');
+  check('a plan without NPCs gets an empty list', normalizePlan({}).npcs, []);
+}
+
+{
+  const plan = table();
+  const vey = addNpc(plan, { name: 'Vey', role: 'Fence' });
+  const mara = addNpc(plan, { name: 'Mara' });
+  check('new NPCs get the next free id', [vey.id, mara.id], ['n1', 'n2']);
+  const [a, b, d] = plan.activities;
+  check('linking an NPC to an activity', updateActivity(plan, d.id, { npcs: [vey.id] }).activity.npcs, ['n1']);
+  check('a link to an NPC the plan lacks is dropped', updateActivity(plan, a.id, { npcs: ['nobody', mara.id] }).activity.npcs, ['n2']);
+  check('linking NPCs never counts as a player clash', updateActivity(plan, b.id, { npcs: [vey.id] }).ok, true);
+  check('one NPC in two activities at once is reported', npcClashes(plan, plan.activities[2]).map(c => [c.npc, c.activity.title]), [['n1', 'B']]);
+  check('both ways', npcClashes(plan, plan.activities[1]).map(c => c.activity.title), ['D']);
+  updateActivity(plan, b.id, { start: 30 });
+  check('but not once they no longer overlap', npcClashes(plan, plan.activities[2]), []);
+  updateActivity(plan, a.id, { start: null, players: [] });
+  check("an NPC's activities run in time order, unscheduled last", [npcActivities(plan, vey.id), npcActivities(plan, mara.id)].map(l => l.map(x => x.title)),
+    [['D', 'B'], ['A']]);
+  const copy = duplicateActivity(plan, d.id);
+  check('a duplicate keeps its NPC links', copy.activity.npcs, ['n1']);
+  const linked = removeNpc(plan, vey.id);
+  check('removing an NPC returns what linked them', linked.map(x => x.title), ['B', 'D', 'D']);
+  check('and unlinks them everywhere', plan.activities.some(x => x.npcs.includes(vey.id)), false);
+  check('the other NPCs stay', plan.npcs.map(n => n.name), ['Mara']);
+}
+
 // ---- Checks and tiers --------------------------------------------------------
 
 {
@@ -166,9 +206,10 @@ function secretPlan() {
     title: 'Open night',
     gmNotes: 'SECRET plan note',
     players: [{ id: 'p1', name: 'Ana', secretFlag: 'SECRET player note' }, { id: 'p2', name: '' }],
+    npcs: [{ id: 'n1', name: 'SECRET npc', role: 'SECRET role', description: 'SECRET looks', notes: 'SECRET motive' }],
     activities: [
       {
-        id: 'a1', title: 'Pick the lock', start: 0, duration: 5, players: ['p1', 'p2'], check: 'Disable Device',
+        id: 'a1', title: 'Pick the lock', start: 0, duration: 5, players: ['p1', 'p2'], npcs: ['n1'], check: 'Disable Device',
         dc: 1777, premise: 'SECRET premise', success: 'SECRET success', failure: 'SECRET failure',
         tiers: [{ id: 't1', label: 'SECRET tier', dc: 1888, reward: 'SECRET tier reward' }], gmNote: 'SECRET field',
       },
@@ -195,11 +236,14 @@ function secretPlan() {
   const withCheck = blockHtml(view, act, 'p1', L, { showCheck: true });
   const without = blockHtml(view, act, 'p1', L, { showCheck: false });
   check('a player block can show the check', withCheck.includes('Disable Device'), true);
+  check('a player block names no NPC', withCheck.includes('NPC'), false);
   check('or leave it out, tooltip included', without.includes('Disable Device'), false);
   check('a player block cannot be dragged or resized', [without.includes('data-grip'), without.includes('tabindex'), without.includes('static')], [false, false, true]);
   check('and names the others in it', without.includes('with Player 2'), true);
   const gm = blockHtml(secretPlan(), secretPlan().activities[0], 'p1', L, { editable: true });
   check('the GM block shows the DC and can be dragged', [gm.includes('Disable Device DC 1777'), gm.includes('data-grip'), gm.includes('tabindex="0"')], [true, true, true]);
+  check('and names its NPCs in the tooltip', gm.includes('NPCs: SECRET npc'), true);
+  check('a block linked to the open NPC is marked', blockHtml(secretPlan(), secretPlan().activities[0], 'p1', L, { marked: true }).includes('marked'), true);
   const odd = blockHtml(view, { ...act, title: '<b>"x"</b>' }, 'p1', L);
   check('titles are escaped', odd.includes('&lt;b&gt;&quot;x&quot;&lt;/b&gt;') && !odd.includes('<b>'), true);
 }
@@ -300,9 +344,12 @@ try {
     check('a write that is not JSON is refused', (await request('POST', '/api/plans', { body: { name: 'x' }, type: 'text/plain' })).status, 415);
     check('a bad plan name is refused', (await request('POST', '/api/plans', { body: { name: '../up' } })).status, 400);
 
-    const created = await request('POST', '/api/plans', { body: { name: 'session-3', title: 'Third', players: table().players } });
-    check('a plan is created with the players it is given', [created.status, created.json.plan.title, created.json.plan.players.map(p => p.name)],
-      [201, 'Third', ['Ana', 'Ben', 'Cai', 'Dee']]);
+    const created = await request('POST', '/api/plans', {
+      body: { name: 'session-3', title: 'Third', players: table().players, npcs: [{ id: 'n1', name: 'Vey', notes: 'Owes Ana' }] },
+    });
+    check('a plan is created with the players and NPCs it is given',
+      [created.status, created.json.plan.title, created.json.plan.players.map(p => p.name), created.json.plan.npcs.map(n => [n.name, n.notes])],
+      [201, 'Third', ['Ana', 'Ben', 'Cai', 'Dee'], [['Vey', 'Owes Ana']]]);
     check('a taken name is refused', (await request('POST', '/api/plans', { body: { name: 'session-3' } })).status, 409);
 
     const v = created.json.v;

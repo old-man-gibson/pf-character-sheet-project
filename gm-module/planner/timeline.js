@@ -4,7 +4,7 @@
 // same code, and it can be checked in Node. Also the few page helpers both
 // pages use (escaping, zoom, per-viewer settings).
 
-import { clock, end, minutesText, playerName, span, whole } from './plan.js';
+import { clock, end, minutesText, npcName, playerName, span, whole } from './plan.js';
 
 export const ZOOMS = [1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24]; // pixels per minute
 export const DEFAULT_ZOOM = 5;
@@ -72,16 +72,18 @@ export function trackHtml(plan, L, blocks) {
 // An activity's block in the lane of player `lane`, or (lane null) a chip in
 // the tray. `editable` adds what the GM page needs: focus, the resize grip
 // and a data-key to put focus back after a redraw. `showCheck: false` leaves
-// the check out.
-export function blockHtml(plan, a, lane, L, { selected = false, clash = false, editable = false, showCheck = true } = {}) {
+// the check out. Linked NPCs are named in the tooltip when the plan has them
+// (the player view's does not).
+export function blockHtml(plan, a, lane, L, { selected = false, clash = false, marked = false, editable = false, showCheck = true } = {}) {
   const others = a.players.filter(p => p !== lane).map(p => playerName(plan, p));
   const withText = lane ? (others.length ? `with ${others.join(', ')}` : '') : (others.join(', ') || 'No players yet');
   const when = a.start == null ? 'Not scheduled' : `${clock(a.start, plan.startsAt)}–${clock(end(a), plan.startsAt)}`;
   const check = showCheck ? checkLabel(a) : '';
-  const tip = [a.title.trim() || 'Untitled', `${when} · ${minutesText(a.duration)}`, check, withText].filter(Boolean).join('\n');
+  const npcs = plan.npcs && a.npcs?.length ? `NPCs: ${a.npcs.map(n => npcName(plan, n)).join(', ')}` : '';
+  const tip = [a.title.trim() || 'Untitled', `${when} · ${minutesText(a.duration)}`, check, withText, npcs].filter(Boolean).join('\n');
   const width = a.duration * L.px;
   const classes = ['block', lane ? '' : 'chip', editable ? '' : 'static', selected ? 'selected' : '',
-    lane && width < 64 ? 'narrow' : '', clash ? 'clash' : ''];
+    lane && width < 64 ? 'narrow' : '', clash ? 'clash' : '', marked ? 'marked' : ''];
   const style = `--hue:${hue(a.id)}` + (lane ? `;left:${a.start * L.px}px;width:${width}px` : '');
   const focus = editable
     ? ` data-key="${esc(`b:${a.id}:${lane ?? ''}`)}" tabindex="0" role="button" aria-label="${esc(tip.replace(/\n/g, ', '))}"`

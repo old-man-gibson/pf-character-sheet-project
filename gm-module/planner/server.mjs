@@ -11,7 +11,7 @@
 //                                 { name, v, view } (see playerView in plan.js), or
 //                                 { name, v, same: true } when the view is unchanged
 //   GET  /api/plans               { dir, plans: [{ name, title, players, activities }] }
-//   POST /api/plans  { name, title?, players? }
+//   POST /api/plans  { name, title?, players?, npcs? }
 //                                 creates a plan with no activities -> { name, v, plan }
 //                                 (409 if the name is taken)
 //   GET  /api/plan?name=&since=   { name, v, plan }, or { name, v, same: true } when the
@@ -56,9 +56,12 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/plans') {
       if (req.method === 'GET') return json(res, 200, { dir, plans: listPlans(dir) });
       if (req.method === 'POST') {
-        const { name, title, players } = await readJson(req);
+        const { name, title, players, npcs } = await readJson(req);
         if (!validName(name)) return json(res, 400, { error: 'Plan names use letters, digits, spaces, - and _.' });
-        const out = createPlan(dir, name, typeof title === 'string' ? title : '', Array.isArray(players) ? players : []);
+        const out = createPlan(dir, name, typeof title === 'string' ? title : '', {
+          players: Array.isArray(players) ? players : [],
+          npcs: Array.isArray(npcs) ? npcs : [],
+        });
         return out.ok ? json(res, 201, { name, v: out.v, plan: out.plan }) : json(res, 409, { error: 'A plan with that name exists.' });
       }
       return json(res, 405, { error: 'method not allowed' });
