@@ -785,6 +785,15 @@ where it is. While an encounter is on, nothing leaves the deck — the table add
 cards by their place — but a copy, or a card joining the deck, is fine; a card that joins
 the deck is in play after the next shuffle.
 
+**Decklist.** The Deck panel carries a **Decklist** fold with a Copy button: one line per
+card under its subtitle (or its name when it has none) with the copies, cost and sphere,
+the Mana Point cards by colour, and then the character's magic talents each with how many
+cards in the deck are it. A card counts for a talent when its subtitle or name says the
+talent's name, so *Explosive Orb (Fire Blast)* counts for both; talents no card carries and
+cards naming no talent of the character's are listed last. The cost's colour shows as pips
+in the field top right; a click on the pips opens the letters to type, and they come back
+when the field is left.
+
 **Targets.** A card in play has a **targets** line under its text — "the ogre and both
 guards" — typed on the tab or in the hand window, read on the shared table screen, and
 gone with the card when it resolves. Each change is one undo step, named for the card.

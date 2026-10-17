@@ -112,6 +112,20 @@ export function abilitySelect(path, value) {
  * the same shape of thing as a hero-point count, and sharing a 140px track
  * with one left it showing a sixth of what it held.
  */
+/**
+ * A generated text to copy -- a Discord post, a decklist: read-only in a fold
+ * with a Copy button. A render rebuilds the fold, so whether it is open is
+ * remembered on the element (ctx.openPosts); `open` is its first state.
+ */
+export function postBox(ctx, id, label, text, rows, { open = false } = {}) {
+  const shown = ctx?.openPosts?.has?.(id) ? ctx.openPosts.get(id) : open;
+  return `<details class="postbox" data-postbox="${esc(id)}"${shown ? ' open' : ''}>
+    <summary>${esc(label)}
+      <button data-view data-copy="${esc(id)}" title="Copy to the clipboard">Copy</button></summary>
+    <textarea readonly rows="${rows}" data-post="${esc(id)}" spellcheck="false">${esc(text ?? '')}</textarea>
+  </details>`;
+}
+
 export function field(label, control, extra = '') {
   return `<label class="fld${extra ? ` ${extra}` : ''}"><span>${esc(label)}</span>${control}</label>`;
 }

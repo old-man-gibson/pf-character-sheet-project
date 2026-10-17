@@ -13403,6 +13403,39 @@ console.log('\na card moves between the deck and the sideboard, or is copied acr
   c.tableEnd();
 }
 
+console.log('\nthe decklist: each card under its subtitle with its copies, and the magic talents the cards are');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 5 }));
+  c.data.cardcasting.enabled = true;
+  c.listAdd('training.magic.bonusTalents', { sphere: 'Destruction', talent: 'Fire Blast' });
+  c.listAdd('training.magic.bonusTalents', { sphere: 'Destruction', talent: 'Explosive Orb' });
+  c.listAdd('training.magic.bonusTalents', { sphere: 'Destruction', talent: 'Frost Blast' });
+  c.data.cardcasting.cards = [
+    { name: 'Big Sky', subtitle: 'Explosive Orb (Fire Blast)', qty: 2, cost: '1', color: 'R', effect: 'x', sphere: 'Destruction' },
+    { name: 'Sun', subtitle: 'Explosive Orb (Fire Blast)', qty: 1, cost: '1', color: 'R', effect: 'x', sphere: 'Destruction' },
+    { name: 'Fire Blast', qty: 3, cost: '1', color: 'R', effect: 'x', sphere: 'Destruction' },
+    { name: 'Desert', qty: 1, cost: '2', color: 'RU', effect: 'x', sphere: 'Mind' },
+    { name: '', qty: 4, cost: '', mana: 'R', effect: '' },
+  ];
+  c.recompute();
+  const l = c.deckList();
+  check('the counts: every copy, effects apart from Mana Points', [l.total, l.effects, l.mana], [11, 7, 4]);
+  check('one line per subtitle, or name, with the copies summed', l.lines.map((x) => [x.label, x.qty, x.costs[0]]),
+    [['Explosive Orb (Fire Blast)', 3, '1R'], ['Fire Blast', 3, '1R'], ['Desert', 1, '2RU']]);
+  check('the magic talents tallied by the cards whose subtitle or name says them', l.talents.map((t) => [t.name, t.cards]),
+    [['Fire Blast', 6], ['Explosive Orb', 3], ['Frost Blast', 0]]);
+  check('a card naming no talent of theirs is listed as such', l.unmatched, [{ label: 'Desert', qty: 1 }]);
+  check('the text to post', l.text.split('\n'), [
+    'Dealer: 11 cards (7 effects, 4 Mana Points)',
+    '3× Explosive Orb (Fire Blast) · 1R · Destruction', '3× Fire Blast · 1R · Destruction', '1× Desert · 2RU · Mind',
+    'Mana Points: 4× R', '', 'Talents', '6× Fire Blast (Destruction)', '3× Explosive Orb (Destruction)',
+    'No card: Frost Blast', 'No talent of theirs: Desert (1)']);
+  check('"Blast" alone is not Fire Blast', (c.data.cardcasting.cards[3].subtitle = 'Blast', c.recompute(), c.deckList().unmatched.map((x) => x.label)), ['Blast']);
+  const html = subsystemPanels.cardcastingPanel(c, { openCards: new Set(), openPosts: new Map() });
+  check('the deck panel carries the list in a Copy box', /data-post="decklist"/.test(html) && /data-copy="decklist"/.test(html), true);
+  check('every face\'s colour field holds its pips, the Mana Point card wearing its mana\'s', [(html.match(/class="colorcell filled" style="--n:2"/g) || []).length, (html.match(/class="colorcell"/g) || []).length], [5, 0]);
+}
+
 console.log('\nan ongoing card carries who it is affecting while it is in play');
 {
   const c = new Character(blankDocument({ name: 'Dealer', level: 5 }));
