@@ -17,7 +17,7 @@
 
 import { blankWeapon, gearColumnCount, gearColumnInUse, weaponHandle } from '../../model.js';
 import { esc } from '../html.js';
-import { roField } from '../fields.js';
+import { postBox, roField } from '../fields.js';
 import { MATERIAL_CASTING_PER_LEVEL } from '../../model.js';
 import {
   group, pct, round, signed,
@@ -995,12 +995,7 @@ function craftProject(ctx, model, cr, p, i) {
    * they tune the numbers, and it must not fold shut under them.
    */
 function craftPost(ctx, id, label, text, rows) {
-    const open = ctx.openPosts.has(id) ? ctx.openPosts.get(id) : id.startsWith('craft-');
-    return `<details class="postbox" data-postbox="${id}"${open ? ' open' : ''}>
-      <summary>${esc(label)}
-        <button data-view data-copy="${id}" title="Copy for Discord">Copy</button></summary>
-      <textarea readonly rows="${rows}" data-post="${id}" spellcheck="false">${esc(text ?? '')}</textarea>
-    </details>`;
+    return postBox(ctx, id, label, text, rows, { open: id.startsWith('craft-') });
   }
 
   /* ----- wealth: what the character owns and what it came to ----- */

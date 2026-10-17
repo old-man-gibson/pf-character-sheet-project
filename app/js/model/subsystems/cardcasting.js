@@ -12,8 +12,8 @@
 import { diceString, parseDiceExpr, statMod } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import { sheetReader } from '../document.js';
-import { evaluateAmount, normalizeName } from '../util.js';
-import { sphereTally } from '../spheres.js';
+import { evaluateAmount, normalizeName, splitTags } from '../util.js';
+import { ownTalentRows, sphereTally, talentKey } from '../spheres.js';
 import { splitVeilName } from './akashic.js';
 import { clampTracker, poolTracker } from '../trackers.js';
 import { companionById, companionEntries } from '../../companions.js';
@@ -236,6 +236,98 @@ export function deckSquad(model) {
 /** A card's owner as the deck reads it: a squad member's id, or '' for the character. */
 export function cardOwner(model, card) {
   return String(card?.calc?.owner ?? '');
+}
+
+/**
+ * The deck as a list to post or print.
+ *
+ * One line per card under its subtitle when it has one -- a Harrow or poker
+ * deck's names are its own, and the subtitle says what the card does -- with
+ * the copies, the cost and the sphere; the Mana Point cards by colour; then the
+ * magic talents the character has, each with how many cards in the deck are
+ * it. A card is a talent's when its subtitle or its name says the talent's
+ * name, so *Explosive Orb (Fire Blast)* counts for both. Cards naming no talent
+ * of theirs are listed as such, and so are talents no card carries: the two
+ * lists a deck is built against. `own` is a squad member's id for their deck.
+ */
+export function deckList(model, own = '') {
+  const p = model.data.cardcasting || {};
+  const k = p.calc || {};
+  const who = own ? (k.squad || []).find((m) => m.id === own) : null;
+  const cards = (p.cards || []).filter((c) => cardOwner(model, c) === own);
+  const copies = (c) => Math.max(1, Number(c.qty) || 1);
+  const isMana = (c) => !String(c.effect || '').trim() && !!String(c.mana || '').trim();
+  const labelOf = (c) => String(c.subtitle || '').trim() || String(c.name || '').trim()
+    || String(c.effect || '').trim().split('\n')[0] || 'card';
+  const owner = who ? who.name : String(model.data.identity?.name || 'Deck');
+
+  const lines = new Map();
+  const manaBy = new Map();
+  let effects = 0;
+  let mana = 0;
+  for (const c of cards) {
+    const n = copies(c);
+    if (isMana(c)) {
+      mana += n;
+      const key = String(c.mana).trim().toUpperCase();
+      manaBy.set(key, (manaBy.get(key) || 0) + n);
+      continue;
+    }
+    effects += n;
+    const label = labelOf(c);
+    const row = lines.get(label) || { label, qty: 0, costs: new Set(), spheres: new Set(), text: normalizeName(`${c.subtitle || ''} | ${c.name || ''}`) };
+    row.qty += n;
+    const cost = `${String(c.cost ?? '').trim()}${String(c.calc?.colors || '')}`;
+    if (cost) row.costs.add(cost);
+    if (String(c.sphere || '').trim()) row.spheres.add(String(c.sphere).trim());
+    lines.set(label, row);
+  }
+
+  // The talents, matched as whole words of the subtitle or name.
+  const talents = new Map();
+  for (const row of ownTalentRows(model, model.data.training?.magic, { sideKey: 'magic' })) {
+    // The name without its choices: 'Erratic Blast (Fire, Frost)' is Erratic Blast.
+    const name = splitTags(String(row.talent || '').trim()).name.trim();
+    const key = talentKey(name);
+    if (!key) continue;
+    const t = talents.get(key) || {
+      name, spheres: new Set(), cards: 0,
+      re: new RegExp(`(^|[^a-z0-9])${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-z0-9])`),
+    };
+    if (String(row.sphere || '').trim()) t.spheres.add(String(row.sphere).trim());
+    talents.set(key, t);
+  }
+  const unmatched = [];
+  for (const row of lines.values()) {
+    let hit = false;
+    for (const t of talents.values()) if (t.re.test(row.text)) { t.cards += row.qty; hit = true; }
+    if (!hit) unmatched.push(row);
+  }
+  const byCount = (a, b) => (b.qty ?? b.cards) - (a.qty ?? a.cards) || (a.label ?? a.name).localeCompare(b.label ?? b.name);
+  const list = [...lines.values()].sort(byCount);
+  const tally = [...talents.values()].sort(byCount);
+  const total = effects + mana;
+
+  const out = [`${owner}: ${total} card${total === 1 ? '' : 's'} (${effects} effect${effects === 1 ? '' : 's'}, ${mana} Mana Point${mana === 1 ? '' : 's'})`];
+  for (const row of list) {
+    out.push([`${row.qty}× ${row.label}`, [...row.costs].join('/'), [...row.spheres].join(', ')].filter(Boolean).join(' · '));
+  }
+  if (mana) out.push(`Mana Points: ${[...manaBy].map(([c, n]) => `${n}× ${c}`).join(', ')}`);
+  if (tally.length) {
+    out.push('', 'Talents');
+    for (const t of tally) if (t.cards) out.push(`${t.cards}× ${t.name}${t.spheres.size ? ` (${[...t.spheres].join(', ')})` : ''}`);
+    const none = tally.filter((t) => !t.cards).map((t) => t.name);
+    if (none.length) out.push(`No card: ${none.join(', ')}`);
+  }
+  if (unmatched.length) out.push(`${tally.length ? 'No talent of theirs' : 'No magic talents on the sheet to match'}: ${unmatched.map((r) => `${r.label} (${r.qty})`).join(', ')}`);
+
+  return {
+    owner, total, effects, mana, text: out.join('\n'),
+    lines: list.map((r) => ({ label: r.label, qty: r.qty, costs: [...r.costs], spheres: [...r.spheres] })),
+    manaBy: [...manaBy].map(([color, qty]) => ({ color, qty })),
+    talents: tally.map((t) => ({ name: t.name, spheres: [...t.spheres], cards: t.cards })),
+    unmatched: unmatched.map((r) => ({ label: r.label, qty: r.qty })),
+  };
 }
 
 /**
