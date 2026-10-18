@@ -97,7 +97,8 @@ uses both. On your turn, immediate actions also spend swift actions. Between tur
 an immediate reserves a swift on the next turn and blocks another immediate until
 that turn ends. **End turn** and **Start my turn** make this distinction explicit;
 **Next turn** is a shortcut from one turn to the next. Actions and AoOs refresh at
-the start of your turn. **Reset encounter** restores all actions and clears any
+the start of your turn, a round comes off every ticked buff with rounds left (one that
+runs out switches off, and the Undo label names it), and **bleed** deals its damage. **Reset encounter** restores all actions and clears any
 reserved swift; it preserves cards and does not reset daily resources.
 
 Counter **−** uses the same action rules. **+** restores only the selected counter.

@@ -107,8 +107,22 @@ The worksheet's four systems, separated and computed:
   "gear 3, bonus 1". Leave To blank and the bonus is a note. Click the ▸ on a row to
   open the item out — the same cells at a legible size, and a description that grows
   with what you write.
-- **Load & value** — weights per section, a reconciling adjustment, total carried
-  against light load, and total value. Item weights flow into carry live.
+- **Load & value** — weights per section, coins, a reconciling adjustment, total carried
+  against the light, medium and heavy limits, and what the load does. Item weights flow
+  into carry live. **Other items** have a quantity (weight and cost are per item), and
+  an item's card says where it is carried: on you, inside a container among the Other
+  items, or stored elsewhere. A container that is *weightless inside* (a bag of holding)
+  carries its contents for nothing; its own weight still counts. The **coin purse**
+  (pp, gp, sp, cp) weighs a pound per fifty coins.
+- **Load penalties.** A medium load caps Dexterity to AC at +3 and has a −3 check penalty;
+  a heavy load +1 and −6; both cut land speed (30 ft. to 20, 20 to 15). The worse of the
+  load's and the armour's figures applies, never both, so the AC, the skills and the
+  `ac.maxDex` / `ac.acp` formula names all follow. While medium or heavy armour is worn
+  the speed you typed (which already carries the armour's cut) stands. **Apply load
+  penalties** on the Overview's Carrying capacity panel turns them off; a sheet that was
+  already past a light load when the penalties arrived opens with them off, so its totals
+  did not move. **Carries by** reads capacity from another ability score, for a feature
+  that carries by Intelligence.
 
 ### Unarmed strike
 

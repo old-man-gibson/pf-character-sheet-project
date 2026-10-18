@@ -28,8 +28,20 @@ and anything downstream recalculates immediately.
   stays. The ▾ beside it lists the thirty before it, each with its own Undo, for the spend
   noticed only after the next hit landed. One that a later action also changed — damage,
   then a heal — says which to take back first, and changes nothing until you do.
-- Conditions are switches (negative levels a count) that show what they cost — tick
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> or <kbd>Ctrl</kbd>+<kbd>Y</kbd> (or **Redo**
+  on the message after an undo) does it again; anything new done to the character clears
+  what there was to redo. The undo list survives a reload of the same browser tab.
+- **The play log.** Every action at the table is written to a dated log saved with the
+  character — *5 damage*, *New day*, *Next round, Haste ended*, and each undo and redo of
+  one (*Undid 5 damage*). Add your own lines ("Session 12: the hydra") in its box. It is on
+  the Trackers tab and is a card on the session dashboard; the last 200 lines are kept.
+- Conditions are switches (negative levels and bleed a count) that show what they cost — tick
   one and every number it moves reads out its conditioned value beside the base.
+- **Ability damage and drain** are entered under *Damage & drain* on the Overview's
+  ability scores. Damage is −1 to the modifier per 2 points and leaves the score; drain
+  lowers the score itself. A New day heals 1 point of damage in each ability; drain stays.
+  A score worn to 0 says what that means (Str helpless, Dex paralyzed, Con dead, the
+  mental scores unconscious).
   See *The Overview* below.
 - Hero points, and resource trackers with click-to-spend pips — add, edit, restyle
   and delete any of them (Mythic Power excepted; every character keeps that one).
@@ -435,10 +447,15 @@ rather than complaining.
 
 **Ctrl/⌘-P prints the tab you are looking at**, on white, without the tab bar, the
 rail's buttons or any of the controls — fields print as the values in them, and a
-proficiency chip prints only if it is one the character has. That is the whole rule:
-the section on screen is the section that comes out, so a sheet for the table is a
-few prints rather than one very long one. Long tables repeat their headings on each
-page, and rows, cards and stat blocks are kept from splitting across a break.
+proficiency chip prints only if it is one the character has. Long tables repeat their
+headings on each page, and rows, cards, stat blocks and the small side-by-side panels
+are kept from splitting across a break. A table wider than the page is scaled down to
+fit it.
+
+**Print tabs…** under the rail's **⋯** prints several tabs at once: tick the ones you
+want (the open tab starts ticked), and each comes out starting on a new page with its
+name at the top. **Landscape** turns the page and fits the wide tables to the wider
+page, which is the better choice for the Progression grid and a full Equipment tab.
 
 ### Session view and build view
 
@@ -534,6 +551,15 @@ and leaves out whatever you never filled in.
 ### Buffs
 
 Buffs live on the session dashboard and on the build Overview (under Conditions).
+
+A buff can say what **bonus type** it is (morale, luck, resistance, enhancement…).
+Within a type only the largest bonus counts — among the ticked buffs, and on saves, AC
+and ability scores against the sheet's own bonus of that type there (a cloak's
+resistance, a belt's enhancement, the armour worn, ABP), so a buff adds only what it
+brings past it. Penalties always count; untyped, dodge and circumstance bonuses stack.
+A buff that is not counting shows *does not stack* and why. A buff can also carry
+**rounds left**: the session board's **Next turn**, or **Next round** on the Buffs panel,
+takes one off each ticked buff, and at none the buff switches off.
 Collapsed, a buff is one line — tick, name, and what it comes to ("+4 Attack ·
 +4 AC"); **Edit** opens it into a roomy editor with six full-width dials —
 **Attack, Damage, AC, Saves, Skills, Init** — and a note. A ticked buff rides the
@@ -666,7 +692,11 @@ ladders do not stack — shaken → frightened → panicked and fatigued → exh
 worse one counts and the lesser is struck through. Anything a number cannot say
 (*must flee*, *no attacks of opportunity*) is listed under **In effect**. Conditions
 the sheet did not carry (flat-footed, staggered, nauseated, dazed, confused,
-unconscious) can be added from a picker and removed again with **×**.
+unconscious, and bleed, fascinated, invisible, petrified, disabled, stable) can be added
+from a picker and removed again with **×**. Some move skills by ability or by name:
+blinded is −4 on Strength- and Dexterity-based skills and on Perception, dazzled −1 on
+Perception, fascinated −4 on Perception. **Bleed** is a count — the damage taken at the
+start of each turn — and the session board's **Next turn** deals it.
 
 > The shared template ships with Helpless and Paralyzed set to 1 in every workbook,
 > with nothing else on. That exact fingerprint is a leftover rather than a state, so
@@ -754,8 +784,11 @@ proficient by the Enhanced-veil rule (a veilweaver is always proficient with wha
 creates), and the row's own **Proficient** field — Auto / Yes / No, with a *via* note for
 Custom Training, a class feature, whatever the lists cannot say — overrides all of it. The
 heading shows *proficient · veil* or *proficient · Custom Training* when the answer came
-from one of those rather than the Overview. The −4 is not applied — it stays the player's
-to write. The Armored Discipline prerequisite on Primordia reads the armor list.
+from one of those rather than the Overview. A weapon the character is not proficient with
+takes **−4 to hit**, and its badge says *not proficient · −4*. Where the −4 is already
+written in Misc, untick **−4 to hit** on the weapon's card; a row that was flagged before
+the sheet applied the −4 itself opens with it unticked, so its total did not move. The
+Armored Discipline prerequisite on Primordia reads the armor list.
 
 **Race traits** have a table of their own under *Traits & drawbacks*, next to the
 character traits — a race hands out anywhere from three to ten, so rows are added and
