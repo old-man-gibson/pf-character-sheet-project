@@ -5170,8 +5170,20 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
 .fxeg code { color: var(--cs-accent); font-size: 0.78rem; }
 .fxcopied { margin: 0; }
 
+/* Print tabs…: the tabs being printed, drawn off screen so their tables can
+   be measured for fitting, and shown only on paper (below). */
+.printstack { position: absolute; left: -100000px; top: 0; width: 1100px; visibility: hidden; pointer-events: none; }
+.printpicks { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+
 @media print {
   .fxdrawer { display: none; }
+  /* Printing several tabs: the stack replaces the open tab, one tab a page. */
+  :host([printing]) #sheet-panel { display: none !important; }
+  .printstack { position: static; left: auto; width: auto; visibility: visible; pointer-events: auto; }
+  .printtab + .printtab { break-before: page; }
+  .printhead { font-size: 1.05rem; margin: 0 0 6px; color: var(--cs-accent); }
+  /* A table wider than the page is scaled to it (#fitPrintTables). */
+  .tablewrap { zoom: var(--print-zoom, 1); }
   :host {
     --cs-bg: #fff;
     --cs-panel: #fff;
@@ -5223,6 +5235,7 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
   .thememenu,
   .tabmenu,
   .bdpop,
+  .charcolor,
   dialog { display: none !important; }
 
   /* The rail loses its tabs above but keeps the session strip, which is a row
@@ -5298,7 +5311,10 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
      table's headings on each sheet it runs onto. */
   thead { display: table-header-group; }
   tr, .bigstat, .mcard, .manacard, .statline { break-inside: avoid; }
-  .panel { break-inside: avoid-page; }
+  /* A small panel stays whole; a big one may run on, or a panel too tall
+     for what is left of a page is pushed to the next and leaves the rest of
+     this one blank -- which is what the first print preview showed. */
+  .band > .panel:not(.span2) { break-inside: avoid; }
   h3, h4 { break-after: avoid; }
 
   /* Backgrounds are dropped by default when printing, which would take the

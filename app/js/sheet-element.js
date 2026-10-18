@@ -77,6 +77,10 @@ import * as fields from './ui/fields.js';
  * these are filled on demand is that carrying 8,912 was 61 ms of every render.
  */
 const DATALIST_MAX = 40;
+/** How wide a printed page's text is, in CSS pixels: A4 less 10 mm margins (190 mm). */
+const PRINT_WIDTH = 715;
+/** The same, turned: A4 landscape less the margins (277 mm). */
+const PRINT_WIDTH_LANDSCAPE = 1045;
 import * as rows from './ui/rows.js';
 import { bindDrag, half, side } from './ui/drag.js';
 import { showBrackets, hideBrackets } from './ui/brackets.js';
@@ -616,6 +620,11 @@ export class CharacterSheetElement extends HTMLElement {
   #chromeMenu = false;
   /** Whether the theme picker is open under the rail. */
   #themeMenu = false;
+  /* Print tabs…: whether its panel is up, and the tabs a print is drawing. */
+  #printMenu = false;
+  #printStack = null;
+  #printWidth = PRINT_WIDTH;
+  #printPage = null;
   /**
    * What this browser asked for: `{ palette, layout }`, either half optional,
    * or null when it never chose and the attributes are the host's. Kept apart
@@ -882,6 +891,7 @@ export class CharacterSheetElement extends HTMLElement {
     window.addEventListener('pagehide', this.#closeCardWindows);
     // A reload straight after an action still finds its undo kept.
     window.addEventListener('pagehide', this.#keepUndoNow);
+    window.addEventListener('beforeprint', this.#onBeforePrint);
     // The same character open in another window: its writes are picked up here.
     window.addEventListener('storage', this.#onStorage);
     if (this.#model && !this.#cardChannel) this.#openCardChannel();
@@ -892,6 +902,7 @@ export class CharacterSheetElement extends HTMLElement {
   disconnectedCallback() {
     window.removeEventListener('pagehide', this.#closeCardWindows);
     window.removeEventListener('pagehide', this.#keepUndoNow);
+    window.removeEventListener('beforeprint', this.#onBeforePrint);
     this.#keepUndoNow();
     window.removeEventListener('storage', this.#onStorage);
     clearTimeout(this.#syncTimer);
@@ -3117,6 +3128,8 @@ export class CharacterSheetElement extends HTMLElement {
         ${monster.menuButton(this.#model, this.isAdmin)}
         <button data-view data-action="theme" aria-pressed="${this.#themeMenu}"
           title="Palettes, and where the tabs go">Theme &amp; layout…</button>
+        <button data-view data-action="print-menu" aria-pressed="${this.#printMenu}"
+          title="Print several tabs at once. Ctrl+P prints the tab that is open.">Print tabs…</button>
         ${this.isPublished ? '' : `
         <button data-action="history" aria-pressed="${this.#showHistory}"
           title="Earlier states of this sheet">History${this.#snapshots.length ? ` (${this.#snapshots.length})` : ''}</button>`}
@@ -3147,6 +3160,7 @@ export class CharacterSheetElement extends HTMLElement {
   #notices() {
     return `<div class="notices">
         ${this.#themeMenu ? this.#themeMenuHtml() : ''}
+        ${this.#printMenu ? this.#printMenuHtml() : ''}
         ${this.#resumeBanner()}
         ${this.#staleSaved ? `<div class="histnote" role="status">
           <span><strong>Saved version kept for recovery.</strong>
@@ -3421,6 +3435,114 @@ export class CharacterSheetElement extends HTMLElement {
       </section></div>`;
     }
   }
+
+  /* ---------------- printing ---------------- */
+
+  /**
+   * Print tabs…: which of the bar's tabs go on paper, the open one ticked.
+   */
+  #printMenuHtml() {
+    const tabs = this.#barEntries().filter((e) => e.id !== 'systabs');
+    return `<div class="panel thememenu printmenu" role="dialog" aria-label="Print tabs">
+        <h3>Print tabs</h3>
+        <p class="hint">Each tab starts on a new page. Wide tables shrink to the page width.</p>
+        <div class="printpicks">${tabs.map((e) => `<label class="chk"><input type="checkbox" data-printtab="${esc(e.id)}"
+          ${e.id === this.#tab ? 'checked' : ''}><span>${esc(e.label)}</span></label>`).join('')}</div>
+        <label class="chk" style="margin-top:8px" title="Turns the page and fits wide tables to its width">
+          <input type="checkbox" data-printlandscape><span>Landscape</span></label>
+        <div class="pair" style="margin-top:8px">
+          <button class="primary" data-action="print-go">Print</button>
+          <button data-view data-action="print-menu">Cancel</button>
+        </div>
+      </div>`;
+  }
+
+  /**
+   * Print several tabs at once. Each is drawn in turn into a stack that only
+   * paper shows, a page break between, and the stack goes when the print
+   * dialog closes. `print: false` draws the stack and stops there, for a
+   * host that prints by other means. Ctrl+P alone prints the open tab.
+   */
+  printTabs(ids, { print = true, landscape = false } = {}) {
+    if (!this.#model) return;
+    const labels = new Map(this.#barEntries().map((e) => [e.id, e.label]));
+    const was = this.#tab;
+    const stack = [];
+    try {
+      for (const id of ids) {
+        if (!labels.has(id) || id === 'systabs') continue;
+        this.#tab = id;
+        stack.push({ id, label: labels.get(id), html: this.#panel() });
+      }
+    } finally {
+      this.#tab = was;
+    }
+    this.#printStack = stack;
+    this.#printWidth = landscape ? PRINT_WIDTH_LANDSCAPE : PRINT_WIDTH;
+    // The page's orientation is the document's to set (an @page rule does
+    // nothing inside a shadow root), so it goes on the page for this print.
+    this.#printPage?.remove();
+    this.#printPage = null;
+    if (landscape) {
+      this.#printPage = this.ownerDocument.createElement('style');
+      this.#printPage.textContent = '@page { size: landscape; }';
+      this.ownerDocument.head.append(this.#printPage);
+    }
+    this.#drawPrintStack();
+    if (!print || !stack.length) return;
+    const done = () => {
+      window.removeEventListener('afterprint', done);
+      this.#printStack = null;
+      this.#printWidth = PRINT_WIDTH;
+      this.#printPage?.remove();
+      this.#printPage = null;
+      this.#drawPrintStack();
+    };
+    window.addEventListener('afterprint', done);
+    window.print();
+  }
+
+  #drawPrintStack() {
+    let holder = this.shadowRoot?.querySelector('.printstack');
+    if (!this.#printStack?.length) {
+      holder?.remove();
+      this.removeAttribute('printing');
+      return;
+    }
+    if (!holder) {
+      holder = document.createElement('div');
+      holder.className = 'printstack';
+      holder.setAttribute('aria-hidden', 'true');
+      (this.shadowRoot.querySelector('.main') ?? this.shadowRoot).append(holder);
+    }
+    holder.innerHTML = this.#printStack.map((t) => `<section class="printtab">
+      <h2 class="printhead">${esc(t.label)}</h2><div class="body">${t.html}</div></section>`).join('');
+    this.setAttribute('printing', '');
+    this.#fitPrintTables(holder);
+  }
+
+  /**
+   * A table wider than the printed page is scaled down to fit it, rather
+   * than running off the edge. The width is read now, on screen, from the
+   * table's own size; the page is taken as A4 with the margins chrome.css
+   * gives it, the narrower of the two common sizes.
+   */
+  #fitPrintTables(root) {
+    for (const wrap of root?.querySelectorAll('.tablewrap') || []) {
+      const table = wrap.querySelector(':scope > table');
+      const wide = Math.max(table?.scrollWidth || 0, wrap.scrollWidth || 0);
+      // Less the panel's own padding and border, which the page width does not leave room for.
+      const room = this.#printWidth - 40;
+      if (wide > room) wrap.style.setProperty('--print-zoom', (room / wide).toFixed(3));
+      else wrap.style.removeProperty('--print-zoom');
+    }
+  }
+
+  /** Ctrl+P: the open tab's wide tables, fitted the same way. */
+  #onBeforePrint = () => {
+    if (this.#printStack) return;
+    this.#fitPrintTables(this.shadowRoot?.getElementById('sheet-panel'));
+  };
 
   /** What the tab bar calls the tab that is up, for a message about it. */
   #tabLabel() {
@@ -7094,6 +7216,20 @@ export class CharacterSheetElement extends HTMLElement {
         this.#themeMenu = !this.#themeMenu;
         this.#renderHeader();
         break;
+      case 'print-menu':
+        this.#printMenu = !this.#printMenu;
+        this.#chromeMenu = false;
+        this.#renderHeader();
+        break;
+      case 'print-go': {
+        const ids = [...this.shadowRoot.querySelectorAll('.printmenu input[data-printtab]:checked')]
+          .map((b) => b.dataset.printtab);
+        const landscape = !!this.shadowRoot.querySelector('.printmenu input[data-printlandscape]')?.checked;
+        this.#printMenu = false;
+        this.#renderHeader();
+        if (ids.length) this.printTabs(ids, { landscape });
+        break;
+      }
       case 'theme-close':
         this.#themeMenu = false;
         this.#renderHeader();
