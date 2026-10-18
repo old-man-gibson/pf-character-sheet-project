@@ -53,6 +53,7 @@ import {
 import { emit, subscribe } from './events.js';
 import {
   markUndo, undo, undoLabel, undoLast, undoPlay, clearUndo, playAction, playActions,
+  redoLabel, redoLast, undoState, adoptUndoState,
 } from './undo.js';
 import {
   addClassFeatureColumn, addClassFeatureColumnOptions, addClassFeatureNote,
@@ -486,6 +487,15 @@ export class Character {
   clearUndo(...a) { return clearUndo(this, ...a); }
 
   get undoLabel() { return undoLabel(this); }
+
+  /* Doing again what was undone, and the stacks kept across a reload. */
+  redoLast(...a) { return redoLast(this, ...a); }
+
+  get redoLabel() { return redoLabel(this); }
+
+  undoState(...a) { return undoState(this, ...a); }
+
+  adoptUndoState(...a) { return adoptUndoState(this, ...a); }
 
   /* Taking back one thing done at the table, and only that. The actions below
      run through `play`, each under the name its Undo button offers it back

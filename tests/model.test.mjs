@@ -3049,6 +3049,44 @@ console.log('undo at the table -- one action back, and only that');
   check('then the removal, and the damage stays undone', [c.undo(), lost()], ['Removed Test Axe', 0]);
 }
 
+console.log('redo -- what was undone comes back, until something new is done');
+{
+  const c = new Character(blankDocument({ name: 'Redoer', level: 5 }));
+  const lost = () => c.hpState.max - c.hpState.current;
+  c.listAdd('equipment.weapons', { name: 'Test Axe', dice: '1d8' });
+  const n = c.list('equipment.weapons').length;
+  c.listRemove('equipment.weapons', n - 1);
+  c.applyDamage(4);
+  check('nothing to redo before an undo', [c.redoLabel, c.redoLast()], [null, null]);
+  c.undo();
+  c.undo();
+  check('both undone, the newer one redoes first', [c.redoLabel, lost(), c.list('equipment.weapons').length], ['Removed Test Axe', 0, n]);
+  check('the removal comes back', [c.redoLast().label, c.list('equipment.weapons').length], ['Removed Test Axe', n - 1]);
+  check('then the damage', [c.redoLast().label, lost(), c.redoLabel], ['4 damage', 4, null]);
+  check('and both can be undone again', [c.undo(), c.undo(), lost(), c.list('equipment.weapons').length],
+    ['4 damage', 'Removed Test Axe', 0, n]);
+
+  // A redo waiting behind an out-of-turn undo keeps the play undone since.
+  c.redoLast();                        // removal again; damage still waiting
+  c.applyHealing(1);                   // new play: the redo stack is gone
+  check('a new action empties the redo stack', c.redoLabel, null);
+  c.undo();
+  c.set('identity.player', 'Someone');
+  check('so does an edit', c.redoLabel, null);
+
+  // Kept across a reload: the stacks survive JSON and a fresh model.
+  c.applyDamage(3);
+  c.undo();
+  const kept = JSON.parse(JSON.stringify(c.undoState()));
+  const reopened = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  reopened.adoptUndoState(kept);
+  check('a reopened sheet can redo and undo what the old one could',
+    [reopened.redoLabel, reopened.redoLast().label, reopened.hpState.max - reopened.hpState.current, reopened.undo()],
+    ['3 damage', '3 damage', 3, '3 damage']);
+  reopened.applyDamage(1);
+  check('and newer entries still sort newest', reopened.undoLabel, '1 damage');
+}
+
 console.log('undo at the table -- cards, a use, slots across a rest');
 {
   const c = new Character(blankDocument({ name: 'Dealer', level: 5 }));
