@@ -13,6 +13,7 @@ import {
   UNORTHODOX_SPHERES_PER_FEAT,
   addDice, diceAverage, diceString, fmt, ladderRung, parseDiceExpr, sizeAttackMod, statMod,
   raiseDice, unarmedDice, SIZE_MODIFIERS, stepDiceMap, critMultOf, coinValue, equipmentWeights, quantityOf,
+  NONPROFICIENT_ATTACK,
 } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import { parseQuery } from '../../inline.js';
@@ -211,12 +212,15 @@ export function recomputeEquipment(model) {
     // all, while the name a rule has to use is settled here.
     w.handle = handles[wi];
     // Read against the row's own Proficient field, the [Enhanced] veil rule
-    // and the Overview's proficiencies; a `false` is shown, not applied --
-    // the -4 is the player's to write, as it always was.
+    // and the Overview's proficiencies. A `false` is -4 to hit, unless the
+    // row says the -4 is already written in (`nonproficiencyPenalty: false`,
+    // which a row flagged before the sheet applied it starts with; see the
+    // `nonproficiency-penalty` correction).
     const pr = weaponProficient(prof, w);
     w.proficient = pr.state;
     w.proficiencyWhy = pr.why;
     w.proficiencySource = pr.source;
+    w.nonproficiency = pr.state === false && w.nonproficiencyPenalty !== false ? NONPROFICIENT_ATTACK : 0;
     // The Dice field may reference an inline name or hold a formula:
     //   "12d8"                 literal
     //   "{kinetic.fist}"       a {name = …} defined in prose (may be dice text
@@ -269,7 +273,7 @@ export function recomputeEquipment(model) {
     w.diceResolved = w.useUnarmedDice && unarmedDiceNow ? unarmedDiceNow : diceText;
     const base = modeBase(w.attackType);
     const attack = (base ?? (Number(w.baseOverride) || 0))
-      + (Number(w.enhancement) || 0) + (Number(w.miscAttack) || 0);
+      + (Number(w.enhancement) || 0) + (Number(w.miscAttack) || 0) + w.nonproficiency;
     if (w.attackOffset === undefined) {
       w.attackOffset = w.sheetAttack != null ? (Number(w.sheetAttack) || 0) - attack : 0;
     }

@@ -24,6 +24,7 @@
 
 import { RULE_CORRECTIONS, SIZE_MODIFIERS, carryState, gestaltSaveBase } from '../rules.js';
 import { classPresence, saveProgressions } from './progression.js';
+import { weaponProficient } from './document.js';
 
 /** The attack slots that take the size modifier the way AC does. */
 const SIZED_ATTACKS = new Set(['Melee', 'Alt Melee', 'Ranged', 'Alt Ranged']);
@@ -113,6 +114,20 @@ FIXES['load-penalties'] = (model) => {
   const k = model.data.carry;
   if (!k || k.applyLoad !== undefined) return;
   if (carryState(model.data).load !== 'light') k.applyLoad = false;
+};
+
+/*
+ * The -4 for a weapon the character is not proficient with was shown and
+ * left for the player to write in Misc. Now it is applied, so a row flagged
+ * before that keeps its total -- its -4 may well be in Misc already -- and
+ * its card offers the -4 as a box to tick. Rows flagged from now on take it.
+ */
+FIXES['nonproficiency-penalty'] = (model) => {
+  const d = model.data;
+  const prof = d.identity?.proficiencies;
+  for (const w of d.equipment?.weapons || []) {
+    if (w && w.nonproficiencyPenalty === undefined && weaponProficient(prof, w).state === false) w.nonproficiencyPenalty = false;
+  }
 };
 
 /**

@@ -254,7 +254,7 @@ export function weaponsPanel(model, e) {
     })}`;
   })()}
           ${w.proficient === false ? `<span class="badge err nonprof"
-            title="${esc(w.proficiencyWhy)} — non-proficiency is −4 to hit, yours to write in Misc">not proficient</span>`
+            title="${esc(w.proficiencyWhy)} — ${w.nonproficiency ? 'non-proficiency is −4 to hit, applied' : 'the −4 is switched off on this row'}">not proficient${w.nonproficiency ? ' · −4' : ''}</span>`
     : w.proficient === true && w.proficiencySource !== 'overview' ? `<span class="badge ok nonprof"
             title="${esc(w.proficiencyWhy)}">proficient · ${w.proficiencySource === 'veil' ? 'veil' : esc(w.proficiencyNote || 'row')}</span>` : ''}
           ${rollButton(model, 'weapon', i, `${String(w.name || '').trim() || 'this weapon'} — attack and damage`, cs)}
@@ -326,6 +326,7 @@ export function weaponsPanel(model, e) {
     `Auto${w.proficient === true ? ' ✓' : w.proficient === false ? ' ✗' : ''}`, null, {
       attrs: `title="${esc(w.proficiencyWhy || 'Auto reads the row against the Overview\'s Proficiencies and the [Enhanced] veil rule')}"`,
     }))}
+          ${w.proficient === false ? field('−4 to hit', `<span title="Untick when the −4 is already written in Misc">${itemCheck('equipment.weapons', i, 'nonproficiencyPenalty', w.nonproficiencyPenalty !== false)}</span>`) : ''}
           ${w.proficiency ? field('Via', `<input type="text" value="${esc(w.proficiencyNote ?? '')}" data-item="equipment.weapons|${i}|proficiencyNote"
             data-kind="text" placeholder="Custom Training" style="width:8rem"
             title="What grants or denies it — a talent, a class feature, a trait">`) : ''}

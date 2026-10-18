@@ -42,7 +42,7 @@
  *     changes, multiplied on the crit lines where the answer multiplies.
  */
 import {
-  ABILITIES, ABILITY_LABELS, fmt, diceString, addDice, skillLabel, statModDelta,
+  ABILITIES, ABILITY_LABELS, fmt, diceString, addDice, skillConditionDelta, skillLabel, statModDelta,
   ATTACK_TYPE_MODE, attackModeTotal, parseDiceExpr, readCrit, threatText, weaponMoves,
 } from './rules.js';
 import { COMPANION_LABELS } from './companions.js';
@@ -668,9 +668,7 @@ export function skillRollSpec(c, index, cs = null) {
   if (!s) return null;
   // A skill moves with its own ability as well as with the flat penalty a
   // condition puts on skill checks, so both halves are summed here.
-  const primary = (s.abilities || [])[0];
-  const delta = (cs ? statModDelta(cs.deltas || {}, primary, null) : 0)
-    + (cs?.delta?.skills || 0);
+  const delta = skillConditionDelta(cs, s);
   const notes = [];
   if (String(s.situational ?? '').trim()) notes.push({ label: 'Note', text: s.situational });
   if (s.requiresTraining && !(Number(s.totalRanks) > 0)) {

@@ -100,7 +100,7 @@ import {
   ATTACK_MODE_LABELS, BONUS_TYPES, BUFF_MOD_KEYS, BUFF_TARGETS, CONDITIONS, CONDITION_CATS, GAME_SYSTEMS,
   SIZE_MODIFIERS, TRAIT_SLOTS, WEAPON_GROUPS, WEAPON_FAMILIARITY, WEAPON_HANDEDNESS,
   ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES, attackModeTotal, castingNoun,
-  conditionInfo, conditionTotals, fmt, prepStyle, skillLabel, statModDelta,
+  conditionInfo, conditionTotals, fmt, prepStyle, skillConditionDelta, skillLabel, statModDelta,
 } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
 import { abilityCollapse, abilityHarm, blankClassRow, maneuverDetails } from '../../model.js';
@@ -395,6 +395,8 @@ function dashCondNumbers(model) {
       score = Math.max(0, score);
       if (score !== base) bits.push(`${ABILITY_LABELS[key]} ${base} → ${score}`);
     }
+    for (const [key, v] of Object.entries(t.skillsBy || {})) if (v) bits.push(`${ABILITY_LABELS[key] || key} skills ${fmt(v)}`);
+    for (const [key, v] of Object.entries(t.skillMods || {})) if (v) bits.push(`${key[0].toUpperCase()}${key.slice(1)} ${fmt(v)}`);
     if (t.losesDex) bits.push('no Dex to AC');
     if (t.speed === 0) bits.push('no move');
     else if (t.speed < 1) bits.push('half speed');
@@ -734,7 +736,7 @@ function dashSkillsCard(model, openNow) {
     // whatever the skill's own ability lost or gained.
     const row = ({ s, i }) => {
       const delta = cs.changed
-        ? statModDelta(cs.deltas || {}, (s.abilities || [])[0], null) + (cs.delta.skills || 0) : 0;
+        ? skillConditionDelta(cs, s) : 0;
       const shown = movedValue(fmt((Number(s.bonus) || 0) + delta), delta, { base: fmt(s.bonus), sources: cs.sources });
       return `<div class="statline">
       <span class="label">${esc(skillLabel(s.name, s.spec) || s.name || '—')}</span>
@@ -1735,7 +1737,9 @@ function proficienciesPanel(model) {
     : 'No weapon proficiencies recorded. '}A weapon on Equipment is checked against these by its
         familiarity, handedness, group, name and <strong>As</strong> (the base weapon it is). It is marked
         when nothing covers it. A veil weapon is proficient by the [Enhanced] rule. A row's own
-        <strong>Proficient</strong> field overrides all of this, for Custom Training and the like. The −4 penalty is not applied for you. Write it yourself.</p>
+        <strong>Proficient</strong> field overrides all of this, for Custom Training and the like. A weapon
+        you are not proficient with takes −4 to hit. Its card can switch the −4 off for a row where it is
+        already written in Misc.</p>
     </section>`;
   }
 
@@ -2118,6 +2122,9 @@ function conditionsPanel(model) {
       if (m.hp) bits.push(`${fmt(m.hp)} hp`);
       for (const [k, v] of Object.entries(info.ability || {})) bits.push(`${fmt(v)} ${ABILITY_LABELS[k]}`);
       for (const [k, v] of Object.entries(info.abilitySet || {})) bits.push(`${ABILITY_LABELS[k]} ${v}`);
+      const by = Object.entries(info.skillsBy || {});
+      if (by.length) bits.push(`${fmt(by[0][1])} ${by.map(([k]) => ABILITY_LABELS[k] || k).join('/')} skills`);
+      for (const [k, v] of Object.entries(info.skill || {})) bits.push(`${fmt(v)} ${k[0].toUpperCase()}${k.slice(1)}`);
       if (info.losesDex) bits.push('no Dex to AC');
       if (info.speed === 0) bits.push('no move');
       else if (info.speed !== undefined && info.speed < 1) bits.push('half speed');

@@ -467,6 +467,7 @@ export function conditionState(model) {
     sources: active.length && buffCount ? 'conditions and buffs'
       : buffCount ? 'buffs' : 'conditions',
     changed: Object.entries(delta).filter(([, v]) => v !== 0).length > 0
+      || Object.values(totals.skillsBy).some(Boolean) || Object.values(totals.skillMods).some(Boolean)
       || totals.speed !== 1 || !!mods.speedFt || !!sizeSteps
       || !!totals.acVsMelee || !!totals.acVsRanged,
   };

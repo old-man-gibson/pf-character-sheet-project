@@ -1832,7 +1832,8 @@ export function ladderDice(ladder, level) {
  * (model/corrections.js). The monster importer writes the whole list, because
  * what it writes is current.
  */
-export const RULE_CORRECTIONS = ['attack-size-sign', 'poor-save-thirds', 'monster-crit-range', 'hp-meter-fill', 'load-penalties'];
+export const RULE_CORRECTIONS = ['attack-size-sign', 'poor-save-thirds', 'monster-crit-range', 'hp-meter-fill', 'load-penalties',
+  'nonproficiency-penalty'];
 
 /** Size -> AC/attack modifier and its opposite for CMB/CMD. */
 export const SIZE_MODIFIERS = {
@@ -2707,6 +2708,9 @@ export function diceAverage(dice, flat = 0) {
  * workbook's "Medium" and a typed "heavy armor" both answer.
  */
 export const ARMOR_TYPES = ['Light', 'Medium', 'Heavy', 'Unarmored'];
+
+/** To hit with a weapon the character is not proficient with. */
+export const NONPROFICIENT_ATTACK = -4;
 export function armorCategory(type) {
   const t = String(type ?? '').toLowerCase();
   if (/\bheavy\b/.test(t)) return 3;
@@ -2793,7 +2797,10 @@ export const CONDITIONS = [
     mods: { ac: -2 },
     losesDex: true,
     speed: 0.5,
-    notes: ['50% miss chance against anything it cannot see', 'cannot run or charge'],
+    skillsBy: { str: -4, dex: -4 },
+    skill: { perception: -4 },
+    notes: ['50% miss chance against anything it cannot see', 'cannot run or charge',
+      'Perception checks that rely on sight fail outright'],
   },
   {
     key: 'cowering',
@@ -2809,6 +2816,54 @@ export const CONDITIONS = [
     label: 'Dazzled',
     rule: 'Overwhelmed by light: −1 on attack rolls and sight-based Perception checks.',
     mods: { attack: -1 },
+    skill: { perception: -1 },
+    notes: ['the −1 on Perception is for checks that rely on sight'],
+  },
+  {
+    key: 'bleed',
+    label: 'Bleed',
+    aliases: ['bleeding'],
+    kind: 'count',
+    rule: 'Takes this much damage at the start of each of its turns. A DC 15 Heal check or any magical healing stops it.',
+    notes: ['the session board’s Next turn takes the bleed damage'],
+  },
+  {
+    key: 'fascinated',
+    label: 'Fascinated',
+    rule: 'Entranced: stands or sits quietly, taking no actions, and takes −4 on skill checks made as reactions, such as Perception.',
+    skill: { perception: -4 },
+    notes: ['any obvious threat breaks the effect', 'an ally can shake it free as a standard action'],
+  },
+  {
+    key: 'invisible',
+    label: 'Invisible',
+    rule: 'Unseen: +2 on attack rolls against sighted opponents, which lose their Dexterity bonus to AC against it.',
+    mods: { attack: 2 },
+    notes: ['the +2 is against opponents that can see', '+20 on Stealth while moving, +40 standing still'],
+  },
+  {
+    key: 'petrified',
+    label: 'Petrified',
+    aliases: ['petrification', 'stone'],
+    group: 'helpless',
+    rank: 3,
+    rule: 'Turned to stone: unconscious and helpless.',
+    abilitySet: { dex: 0 },
+    acVsMelee: -4,
+    speed: 0,
+    notes: ['broken pieces are missing when the creature returns to flesh'],
+  },
+  {
+    key: 'disabled',
+    label: 'Disabled',
+    rule: 'At exactly 0 hit points: a single move or standard action each round, and a strenuous action deals 1 damage.',
+    notes: ['a standard action or anything strenuous takes 1 damage afterwards, unless it heals'],
+  },
+  {
+    key: 'stable',
+    label: 'Stable',
+    rule: 'Dying but no longer losing hit points: unconscious until healed.',
+    notes: ['makes a DC 10 Constitution check each hour to become conscious and disabled'],
   },
   {
     key: 'deafened',
@@ -3011,14 +3066,15 @@ export const SHEET_CONDITIONS = ['blinded', 'cowering', 'dazzled', 'deafened',
  * so twenty-odd conditions read as six short columns rather than one long list.
  * (`group` above is the supersession ladder, a different thing.)
  */
-export const CONDITION_CATS = ['Fear', 'Worn down', 'Held', 'Addled', 'Senses', 'Footing'];
+export const CONDITION_CATS = ['Fear', 'Worn down', 'Held', 'Addled', 'Senses', 'Footing', 'Hurt'];
 const CONDITION_CAT_KEYS = {
   Fear: ['shaken', 'frightened', 'panicked', 'cowering'],
   'Worn down': ['fatigued', 'exhausted', 'sickened', 'nauseated', 'energyDrain'],
-  Held: ['grappled', 'pinned', 'entangled', 'helpless', 'paralyzed'],
-  Addled: ['dazed', 'staggered', 'stunned', 'confused', 'unconscious'],
-  Senses: ['blinded', 'dazzled', 'deafened'],
+  Held: ['grappled', 'pinned', 'entangled', 'helpless', 'paralyzed', 'petrified'],
+  Addled: ['dazed', 'staggered', 'stunned', 'confused', 'fascinated', 'unconscious'],
+  Senses: ['blinded', 'dazzled', 'deafened', 'invisible'],
   Footing: ['prone', 'flatFooted'],
+  Hurt: ['bleed', 'disabled', 'stable'],
 };
 for (const [cat, keys] of Object.entries(CONDITION_CAT_KEYS)) {
   for (const key of keys) {
@@ -3174,6 +3230,10 @@ export function conditionTotals(active) {
   let speed = 1;
   let acVsMelee = 0;
   let acVsRanged = 0;
+  // Skill penalties keyed by the skill's ability (blinded: Str and Dex) and
+  // by the skill itself (dazzled: Perception); see skillConditionDelta.
+  const skillsBy = {};
+  const skillMods = {};
   // What the AC penalties among these come to, kept apart from the net `ac`:
   // blinded's −2 is −2 CMD as well, and a buff that happens to be raising AC
   // at the same time must not cancel it out (see acPenaltyToCmd).
@@ -3191,6 +3251,8 @@ export function conditionTotals(active) {
     for (const [key, value] of Object.entries(info.abilitySet || {})) {
       abilitySet[key] = Math.min(abilitySet[key] ?? Infinity, value);
     }
+    for (const [key, value] of Object.entries(info.skillsBy || {})) skillsBy[key] = (skillsBy[key] || 0) + value * n;
+    for (const [key, value] of Object.entries(info.skill || {})) skillMods[key] = (skillMods[key] || 0) + value * n;
     if (info.losesDex) losesDex = true;
     if (info.speed !== undefined) speed = Math.min(speed, info.speed);
     acVsMelee += (info.acVsMelee || 0) * n;
@@ -3199,8 +3261,26 @@ export function conditionTotals(active) {
 
   return {
     mods, ability, abilitySet, losesDex, speed, acVsMelee, acVsRanged, acPenalty,
-    counted, superseded,
+    skillsBy, skillMods, counted, superseded,
   };
+}
+
+/** A skill row's key for a condition's per-skill penalty: "Perception" is `perception`. */
+export const skillConditionKey = (name) => String(name ?? '').toLowerCase().replace(/[^a-z]/g, '');
+
+/**
+ * What the ticked conditions and buffs do to one skill row's check: its
+ * ability's move, the flat skills channel, a penalty on skills of its ability
+ * (blinded's −4 on Strength and Dexterity skills), and one on the skill
+ * itself (dazzled's −1 on Perception). The dashboard and the d20 copy both
+ * read this.
+ */
+export function skillConditionDelta(cs, s) {
+  if (!cs || !s) return 0;
+  const primary = (s.abilities || [])[0];
+  const ab = abilityKey(primary);
+  return statModDelta(cs.deltas || {}, primary, null) + (cs.delta?.skills || 0)
+    + (cs.skillsBy?.[ab] || 0) + (cs.skillMods?.[skillConditionKey(s.name)] || 0);
 }
 
 /**

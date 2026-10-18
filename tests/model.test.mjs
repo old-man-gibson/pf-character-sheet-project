@@ -42,7 +42,7 @@ import {
   ATTACK_MODES, ATTACK_MODE_KEY, attackModeTotal, attackModeAbility,
   WEAPON_ATTACK_TYPES,
   KHESHIG_VEILS, wikiUrl, mergeLayout,
-  CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod, statKeys, critMultOf, threatText, readCrit, weaponMoves,
+  CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, skillConditionDelta, fmt, abilityMod, armorParts, statMod, statKeys, critMultOf, threatText, readCrit, weaponMoves,
   AC_BONUS_TYPES, SAVE_BONUS_TYPES, SHEET_ALIASES, ABILITIES,
   MONK_UNARMED_LADDER, UNARMED_NATIVE_THRESHOLD, ladderDice, stepDice, raiseDice, unarmedDice,
   gestaltSaveBase,
@@ -73,7 +73,7 @@ import {
   GUILE_SPHERES, expertiseTalents, guilePackages, guileRanges, guileSkillHint,
   leveragePool, carryTiers, reducedSpeed,
 } from '../app/js/rules.js';
-import { concentrationRollSpec, rollSpec } from '../app/js/roll20.js';
+import { concentrationRollSpec, rollSpec, skillRollSpec } from '../app/js/roll20.js';
 import { NameIndex, evaluateFormula, resolvePath } from '../app/js/formula.js';
 import { positionedRows } from '../app/js/model/templates.js';
 import { blankGuileClass, guileTally } from '../app/js/model/subsystems/guile.js';
@@ -3161,6 +3161,50 @@ console.log('ability damage and drain -- the modifier, the score, a night’s re
   check('a New day heals 1 damage, and no drain', [str().damage, str().drain], [3, 2]);
   c.set('abilities.con.drain', c.data.abilities.con.workingScore);
   check('Con worn to 0 is death', abilityCollapse('con', c.data.abilities.con), 'dead');
+}
+
+console.log('conditions -- skill penalties by ability and by skill, bleed, non-proficiency');
+{
+  const c = new Character(blankDocument({ name: 'Unlucky', level: 5 }));
+  const skill = (name) => c.data.skills.find((s) => s.name === name);
+  c.set('conditions.blinded', 1);
+  let cs = c.conditionState;
+  check('blinded is −4 on a Dex skill and on Perception, nothing on a mental one',
+    [skillConditionDelta(cs, skill('Acrobatics')), skillConditionDelta(cs, skill('Perception')), skillConditionDelta(cs, skill('Diplomacy'))],
+    [-4, -4, 0]);
+  c.set('conditions.blinded', 0);
+  c.set('conditions.dazzled', 1);
+  cs = c.conditionState;
+  check('dazzled is −1 on attack and on Perception', [cs.delta.melee, skillConditionDelta(cs, skill('Perception'))], [-1, -1]);
+  check('the d20 copy reads the same', skillRollSpec(c.data, c.data.skills.indexOf(skill('Perception')), cs).rolls[0].formula,
+    `1d20${fmt((Number(skill('Perception').bonus) || 0) - 1)}`);
+  c.set('conditions.dazzled', 0);
+
+  // Bleed comes off at the start of the turn, with the turn, as one action.
+  c.set('conditions.bleed', 3);
+  const hp = c.hpState.current;
+  c.clearUndo();
+  advanceTurn(c, true);
+  check('bleed 3 is 3 damage at Next turn, named on the undo', [hp - c.hpState.current, c.playActions[0].label], [3, 'Next turn, bleed 3']);
+  c.undo();
+  check('and undoes with it', c.hpState.current, hp);
+  c.set('conditions.bleed', 0);
+
+  // A weapon the character is not proficient with is −4 to hit.
+  c.set('identity.proficiencies.weapons', ['Longsword']);
+  c.listAdd('equipment.weapons', { ...blankWeapon(), name: 'Greataxe', baseWeapon: 'greataxe', groups: ['Axes'], attackType: 'Melee' });
+  const axe = () => c.list('equipment.weapons').at(-1);
+  check('not proficient, −4 applied', [axe().proficient, axe().nonproficiency], [false, -4]);
+  const flagged = axe().attackTotal;
+  c.setItem('equipment.weapons', c.list('equipment.weapons').length - 1, 'nonproficiencyPenalty', false);
+  check('a row with the −4 already in Misc can switch it off', axe().attackTotal, flagged + 4);
+
+  // A row flagged before the sheet applied it keeps its total.
+  const old = JSON.parse(JSON.stringify(c.toJSON()));
+  delete old.equipment.weapons.at(-1).nonproficiencyPenalty;
+  old.corrections = old.corrections.filter((n) => n !== 'nonproficiency-penalty');
+  const reopened = new Character(old);
+  check('an old non-proficient row opens with the −4 off', reopened.list('equipment.weapons').at(-1).nonproficiencyPenalty, false);
 }
 
 console.log('undo at the table -- cards, a use, slots across a rest');

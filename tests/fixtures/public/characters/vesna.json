@@ -3132,6 +3132,7 @@
     "proficient": null,
     "proficiencyWhy": "",
     "proficiencySource": null,
+    "nonproficiency": 0,
     "diceError": null,
     "sizeSteps": 0,
     "sizeNow": "Medium",
@@ -3256,6 +3257,7 @@
     "proficient": null,
     "proficiencyWhy": "",
     "proficiencySource": null,
+    "nonproficiency": 0,
     "diceError": null,
     "sizeSteps": 0,
     "sizeNow": "Medium",
@@ -6049,7 +6051,8 @@
   "poor-save-thirds",
   "monster-crit-range",
   "hp-meter-fill",
-  "load-penalties"
+  "load-penalties",
+  "nonproficiency-penalty"
  ],
  "customTrackers": [
   {
