@@ -5465,3 +5465,14 @@ table.stacked .catface { margin-left: 0; }
 .squadrow .hint { margin: 2px 0 0; }
 .deckgroup { margin-top: 10px; }
 .deckgroup > h4 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 4px; }
+
+/* The cost colour on a face: the pips sit in the field itself, over the
+   letters, and a click on them is a click into the field -- the pips step
+   aside while it has focus and the letters show to be typed. The field is as
+   wide as its pips. */
+.mcard .bar.title .cost .colorcell { position: relative; display: inline-flex; flex: none; --n: 2; }
+.mcard .bar.title .cost .colorcell input.colorpick { width: max(2.6rem, calc(var(--n) * 1.3rem + 0.35rem)); }
+.mcard .bar.title .cost .colorcell .mana { position: absolute; inset: 0; justify-content: center; align-items: center; pointer-events: none; }
+.mcard .bar.title .cost .colorcell:focus-within .mana { display: none; }
+.mcard .bar.title .cost .colorcell.filled:not(:focus-within) input.colorpick,
+.mcard .bar.title .cost .colorcell.filled:not(:focus-within) input.colorpick::placeholder { color: transparent; }

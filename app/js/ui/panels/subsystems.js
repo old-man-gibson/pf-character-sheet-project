@@ -80,7 +80,7 @@ import { getPath } from '../../model/util.js';
 import { speedTable } from '../speeds.js';
 import { countsTowardLine } from '../counts-toward.js';
 import { squareLayout } from '../../tracker-style.js';
-import { abilitySelect, check, field, num, autoNum, levelPin, levelPinHint, select, text } from '../fields.js';
+import { abilitySelect, check, field, num, autoNum, levelPin, levelPinHint, postBox, select, text } from '../fields.js';
 import {
   addButton, bigStat, collapsible, exprField, foldButton, isCollapsed, isOpen, itemCheck, itemNum,
   itemSelect, itemText, line,
@@ -3448,9 +3448,11 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
           placeholder="${isMana ? 'Mana Point' : 'Card name'}" aria-label="Card name">
         <span class="cost" title="Spell point cost, and the colour(s) it must be paid in — two or more with Rainbow Efficiency${r.fromSphere ? '. No colour of its own: the frame follows the sphere' : ''}">
           <input type="text" value="${esc(card.cost ?? '')}" data-item="${list}|${i}|cost" data-kind="text" placeholder="—" aria-label="Cost">
-          <input type="text" class="colorpick" value="${esc(card.color ?? '')}" data-item="${list}|${i}|color" data-kind="text"
-            placeholder="${esc(r.fromSphere ? colors : '◌')}" aria-label="Cost colours" title="Colour letters: R B U W G">
-          ${manaChips(colors, '')}
+          <span class="colorcell${colors ? ' filled' : ''}" style="--n:${Math.max(2, colors.length)}">
+            <input type="text" class="colorpick" value="${esc(card.color ?? '')}" data-item="${list}|${i}|color" data-kind="text"
+              placeholder="${esc(r.fromSphere ? colors : '◌')}" aria-label="Cost colours" title="The colour letters R B U W G. Click the pips to type them">
+            ${colors ? manaChips(colors, '') : ''}
+          </span>
           ${r.discount ? `<span class="badge" title="${esc(`Rainbow Efficiency: ${r.discount} off for ${colors.length} colours — ${r.cost} to cast`)}">→ ${r.cost}</span>` : ''}
         </span>
       </div>
@@ -3672,12 +3674,14 @@ function deckTableBody(model, ctx, p, k, own = '') {
           ${check(own ? `cardcasting.harrowBy.${own}` : 'cardcasting.harrow', harrowFor(p, own), 'Harrow deck — suits & alignments')}
         </span>
       </h3>
-      <p class="hint">Cost and its colour sit top right and set the frame colour. The type line is
+      <p class="hint">Cost and its colour sit top right and set the frame colour; the colour shows
+        as pips, and a click on them opens the letters to type. The type line is
         sphere — tags. The letters under the text are the mana the card puts on the table when a
         Mana Point card is fused onto it. Leave the effect blank for a plain Mana Point card.
         ${p.useD100 ? 'The number bottom right is the card\'s roll on the d100.' : ''}
         Sort shows the faces by colour (white, blue, black, red, green, then gold), by cost, by tags
         or by sphere; the sideboard follows.</p>
+      ${(() => { const l = model.deckList(own); return postBox(ctx, `decklist${own ? `-${own}` : ''}`, 'Decklist', l.text, Math.min(24, Math.max(4, l.text.split('\n').length + 1))); })()}
       ${harrowFor(p, own) && Object.keys(suitTally).length ? `<div class="tally">
         ${Object.entries(suitTally).map(([s, n]) => `<span class="t">${esc(s)} <span class="n">${n}</span></span>`).join('')}
         <span class="t">·</span>
