@@ -56,6 +56,7 @@ const DASH_CARDS = [
   ['skills', 'Key skills'],
   ['effects', 'Active effects'],
   ['quick', 'Quick actions'],
+  ['log', 'Play log'],
 ];
 
 const DASH_CARD_LABELS = new Map(DASH_CARDS);
@@ -95,6 +96,7 @@ function progressionSelect(i, field, value, choices, label, format = String, bea
   });
 }
 import { loadLine, weaponsPanel, wealthPanel } from './gear.js';
+import { playLogPanel } from '../play-log.js';
 import {
   ABILITIES, ABILITY_LABELS, ALT_ATTACK_OF, ATTACK_MODES, ATTACK_MODE_KEY,
   ATTACK_MODE_LABELS, BONUS_TYPES, BUFF_MOD_KEYS, BUFF_TARGETS, CONDITIONS, CONDITION_CATS, GAME_SYSTEMS,
@@ -234,9 +236,10 @@ export function renderDashboardPanel(model, ctx) {
       skills: () => dashSkillsCard(model, open('skills')),
       effects: () => dashEffectsCard(model),
       quick: () => dashQuickCard(model, ctx),
+      log: () => playLogPanel(model, ctx, { span: false }),
     };
     const ids = dashCardIds(model);
-    const support = new Set(['quick', 'resources', 'conditions', 'buffs', 'effects', 'vancian', 'psionics', 'spheres']);
+    const support = new Set(['quick', 'resources', 'conditions', 'buffs', 'effects', 'vancian', 'psionics', 'spheres', 'log']);
     return `<div class="dashboard session-dashboard">
       <div class="dashtools span2">
         <button class="linkish" data-action="dash-arrange" aria-expanded="${ctx.dashArrange}">
@@ -281,7 +284,7 @@ function dashDefaultCards(model) {
     // Keyed by tab: the old single combat tab is two now, and asking for it
     // meant the casting card was never added for anyone.
     if (on('magic') && model.data.training?.magic) out.push('spheres');
-    out.push('offense', 'defense', 'abilities', 'speed', 'skills', 'effects');
+    out.push('offense', 'defense', 'abilities', 'speed', 'skills', 'effects', 'log');
     return out;
   }
 

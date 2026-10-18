@@ -6054,6 +6054,12 @@
   "load-penalties",
   "nonproficiency-penalty"
  ],
+ "log": [
+  {
+   "at": "2026-01-01T00:00:00.000Z",
+   "text": "Power Points 174 → 169"
+  }
+ ],
  "customTrackers": [
   {
    "minFormula": null,

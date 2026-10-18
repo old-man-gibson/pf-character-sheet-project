@@ -37,6 +37,8 @@ export function blankView() {
     condPickerOpen: false,
     /** Whether the dashboard's card arranger is open. */
     dashArrange: false,
+    /** Whether the play log shows every line rather than the latest. */
+    logAll: false,
     /** Which buff row has its editor open (index, or null). */
     openBuff: null,
     /** Which Classes row has its sub-system picker open (index, or null). */

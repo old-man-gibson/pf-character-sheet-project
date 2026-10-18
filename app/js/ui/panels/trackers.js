@@ -23,6 +23,7 @@ import { highlight, pretty, workingLine, workings } from '../../formula-format.j
 import { hasTokens } from '../../inline.js';
 import { poolDef, trackerDrains, trackerFacts, trackerShown } from '../../model/trackers.js';
 import { trackerForwardKey } from '../../model/util.js';
+import { playLogPanel } from '../play-log.js';
 
 /** What a casting pool's maximum is, said once for the row and the editor. */
 const poolWhat = (model, t) => poolDef(t?.pool, model.data)?.what || '';
@@ -96,6 +97,7 @@ export function renderTrackersPanel(model, ctx) {
           <div style="margin-top:6px">${names.map((n) => `<span class="tag">${esc(n)}</span>`).join('')}</div>
         </details>
       </section>
+      ${playLogPanel(model, ctx)}
     </div>`;
 }
 

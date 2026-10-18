@@ -16,7 +16,7 @@ import {
   loadCharacter, fixtureIds, missingCharacters, missingNote, CHARACTERS_DIR,
 } from './fixtures.mjs';
 import {
-  Character, MYTHIC_POWER_FORMULA, SCHEMA_VERSION, DEFAULT_TAB_ORDER, inspectDocument, abilityCollapse,
+  Character, MYTHIC_POWER_FORMULA, SCHEMA_VERSION, DEFAULT_TAB_ORDER, inspectDocument, abilityCollapse, LOG_MAX,
   setManeuverCatalogue, disciplineEntries, describeSource, maneuverDetails, maneuverIsWritten,
   maneuverOwn, blankWeapon, blankClassRow,
   setVancianTables, castingTableNames, castingTable, closestName,
@@ -3205,6 +3205,30 @@ console.log('conditions -- skill penalties by ability and by skill, bleed, non-p
   old.corrections = old.corrections.filter((n) => n !== 'nonproficiency-penalty');
   const reopened = new Character(old);
   check('an old non-proficient row opens with the −4 off', reopened.list('equipment.weapons').at(-1).nonproficiencyPenalty, false);
+}
+
+console.log('the play log -- every action, its undo and redo, notes, kept through a snapshot undo');
+{
+  const c = new Character(blankDocument({ name: 'Logger', level: 5 }));
+  const texts = () => c.playLog.map((e) => e.text);
+  c.applyDamage(5);
+  c.applyHealing(2);
+  check('actions are logged newest first', texts(), ['heal 2', '5 damage']);
+  c.undo();
+  check('an undo adds a line and keeps the one it undid', texts(), ['Undid heal 2', 'heal 2', '5 damage']);
+  c.redoLast();
+  check('so does a redo', texts()[0], 'Redid heal 2');
+  c.addLogNote('Session 12: the hydra');
+  check('a note is a line of its own', [c.playLog[0].text, c.playLog[0].kind], ['Session 12: the hydra', 'note']);
+  c.listAdd('equipment.weapons', { name: 'Spare Axe', dice: '1d8' });
+  c.listRemove('equipment.weapons', c.list('equipment.weapons').length - 1);
+  c.applyDamage(1);
+  c.undo();   // the damage
+  c.undo();   // the removal: a snapshot, older than the log
+  check('a snapshot undo leaves the log as it is', texts().slice(0, 3), ['Undid 1 damage', '1 damage', 'Session 12: the hydra']);
+  check('and the log is saved with the character', JSON.parse(JSON.stringify(c.toJSON())).log.length, c.playLog.length);
+  for (let i = 0; i < LOG_MAX + 10; i++) c.addLogNote(`n${i}`);
+  check('the oldest go past the cap', [c.playLog.length, c.playLog[0].text], [LOG_MAX, `n${LOG_MAX + 9}`]);
 }
 
 console.log('undo at the table -- cards, a use, slots across a rest');

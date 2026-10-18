@@ -6362,6 +6362,14 @@ export class CharacterSheetElement extends HTMLElement {
         // has to rebuild it.
         if (key === 'fullAttackWeapon') this.#render();
       });
+      // Enter adds the play log's note, as its Add button does.
+      if (key === 'logNote') {
+        input.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          input.closest('.playlog')?.querySelector('[data-action="log-note"]')?.click();
+        });
+      }
     });
 
     // The word that arms Reset. Toggled in place -- a re-render per keystroke
@@ -7625,6 +7633,17 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       }
+      case 'log-note': {
+        const text = String(this.#view.draft.logNote ?? '').trim();
+        if (text) this.#model.addLogNote(text);
+        this.#view.draft.logNote = '';
+        this.#render();
+        break;
+      }
+      case 'log-all':
+        this.#view.logAll = !this.#view.logAll;
+        this.#render();
+        break;
       case 'quick-heal': {
         const n = Number(this.#view.draft.quickHp) || 0;
         if (n > 0) {

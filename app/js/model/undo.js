@@ -46,6 +46,7 @@
  */
 
 import { emit, subscribe } from './events.js';
+import { logPlay } from './play-log.js';
 
 /** How many steps back the stack holds. */
 export const UNDO_DEPTH = 20;
@@ -97,11 +98,16 @@ function capture(model) {
 }
 
 function restore(model, state) {
+  // The play log is the record of what has happened, and stays as it is: the
+  // document put back is older than the lines written since. See play-log.js.
+  const log = model.data.log;
   // Into the same object rather than over it: `model.data` is held in a good
   // many places across a render, and swapping it would leave every one of them
   // pointing at the version that was just undone.
   for (const key of Object.keys(model.data)) delete model.data[key];
   Object.assign(model.data, state.data);
+  if (log !== undefined) model.data.log = log;
+  else delete model.data.log;
   if (Array.isArray(model.trackers)) model.trackers.splice(0, model.trackers.length, ...state.trackers);
   else model.trackers = state.trackers;
   model.offsets = state.offsets;
@@ -247,6 +253,7 @@ export function redoLast(model) {
     model.playStack.push({ label, changes: entry.changes, seq: ++counter });
     if (model.playStack.length > PLAY_DEPTH) model.playStack.shift();
     patchSnapshots(model, entry.changes);
+    logPlay(model, `Redid ${label}`);
     model.recompute();
     settle(model, entry.changes);
     emit(model, { type: 'redo', label });
@@ -631,6 +638,8 @@ export function playAction(model, label, fn) {
   model.playStack.push(entry);
   if (model.playStack.length > PLAY_DEPTH) model.playStack.shift();
   patchSnapshots(model, changes);
+  // After the changes were measured, so the line is never one of them.
+  logPlay(model, entry.label);
   emit(model, { type: 'play-mark', label: entry.label, seq: entry.seq });
   return result;
 }
@@ -703,6 +712,7 @@ export function undoPlay(model, seq) {
     stack.splice(at, 1);
     pushRedo(model, { kind: 'play', label: entry.label, changes: entry.changes });
     patchSnapshots(model, back);
+    logPlay(model, `Undid ${entry.label}`);
     model.recompute();
     settle(model, back);
     emit(model, { type: 'undo', label: entry.label });

@@ -141,6 +141,7 @@ import {
 } from './trackers.js';
 import { featCount, recomputeLanguages, recomputeSpeeds } from './traits.js';
 import { applyCarry } from './stats/carry.js';
+import { logPlay, playLog } from './play-log.js';
 import { casterLevelSources, toggleCountsToward } from './transparency.js';
 import { evaluateAmount, getPath, isFormulaText, safe, setPath, skillForwardKey, skillKey } from './util.js';
 
@@ -501,6 +502,15 @@ export class Character {
   undoPlay(...a) { return undoPlay(this, ...a); }
 
   get playActions() { return playActions(this); }
+
+  /* The play log: what happened, kept on the document; see model/play-log.js. */
+  get playLog() { return playLog(this); }
+
+  addLogNote(text) {
+    const entry = logPlay(this, text, 'note');
+    if (entry) this.#emit({ type: 'log' });
+    return entry;
+  }
 
   list(...a) { return listAt(this, ...a); }
   listAdd(...a) { return listAdd(this, ...a); }
