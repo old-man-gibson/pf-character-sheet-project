@@ -3002,6 +3002,7 @@ table.gear tr.gearcardrow > td { padding: 0; }
 table.gear td.name input { width: 100%; min-width: 7rem; }
 table.gear td.other input { width: 100%; min-width: 5rem; }
 table.gear td.wt input { width: 3.6rem; }
+table.gear td.qty input { width: 3.2rem; }
 table.gear td.cost input { width: 100%; min-width: 4.2rem; }
 table.gear td.bval > .xf:only-child { min-width: 0; width: var(--xf-w, 3.6rem); }
 table.gear td.btype select { width: auto; min-width: 4.6rem; padding: 3px 4px; }
@@ -3334,8 +3335,10 @@ input.mono:not(.hexin):hover {
   border: 1px solid var(--cs-line); border-radius: 6px; margin-top: 8px;
   padding: 6px 8px; background: var(--cs-panel);
 }
-.ttablehead { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
-.ttablehead input[type="text"] { flex: 1; font-size: 0.78rem; }
+/* Wraps, and the caption keeps 12rem: on a phone the four buttons beside it
+   left the caption box 16px wide. */
+.ttablehead { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+.ttablehead input[type="text"] { flex: 1 1 12rem; font-size: 0.78rem; }
 .ttablehead button { font-size: 0.72rem; }
 .ttablehead select { font-size: 0.72rem; max-width: 11rem; padding: 3px 4px; }
 /* Fixed layout so one long "Additional Information" column does not starve the
@@ -4031,7 +4034,9 @@ table.build.compact input[type="number"] { width: 3rem; }
 table.classes { table-layout: fixed; }
 table.classes col.cls { width: 12rem; }
 table.classes col.lvl { width: 4.4rem; }
-table.classes col.hd { width: 3.1rem; }
+/* Room for "d12" and the select's arrow: at 3.1rem the box was 36px and
+   showed "d1" whenever the table was at its narrowest (700 to 1024px wide). */
+table.classes col.hd { width: 4.2rem; }
 table.classes col.bab { width: 4.6rem; }
 table.classes col.save { width: 3rem; }
 table.classes col.ranks { width: 4.2rem; }
