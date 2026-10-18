@@ -23,8 +23,20 @@ import { getPath, setPath, skillKey } from './util.js';
  * Used by every input in the UI, so it is the single write entry point.
  */
 export function setValue(model, path, value) {
+  // Constitution damage and drain take hit points with them: the maximum
+  // falls with the modifier, and so does what is left, so the damage already
+  // taken stays what it was -- and healing them gives the points back.
+  const conHarm = /^abilities\.con\.(damage|drain)$/.test(path) && !!model.data.hp;
+  const maxBefore = conHarm ? (void model.hpState, model.hpMax) : 0;
   setPath(model.data, path, value);
   model.recompute();
+  if (conHarm) {
+    const moved = model.hpMax - maxBefore;
+    if (moved) {
+      model.data.hp.current = (Number(model.data.hp.current) || 0) + moved;
+      model.recompute();
+    }
+  }
   emit(model, { type: 'set', path, value });
   return model;
 }

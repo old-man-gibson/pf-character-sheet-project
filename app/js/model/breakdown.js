@@ -27,6 +27,7 @@ import {
 import { forwarded, forwardedSplit } from './scope.js';
 import { abilityMoves, abilitySlots, mythicHp } from './stats/defenses.js';
 import { COMPANION_KINDS, companionBreakdown, companionScopeName } from '../companions.js';
+import { abilityHarm } from './abilities.js';
 
 // The line makers are the recipes' own (rules.js), so a breakdown's lines
 // are the lines its number is summed from.
@@ -87,7 +88,7 @@ function abilityBreakdown(model, key, which) {
     const tempFwd = forwardedSplit(model, `${key}.temp`);
     return which === 'temp'
       ? [plain('Score', a.score), part('typed temporary', (Number(a.tempScore) || 0) - (Number(a.score) || 0)),
-        part('forwarded', fwd.total + tempFwd.total)]
+        part('forwarded', fwd.total + tempFwd.total), part('drain', -abilityHarm(a).drain, 'ability drain, on the Overview')]
       : [plain('Score', a.score), part('forwarded', fwd.permanent)];
   }
   const r = build.resolved || {};
@@ -101,6 +102,7 @@ function abilityBreakdown(model, key, which) {
       ...BUILD_TEMPORARY.map(([k, , full]) => part(full, build[k])),
       part('forwarded', (a.forwarded?.total || 0) + (a.forwardedTemp?.total || 0),
         'a rule written elsewhere on the sheet'),
+      part('drain', -abilityHarm(a).drain, 'ability drain, on the Overview'),
     ];
   } else {
     // The permanent columns as `resolveAbility` sums them: ABP and gear are

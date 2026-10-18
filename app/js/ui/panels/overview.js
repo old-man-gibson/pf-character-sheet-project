@@ -1301,6 +1301,7 @@ function languagesPanel(model) {
  * columns.
  */
 function harmMark(k, a) {
+    // The working score and modifier beside it already carry both; this says why.
     const { damage, drain } = abilityHarm(a);
     if (!damage && !drain) return '';
     const bits = [damage ? `${damage} damage (${minus(-Math.floor(damage / 2))} mod)` : '', drain ? `${drain} drain` : ''].filter(Boolean);
@@ -1359,7 +1360,7 @@ function abilityScoresPanel(model) {
                 attrs: bd(`${k}.temp`, `${a.workingScore ?? a.tempScore} before conditions`).trim(),
               })
               : built
-                ? `<span class="mod temp-score working" title="${tip(`${k}.temp`)}"${bd(`${k}.temp`)}>${a.tempScore}</span>`
+                ? `<span class="mod temp-score working${abilityHarm(a).drain ? ' harmed' : ''}" title="${tip(`${k}.temp`)}"${bd(`${k}.temp`)}>${a.workingScore ?? a.tempScore}</span>`
                 : `<input class="temp-score" type="number" value="${a.tempScore}" data-set="abilities.${k}.tempScore" aria-label="${ABILITY_LABELS[k]} temporary score" title="${tip(`${k}.temp`)}">`}
             ${movedValue(fmt(a.totalMod + (moved ? cs.deltas[k] : 0)), moved ? cs.deltas[k] : 0, {
     tag: 'span', cls: 'mod temp temp-mod', title: moved ? `${fmt(a.totalMod)} before conditions` : '', keep: true,
@@ -1472,7 +1473,7 @@ function defenceBox(model, key, label, example) {
     // every named part, saying the line as it now stands; its panel has one
     // row a rule, each naming the part it went to.
     const names = [spec.dest, ...parts.map((p) => p.key)];
-    return `<div class="statline">
+    return `<div class="statline defbox">
       <span class="label" title="${esc(`For example: ${example}`)}">${esc(label)}</span>
       <span class="value">${prose(model, `data-set="defenses.${key}"`, d[key], 1, 'grow')}
         ${moved ? forwardedBadge(model, names, { shown: now || '—' }) : ''}</span></div>`;
@@ -1752,7 +1753,7 @@ function carryPanel(model) {
     const abilities = ABILITIES.map((k) => [k, ABILITY_LABELS[k] || k]);
     return `<section class="panel">
       <h3>Carrying capacity</h3>
-      <div class="statline"><span class="label">Carries by</span>
+      <div class="statline"><span class="label">Carrying score</span>
         <span class="value">${select('carry.ability', c.carry?.ability || 'str', abilities, null,
     { attrs: 'title="The score capacity is read from. Strength, unless a feature says otherwise (carrying by Intelligence)."' })}</span></div>
       ${['light', 'medium', 'heavy', 'offGround', 'pushDrag'].map((k) => line(

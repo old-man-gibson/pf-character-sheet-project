@@ -14,6 +14,8 @@ import { esc, abAttr, picksAbility, ABILITY_LABELS_LIST } from '../html.js';
 import { roField } from '../fields.js';
 import { exprField } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
+import { abilityHarm } from '../../model/abilities.js';
+import { minus } from '../format.js';
 import {
   fmt, ABILITIES, ABILITY_LABELS, ABP_DEFENCE_CAP, ABP_DEFENCE_GROUPS, ABP_LEVELS,
   AC_BONUS_TYPES, ARRAY_LEVELS, ARRAY_MAX_SLOTS, ARRAY_SLOTS, arraySourceLevel,
@@ -148,13 +150,15 @@ export function renderStatsPanel(model, ctx) {
         <div class="tablewrap">
           <table class="build statcols">
             <thead>
-              <tr class="groups"><th colspan="${BUILD_TEMPORARY.length + 5}"></th></tr>
+              <tr class="groups"><th colspan="${BUILD_TEMPORARY.length + 7}"></th></tr>
               <tr>
                 <th></th>
                 ${BUILD_TEMPORARY.map(([, label, full]) => `<th class="num" title="${esc(full)}">${esc(label)}</th>`).join('')}
                 <th class="num" title="Bonuses forwarded here as temporary ones — written {str.temp += 2 as size}, or {str.score += 2 as temp.size}, somewhere else on the sheet">Fwd</th>
                 <th class="num" title="Everything the temporary columns add up to">Temp</th>
-                <th class="num" title="Temporary score, used by every derived stat">Score</th>
+                <th class="num" title="Ability drain, entered on the Overview: it lowers the score">Drain</th>
+                <th class="num" title="Ability damage, entered on the Overview: each 2 points is −1 to the modifier, and the score stays">Dmg</th>
+                <th class="num" title="Temporary score less drain, used by every derived stat">Score</th>
                 <th class="num">Mod</th>
               </tr>
             </thead>
@@ -162,6 +166,7 @@ export function renderStatsPanel(model, ctx) {
               ${ABILITIES.map((ab) => {
               const r = build[ab].resolved || {};
               const a = c.abilities[ab];
+              const harm = abilityHarm(a);
               return `<tr>
                   <th scope="row"><span class="abmark" data-ab="${ab}">${ABILITY_LABELS[ab]}</span></th>
                   ${BUILD_TEMPORARY.map(([k]) => cell(ab, k)).join('')}
@@ -169,8 +174,10 @@ export function renderStatsPanel(model, ctx) {
                     forwardedBadge(model, `${ab}.temp`)}` || '—'}</td>
                   <td class="num">${r.temporary || a.forwarded?.temporary || a.forwardedTemp?.total
                   ? fmt((r.temporary || 0) + (a.forwarded?.temporary || 0) + (a.forwardedTemp?.total || 0)) : '—'}</td>
-                  <td class="num total">${a.tempScore ?? r.tempTotal ?? 0}</td>
-                  <td class="num total">${fmt(a.totalMod)}</td>
+                  <td class="num">${harm.drain ? minus(-harm.drain) : '—'}</td>
+                  <td class="num">${harm.damage ? `${harm.damage} (${minus(-Math.floor(harm.damage / 2))})` : '—'}</td>
+                  <td class="num total${harm.drain ? ' harmed' : ''}">${a.workingScore ?? a.tempScore ?? r.tempTotal ?? 0}</td>
+                  <td class="num total${harm.damage ? ' harmed' : ''}">${fmt(a.totalMod)}</td>
                 </tr>`;
             }).join('')}
             </tbody>

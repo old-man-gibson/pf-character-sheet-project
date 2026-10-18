@@ -121,7 +121,7 @@ The worksheet's four systems, separated and computed:
   the speed you typed (which already carries the armour's cut) stands. **Apply load
   penalties** on the Overview's Carrying capacity panel turns them off; a sheet that was
   already past a light load when the penalties arrived opens with them off, so its totals
-  did not move. **Carries by** reads capacity from another ability score, for a feature
+  did not move. **Carrying score** reads capacity from another ability score, for a feature
   that carries by Intelligence.
 
 ### Unarmed strike

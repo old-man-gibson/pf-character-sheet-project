@@ -6494,6 +6494,39 @@ export class CharacterSheetElement extends HTMLElement {
       }
     });
 
+    // The play log's search: lines filtered in place as the query is typed,
+    // over every line kept rather than the latest few, so the caret stays put.
+    root.querySelectorAll('[data-logsearch]').forEach((input) => {
+      const filter = () => {
+        this.#view.logQuery = input.value;
+        const panel = input.closest('.playlog');
+        const words = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+        const lines = [...panel.querySelectorAll('li[data-logline]')];
+        let hits = 0;
+        for (const li of lines) {
+          const show = words.length
+            ? words.every((w) => li.textContent.toLowerCase().includes(w))
+            : !li.hasAttribute('data-logmore');
+          li.hidden = !show;
+          if (show && words.length) hits += 1;
+        }
+        // A day's heading shows while any line under it does.
+        for (const head of panel.querySelectorAll('li.logday')) {
+          let next = head.nextElementSibling;
+          let any = false;
+          while (next && !next.classList.contains('logday')) { if (!next.hidden) any = true; next = next.nextElementSibling; }
+          head.hidden = !any;
+        }
+        const count = panel.querySelector('.logcount');
+        if (count) {
+          count.hidden = !words.length;
+          count.textContent = `${hits} of ${lines.length} line${lines.length === 1 ? '' : 's'} match.`;
+        }
+      };
+      input.addEventListener('input', filter);
+      if (input.value) filter();
+    });
+
     // The word that arms Reset. Toggled in place -- a re-render per keystroke
     // would drop focus mid-word.
     root.querySelectorAll('[data-reset-word]').forEach((input) => {

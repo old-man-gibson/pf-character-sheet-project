@@ -600,6 +600,14 @@
 .playlog .logl { list-style: none; margin: 8px 0 4px; padding: 0; display: grid; gap: 2px; font-size: 0.82rem; }
 .playlog .logl time { color: var(--cs-muted); font-variant-numeric: tabular-nums; margin-right: 6px; font-size: 0.76rem; }
 .playlog .logl li.note span { color: var(--cs-accent); font-weight: 600; }
+.logl li.logday { margin-top: 6px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--cs-muted); font-weight: 650; }
+.logl li.logday:first-child { margin-top: 0; }
+.playlog input[type="search"] { width: 100%; }
+.logl { list-style: none; margin: 8px 0 4px; padding: 0; display: grid; gap: 2px; font-size: 0.82rem; }
+.logl time { color: var(--cs-muted); font-variant-numeric: tabular-nums; margin-right: 6px; font-size: 0.76rem; }
+/* Session notes: the play log of the day under each, folded. */
+.sessionnote .sessionlog { margin-top: 6px; }
+.sessionnote .sessionlog summary { cursor: pointer; font-size: 0.8rem; color: var(--cs-muted); }
 .buffeditor {
   margin-top: 8px; padding: 8px 10px; background: var(--cs-panel-2);
   border: 1px solid var(--cs-edit); border-radius: var(--cs-radius);
@@ -1522,6 +1530,12 @@ select.jumpto[hidden] { display: none; }
 .statline .label { color: var(--cs-muted); font-size: 0.82rem; }
 .statline .value { font-weight: 640; font-variant-numeric: tabular-nums; }
 .statline .value.big { font-size: 1.05rem; color: var(--cs-accent); }
+/* A defence box (SR, DR, resistances…) is a field, not a figure: it takes the rest
+   of the row, or an empty one shrinks to a sliver beside its label. */
+.statline.defbox > .label { flex: 0 0 7.5rem; }
+.statline.defbox > .value { flex: 1 1 10rem; min-width: 0; }
+/* A score or modifier lowered by ability drain or damage. */
+.harmed { color: var(--cs-bad) !important; }
 /* A total that does not add up -- more spent than the character has. */
 .statline .value.bad { color: var(--cs-bad); }
 

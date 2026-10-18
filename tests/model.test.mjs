@@ -3161,6 +3161,18 @@ console.log('ability damage and drain -- the modifier, the score, a night’s re
   check('a New day heals 1 damage, and no drain', [str().damage, str().drain], [3, 2]);
   c.set('abilities.con.drain', c.data.abilities.con.workingScore);
   check('Con worn to 0 is death', abilityCollapse('con', c.data.abilities.con), 'dead');
+
+  // Con takes hit points with it: the maximum and what is left fall together.
+  const h = new Character(blankDocument({ name: 'Frail', level: 10 }));
+  h.data.abilities.con.drain = 0;
+  h.recompute();
+  h.applyDamage(5);
+  const [cur, max] = [h.hpState.current, h.hpMax];
+  h.set('abilities.con.drain', 4);
+  check('Con drain lowers current hit points with the maximum, damage taken unchanged',
+    [h.hpMax < max, max - cur, h.hpMax - h.hpState.current], [true, 5, 5]);
+  h.set('abilities.con.drain', 0);
+  check('and restoring it gives them back', [h.hpMax, h.hpState.current], [max, cur]);
 }
 
 console.log('conditions -- skill penalties by ability and by skill, bleed, non-proficiency');

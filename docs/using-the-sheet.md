@@ -34,12 +34,18 @@ and anything downstream recalculates immediately.
 - **The play log.** Every action at the table is written to a dated log saved with the
   character — *5 damage*, *New day*, *Next round, Haste ended*, and each undo and redo of
   one (*Undid 5 damage*). Add your own lines ("Session 12: the hydra") in its box. It is on
-  the Trackers tab and is a card on the session dashboard; the last 200 lines are kept.
+  the Trackers tab and is a card on the session dashboard. The last 200 lines are kept and
+  older ones drop off; lines are grouped by day, and the search box filters all of them.
+- **Session notes** on Extras & Notes: one card a session, newest first, with its date, a
+  title and your notes. Under each, folded, are the play log's lines from that day.
 - Conditions are switches (negative levels and bleed a count) that show what they cost — tick
   one and every number it moves reads out its conditioned value beside the base.
 - **Ability damage and drain** are entered under *Damage & drain* on the Overview's
   ability scores. Damage is −1 to the modifier per 2 points and leaves the score; drain
-  lowers the score itself. A New day heals 1 point of damage in each ability; drain stays.
+  lowers the score itself. The Overview's working score and modifier, and the Stats tab's
+  Temporary bonuses table (with Drain and Dmg columns), show them taken off. Constitution
+  damage or drain lowers current hit points with the maximum, so the damage already taken
+  stays the same. A New day heals 1 point of damage in each ability; drain stays.
   A score worn to 0 says what that means (Str helpless, Dex paralyzed, Con dead, the
   mental scores unconscious).
   See *The Overview* below.
