@@ -2033,6 +2033,11 @@ option[data-ab]:not([data-ab=""]) {
 .tablewrap > table.racetraits { min-width: 26rem; }
 .tablewrap > table.craftlist { min-width: 26rem; }
 .tablewrap > table.perks { min-width: 0; }
+/* These two size every column but Notes in rem (about 37rem and 30rem with
+   padding), and Notes took what was left: 36px on a phone, one word per line.
+   Each floor leaves Notes about 150px. */
+.tablewrap > table.spelllist { min-width: 46rem; }
+.tablewrap > table.evolutions { min-width: 40rem; }
 table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
 th, td { padding: 4px 7px; text-align: left; border-bottom: 1px solid var(--cs-line); }
 th {
@@ -2223,7 +2228,9 @@ tr.untrained { color: var(--cs-muted); }
   table.stacked > tbody > tr > td.num[data-label] input { width: 6rem; text-align: left; }
   /* A card has no column to fill; the field keeps its own width there. */
   table.stacked > tbody > tr > td > .xf:only-child { width: var(--xf-w, 5rem); min-width: 0; }
-  table.stacked > tbody > tr > td.tools { display: flex; gap: 4px; }
+  /* `width: auto` undoes `td.tools.quiet`'s 1%, which in a card is 1% of the
+     card: a 5px cell with the × hanging 14px past it, scrolling the speeds. */
+  table.stacked > tbody > tr > td.tools { display: flex; gap: 4px; width: auto; }
   table.stacked button.rowfold {
     display: inline-block;
     flex: none; padding: 0 5px; font-size: 0.85rem; line-height: 1.5;
@@ -2482,6 +2489,10 @@ label.fld.tall textarea { min-height: 58px; }
 /* The slot table sized to its figures: at full width four numbers sat a
    quarter of a screen apart and the pips drifted to the far side. */
 table.build.vslots { width: auto; margin-top: 8px; }
+/* In a scroll box for a phone, where the biggest slot table is a few pixels
+   wider than its panel -- but without the `table.build` floor, which would
+   widen every block to 26rem. */
+.tablewrap > table.build.vslots { min-width: 0; }
 /* Six pips to a row, so seven to twelve slots grow the row downward instead
    of widening the block; past twelve `slotSpend` prints the count instead. */
 table.build.vslots .pips {
@@ -3969,6 +3980,13 @@ button.helpopen:hover, button.helpopen[aria-expanded="true"] { color: var(--cs-a
 /* A familiar's table carries the master's ranks as well, so it needs more. */
 .compskills.fam { grid-template-columns: repeat(auto-fit, minmax(min(100%, 32rem), 1fr)); }
 .compskills table { width: 100%; }
+/* Each table scrolls in its own box when one is wider than the panel (a phone),
+   at its own width rather than the `table.build` floor. */
+.compskills .tablewrap > table.build { min-width: 0; }
+/* A companion's attacks: the pick lists and number boxes keep a floor, or the
+   table gave them the width of their headings ("Type", "Role"): 26px. */
+table.compattacks td > select { min-width: 6.5rem; }
+table.compattacks td > input[type="number"] { min-width: 3.4rem; }
 .compskills th:not(.cname), .compskills td:not(.cname) { width: 1%; white-space: nowrap; }
 .compskills select { width: auto; min-width: 3.6rem; }
 .compskills td.mid { text-align: center; }
@@ -3991,6 +4009,14 @@ button.helpopen:hover, button.helpopen[aria-expanded="true"] { color: var(--cs-a
    what put the eidolon's seven columns two pixels over a 400px panel. */
 table.build.compact input[type="number"] { width: 3rem; }
 @container (max-width: 560px) { .grid.companion { grid-template-columns: minmax(0, 1fr); } }
+/* On a phone three small tables came out 9 to 24px wider than their panel and
+   scrolled for it: the eidolon's scores, the optional ability picks and a
+   Vancian slot table. Less padding between their columns fits them. */
+@container (max-width: 520px) {
+  table.build.compact th, table.build.compact td,
+  table.build.picks th, table.build.picks td,
+  table.build.vslots th, table.build.vslots td { padding-left: 2px; padding-right: 2px; }
+}
 
 /* ---------- the class table ----------
    Fixed columns, because the two that were growing to fill are the two with
@@ -4771,7 +4797,9 @@ button.fx-name-chip.fx-target { position: relative; }
   padding: 7px 9px; margin-bottom: 6px;
 }
 .fx-row.bad { border-color: var(--cs-bad); }
-.fx-rowhead { display: flex; gap: 6px; align-items: baseline; font-size: 0.82rem; }
+/* Wraps: a long destination name and two badges ran 31px off a phone. */
+.fx-rowhead { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; font-size: 0.82rem; }
+.fx-rowhead > strong { overflow-wrap: anywhere; min-width: 0; }
 .fx-rowval {
   margin-left: auto; color: var(--cs-accent); font-weight: 700;
   font-variant-numeric: tabular-nums;
