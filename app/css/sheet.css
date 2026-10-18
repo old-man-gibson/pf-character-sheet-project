@@ -1923,6 +1923,11 @@ option[data-ab]:not([data-ab=""]) {
   gap: 6px; align-items: center;
 }
 .ability .ab { font-weight: 650; font-size: 0.85rem; }
+/* Damage and drain on a score: a line of its own under the row. */
+.ability .abharm { grid-column: 1 / -1; font-size: 0.75rem; color: var(--cs-muted); margin-top: -3px; }
+.ability .abharm.bad { color: var(--cs-bad); font-weight: 620; }
+.abdmg input[type="number"] { width: 3.2rem; }
+.abdmg th[scope="row"] { text-align: left; font-weight: 600; }
 .ability .mod {
   text-align: center; font-variant-numeric: tabular-nums; font-weight: 640;
   background: var(--cs-panel-2); border-radius: 5px; padding: 3px 0; font-size: 0.85rem;

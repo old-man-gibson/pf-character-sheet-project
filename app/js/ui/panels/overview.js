@@ -18,7 +18,7 @@ import { renderSessionBoard } from './session.js';
 import { field } from '../fields.js';
 import { effectiveMythicTier } from '../../rules.js';
 import { minus, signed } from '../format.js';
-import { collapsible, foldButton, isCollapsed, isOpen } from '../rows.js';
+import { collapsible, collapsibleSub, foldButton, isCollapsed, isOpen } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
 import { proseText } from '../rows.js';
 import { forwardedBadge, sheetBonusCell, sheetBonusField, sheetBonusHead, sheetBonusHint } from '../badges.js';
@@ -103,7 +103,7 @@ import {
   conditionInfo, conditionTotals, fmt, prepStyle, skillLabel, statModDelta,
 } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
-import { blankClassRow, maneuverDetails } from '../../model.js';
+import { abilityCollapse, abilityHarm, blankClassRow, maneuverDetails } from '../../model.js';
 import { colorControl } from '../color-control.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
@@ -1290,6 +1290,34 @@ function languagesPanel(model) {
   }
 
 
+/**
+ * Damage and drain beside a score: what each comes to, and what a score
+ * worn to nothing means. Drawn under the score's row so the grid keeps its
+ * columns.
+ */
+function harmMark(k, a) {
+    const { damage, drain } = abilityHarm(a);
+    if (!damage && !drain) return '';
+    const bits = [damage ? `${damage} damage (${minus(-Math.floor(damage / 2))} mod)` : '', drain ? `${drain} drain` : ''].filter(Boolean);
+    const collapse = abilityCollapse(k, a);
+    return `<span class="abharm${collapse ? ' bad' : ''}">${esc(bits.join(', '))}${collapse ? ` — ${esc(collapse)}` : ''}</span>`;
+  }
+
+/** The six damage and drain boxes, folded away until something is in them. */
+function abilityHarmTable(model) {
+    const c = model.data;
+    const any = ABILITIES.some((k) => { const h = abilityHarm(c.abilities[k]); return h.damage || h.drain; });
+    const body = `<div class="tablewrap"><table class="abdmg">
+      <thead><tr><th></th>${ABILITIES.map((k) => `<th class="num">${ABILITY_LABELS[k]}</th>`).join('')}</tr></thead>
+      <tbody>
+        <tr><th scope="row" title="Each 2 points is −1 to the modifier. A New day heals 1 point in each.">Damage</th>
+          ${ABILITIES.map((k) => `<td>${num(`abilities.${k}.damage`, c.abilities[k]?.damage, `min="0" aria-label="${ABILITY_LABELS[k]} damage"`)}</td>`).join('')}</tr>
+        <tr><th scope="row" title="Lowers the score itself. Rest does not heal it.">Drain</th>
+          ${ABILITIES.map((k) => `<td>${num(`abilities.${k}.drain`, c.abilities[k]?.drain, `min="0" aria-label="${ABILITY_LABELS[k]} drain"`)}</td>`).join('')}</tr>
+      </tbody></table></div>`;
+    return collapsibleSub(model, 'ability-harm', 'Damage &amp; drain', body, '', !any);
+  }
+
 function abilityScoresPanel(model) {
     const c = model.data;
     const cs = model.conditionState;
@@ -1332,9 +1360,11 @@ function abilityScoresPanel(model) {
     tag: 'span', cls: 'mod temp temp-mod', title: moved ? `${fmt(a.totalMod)} before conditions` : '', keep: true,
   })}
             ${rollButton(model, 'ability', k, `a ${ABILITY_LABELS[k]} check`, cs)}
+            ${harmMark(k, a)}
           </div>`;
         }).join('')}
       </div>
+      ${abilityHarmTable(model)}
       ${built ? `<p class="hint" style="margin-top:8px">
         Scores are built from point buy, race, ABP and other sources.
         Edit them on the <strong>Stats</strong> tab.

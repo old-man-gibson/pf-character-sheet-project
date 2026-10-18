@@ -233,7 +233,10 @@ export function abilityMoves(c, totals) {
     if (totals.abilitySet[key] !== undefined) score = Math.min(score, totals.abilitySet[key]);
     score = Math.max(0, score);
     scores[key] = score;
-    deltas[key] = abilityMod(score) - (Number(a?.totalMod) || 0);
+    // Against the score's own modifier, not `totalMod`: ability damage is a
+    // penalty on the modifier that conditions do not move, and measuring
+    // from it would read the damage as a condition and give it back.
+    deltas[key] = abilityMod(score) - abilityMod(base);
   }
   const slot = (stat1, stat2) => statModDelta(deltas, stat1, stat2);
 

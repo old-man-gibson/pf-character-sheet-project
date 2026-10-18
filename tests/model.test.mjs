@@ -16,7 +16,7 @@ import {
   loadCharacter, fixtureIds, missingCharacters, missingNote, CHARACTERS_DIR,
 } from './fixtures.mjs';
 import {
-  Character, MYTHIC_POWER_FORMULA, SCHEMA_VERSION, DEFAULT_TAB_ORDER, inspectDocument,
+  Character, MYTHIC_POWER_FORMULA, SCHEMA_VERSION, DEFAULT_TAB_ORDER, inspectDocument, abilityCollapse,
   setManeuverCatalogue, disciplineEntries, describeSource, maneuverDetails, maneuverIsWritten,
   maneuverOwn, blankWeapon, blankClassRow,
   setVancianTables, castingTableNames, castingTable, closestName,
@@ -3138,6 +3138,29 @@ console.log('typed buffs -- the largest of a type counts, penalties stack, round
   check('undo puts it back on', [c.data.buffs[0].rounds, c.data.buffs[0].on, c.conditionState.delta.melee], [1, true, 2]);
   advanceTurn(c, true);
   check('the session board’s Next turn is a round too', [c.data.buffs[0].on, c.playActions[0].label], [false, 'Next turn, Haste ended']);
+}
+
+console.log('ability damage and drain -- the modifier, the score, a night’s rest');
+{
+  const c = new Character(blankDocument({ name: 'Drained', level: 5 }));
+  const str = () => c.data.abilities.str;
+  const before = { score: str().workingScore, mod: str().totalMod, melee: c.data.attack.totalMelee };
+  c.set('abilities.str.damage', 3);
+  check('3 damage is −1 to the modifier and leaves the score',
+    [str().workingScore, str().totalMod, c.data.attack.totalMelee], [before.score, before.mod - 1, before.melee - 1]);
+  c.set('abilities.str.damage', 4);
+  check('4 is −2', str().totalMod, before.mod - 2);
+  check('and the conditions’ now-figures leave it alone', [c.conditionState.deltas.str, c.conditionState.changed], [0, false]);
+  c.set('conditions.fatigued', 1);
+  check('fatigue on top is its own −1 to the modifier', c.conditionState.deltas.str, -1);
+  c.set('conditions.fatigued', 0);
+  c.set('abilities.str.drain', 2);
+  check('drain lowers the score itself', [str().workingScore, str().totalMod], [before.score - 2, before.mod - 1 - 2]);
+  check('nothing collapses yet', abilityCollapse('str', str()), null);
+  c.rest('day');
+  check('a New day heals 1 damage, and no drain', [str().damage, str().drain], [3, 2]);
+  c.set('abilities.con.drain', c.data.abilities.con.workingScore);
+  check('Con worn to 0 is death', abilityCollapse('con', c.data.abilities.con), 'dead');
 }
 
 console.log('undo at the table -- cards, a use, slots across a rest');

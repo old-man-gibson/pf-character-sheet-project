@@ -4093,6 +4093,12 @@ export class CharacterSheetElement extends HTMLElement {
     }
     m = /^buffs\.(\d+)\.on$/.exec(path);
     if (m) return `${d.buffs?.[Number(m[1])]?.name || 'buff'} ${value ? 'on' : 'off'}`;
+    // Ability damage and drain are taken at the table like hit points.
+    m = /^abilities\.(str|dex|con|int|wis|cha)\.(damage|drain)$/.exec(path);
+    if (m) {
+      const name = m[1][0].toUpperCase() + m[1].slice(1);
+      return `${name} ${m[2]} ${Number(d.abilities?.[m[1]]?.[m[2]]) || 0} → ${Number(value) || 0}`;
+    }
     return null;
   }
 

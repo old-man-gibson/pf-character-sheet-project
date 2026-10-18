@@ -96,10 +96,54 @@ export function refreshAbilities(model) {
     // added here, once -- castability, carrying capacity and the conditions
     // read this rather than the box, or a headband moved the bonus slots and
     // not the highest level castable.
-    a.workingScore = a.tempScore + loose;
-    a.totalMod = abilityMod(a.workingScore);
+    //
+    // Ability drain lowers the score itself, so it comes off the working
+    // score and everything that reads a score follows. Ability damage leaves
+    // the score alone and costs 1 off the modifier per 2 points -- "apply a
+    // -1 penalty to skills and statistics listed with the ability" -- so it
+    // comes off the modifier every total reads (statMod).
+    const { damage, drain } = abilityHarm(a);
+    a.workingScore = a.tempScore + loose - drain;
+    a.totalMod = abilityMod(a.workingScore) - Math.floor(damage / 2);
     a.checkMod = a.totalMod;
   }
+}
+
+/** An ability's damage and drain as whole, non-negative points. */
+export function abilityHarm(a) {
+  const n = (v) => Math.max(0, Math.floor(Number(v) || 0));
+  return { damage: n(a?.damage), drain: n(a?.drain) };
+}
+
+/**
+ * What an ability's damage or drain has done to the character, or null: at
+ * a score of 0 -- or damage equal to the score -- Strength leaves you
+ * helpless, Dexterity paralyzed, Constitution dead, and the mental scores
+ * unconscious.
+ */
+export function abilityCollapse(key, a) {
+  const { damage, drain } = abilityHarm(a);
+  if (!damage && !drain) return null;
+  const left = (Number(a?.workingScore) || 0);
+  if (left > 0 && damage < left) return null;
+  return { str: 'helpless', dex: 'paralyzed', con: 'dead' }[key] || 'unconscious';
+}
+
+/**
+ * A night's rest heals 1 point of ability damage in each ability. Drain does
+ * not heal with rest. Answers how many points came back.
+ */
+export function healAbilityDamage(model, per = 1) {
+  let healed = 0;
+  for (const key of ABILITIES) {
+    const a = model.data.abilities?.[key];
+    const { damage } = abilityHarm(a);
+    if (!damage) continue;
+    const back = Math.min(damage, per);
+    a.damage = damage - back;
+    healed += back;
+  }
+  return healed;
 }
 
 export function pointBuyTable(model) {

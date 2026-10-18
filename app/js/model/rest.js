@@ -24,6 +24,7 @@
 import { subsystems } from './subsystems/registry.js';
 import { poolTracker } from './trackers.js';
 import { emit } from './events.js';
+import { healAbilityDamage } from './abilities.js';
 
 export const REST_SPANS = ['encounter', 'day', 'week'];
 
@@ -94,6 +95,8 @@ export function rest(model, span) {
       d.hp.tempSpent = 0;
       d.hp.nonlethal = 0;
     }
+    // A point of ability damage heals in each ability; drain does not.
+    healAbilityDamage(model);
     // What each sub-system gives back with the day: slots, power points,
     // temporary essence, the companions' hit points, the Lifebound piles.
     for (const s of subsystems()) s.newDay?.(model);
