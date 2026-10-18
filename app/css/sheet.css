@@ -1530,10 +1530,14 @@ select.jumpto[hidden] { display: none; }
 .statline .label { color: var(--cs-muted); font-size: 0.82rem; }
 .statline .value { font-weight: 640; font-variant-numeric: tabular-nums; }
 .statline .value.big { font-size: 1.05rem; color: var(--cs-accent); }
-/* A defence box (SR, DR, resistances…) is a field, not a figure: it takes the rest
-   of the row, or an empty one shrinks to a sliver beside its label. */
-.statline.defbox > .label { flex: 0 0 7.5rem; }
-.statline.defbox > .value { flex: 1 1 10rem; min-width: 0; }
+/* The five defence boxes (SR, DR, resistances…) share one grid, so they line up
+   at any width: a label column as wide as the longest label, and a box column at
+   the right of the panel like every other value on it -- up to 21rem, enough for
+   "5/magic, fire 10", never the whole width of a wide panel, and narrowing with a
+   narrow one. Each row keeps its own line between it and the next (subgrid). */
+.defboxes { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 8px; }
+.defboxes > .statline.defbox { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; }
+.statline.defbox > .value { min-width: 0; width: 100%; max-width: 21rem; justify-self: end; }
 /* A score or modifier lowered by ability drain or damage. */
 .harmed { color: var(--cs-bad) !important; }
 /* A total that does not add up -- more spent than the character has. */

@@ -1417,11 +1417,13 @@ function acPanel(model) {
           <span class="hint">+</span>${abilitySelect('defenses.acStat2', d.acStat2)}</span></div>
       <div class="statline"><span class="label">Uncanny dodge</span>
         <span class="value">${check('defenses.uncannyDodge', d.uncannyDodge)}</span></div>
+      <div class="defboxes">
       ${defenceBox(model, 'spellResistance', 'Spell resistance', 'Yes (17), or {= 11 + level}')}
       ${defenceBox(model, 'dr', 'DR', '5/magic')}
       ${defenceBox(model, 'resistance', 'Resistance', 'fire 10, cold 5')}
       ${defenceBox(model, 'weakness', 'Vulnerability', 'sonic 5')}
       ${defenceBox(model, 'immunities', 'Immunities', 'sleep, paralysis')}
+      </div>
       <p class="hint">These five boxes read <code>{…}</code> like prose. Each part of
         them is a bonus target: <code>{dr.magic += 2}</code>, <code>{resistance.fire += 5}</code>,
         <code>{immune.sleep += 1}</code>, <code>{defenses.sr += 2}</code>. A bonus to a part the box
