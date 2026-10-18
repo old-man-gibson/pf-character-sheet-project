@@ -28,6 +28,7 @@ import { mythicHpPerTier } from '../progression.js';
 import { trackerFacts } from '../trackers.js';
 import { resolveSaveBonuses } from './saves.js';
 import { resolveBonusBlock, resolveNumberField } from '../util.js';
+import { settleTypedBuffs, stackingSummary } from './buff-stacking.js';
 
 /**
  * Resolve the typed save and AC bonuses before anything reads them.
@@ -300,7 +301,10 @@ export function conditionState(model) {
   // each other; the stacking kind (wraps of suppressed size and its ilk)
   // sums outright and rides the true bundle.
   const sizeRows = { size: { up: 0, down: 0 }, sizeEffective: { up: 0, down: 0 }, stacking: 0 };
-  for (const b of c.buffs || []) {
+  // Each ticked buff's numbers, gathered first and settled by bonus type
+  // (buff-stacking.js) before any of them moves a figure.
+  const buffRows = [];
+  for (const [index, b] of (c.buffs || []).entries()) {
     if (!b?.on) continue;
     const bmods = {};
     const bability = {};
@@ -327,7 +331,14 @@ export function conditionState(model) {
       else if (t) add(t, v);
     }
     const label = String(b.name || '').trim() || 'Buff';
-    buffsOn.push({ name: label, info: { key: `buff:${label}`, label, mods: bmods, ability: bability }, count: 1 });
+    buffRows.push({ index, label, type: b.type, mods: bmods, ability: bability, lost: [] });
+  }
+  settleTypedBuffs(model, buffRows);
+  const buffStacking = {};
+  for (const r of buffRows) {
+    buffsOn.push({ name: r.label, info: { key: `buff:${r.label}`, label: r.label, mods: r.mods, ability: r.ability }, count: 1 });
+    const lines = stackingSummary(r, r.type);
+    if (lines.length) buffStacking[r.index] = lines;
   }
   // Flowing Power (mythic tradition): the chosen increase on every ability
   // score, riding the totals as a buff that is on while the increase is set.
@@ -447,7 +458,7 @@ export function conditionState(model) {
   }
 
   return {
-    active, buffsOn: buffCount, sizeSteps, ...totals, deltas, scores, delta, base, adjusted, speeds, notes,
+    active, buffsOn: buffCount, buffStacking, sizeSteps, ...totals, deltas, scores, delta, base, adjusted, speeds, notes,
     // What moved the numbers, for the tooltips: named honestly, so a lone
     // buff never reads as "conditions".
     sources: active.length && buffCount ? 'conditions and buffs'

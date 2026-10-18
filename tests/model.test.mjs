@@ -61,7 +61,7 @@ import { isComputedPath } from '../app/js/model/computed-paths.js';
 import { importCrafting } from '../app/js/model/subsystems/crafting.js';
 import { importVancian } from '../app/js/model/subsystems/vancian.js';
 import { importPsionics } from '../app/js/model/subsystems/psionics.js';
-import { sessionState, useSessionAction } from '../app/js/model/session.js';
+import { advanceTurn, sessionState, useSessionAction } from '../app/js/model/session.js';
 import {
   CONJURED_TABLE, COMPANION_KINDS, companionBreakdown, companionScopeName, defaultCompanion, normalizeCompanion,
   splitAbilities, setCompanionAbilityText, companionAbilityText, abilityTextKey, companionById, companionEntries,
@@ -3085,6 +3085,59 @@ console.log('redo -- what was undone comes back, until something new is done');
     ['3 damage', '3 damage', 3, '3 damage']);
   reopened.applyDamage(1);
   check('and newer entries still sort newest', reopened.undoLabel, '1 damage');
+}
+
+console.log('typed buffs -- the largest of a type counts, penalties stack, rounds run out');
+{
+  const c = new Character(blankDocument({ name: 'Buffed', level: 6 }));
+  const buff = (o) => ({ name: '', on: true, type: '', rounds: '', attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [], ...o });
+  c.data.buffs = [
+    buff({ name: 'Heroism', type: 'morale', attack: 2, saves: 2 }),
+    buff({ name: 'Good Hope', type: 'morale', attack: 2, damage: 2 }),
+    buff({ name: 'Haste', attack: 1 }),
+    buff({ name: 'Untyped too', attack: 1 }),
+  ];
+  c.recompute();
+  let cs = c.conditionState;
+  check('two morale +2s to attack are +2, the untyped ones still stack', cs.delta.melee, 2 + 1 + 1);
+  check('morale damage from the one that has it', cs.delta.damage, 2);
+  check('the loser says why', cs.buffStacking[1], ['attack: Heroism’s morale bonus counts instead']);
+
+  c.data.buffs.push(buff({ name: 'Crushing Despair', type: 'morale', attack: -2 }));
+  c.recompute();
+  check('a typed penalty still counts against the best bonus', c.conditionState.delta.melee, 2 + 1 + 1 - 2);
+
+  // Settled against the save's own column of that type, save by save.
+  // ABP's resistance is the same bonus as a cloak's: +1 on every save at
+  // 6th, and the cloak's +2 on Fortitude on top of it is +3 there.
+  c.data.buffs = [buff({ name: 'Resistance', type: 'resistance', saves: 3 })];
+  c.data.saves.fortitude.bonuses.resistance = 2;
+  c.recompute();
+  cs = c.conditionState;
+  check('nothing past ABP and a +2 cloak on Fortitude, +2 past ABP alone',
+    [cs.delta.fortitude, cs.delta.reflex, cs.delta.will], [0, 2, 2]);
+  check('and it says so', cs.buffStacking[0], [
+    'Fortitude: the resistance bonus already there is as large',
+    'Reflex, Will: adds only 2, past the resistance bonus already there',
+  ]);
+  c.data.buffs[0].type = '';
+  c.recompute();
+  check('untyped, it adds everywhere', c.conditionState.delta.fortitude, 3);
+
+  // Rounds: one off per round, off at none, one undo step.
+  c.data.buffs = [buff({ name: 'Haste', attack: 1, rounds: 2 }), buff({ name: 'Bless', attack: 1 })];
+  c.recompute();
+  c.clearUndo();
+  c.buffRound();
+  check('a round off', [c.data.buffs[0].rounds, c.data.buffs[0].on, c.playActions[0].label], [1, true, 'Next round']);
+  c.buffRound();
+  check('at none it switches off, and the label says so',
+    [c.data.buffs[0].rounds, c.data.buffs[0].on, c.data.buffs[1].on, c.playActions[0].label], [0, false, true, 'Next round, Haste ended']);
+  check('a round with nothing counting is not an action', [c.buffRound().ticked, c.playActions.length], [0, 2]);
+  c.undo();
+  check('undo puts it back on', [c.data.buffs[0].rounds, c.data.buffs[0].on, c.conditionState.delta.melee], [1, true, 2]);
+  advanceTurn(c, true);
+  check('the session board’s Next turn is a round too', [c.data.buffs[0].on, c.playActions[0].label], [false, 'Next turn, Haste ended']);
 }
 
 console.log('undo at the table -- cards, a use, slots across a rest');

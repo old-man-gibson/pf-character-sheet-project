@@ -499,6 +499,38 @@ export function removeTracker(model, id) {
 }
 
 /**
+ * A round passes for the ticked buffs: each with rounds left loses one, and
+ * one that reaches none switches off. A buff with no rounds written lasts
+ * until it is unticked. Run inside a play action by its callers -- the
+ * session board's Next turn, the Buffs panel's Next round -- so it undoes as
+ * part of that. Answers `{ ticked, ended }`, `ended` the names that ran out.
+ */
+export function tickBuffRounds(model) {
+  const ended = [];
+  let ticked = 0;
+  for (const b of model.data.buffs || []) {
+    if (!b?.on) continue;
+    const left = Math.floor(Number(b.rounds));
+    if (String(b.rounds ?? '').trim() === '' || !Number.isFinite(left) || left <= 0) continue;
+    ticked += 1;
+    b.rounds = left - 1;
+    if (b.rounds === 0) {
+      b.on = false;
+      ended.push(String(b.name || '').trim() || 'Buff');
+    }
+  }
+  if (ticked) model.recompute();
+  return { ticked, ended };
+}
+
+/** "Haste and Bless ended", or '' when none did: the tail of a round's undo label. */
+export function endedText(ended) {
+  if (!ended?.length) return '';
+  const names = ended.length > 2 ? `${ended.slice(0, -1).join(', ')} and ${ended.at(-1)}` : ended.join(' and ');
+  return `${names} ended`;
+}
+
+/**
  * Resolve each buff's dials. A dial takes a plain number or a formula in
  * the tracker sandbox -- "1 + essence.shoulder" keeps a Citadel banner's
  * bonus right as essence moves -- and the resolved number lands beside the

@@ -1145,7 +1145,7 @@ const ABILITY_COLUMN_TYPES = {
  * an ability score its build. Untyped, dodge and circumstance columns are not
  * here, because those stack.
  */
-function typedColumns(model, key) {
+export function typedColumns(model, key) {
   const c = model.data;
   const row = (resolved, map, types, filter) => {
     const out = {};

@@ -9,6 +9,7 @@ const MANEUVER_ACTION_TYPES = { 'full-round': 'full', standard: 'standard', move
 export const maneuverActionType = action => MANEUVER_ACTION_TYPES[String(action || '').trim().toLowerCase().replace(/\s+action$/, '')] || '';
 import { executeChainAction } from './session-chains.js';
 import { actionFeatures } from './action-features.js';
+import { endedText, tickBuffRounds } from './trackers.js';
 
 export const ACTION_TYPES = [['standard', 'Standard'], ['move', 'Movement'], ['swift', 'Swift'],
   ['immediate', 'Immediate'], ['aoo', 'Attacks of opportunity'], ['full', 'Full round'], ['free', 'Free']];
@@ -84,12 +85,16 @@ export function advanceTurn(model, start) {
   const state = sessionState(model);
   if (state.pendingFollowups?.length) return;
   if (!start && !state.onTurn) return;
-  model.play(start ? 'Next turn' : 'End turn', () => {
+  // The start of your turn is when a round of each ticked buff's duration
+  // runs out, so the label says which ended.
+  model.play((ended) => [start ? 'Next turn' : 'End turn', endedText(ended)].filter(Boolean).join(', '), () => {
+    let ended = [];
     if (start) {
       state.turn = count(state.turn) + 1;
       state.spent = { swift: count(state.pendingSwift), immediate: count(state.pendingSwift) };
       state.pendingSwift = 0;
       state.onTurn = true;
+      ({ ended } = tickBuffRounds(model));
     } else {
       state.onTurn = false;
       // An immediate taken on your turn uses that turn's swift. After the
@@ -97,6 +102,7 @@ export function advanceTurn(model, start) {
       state.spent.immediate = count(state.pendingSwift);
     }
     model.set('session', state);
+    return ended;
   });
 }
 

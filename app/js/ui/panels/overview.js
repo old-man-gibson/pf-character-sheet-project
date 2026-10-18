@@ -97,7 +97,7 @@ function progressionSelect(i, field, value, choices, label, format = String, bea
 import { weaponsPanel, wealthPanel } from './gear.js';
 import {
   ABILITIES, ABILITY_LABELS, ALT_ATTACK_OF, ATTACK_MODES, ATTACK_MODE_KEY,
-  ATTACK_MODE_LABELS, BUFF_MOD_KEYS, BUFF_TARGETS, CONDITIONS, CONDITION_CATS, GAME_SYSTEMS,
+  ATTACK_MODE_LABELS, BONUS_TYPES, BUFF_MOD_KEYS, BUFF_TARGETS, CONDITIONS, CONDITION_CATS, GAME_SYSTEMS,
   SIZE_MODIFIERS, TRAIT_SLOTS, WEAPON_GROUPS, WEAPON_FAMILIARITY, WEAPON_HANDEDNESS,
   ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES, attackModeTotal, castingNoun,
   conditionInfo, conditionTotals, fmt, prepStyle, skillLabel, statModDelta,
@@ -446,6 +446,11 @@ function buffsPanel(model, ctx) {
     const buffs = model.data.buffs || [];
     const cs = model.conditionState;
     const list = 'buffs';
+    // The bonus types a buff can be; Untyped is the blank choice.
+    const typeOptions = Object.entries(BONUS_TYPES).filter(([k]) => k !== 'untyped').map(([k, t]) => [k, t.name]);
+    const typeName = (b) => BONUS_TYPES[b.type]?.name?.toLowerCase() || '';
+    const roundsLeft = (b) => Math.max(0, Math.floor(Number(b.rounds) || 0));
+    const counting = buffs.some((b) => b?.on && roundsLeft(b) > 0);
     // Collapsed, a buff is one line: tick, name, what it comes to. Opened, each
     // dial is a full-width formula field with its working, because the formulas
     // worth writing -- nested if(…) off hit points and essence -- need room.
@@ -462,7 +467,8 @@ function buffsPanel(model, ctx) {
             : row.target === 'sizeStacking' ? `${signed(v)} size (stacks)`
               : `${fmt(v)} ${targetLabels.get(row.target) || row.target}`);
       }
-      return bits.join(' · ') || 'no numbers yet';
+      const out = bits.join(' · ') || 'no numbers yet';
+      return typeName(b) && bits.length ? `${out} (${typeName(b)})` : out;
     };
     const dial = (b, i, [key, label]) => `<label class="fld"><span>${label}</span>
       ${itemExpr(list, i, key, b, { width: '100%', placeholder: '0, or a formula' })}</label>`;
@@ -470,11 +476,15 @@ function buffsPanel(model, ctx) {
     // grid, tied to the open card by the shared highlight.
     const row = (b, i) => {
       const open = ctx.openBuff === i;
+      const left = roundsLeft(b);
+      const stacking = cs.buffStacking?.[i] || [];
       return `<div class="buffcard${b.on ? '' : ' off'}${b.error ? ' invalid' : ''}${open ? ' open' : ''}">
         <div class="buffhead">
           ${itemCheck(list, i, 'on', b.on !== false)}
           <span class="bname">${esc(b.name || 'Unnamed buff')}</span>
           <span class="bsum hint" style="margin:0">${esc(summary(b))}</span>
+          ${left ? `<span class="badge" title="Rounds left. Next turn on the session board, or Next round here, takes one off; at none the buff switches off.">${left} round${left === 1 ? '' : 's'}</span>` : ''}
+          ${stacking.length ? '<span class="badge">does not stack</span>' : ''}
           ${b.error ? `<span class="badge err" title="${esc(b.error)}">formula problem</span>` : ''}
           <span class="pair" style="margin-left:auto">
             <button data-action="buff-open" data-index="${i}" aria-expanded="${open}"
@@ -482,6 +492,7 @@ function buffsPanel(model, ctx) {
             ${removeButton('buffs', i, { what: 'buff' })}
           </span>
         </div>
+        ${stacking.length ? `<ul class="bstack">${stacking.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
       </div>`;
     };
     const editing = buffs[ctx.openBuff] ? ctx.openBuff : null;
@@ -498,6 +509,9 @@ function buffsPanel(model, ctx) {
       return `<div class="buffeditor">
         <div class="fieldgrid">
           <label class="fld"><span>Buff</span>${itemText(list, i, 'name', b.name, 'Citadel banner')}</label>
+          <label class="fld"><span>Bonus type</span>${itemSelect(list, i, 'type', b.type, typeOptions, 'Untyped', null,
+    { attrs: 'title="Typed bonuses do not stack with another of the same type: only the largest counts. Untyped, dodge and circumstance stack."' })}</label>
+          <label class="fld"><span>Rounds left</span>${itemNum(list, i, 'rounds', b.rounds)}</label>
           ${BUFF_MOD_KEYS.map((k) => dial(b, i, k)).join('')}
         </div>
         ${BUFF_MOD_KEYS.filter(([key]) => typeof b[key] === 'string' && b[key].trim() !== '')
@@ -506,6 +520,11 @@ function buffsPanel(model, ctx) {
           ${(b.bonuses || []).map(bonusRow).join('')}
           <button data-action="buff-bonus-add" data-index="${i}">+ Add bonus</button>
         </div>
+        <p class="hint">The bonus type applies to every number on this buff. Within a type only the
+          largest bonus counts, among the ticked buffs and, on saves, AC and ability scores, against
+          the sheet's own bonus of that type (a cloak's resistance, a belt's enhancement, worn armour).
+          Penalties always count. Rounds left counts down by one on the session board's Next turn or
+          this panel's Next round; at none the buff switches off. 0 means it lasts until unticked.</p>
         <p class="hint">Extra bonuses cover targets the dials do not. An ability score bonus
           changes everything built on that modifier. <em>Save DCs</em> and <em>Essence pool</em>
           show where those values are read. <em>Size</em> has three types. Different types
@@ -555,7 +574,11 @@ function buffsPanel(model, ctx) {
     })() : '';
     return `<section class="panel span2">
       <h3>Buffs ${cs.buffsOn ? `<span class="badge ok">${cs.buffsOn} on</span>` : ''}
-        <button style="margin-left:auto" data-action="buff-add">+ Add buff</button>
+        <span class="pair" style="margin-left:auto">
+          ${counting ? `<button data-action="buff-round"
+            title="A round passes: every ticked buff with rounds left loses one">Next round</button>` : ''}
+          <button data-action="buff-add">+ Add buff</button>
+        </span>
       </h3>
       ${flowing}
       <div class="bufflist">

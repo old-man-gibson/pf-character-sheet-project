@@ -137,6 +137,7 @@ import {
 import {
   addSystemPool, addTracker, ensureMythicPower, isProtectedTracker, loadTrackers, missingSystemPools,
   recomputeBuffs, recomputeTrackers, removeTracker, seedTrackers, stepTracker, tierNow, updateTracker,
+  endedText, tickBuffRounds,
 } from './trackers.js';
 import { featCount, recomputeLanguages, recomputeSpeeds } from './traits.js';
 import { casterLevelSources, toggleCountsToward } from './transparency.js';
@@ -693,6 +694,9 @@ export class Character {
   applyNonlethal(...a) { return this.play((r) => r.taken && `${r.taken} nonlethal damage`, () => applyNonlethal(this, ...a)); }
   grantTempHp(...a) { return this.play((r) => r.granted && `${r.granted} temporary hit points`, () => grantTempHp(this, ...a)); }
   applyHealing(...a) { return this.play((r) => r.healed && `heal ${r.healed}`, () => applyHealing(this, ...a)); }
+
+  /* A round off every ticked buff with rounds left; see tickBuffRounds. */
+  buffRound() { return this.play((r) => r.ticked && ['Next round', endedText(r.ended)].filter(Boolean).join(', '), () => tickBuffRounds(this)); }
   meterStyle(...a) { return meterStyle(this, ...a); }
   setMeterStyle(...a) { return setMeterStyle(this, ...a); }
   meterSpec(...a) { return meterSpec(this, ...a); }

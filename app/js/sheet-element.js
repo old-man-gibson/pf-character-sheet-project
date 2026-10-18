@@ -7521,8 +7521,12 @@ export class CharacterSheetElement extends HTMLElement {
       case 'buff-add':
         this.#view.openBuff = (this.#model.data.buffs || []).length;
         this.#model.listAdd('buffs', {
-          name: '', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [],
+          name: '', on: true, type: '', rounds: '', attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [],
         });
+        this.#render();
+        break;
+      case 'buff-round':
+        this.#model.buffRound();
         this.#render();
         break;
       case 'buff-bonus-add': {
