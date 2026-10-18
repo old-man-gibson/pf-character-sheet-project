@@ -3627,6 +3627,16 @@ table.build td.linked select:disabled {
 .tracker-controls input { width: 3.6rem; }
 .tracker-controls input.neg { color: var(--cs-bad); font-weight: 640; }
 .tracker.editing { grid-template-columns: 1fr; }
+/* The Trackers tab's list is one grid, so the controls line up from tracker to
+   tracker: the name and meter take the rest of the row, and each control
+   (− box / max + ✎ ×) has a column as wide as its widest. Each tracker sized
+   its own controls, so a "/ 274" or a tracker that cannot be removed moved
+   the box over by up to 36px. One with no × leaves that column empty. */
+.trackerlist { display: grid; grid-template-columns: minmax(0, 1fr) repeat(6, auto); }
+.trackerlist > .tracker { grid-column: 1 / -1; grid-template-columns: subgrid; column-gap: 5px; }
+.trackerlist > .tracker > :first-child { margin-right: 3px; min-width: 0; }
+.trackerlist > .tracker > .tracker-controls { grid-column: 2 / -1; display: grid; grid-template-columns: subgrid; }
+.trackerlist > .tracker.editing { grid-template-columns: 1fr; }
 .pool { font-variant-numeric: tabular-nums; font-weight: 640; white-space: nowrap; }
 .pips { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 5px; }
 .pip {

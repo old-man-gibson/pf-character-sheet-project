@@ -42,7 +42,8 @@ export function renderTrackersPanel(model, ctx) {
   return `<div class="grid">
       <section class="panel span2">
         <h3>Resource trackers</h3>
-        ${trackers.length ? trackers.map((t) => trackerRow(model, ctx, t)).join('') : '<p class="empty">No trackers yet.</p>'}
+        ${trackers.length ? `<div class="trackerlist">${trackers.map((t) => trackerRow(model, ctx, t)).join('')}</div>`
+    : '<p class="empty">No trackers yet.</p>'}
       </section>
 
       <section class="panel span2">
