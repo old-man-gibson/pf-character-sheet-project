@@ -594,6 +594,8 @@
 .buffcard.off .bname, .buffcard.off .bsum { opacity: 0.55; }
 /* Why a ticked buff is not moving a number: a bigger bonus of its type. */
 .bstack { margin: 4px 0 0; padding-left: 1.2rem; font-size: 0.78rem; color: var(--cs-muted); }
+/* The coin purse on the Load panel: four small boxes in a row. */
+.coinrow { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 4px 0 6px; }
 .buffeditor {
   margin-top: 8px; padding: 8px 10px; background: var(--cs-panel-2);
   border: 1px solid var(--cs-edit); border-radius: var(--cs-radius);

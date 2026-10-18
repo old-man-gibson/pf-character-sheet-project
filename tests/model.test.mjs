@@ -71,7 +71,7 @@ import { namedTextFrom } from '../app/js/extensions.js';
 import { parseDiceExpr as readDice, stepDamageDice, stepDiceMap } from '../app/js/rules.js';
 import {
   GUILE_SPHERES, expertiseTalents, guilePackages, guileRanges, guileSkillHint,
-  leveragePool,
+  leveragePool, carryTiers, reducedSpeed,
 } from '../app/js/rules.js';
 import { concentrationRollSpec, rollSpec } from '../app/js/roll20.js';
 import { NameIndex, evaluateFormula, resolvePath } from '../app/js/formula.js';
@@ -4403,8 +4403,69 @@ console.log('carry capacity follows Strength');
   if (!(c.data.carry.light > light0)) {
     fail++; console.log('  FAIL carry capacity did not rise with Str');
   } else pass++;
-  check('medium is 2x light', c.data.carry.medium, c.data.carry.light * 2);
-  check('heavy is 3x light', c.data.carry.heavy, c.data.carry.light * 3);
+  // The heavy load is the table's figure; light and medium are a third and
+  // two thirds of it, rounded down -- 33 / 66 / 100 at Str 10, not 99.
+  const k = c.data.carry;
+  check('light and medium are a third and two thirds of heavy',
+    [k.light, k.medium], [Math.floor(k.heavy / 3), Math.floor((k.heavy * 2) / 3)]);
+}
+
+console.log('load -- the table, the worse of armour and load, quantities, coins, containers');
+{
+  check('Str 10 is 33 / 66 / 100', [carryTiers(10).light, carryTiers(10).medium, carryTiers(10).heavy], [33, 66, 100]);
+  check('Str 30 is Str 20 four times over', carryTiers(30).heavy, 4 * carryTiers(20).heavy);
+  check('a load cuts 30 to 20 and 20 to 15', [reducedSpeed(30), reducedSpeed(20), reducedSpeed(40)], [20, 15, 30]);
+
+  const c = new Character(blankDocument({ name: 'Packmule', level: 5 }));
+  c.data.equipment.armor = { ...c.data.equipment.armor, active: true, type: 'Light', name: 'Leather', acBonus: 2, maxDex: 6, acp: 0, weight: 15 };
+  c.recompute();
+  const str = c.data.carry.score;
+  const { light, medium } = c.data.carry;
+  const acAt = () => c.data.defenses.ac;
+  const stealth = () => c.data.skills.find((s) => s.name === 'Stealth');
+  const lightAc = acAt();
+  c.listAdd('equipment.other', { slot: 'Other', name: 'Rations', qty: 1, weight: 1, cost: 0.5, note: '' });
+  const rations = c.list('equipment.other').length - 1;
+  c.setItem('equipment.other', rations, 'qty', medium - 15 - (light - 15) + light - 15);   // lands in the medium band
+  check('a quantity multiplies the weight', c.data.carry.carried, 15 + (medium - 15));
+  check('which is a medium load', c.data.carry.load, 'medium');
+  check('the load caps Dexterity at +3 and has a −3 check penalty, worse than the leather',
+    [armorParts(c.data).maxDex, armorParts(c.data).acp], [3, -3]);
+  check('AC follows the cap when Dex is over it',
+    acAt(), lightAc - Math.max(0, statMod(c.data, 'dex') - 3));
+  c.set('carry.applyLoad', false);
+  check('switched off, the leather alone applies', [armorParts(c.data).maxDex, armorParts(c.data).acp, acAt()], [6, 0, lightAc]);
+  c.set('carry.applyLoad', true);
+
+  // A bag of holding carries what is in it for nothing; a store is not carried.
+  c.listAdd('equipment.other', { slot: 'Other', name: 'Bag of holding', qty: 1, weight: 15, cost: 2500, holds: 'weightless', note: '' });
+  c.recompute();
+  const bag = c.list('equipment.other').at(-1);
+  check('a container is given an id', typeof bag.id, 'string');
+  c.setItem('equipment.other', rations, 'inside', bag.id);
+  check('rations in the bag weigh nothing; the bag weighs 15', [c.data.carry.carried, c.data.carry.load], [15 + 15, 'light']);
+  c.setItem('equipment.other', rations, 'inside', 'stored');
+  check('stored is not carried either', c.data.equipment.weights.stored > 0, true);
+
+  c.set('equipment.coins', { gp: 500, sp: 120, cp: 5 });
+  check('coins weigh a pound per fifty and are worth their gold', [c.data.equipment.weights.coins, c.data.equipment.coinValue], [12, 512.05]);
+
+  // Carrying by another score: a class feature that carries by Intelligence.
+  c.setBuild('int', 'untyped', 10);
+  c.set('carry.ability', 'int');
+  check('capacity reads the chosen score', [c.data.carry.score > str, c.data.carry.heavy], [true, carryTiers(c.data.carry.score).heavy]);
+
+  // A sheet saved before load penalties, already past a light load, opens with
+  // them off and its totals as saved.
+  const old = JSON.parse(JSON.stringify(c.toJSON()));
+  old.carry = { ...old.carry, ability: 'str', carried: 9999 };
+  delete old.carry.applyLoad;
+  delete old.carry.carriedOffset;
+  old.corrections = old.corrections.filter((n) => n !== 'load-penalties');
+  const savedAc = old.defenses.ac;
+  const reopened = new Character(old);
+  check('a heavy sheet from before opens with the penalties off, its AC as saved',
+    [reopened.data.carry.applyLoad, reopened.data.defenses.ac], [false, savedAc]);
 }
 
 console.log('custom trackers');

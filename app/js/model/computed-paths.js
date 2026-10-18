@@ -40,7 +40,11 @@ const COMPUTED_PATHS = [
   'saves.*.base', 'saves.*.total', 'saves.*.bonuses.abpResistance',
   'skills.*.bonus', 'skills.*.abilityMod', 'skills.*.totalRanks', 'skills.*.sphereRanks',
   'skillBudget.*',
-  'carry.*',
+  // The capacity and the load are worked out; Ant Haul, the score bonus,
+  // the ability and the penalty switch are typed.
+  'carry.light', 'carry.medium', 'carry.heavy', 'carry.offGround', 'carry.pushDrag',
+  'carry.carried', 'carry.carriedOffset', 'carry.load', 'carry.score',
+  'equipment.weights', 'equipment.coinValue',
   'classes.*.gestaltLevels', 'classes.*.gestaltBeaten',
   'gestalt.bab', 'gestalt.babPerLevel', 'gestalt.hdTotal', 'gestalt.hp', 'gestalt.saves.*.base',
   'equipment.weapons.*.attackTotal', 'equipment.weapons.*.damageBonus',

@@ -22,7 +22,7 @@
  * workbook's totals, and a blank sheet has nothing yet for a fix to move.
  */
 
-import { RULE_CORRECTIONS, SIZE_MODIFIERS, gestaltSaveBase } from '../rules.js';
+import { RULE_CORRECTIONS, SIZE_MODIFIERS, carryState, gestaltSaveBase } from '../rules.js';
 import { classPresence, saveProgressions } from './progression.js';
 
 /** The attack slots that take the size modifier the way AC does. */
@@ -98,6 +98,21 @@ FIXES['monster-crit-range'] = (model) => {
 FIXES['hp-meter-fill'] = (model) => {
   const style = model.data.meterStyles?.hp;
   if (style && style.fill !== 'remaining') style.fill = 'remaining';
+};
+
+/*
+ * Load penalties arrived after the document was saved: its AC and skill
+ * totals were worked out with no load cap. A sheet that was already past a
+ * light load would otherwise have that penalty folded into its offsets and
+ * given back twice once it lightened, so it opens with the penalties off --
+ * the Carrying capacity panel's switch -- and its totals stay as saved.
+ * Ticking the switch then moves them, like any edit. A sheet at a light load
+ * has nothing to move and keeps the default, on.
+ */
+FIXES['load-penalties'] = (model) => {
+  const k = model.data.carry;
+  if (!k || k.applyLoad !== undefined) return;
+  if (carryState(model.data).load !== 'light') k.applyLoad = false;
 };
 
 /**

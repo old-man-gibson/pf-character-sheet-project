@@ -9,6 +9,7 @@
 
 import { forwarded, lazyScope, scopeIfFormulas } from './scope.js';
 import { evaluateAmount, speedRows } from './util.js';
+import { LOAD_PENALTIES, armorParts, reducedSpeed } from '../rules.js';
 import { featNames } from './feats.js';
 
 /**
@@ -44,8 +45,20 @@ export function recomputeSpeeds(model) {
       sp.handle = r.handle;
       sp.forwarded = r.forwarded;
       sp.final = r.final;
+      // A medium or heavy load cuts land speed, the same cut medium or heavy
+      // armour makes -- and the two do not stack, so while such armour is
+      // worn the speed typed in (which carries the armour's cut) stands.
+      sp.loadSlowed = false;
+      const load = armorParts(model.data).load;
+      if (LOAD_PENALTIES[load]?.slow && isLandSpeed(sp) && armorParts(model.data).armorType < 2) {
+        const slowed = reducedSpeed(r.final);
+        if (slowed !== r.final) { sp.final = slowed; sp.loadSlowed = true; }
+      }
     });
 }
+
+/** A walking speed: the land row, or a row with no type. */
+const isLandSpeed = (sp) => /^(land|base|walk|)$/i.test(String(sp?.type ?? '').trim());
 
 /**
  * How many languages the character may know beyond the native ones.

@@ -94,7 +94,7 @@ function progressionSelect(i, field, value, choices, label, format = String, bea
     kind: 'number', attrs: `aria-label="${esc(label)}" class="${all ? 'beaten' : ''}"${why ? ` title="${esc(why)}"` : ''}`,
   });
 }
-import { weaponsPanel, wealthPanel } from './gear.js';
+import { loadLine, weaponsPanel, wealthPanel } from './gear.js';
 import {
   ABILITIES, ABILITY_LABELS, ALT_ATTACK_OF, ATTACK_MODES, ATTACK_MODE_KEY,
   ATTACK_MODE_LABELS, BONUS_TYPES, BUFF_MOD_KEYS, BUFF_TARGETS, CONDITIONS, CONDITION_CATS, GAME_SYSTEMS,
@@ -1605,15 +1605,18 @@ function speedPanel(model) {
       <h3>Speed</h3>
       ${speedTable('identity.speeds', speeds, speeds.map((sp) => ({
     bonus: sp.bonusNum, error: sp.bonusError, handle: sp.handle, final: sp.final,
+    loadSlowed: sp.loadSlowed,
   })), {
     named: true,
     exampleFor: ' for fast movement',
     // What conditions and buffs do to the rate, where they move it.
     final: (i, w) => {
       const adj = cs.speeds[i];
-      return cs.changed && adj && adj.adjusted !== adj.final
+      const moved = cs.changed && adj && adj.adjusted !== adj.final
         ? movedValue(`${adj.adjusted} ft.`, adj.adjusted - adj.final, { base: `${adj.final} ft.`, sources: cs.sources })
         : null;
+      if (!w.loadSlowed) return moved;
+      return `${moved ?? `${Number(w.final) || 0} ft.`} <span class="badge" title="Cut by a medium or heavy load">load</span>`;
     },
     badge: (handle) => forwardedBadge(model, handle),
   })}
@@ -1709,17 +1712,25 @@ function proficienciesPanel(model) {
 
 function carryPanel(model) {
     const c = model.data;
+    const abilities = ABILITIES.map((k) => [k, ABILITY_LABELS[k] || k]);
     return `<section class="panel">
       <h3>Carrying capacity</h3>
+      <div class="statline"><span class="label">Carries by</span>
+        <span class="value">${select('carry.ability', c.carry?.ability || 'str', abilities, null,
+    { attrs: 'title="The score capacity is read from. Strength, unless a feature says otherwise (carrying by Intelligence)."' })}</span></div>
       ${['light', 'medium', 'heavy', 'offGround', 'pushDrag'].map((k) => line(
         k === 'offGround' ? 'Off ground' : k === 'pushDrag' ? 'Push / drag' : k[0].toUpperCase() + k.slice(1),
         c.carry?.[k] != null ? `${c.carry[k]} lbs` : '—',
       )).join('')}
       ${line('Currently carried', `${c.carry?.carried ?? 0} lbs`)}
+      ${loadLine(c)}
       ${editLine('Ant Haul multiplier', 'carry.antHaul', c.carry?.antHaul ?? 1)}
-      ${editLine('Carry Str bonus', 'carry.strBonus', c.carry?.strBonus ?? 0)}
+      ${editLine('Carry score bonus', 'carry.strBonus', c.carry?.strBonus ?? 0)}
       <div class="statline"><span class="label">Quadruped</span>
         <span class="value">${check('carry.quadruped', c.carry?.quadruped)}</span></div>
+      <div class="statline"><span class="label">Apply load penalties</span>
+        <span class="value">${check('carry.applyLoad', c.carry?.applyLoad !== false, '',
+    'A medium or heavy load caps Dex to AC, has a check penalty, and cuts land speed. Untick for a table that does not track encumbrance.')}</span></div>
     </section>`;
   }
 

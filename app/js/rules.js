@@ -1832,7 +1832,7 @@ export function ladderDice(ladder, level) {
  * (model/corrections.js). The monster importer writes the whole list, because
  * what it writes is current.
  */
-export const RULE_CORRECTIONS = ['attack-size-sign', 'poor-save-thirds', 'monster-crit-range', 'hp-meter-fill'];
+export const RULE_CORRECTIONS = ['attack-size-sign', 'poor-save-thirds', 'monster-crit-range', 'hp-meter-fill', 'load-penalties'];
 
 /** Size -> AC/attack modifier and its opposite for CMB/CMD. */
 export const SIZE_MODIFIERS = {
@@ -1941,30 +1941,147 @@ export const SIZE_CARRY_MULTIPLIER = {
   Large: 2, Huge: 4, Gargantuan: 8, Colossal: 16,
 };
 
-/** Str 1-29 light-load capacity; beyond 29 it quadruples every +10. */
-const CARRY_BASE = [
-  0, 3, 6, 10, 13, 16, 20, 23, 26, 30, 33, 38, 43, 50, 58, 66,
-  76, 86, 100, 116, 133, 153, 173, 200, 233, 266, 306, 346, 400, 466,
+/**
+ * The heaviest load for Str 0-29; beyond 29 it quadruples every +10. The
+ * table's own column: light and medium are a third and two thirds of it,
+ * rounded down, which is how the printed table gets 33 / 66 / 100 at Str 10.
+ * (Working from the light figure times three lost the last pound: 99.)
+ */
+const CARRY_HEAVY = [
+  0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 115, 130, 150, 175, 200,
+  230, 260, 300, 350, 400, 460, 520, 600, 700, 800, 920, 1040, 1200, 1400,
 ];
 
-/** Light-load limit for a Strength score, extended past the printed table. */
-export function carryLight(str) {
-  const s = Math.max(0, Math.floor(Number(str) || 0));
-  if (s < CARRY_BASE.length) return CARRY_BASE[s];
-  const doublings = Math.floor((s - 20) / 10);
-  return CARRY_BASE[((s - 20) % 10) + 20] * 4 ** doublings;
+/** Heavy-load limit for a score, extended past the printed table. */
+export function carryHeavy(score) {
+  const s = Math.max(0, Math.floor(Number(score) || 0));
+  if (s < CARRY_HEAVY.length) return CARRY_HEAVY[s];
+  const quadruplings = Math.floor((s - 20) / 10);
+  return CARRY_HEAVY[((s - 20) % 10) + 20] * 4 ** quadruplings;
 }
 
-export function carryTiers(str, { multiplier = 1, antHaul = 1, quadruped = false } = {}) {
+/** Light-load limit for a score. */
+export function carryLight(score) {
+  return Math.floor(carryHeavy(score) / 3);
+}
+
+export function carryTiers(score, { multiplier = 1, antHaul = 1, quadruped = false } = {}) {
   const scale = multiplier * (antHaul || 1) * (quadruped ? 1.5 : 1);
-  const light = Math.floor(carryLight(str) * scale);
+  const heavy = Math.floor(carryHeavy(score) * scale);
   return {
-    light,
-    medium: light * 2,
-    heavy: light * 3,
-    offGround: light * 6,
-    pushDrag: light * 15,
+    light: Math.floor(heavy / 3),
+    medium: Math.floor((heavy * 2) / 3),
+    heavy,
+    offGround: heavy * 2,
+    pushDrag: heavy * 5,
   };
+}
+
+/** Coins to the pound. */
+export const COINS_PER_POUND = 50;
+export const COIN_KINDS = [['pp', 'Platinum', 10], ['gp', 'Gold', 1], ['sp', 'Silver', 0.1], ['cp', 'Copper', 0.01]];
+
+/**
+ * What a load does: the worst Dexterity bonus to AC it allows, its check
+ * penalty, and whether it cuts land speed. Armour's own figures and these do
+ * not stack -- the worse of each applies (see armorParts). Over the heavy
+ * limit a character can only stagger 5 feet a round; the sheet keeps the
+ * heavy figures and says so.
+ */
+export const LOAD_PENALTIES = {
+  light: null,
+  medium: { maxDex: 3, acp: -3, slow: true, run: 4 },
+  heavy: { maxDex: 1, acp: -6, slow: true, run: 3 },
+  over: { maxDex: 1, acp: -6, slow: true, run: 3, note: 'Over the heavy load: you can move only 5 feet a round.' },
+};
+
+/** Which load `carried` pounds is against the tiers. */
+export function loadOf(carried, tiers) {
+  const w = Number(carried) || 0;
+  if (w <= (tiers?.light ?? 0)) return 'light';
+  if (w <= (tiers?.medium ?? 0)) return 'medium';
+  if (w <= (tiers?.heavy ?? 0)) return 'heavy';
+  return 'over';
+}
+
+/** A speed cut by a medium or heavy load: 30 to 20, 20 to 15, a third off rounded up to the square. */
+export function reducedSpeed(speed) {
+  const s = Number(speed) || 0;
+  return s > 0 ? Math.ceil((s * 2) / 3 / 5) * 5 : s;
+}
+
+/** How many of an item there are: a quantity left blank is one. */
+export const quantityOf = (row) => {
+  const q = Number(row?.qty);
+  return row?.qty === undefined || row?.qty === null || row?.qty === '' || !Number.isFinite(q) ? 1 : Math.max(0, q);
+};
+
+/**
+ * What the character is carrying, by where it is.
+ *
+ * An Other item can be inside a container (`inside` is the container's id),
+ * and a container that `holds: 'weightless'` -- a bag of holding -- carries
+ * what is inside it for nothing; the bag's own weight still counts. An item
+ * `inside: 'stored'` is not on the character at all. Coins weigh one pound
+ * per fifty.
+ */
+export function equipmentWeights(e) {
+  const rowWeight = (x) => (Number(x?.weight) || 0) * quantityOf(x);
+  const sum = (rows) => (rows || []).reduce((t, x) => t + rowWeight(x), 0);
+  const other = Array.isArray(e?.other) ? e.other : [];
+  const weightless = new Set(other.filter((x) => x?.holds === 'weightless' && x.id).map((x) => x.id));
+  let carriedOther = 0;
+  let inWeightless = 0;
+  let stored = 0;
+  for (const x of other) {
+    if (x?.inside === 'stored') stored += rowWeight(x);
+    else if (weightless.has(x?.inside)) inWeightless += rowWeight(x);
+    else carriedOther += rowWeight(x);
+  }
+  const coins = COIN_KINDS.reduce((t, [k]) => t + Math.max(0, Number(e?.coins?.[k]) || 0), 0);
+  const coinWeight = Math.floor(coins / COINS_PER_POUND);
+  const parts = {
+    gear: sum(e?.gear),
+    other: carriedOther,
+    armor: (Number(e?.armor?.weight) || 0) + sum(e?.shields),
+    weapons: sum(e?.weapons),
+    coins: coinWeight,
+  };
+  const total = parts.gear + parts.other + parts.armor + parts.weapons + parts.coins;
+  return { ...parts, total, inWeightless, stored, coinCount: coins };
+}
+
+/** Coins' worth in gold pieces. */
+export function coinValue(coins) {
+  return COIN_KINDS.reduce((t, [k, , gp]) => t + Math.max(0, Number(coins?.[k]) || 0) * gp, 0);
+}
+
+/**
+ * Carrying capacity and the load it comes to, from the document alone, so
+ * it can be read before anything that depends on it is worked out -- the
+ * AC's Dexterity cap and every skill's check penalty.
+ *
+ * The capacity reads Strength unless `carry.ability` names another score
+ * (a class feature that carries by Intelligence), plus `carry.strBonus`, the
+ * score bonus for carrying only.
+ */
+export function carryState(c) {
+  const k = c?.carry || {};
+  const ability = ABILITIES.includes(k.ability) ? k.ability : 'str';
+  const a = c?.abilities?.[ability] || {};
+  const score = (Number(a.workingScore ?? a.tempScore ?? a.score) || 0) + (Number(k.strBonus) || 0);
+  const tiers = carryTiers(score, {
+    multiplier: SIZE_CARRY_MULTIPLIER[c?.identity?.size] ?? 1,
+    antHaul: k.antHaul || 1,
+    quadruped: !!k.quadruped,
+  });
+  const weights = equipmentWeights(c?.equipment);
+  // The adjustment that reconciles an imported figure is measured on the
+  // first pass; until then the saved figure is the carried weight.
+  const carried = k.carriedOffset === undefined || k.carriedOffset === null
+    ? (Number(k.carried) || weights.total)
+    : weights.total + (Number(k.carriedOffset) || 0);
+  return { ability, score, ...tiers, carried, load: loadOf(carried, tiers), weights };
 }
 
 /** "+20/+15/+10/+5" from a BAB total. */
@@ -2613,6 +2730,10 @@ export function armorCategory(type) {
  */
 export function armorParts(c) {
   const armor = c.equipment?.armor?.active ? c.equipment.armor : null;
+  // A medium or heavy load caps Dexterity and has a check penalty of its own;
+  // the worse of the load's and the armour's applies, never both. `carry.load`
+  // is worked out before the AC and skills are (see applyCarry).
+  const load = c.carry?.applyLoad === false ? null : LOAD_PENALTIES[c.carry?.load] ?? null;
   const rows = c.equipment?.shields || [];
   // A piece's bonus is what it is made of plus what it is enchanted to: a +1
   // breastplate is a +7 armour bonus, not a +6 with a +1 beside it, so the
@@ -2624,6 +2745,8 @@ export function armorParts(c) {
   const maxDexes = pieces.map((p) => p.maxDex).filter((v) => v !== null && v !== undefined && v !== '');
   const armorAc = armor ? pieceAc(armor) : 0;
   const shieldAc = shieldAcs.reduce((t, n) => t + n, 0);
+  const armorMaxDex = maxDexes.length ? Math.min(...maxDexes.map(Number)) : Infinity;
+  const armorAcp = pieces.reduce((t, p) => t + (Number(p.acp) || 0), 0);
   return {
     ac: armorAc + shieldAc,
     armor: armorAc,
@@ -2633,8 +2756,12 @@ export function armorParts(c) {
     armorEnhancement: armor ? Number(armor.enhancement) || 0 : 0,
     shieldEnhancement: shields.reduce((t, s) => t + (Number(s.enhancement) || 0), 0),
     armorType: armor ? armorCategory(armor.type) : 0,
-    maxDex: maxDexes.length ? Math.min(...maxDexes.map(Number)) : Infinity,
-    acp: pieces.reduce((t, p) => t + (Number(p.acp) || 0), 0),
+    maxDex: Math.min(armorMaxDex, load?.maxDex ?? Infinity),
+    acp: Math.min(armorAcp, load?.acp ?? 0),
+    // The two halves, for saying which one is doing the capping.
+    armorMaxDex,
+    armorAcp,
+    load: load ? c.carry.load : null,
   };
 }
 

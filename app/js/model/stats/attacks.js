@@ -12,7 +12,7 @@ import {
   TALENTED_KNUCKLE_TALENTS, UNARMED_NATIVE_THRESHOLD, UNARMED_SPHERES, UNORTHODOX_FEAT,
   UNORTHODOX_SPHERES_PER_FEAT,
   addDice, diceAverage, diceString, fmt, ladderRung, parseDiceExpr, sizeAttackMod, statMod,
-  raiseDice, unarmedDice, SIZE_MODIFIERS, stepDiceMap, critMultOf,
+  raiseDice, unarmedDice, SIZE_MODIFIERS, stepDiceMap, critMultOf, coinValue, equipmentWeights, quantityOf,
 } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import { parseQuery } from '../../inline.js';
@@ -538,18 +538,27 @@ export function recomputeEquipment(model) {
   }
   model.gearBonusCalc = calc;
 
-  // Carried weight: every section's weights, plus a manual adjustment that
-  // reconciles the imported figure.
-  const sum = (arr, key = 'weight') => (arr || []).reduce((t, x) => t + (Number(x[key]) || 0), 0);
-  const computed = sum(e.gear) + sum(e.other) + (Number(e.armor?.weight) || 0)
-    + sum(e.shields) + sum(e.weapons);
+  // A container is pointed at by id, so one is given the first time a row is
+  // made a container; the id stays when the row is renamed or moved.
+  for (const x of e.other || []) {
+    if (x && x.holds && !x.id) x.id = `box-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  // Carried weight: every section's weights (times a row's quantity, less
+  // what a bag of holding or a store holds), coins, and a manual adjustment
+  // that reconciles the imported figure. See equipmentWeights.
+  const weights = equipmentWeights(e);
+  const computed = weights.total;
   if (c.carry.carriedOffset === undefined) {
     c.carry.carriedOffset = (Number(c.carry.carried) || 0) - computed;
   }
   e.totalWeight = computed;
+  e.weights = weights;
   c.carry.carried = computed + (Number(c.carry.carriedOffset) || 0);
+  const sum = (arr, key) => (arr || []).reduce((t, x) => t + (Number(x?.[key]) || 0) * quantityOf(x), 0);
   e.totalValue = sum(e.gear, 'cost') + sum(e.other, 'cost')
     + (Number(e.armor?.cost) || 0) + sum(e.shields, 'cost') + sum(e.weapons, 'price');
+  e.coinValue = coinValue(e.coins);
 }
 
 /* ------------------------------------------------------------------ *

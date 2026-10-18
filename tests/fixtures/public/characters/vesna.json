@@ -2338,9 +2338,11 @@
   "carried": 8,
   "light": 58,
   "medium": 116,
-  "heavy": 174,
-  "offGround": 348,
-  "pushDrag": 870,
+  "heavy": 175,
+  "offGround": 350,
+  "pushDrag": 875,
+  "load": "light",
+  "score": 14,
   "carriedOffset": -15
  },
  "resources": [
@@ -3348,7 +3350,19 @@
    }
   ],
   "totalWeight": 23,
-  "totalValue": 3340
+  "weights": {
+   "gear": 0,
+   "other": 0,
+   "armor": 15,
+   "weapons": 8,
+   "coins": 0,
+   "total": 23,
+   "inWeightless": 0,
+   "stored": 0,
+   "coinCount": 0
+  },
+  "totalValue": 3340,
+  "coinValue": 0
  },
  "training": {
   "combat": {
@@ -6034,7 +6048,8 @@
   "attack-size-sign",
   "poor-save-thirds",
   "monster-crit-range",
-  "hp-meter-fill"
+  "hp-meter-fill",
+  "load-penalties"
  ],
  "customTrackers": [
   {

@@ -33,7 +33,7 @@
  */
 
 import {
-  DERIVED, FORWARD_BY_DERIVED, SIZE_CARRY_MULTIPLIER, abilityMod, armorParts, carryTiers,
+  DERIVED, FORWARD_BY_DERIVED, abilityMod, armorParts,
   flatFootedCmd, iterativeAttacks, skillTotal, statMod,
 } from '../rules.js';
 import {
@@ -140,6 +140,7 @@ import {
   endedText, tickBuffRounds,
 } from './trackers.js';
 import { featCount, recomputeLanguages, recomputeSpeeds } from './traits.js';
+import { applyCarry } from './stats/carry.js';
 import { casterLevelSources, toggleCountsToward } from './transparency.js';
 import { evaluateAmount, getPath, isFormulaText, safe, setPath, skillForwardKey, skillKey } from './util.js';
 
@@ -258,6 +259,8 @@ export class Character {
     this.#resolveOffsets();
     this.#applyGestalt();
     this.#resolveDefenceBonuses();
+    // The load, before the AC and skills it caps; see stats/carry.js.
+    applyCarry(this);
 
     for (const d of DERIVED) {
       // The reconciliation offset and the forwarded bonus are both flat
@@ -272,14 +275,6 @@ export class Character {
     c.defenses.ffCmd = flatFootedCmd(c, this.ffCmdExtra);
 
     c.attack.iterative = iterativeAttacks(c.attack.bab);
-
-    // Carry capacity follows Strength, size, Ant Haul and quadruped status.
-    const tiers = carryTiers((c.abilities.str.workingScore ?? c.abilities.str.tempScore) + (c.carry?.strBonus || 0), {
-      multiplier: SIZE_CARRY_MULTIPLIER[c.identity.size] ?? 1,
-      antHaul: c.carry?.antHaul || 1,
-      quadruped: !!c.carry?.quadruped,
-    });
-    c.carry = { ...c.carry, ...tiers };
 
     this.#recomputeSpeeds();
     // A guile class blended into the sphere sides spends talents there, so its
