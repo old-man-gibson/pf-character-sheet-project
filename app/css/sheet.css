@@ -1492,14 +1492,24 @@ select.jumpto[hidden] { display: none; }
    the whole band is, at any window size, font size or character.
 
    `lead` hands what is left to the first panel, so the one beside it keeps
-   its measure. A band can sit in a band: it asks for the width of its
-   widest panel, its panels stacked, and puts them side by side when what it
-   is given holds them. */
+   its measure. A band can sit in a band: it is as wide as its widest panel,
+   its panels stacked, and the panels in it share that width so they line up.
+
+   `.fit` marks a panel of short tables -- saves, initiative, armour class,
+   attack, speed -- that reads no better wider. It keeps the width its tables
+   need and leaves the rest of the row to the panels beside it. Handed a whole
+   row, its table's first column took the spare width: on an 878px window
+   Fortitude sat 400px from its total, and so did Initiative and the attack
+   modes. A band in a band does not grow either, for the same reason. */
 .band {
   grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start;
 }
 .band > * { flex: 1 1 auto; min-width: min(100%, 12rem); max-width: 100%; }
-.band > .band { width: min-content; }
+.band > .band { width: min-content; flex-grow: 0; }
+.band > .panel.fit { flex-grow: 0; }
+.band > .band > .panel.fit { flex-grow: 1; }
+/* On a phone every panel is the width of the screen, as in `.flow`. */
+@container (max-width: 620px) { .band > .band, .band > .panel.fit { flex-grow: 1; } }
 .band.lead > :first-child { flex-grow: 1000; }
 .band p:not(.empty), .band .longhint, .band .langlist, .band .chips { contain: inline-size; }
 .band td p, .band th p { contain: none; }
@@ -1515,6 +1525,10 @@ select.jumpto[hidden] { display: none; }
 .band > .panel.wide { flex: 1.5 1 30rem; }
 /* The mythic tier grants beside the tradition: a reading width, never the whole row. */
 .band > .panel.mythgrants { flex: 1 1 28rem; max-width: 46rem; }
+/* Hit points is the one panel in Defenses that grows, beside armour class and
+   the saves (both .fit), so it would take all the rest of a wide row: 947px at
+   1920. Capped, the meter and its fields keep a reading width. */
+.band > .panel.hitpoints { max-width: 36rem; }
 /* Flowing Power's round controls, above the buff list. */
 .flowing { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 0 0 8px; padding: 6px 8px; border: 1px solid var(--cs-line); border-radius: 6px; }
 .flowing .d { font-size: 0.78rem; color: var(--cs-muted); }

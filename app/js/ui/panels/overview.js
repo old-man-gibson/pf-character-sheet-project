@@ -1387,7 +1387,7 @@ function acPanel(model) {
     const d = model.data.defenses;
     const cs = model.conditionState;
     const cell = (key, base) => `<td class="num total">${movedInline(cs, key, base, String, model)}</td>`;
-    return `<section class="panel">
+    return `<section class="panel fit">
       <h3>Armor class</h3>
       <div class="tablewrap"><table class="defense fitcols">
         <thead><tr><th></th><th class="num">Total</th>
@@ -1485,7 +1485,7 @@ function defenceBox(model, key, label, example) {
 function savesPanel(model) {
     const s = model.data.saves;
     const cs = model.conditionState;
-    return `<section class="panel">
+    return `<section class="panel fit">
       <h3>Saving throws</h3>
       <div class="tablewrap"><table class="saves stacked fitcols" data-fold="shut">
         <thead><tr><th>Save</th><th class="num">Total</th>
@@ -1518,7 +1518,7 @@ function savesPanel(model) {
 function initiativePanel(model) {
     const c = model.data;
     const cs = model.conditionState;
-    return `<section class="panel">
+    return `<section class="panel fit">
       <h3>Initiative</h3>
       <div class="tablewrap"><table class="saves stacked fitcols" data-fold="shut">
         <thead><tr><th></th><th class="num">Total</th>
@@ -1545,7 +1545,7 @@ function initiativePanel(model) {
 function attackPanel(model) {
     const c = model.data;
     const cs = model.conditionState;
-    return `<section class="panel">
+    return `<section class="panel fit">
       <h3>Attack</h3>
       ${lineHtml('Melee', `${movedInline(cs, 'melee', c.attack.totalMelee, fmt, model)}${
         rollButton(model, 'mode', 'melee', 'a melee attack', cs)}`, true)}
@@ -1639,7 +1639,7 @@ function speedPanel(model) {
     const c = model.data;
     const cs = model.conditionState;
     const speeds = c.identity.speeds || [];
-    return `<section class="panel">
+    return `<section class="panel fit">
       <h3>Speed</h3>
       ${speedTable('identity.speeds', speeds, speeds.map((sp) => ({
     bonus: sp.bonusNum, error: sp.bonusError, handle: sp.handle, final: sp.final,
@@ -2042,7 +2042,7 @@ function hpBuild(model) {
 function hitPointsPanel(ctx, model) {
     const hp = model.hpState;
     const status = hp.dead ? 'dead' : hp.dying ? 'dying' : hp.unconscious ? 'unconscious' : null;
-    return `<section class="panel">
+    return `<section class="panel hitpoints">
       <h3>Hit points
         ${hp.temp > 0 ? `<span class="badge">+${hp.temp} temp</span>` : ''}
         ${hp.nonlethal > 0 ? `<span class="badge${hp.nonlethal >= hp.effective ? ' err' : ''}">${hp.nonlethal} nonlethal</span>` : ''}
