@@ -112,7 +112,7 @@ import { abilitySelect, area, check, num, autoNum, roField, roValue, select, tex
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
   itemText, line, lineHtml, movedInline, movedSub, movedTitle, movedValue, removeAction, removeButton,
-  removeControl, rowTools, workingTitle,
+  removeControl, rowRemove, rowTools, workingTitle,
 } from '../rows.js';
 import {
   TRAIT_CATEGORIES,
@@ -1574,7 +1574,7 @@ function attackPanel(model) {
         <thead><tr><th>Mode</th>
           <th class="num" title="An alternate is this attack with the ability beside it in the slot instead">Total</th>
           ${sheetBonusHead()}
-          <th>Ability</th><th>2nd ability</th></tr></thead>
+          <th>Ability</th><th title="A second ability that adds its modifier">2nd</th></tr></thead>
         <tbody>${ATTACK_MODES.map((k) => {
           const alt = ALT_ATTACK_OF[k];
           const shut = !!model.data.uiPrefs?.collapsed?.[`atk:${alt || k}`];
@@ -1828,7 +1828,7 @@ function classesPanel(model, ctx) {
     };
     return `<section class="panel span2">
       <h3>Classes</h3>
-      <div class="tablewrap"><table class="classes stacked cardrows">
+      <div class="tablewrap squeeze"><table class="classes stacked cardrows">
         <colgroup><col class="cls"><col class="lvl"><col class="hd"><col class="bab">
           <col class="save"><col class="save"><col class="save">
           <col class="ranks"><col class="arch"><col class="sys"><col class="tools"></colgroup>
@@ -2220,7 +2220,7 @@ function traitsPanel(model, ctx) {
       <h3>Traits &amp; drawbacks
         <span class="badge${picked < standard.length ? ' err' : ' ok'}">${picked} of ${standard.length} picked</span>
       </h3>
-          <div class="tablewrap"><table class="traits stacked">
+          <div class="tablewrap squeeze"><table class="traits stacked">
             <colgroup><col class="slot"><col class="cat"><col class="tname"><col class="effect"></colgroup>
             <thead><tr><th>Slot</th><th>Category</th><th>Name</th><th>Trait / effect</th></tr></thead>
             <tbody>
@@ -2240,7 +2240,7 @@ function traitsPanel(model, ctx) {
           <div style="margin-top:8px" class="pair">
             ${addButton('traitSlots.additional', 'Add additional trait', { category: null, name: '', text: '' })}
             <input data-draft="traitCategory" placeholder="New category (e.g. Akashic)"
-              value="${esc(ctx.draft.traitCategory || '')}" style="max-width:14rem">
+              value="${esc(ctx.draft.traitCategory || '')}" style="width:14rem;max-width:100%">
             <button data-action="add-trait-category">Add category</button>
           </div>
           <p class="hint">
@@ -2262,7 +2262,7 @@ function traitsPanel(model, ctx) {
               <td data-stack="name">${itemText('raceTraits', i, 'name', t.name, 'Darkvision')}${Array.isArray(t.replaced) && t.replaced.length
     ? ` <span class="badge player" title="${esc(`Alternate racial trait — took the place of ${t.replaced.map((r) => r.name).join(' and ')}. Removing this row does not put them back; add them again from the race's pack if you need them.`)}">alt</span>` : ''}</td>
               <td data-label="Effect">${foldingNote(model, `data-item="raceTraits|${i}|text"`, t.text, `raceTraits|${i}|text`, { name: t.name })}</td>
-              ${rowTools('raceTraits', i)}
+              ${rowRemove('raceTraits', i, { what: 'race trait' })}
             </tr>`).join('')}
             ${race.length ? '' : '<tr><td colspan="3" class="empty">No race traits yet — add what the race grants.</td></tr>'}
             </tbody>

@@ -2017,6 +2017,16 @@ option[data-ab]:not([data-ab=""]) {
 /* A table only just over the cap: the script lifts it rather than leave a
    scroll box with a few pixels of travel. See `#fitTableWraps`. */
 .tablewrap.nocap { max-height: none; }
+/* A wrap its table measures. A table whose fixed columns add up to more than
+   a tablet's panel reads the wrap's width as `100cqw` and narrows its columns
+   to it; see `table.classes` and `table.traits`.
+   Being a container, the wrap is also what the 620px card query below asks
+   about for the table inside it, so that table is cards when the wrap is
+   620px or less, not only when the sheet is. On a sheet of 621 to 674px those
+   tables used to scroll inside a wrap too narrow for them; they are cards
+   there now. The row-fold carets are still added only when the sheet itself
+   is 620px or less (`#stackRows`), so those cards have none and stay open. */
+.tablewrap.squeeze { container-type: inline-size; }
 :host([scheme="light"]) .tablewrap {
   background:
     linear-gradient(to right, var(--cs-tablebg) 40%, transparent) 0 0 / 22px 100% no-repeat,
@@ -2050,7 +2060,6 @@ option[data-ab]:not([data-ab=""]) {
 .tablewrap > table.primordia { min-width: 32rem; }
 .tablewrap > table.build { min-width: 26rem; }
 .tablewrap > table.tradition { min-width: 28rem; }
-.tablewrap > table.attackmodes { min-width: 21rem; }
 .tablewrap > table.racetraits { min-width: 26rem; }
 .tablewrap > table.craftlist { min-width: 26rem; }
 .tablewrap > table.perks { min-width: 0; }
@@ -4092,6 +4101,17 @@ table.build.compact input[type="number"] { width: 3rem; }
   table.build.vslots th, table.build.vslots td,
   table.attackmodes th, table.attackmodes td,
   .compskills table.build th, .compskills table.build td { padding-left: 2px; padding-right: 2px; }
+  /* At 375 the attack modes were still 12px over a 315px wrap: two ability
+     pickers at the 4.6rem `fitcols` gives a select. Three letters and the
+     arrow fit in 3.8rem, and what that frees goes to the Mode column, where
+     "CMB" and its caret then share a line as they did. (The table also had a
+     21rem floor, from before its columns were sized to their contents; that
+     alone was 336px.) */
+  table.attackmodes td select { min-width: 3.8rem; }
+  /* An Other field with a forwarded bonus beside it is 92px on one line, and
+     `fitcols` keeps every cell on one; that was another 28px. The badge goes
+     under its field instead. */
+  table.attackmodes td[data-label="Other"] { white-space: normal; }
 }
 
 /* ---------- the class table ----------
@@ -4105,22 +4125,47 @@ table.build.compact input[type="number"] { width: 3rem; }
    placeholder is the Planner's own count for that class, so it is drawn as the
    value it is rather than as the ghost of one. */
 table.classes { table-layout: fixed; }
-table.classes col.cls { width: 12rem; }
-table.classes col.lvl { width: 4.4rem; }
+/* The columns below add up to 62.6rem, which is wider than the panel on a
+   tablet (699px at 768) or a small laptop (955px at 1024), and the wrap
+   scrolled by the difference. So the table measures its wrap (`squeeze` makes
+   the wrap a size container) and every column gives back a fixed share of
+   the shortfall, `--short`, until the table fits: Class and Archetypes the
+   most, then Systems, which is a short button in a wide column; the number
+   boxes the least, down to the width of what they hold. The cell padding
+   goes from 7px to 3px over the same range. At 19rem short (a 698px wrap)
+   every column is at its narrowest; a wrap narrower than that scrolls.
+   Shrinking Class and Archetypes on down to the 620px card switch was
+   tried: at 626px they were 64px and 61px, class names read "Summc" and
+   "Cerebr", and the Archetypes heading ran into Systems. The 1px is slack
+   against rounding, so the columns never add up to a hair over the wrap. A
+   wrap of 62.6rem or more has nothing to give back and the table is as it
+   always was.
+
+   Each column's line reads: its width when there is room, less the rem it
+   gives up at the narrowest out of the 19. The shares add up to 19. */
+table.classes { --short: clamp(0px, 62.6rem + 1px - 100cqw, 19rem); }
+table.classes th, table.classes td { padding-left: calc(7px - var(--short) / 76); padding-right: calc(7px - var(--short) / 76); }
+table.classes col.cls { width: calc(12rem - var(--short) * 5.75 / 19); }
+table.classes col.lvl { width: calc(4.4rem - var(--short) * 1.15 / 19); }
 /* Room for "d12" and the select's arrow: at 3.1rem the box was 36px and
-   showed "d1" whenever the table was at its narrowest (700 to 1024px wide). */
-table.classes col.hd { width: 4.2rem; }
-table.classes col.bab { width: 4.6rem; }
-table.classes col.save { width: 3rem; }
-table.classes col.ranks { width: 4.2rem; }
-table.classes col.tools { width: 6.2rem; }
+   showed "d1" whenever the table was at its narrowest (700 to 1024px wide).
+   It gives back only what the padding does, so the box stays 53px. */
+table.classes col.hd { width: calc(4.2rem - var(--short) * 0.5 / 19); }
+table.classes col.bab { width: calc(4.6rem - var(--short) * 0.5 / 19); }
+table.classes col.save { width: calc(3rem - var(--short) * 0.5 / 19); }
+table.classes col.ranks { width: calc(4.2rem - var(--short) * 0.95 / 19); }
+/* Three buttons that do not wrap: at its narrowest the column still holds
+   them at the 24px a touch screen gives each, with the gaps between them
+   (90px; see `--cs-tap`). A touch screen clips a table's overflow, so a
+   narrower column cut the × off rather than scrolling to it. */
+table.classes col.tools { width: calc(6.2rem - var(--short) * 0.2 / 19); }
 /* The two that had no width of their own. Every other column here is measured
    in rem, so between them they took the whole table and left these the
    remainder -- which on a phone is 16px, and 16px of an archetype name is
-   nothing. Given widths, they push the table out and the wrap scrolls, which
-   is the behaviour the rest of the row already had. */
-table.classes col.arch { width: 11rem; }
-table.classes col.sys { width: 7rem; }
+   nothing. On a phone the table is cards now, and above that these are the
+   columns that give back the most. */
+table.classes col.arch { width: calc(11rem - var(--short) * 4.95 / 19); }
+table.classes col.sys { width: calc(7rem - var(--short) * 3.5 / 19); }
 table.classes td select { width: 100%; min-width: 0; padding: 3px 4px; }
 table.classes td input[type="text"] { width: 100%; min-width: 0; }
 table.classes td.num input[type="number"] { width: 100%; text-align: right; }
@@ -4347,8 +4392,15 @@ table.traits { table-layout: fixed; }
 table.traits col.slot { width: 7.4rem; }
 table.traits col.cat { width: 8.6rem; }
 table.traits col.tname { width: 12.5rem; }
-/* Same as the classes grid: the effect column was the one left over. */
-table.traits col.effect { width: 16rem; }
+/* Same as the classes grid: the effect column was the one left over. The four
+   add up to 44.5rem, 13px more than the panel at 768, where it has the band's
+   row to itself, so the effect gives back the difference, as the class
+   table's columns do (see `squeeze`). Up to 6rem: a wrap narrower than the
+   table can then take is 620px or less, and the table is cards there.
+   One column taking the whole shortfall adds up exactly, so unlike the class
+   table this needs no pixel of slack. */
+table.traits { --short: clamp(0px, 44.5rem - 100cqw, 6rem); }
+table.traits col.effect { width: calc(16rem - var(--short)); }
 table.traits select, table.traits input[type="text"] { width: 100%; min-width: 0; }
 /* Both lists read top-down the same way: a row's name and controls sit level
    with the first line of its effect, however long the effect runs, and the

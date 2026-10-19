@@ -142,7 +142,7 @@ export function renderSystemManagerPanel(model, ctx) {
         Rename a worksheet by typing over its name above. × deletes a worksheet and its data after asking twice.
       </p>
       <div class="pair">
-        <input type="text" data-draft="newSystem" placeholder="New tab name" value="${esc(ctx.draft.newSystem || '')}" style="max-width:16rem">
+        <input type="text" data-draft="newSystem" placeholder="New tab name" value="${esc(ctx.draft.newSystem || '')}" style="width:16rem;max-width:100%">
         <button class="primary" data-action="add-system">+ Add system tab</button>
       </div>
     </section>

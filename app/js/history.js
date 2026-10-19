@@ -36,6 +36,7 @@
 import { SCHEMA_VERSION } from './model.js';
 import { isComputedPath } from './model/computed-paths.js';
 import { databaseOpener, finished, result } from './idb.js';
+import { undoKey } from './undo-store.js';
 
 /** How many automatic snapshots survive per character; the oldest goes first. */
 export const AUTO_KEEP = 5;
@@ -480,6 +481,9 @@ export function historyFor(id, { storageKey = null } = {}) {
 export async function forget(id, { storageKey = null } = {}) {
   const key = storageKey || workingKey(id);
   try { localStorage.removeItem(key); localStorage.removeItem(`${key}:recovery`); } catch { /* ignore */ }
+  // Also the marker a save stamps for other windows (the sheet's
+  // `#historyMarkKey`) and this tab's undo stacks, which were left behind.
+  try { localStorage.removeItem(`${workingKey(id)}:history`); sessionStorage.removeItem(undoKey(key)); } catch { /* ignore */ }
   try {
     const db = await openDb();
     const tx = db.transaction(STORE, 'readwrite');
