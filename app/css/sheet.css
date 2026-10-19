@@ -4328,12 +4328,12 @@ label.cond.count input[type="number"] { grid-column: 2; }
 .condsummary li { margin: 1px 0; }
 
 /* ---------- traits ----------
-   Character traits and race traits are two lists that belong under one
-   heading, side by side when the width is there. */
-.traitpair { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); align-items: start; }
-@container (min-width: 1200px) {
-  .traitpair { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
-}
+   Character traits and race traits are two panels in a band (overview.js
+   traitsPanel), side by side when the width is there, each folding on its own. */
+/* Each starts from the width its table needs, not from its prose, which would
+   ask for a whole effect on one line and push the other panel below it. */
+.band > .panel.traitspanel { flex: 1 1 46rem; }
+.band > .panel.racepanel { flex: 1 1 27rem; }
 h4.subhead {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   margin: 0 0 7px; font-size: 0.68rem; text-transform: uppercase;
@@ -4350,8 +4350,11 @@ table.traits col.tname { width: 12.5rem; }
 /* Same as the classes grid: the effect column was the one left over. */
 table.traits col.effect { width: 16rem; }
 table.traits select, table.traits input[type="text"] { width: 100%; min-width: 0; }
-table.traits td { vertical-align: top; }
-table.racetraits td:first-child { width: 11rem; }
+/* Both lists read top-down the same way: a row's name and controls sit level
+   with the first line of its effect, however long the effect runs, and the
+   name column is the same width in both. */
+table.traits td, table.racetraits td { vertical-align: top; }
+table.racetraits td:first-child { width: 12.5rem; }
 table.racetraits td:first-child input { min-width: 8rem; }
 td.empty { color: var(--cs-muted); font-style: italic; text-align: center; padding: 10px; }
 

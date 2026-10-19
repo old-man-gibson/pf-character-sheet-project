@@ -2212,13 +2212,12 @@ function traitsPanel(model, ctx) {
     };
 
     const race = c.raceTraits || [];
-    return `<section class="panel span2">
-      <h3>Traits &amp; drawbacks</h3>
-      <div class="traitpair">
-        <div>
-          <h4 class="subhead">Character traits
-            <span class="badge${picked < standard.length ? ' err' : ' ok'}">${picked} of ${standard.length} picked</span>
-          </h4>
+    // Two panels side by side in a band, each folding on its own like every
+    // other panel on the Overview, rather than two lists inside one panel.
+    const traitsHtml = `<section class="panel traitspanel">
+      <h3>Traits &amp; drawbacks
+        <span class="badge${picked < standard.length ? ' err' : ' ok'}">${picked} of ${standard.length} picked</span>
+      </h3>
           <div class="tablewrap"><table class="traits stacked">
             <colgroup><col class="slot"><col class="cat"><col class="tname"><col class="effect"></colgroup>
             <thead><tr><th>Slot</th><th>Category</th><th>Name</th><th>Trait / effect</th></tr></thead>
@@ -2248,12 +2247,12 @@ function traitsPanel(model, ctx) {
             Categories cover the standard list plus any you add
             (Akashic, Mythic, Psionic…).
           </p>
-        </div>
-        <div>
-          <h4 class="subhead">Race traits
-            <span class="badge">${race.filter((t) => String(t.name || '').trim() || String(t.text || '').trim()).length}${race.some((t) => !String(t.name || '').trim() && !String(t.text || '').trim()) ? ` of ${race.length}` : ''}</span>
-            ${c.identity.race ? `<span class="hint">${esc(c.identity.race)}${c.identity.variant ? ` (${esc(c.identity.variant)})` : ''}</span>` : ''}
-          </h4>
+    </section>`;
+    const raceHtml = `<section class="panel racepanel">
+      <h3>Race traits
+        <span class="badge">${race.filter((t) => String(t.name || '').trim() || String(t.text || '').trim()).length}${race.some((t) => !String(t.name || '').trim() && !String(t.text || '').trim()) ? ` of ${race.length}` : ''}</span>
+        ${c.identity.race ? `<span class="hint">${esc(c.identity.race)}${c.identity.variant ? ` (${esc(c.identity.variant)})` : ''}</span>` : ''}
+      </h3>
           <div class="tablewrap"><table class="racetraits stacked">
             <thead><tr><th>Trait</th><th>Effect</th><th></th></tr></thead>
             <tbody>${race.map((t, i) => `<tr${String(t.name || '').trim() || String(t.text || '').trim() ? '' : ' class="needsfill" title="A race-trait slot still to fill"'}>
@@ -2268,7 +2267,9 @@ function traitsPanel(model, ctx) {
           <div style="margin-top:8px">${addButton('raceTraits', 'Add race trait', { name: '', text: '' })}</div>
           <p class="hint">The traits the race grants. Some races have a few, others ten.
             Alternate racial traits go here too, in place of the traits they replace.</p>
-        </div>
-      </div>
     </section>`;
+    return `<div class="band lead">
+      ${collapsible(model, 'traits', traitsHtml)}
+      ${collapsible(model, 'race-traits', raceHtml)}
+    </div>`;
   }
