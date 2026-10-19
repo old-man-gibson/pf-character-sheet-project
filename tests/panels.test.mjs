@@ -678,6 +678,8 @@ console.log('\nno character text reaches the page as markup');
     // A web address is drawn as a link, so it leaves through the link's own
     // markup: its href, and its text.
     'a link': 'https://zq.example/"><svg/onload=x(1)>',
+    // And words linked to one are drawn as the link's text.
+    'the words of a link': '[Zq</a><svg/onload=x(1)>](https://zq.example/)',
   };
   // Which values a pass replaces with the payload. Text is most of a
   // document. Blanks and numbers matter as much: an edited file can put a
