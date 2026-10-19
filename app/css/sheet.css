@@ -5620,3 +5620,88 @@ table.stacked .catface { margin-left: 0; }
 .mcard .bar.title .cost .colorcell:focus-within .mana { display: none; }
 .mcard .bar.title .cost .colorcell.filled:not(:focus-within) input.colorpick,
 .mcard .bar.title .cost .colorcell.filled:not(:focus-within) input.colorpick::placeholder { color: transparent; }
+
+/* ---------- touch screens ----------
+   A fingertip covers far more than a mouse pointer does, and most of the
+   sheet's controls are drawn for a mouse: a 12px pip, a 13px checkbox, a 20px
+   die or fold caret. On a touch screen every button and checkbox is drawn at
+   least 24px each way, and every button and every label that wraps a
+   checkbox gets a transparent overhang that takes its hit area to `--cs-tap`,
+   centred on it, without moving anything. Where controls sit closer together than that, the
+   spacing grows instead, so a tap meant for one does not land on its
+   neighbour's overhang.
+
+   A media query rather than the container queries the widths use, because
+   this is about the input and not the space: a phone, a tablet either way up,
+   a touch laptop. `screen` leaves a print-out from a tablet as it is. */
+@media screen and (pointer: coarse) {
+  :host { --cs-tap: 32px; }
+  /* `:host` for weight: `.disclose`, `button.tiny` and the note caret set
+     their own minimum for the desktop. */
+  :host button { min-width: 24px; min-height: 24px; }
+  /* Positioned, so the overhang has a box to hang from and paints above the
+     in-flow content around it. `min()` leaves an axis that is already as big
+     as the target alone. */
+  button, label.chk { position: relative; }
+  button::before, label.chk::before {
+    content: ""; position: absolute;
+    inset: min(0px, calc(50% - var(--cs-tap) / 2));
+  }
+  /* An overhang at a table's edge would widen what its scroll box scrolls by
+     a few pixels; past the edge there is nothing to tap anyway. */
+  .tablewrap > table { overflow: clip; }
+  /* A folded card's name clips, for its ellipsis, and the fold caret sits at
+     its edge: the cell takes 4px of padding it gives straight back in margin,
+     so the caret's overhang is inside the clip and nothing moves. */
+  table.stacked > tbody > tr.shut > td[data-stack="name"] { padding: 4px; margin: -4px; }
+  /* Move, remove and fold side by side, 24px buttons: 8px apart in a card
+     (its 4px gap and this), about as far across a table's whitespace. */
+  td.tools button + button { margin-left: 4px; }
+  /* A native checkbox ignores padding and draws itself at the size of its
+     box, so a bare one can only get bigger. `min-` because a dozen rules set
+     `width: auto` on the ones they place, and `:host` over the tables that
+     zero every field's minimum. */
+  :host input[type="checkbox"], :host input[type="radio"] { min-width: 24px; min-height: 24px; }
+
+  /* Pips are packed for the eye; three pixels apart, every overhang would
+     land on the next pip. The pitch becomes the target, a little more of it
+     drawn. A Vancian slot table fits four to a row rather than six. */
+  button.pip { min-width: 0; min-height: 0; width: 20px; height: 20px; border-radius: 4px; }
+  .pip.zero { width: 5px; height: 26px; }
+  .pips, .pips.square { gap: calc(var(--cs-tap) - 20px); }
+  table.build.vslots .pips { grid-template-columns: repeat(4, max-content); }
+  /* A bar is set by where it is tapped, and it clips what is inside it to
+     round its fill, so an overhang would be clipped with it: the track
+     itself is drawn taller. */
+  .bar[data-pool-bar] { height: 24px; }
+  /* On a phone a tracker's controls left its name and meter 69px, two pips
+     across at this pitch, so 26 pips stood 400px tall. The controls go under
+     the name and meter instead, and still share their columns from one
+     tracker to the next. */
+  @container (max-width: 520px) {
+    .trackerlist { grid-template-columns: repeat(6, auto) minmax(0, 1fr); }
+    .trackerlist > .tracker > :first-child { grid-column: 1 / -1; margin-right: 0; }
+    .trackerlist > .tracker > .tracker-controls { grid-column: 1 / 7; }
+  }
+  /* Rows of chips and swatches three and four pixels apart. */
+  .chips { gap: 4px; }
+  button.chip-toggle { min-height: calc(var(--cs-tap) - 4px); }
+  .swatches { gap: 8px; }
+  .swatch { width: calc(var(--cs-tap) - 8px); height: calc(var(--cs-tap) - 8px); }
+  .hint.countstoward { gap: 8px; }
+  /* Two help lines in a row sat 4px apart, and the field after one 0px;
+     folded sub-sections stack their fold buttons 1px apart. */
+  button.helpopen { margin-block: 8px 4px; }
+  h4.subhead [data-collapse] { margin-block: 4px; }
+  /* A field's cross two or three pixels from it: a language, a template
+     column, a ladder's rule group. */
+  .lang { gap: 6px; }
+  table.tmpltable .colhead { gap: 4px; }
+  /* A gear table's add and remove column, two pixels apart. */
+  .colstep { gap: 8px; }
+  /* A class ladder's column head stacks its menus and buttons two pixels apart. */
+  table.featgrid th .rulegroup { margin-top: 4px; gap: 4px; }
+  table.featgrid th .rulegroup input { min-height: 24px; }
+  table.featgrid th .rulegroup input[type="color"] { width: 24px; }
+  table.featgrid th .colmenu, table.featgrid th .addgroup { min-height: 24px; margin-top: 4px; }
+}
