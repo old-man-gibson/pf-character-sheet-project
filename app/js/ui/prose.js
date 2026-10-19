@@ -44,36 +44,6 @@ export function prose(model, bindingAttr, value, rows = 3, extraClass = '', loca
 }
 
 /**
- * A prose field in a table with no room for prose.
- *
- * Shut, it is one line of what the field says -- computed, so a formula
- * shows its value -- cut off with an ellipsis, and the whole of it is on
- * the tooltip. Clicking opens the real field in place, which grows the row
- * and pushes the ones below it down; clicking anywhere else, or Escape,
- * shuts it again.
- *
- * Only one is open at a time, and which one is not saved with the
- * character: it is a way of reading a wide table, not something about the
- * character.
- */
-export function foldedProse(model, ctx, key, bindingAttr, value, placeholder = '') {
-  const text = String(value ?? '');
-  if (ctx.openCell === key) {
-    return `<div class="foldcell open" data-foldcell-open="${esc(key)}">
-        ${prose(model, bindingAttr, text, 2, 'grow')}
-      </div>`;
-  }
-  const shown = text.trim()
-    ? (hasTokens(text) ? renderedProse(model, text) : esc(text))
-    : `<span class="ph">${esc(placeholder)}</span>`;
-  return `<button data-view type="button" class="foldcell peek${text.trim() ? '' : ' blank'}"
-      data-foldcell="${esc(key)}"
-      title="${esc(text.trim() ? `${text}
-
-  Click to edit.` : PROSE_HINT)}">${shown}</button>`;
-}
-
-/**
  * What a computed value in prose says when you point at it.
  *
  * The token's own source, then its working -- because a bare "24" in the

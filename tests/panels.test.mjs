@@ -42,7 +42,7 @@ import * as techniques from '../app/js/ui/panels/techniques.js';
 import * as manager from '../app/js/ui/panels/manager.js';
 import { renderStatsPanel } from '../app/js/ui/panels/stats.js';
 import { renderSkillsPanel, skillRowIndices } from '../app/js/ui/panels/skills.js';
-import { prose, foldedProse, renderedProse } from '../app/js/ui/prose.js';
+import { prose, renderedProse } from '../app/js/ui/prose.js';
 import * as statBlock from '../app/js/monster/panel.js';
 import { blankDraft, blankTrackerDraft, blankView } from '../app/js/ui/view-state.js';
 import { foldValue } from '../app/js/ui/folds.js';
@@ -112,7 +112,6 @@ const openCtx = (model) => {
     formulaRefOpen: true,
     tab: 'audit',
     showAllSkills: true,
-    openCell: 'mythic:0:effect',
     armedRemove: (d.sheetTabs || []).length ? 'systab|0' : null,
     extSearch: 'a',
   };
@@ -198,7 +197,7 @@ function renders(who, name, draw, model) {
   // is disabled for every reader. These attributes are view controls by what
   // they do, so each must carry it.
   const viewless = (html.match(/<button[^>]*>/g) || []).filter((b) => !/sdata-view[s=>]/.test(b)
-    && /sdata-(?:collapse|tab|gearopen|mopen|mclose|textopen|deck-view|copy|cfpeek|foldcell|ladderfocus|buildcol|veilcols|cells)=/.test(b));
+    && /sdata-(?:collapse|tab|gearopen|mopen|mclose|textopen|deck-view|copy|cfpeek|ladderfocus|buildcol|veilcols|cells)=/.test(b));
   if (viewless.length) {
     fail++;
     console.log(`  FAIL ${who} — ${name} has a view control a reader would lose: ${viewless[0].slice(0, 120)}`);
@@ -468,8 +467,6 @@ ok('a token shows its value', withTitle.includes('>5<'));
 ok('and its working on the tooltip', withTitle.includes('2 + 3'));
 ok('a field wraps both layers',
   drew('a prose field', () => prose(proseModel, 'data-item="x|0|y"', 'heals {= 1 + 1}')).includes('prose-view'));
-ok('a folded cell computes its peek',
-  drew('a folded cell', () => foldedProse(proseModel, { openCell: null }, 'k', 'data-item="x|0|y"', '{= 1 + 1} hits')).includes('class="tok'));
 
 console.log('\nthe unarmed practitioner table folds, and the shared increases do not go with it');
 {
@@ -745,13 +742,46 @@ console.log('\nno character text reaches the page as markup');
   // read through a rendered view and edited in the box underneath -- the
   // bargain formula fields already strike. A note without one is the plain
   // box, and one with a formula keeps the formula view, which computes.
-  const { talentNote } = await import('../app/js/ui/talents.js');
+  const { foldingNote } = await import('../app/js/ui/talents.js');
   const noteModel = new Character(blankDocument({ name: 'Reader', level: 1 }));
-  const tabled = talentNote(noteModel, 'data-item="x|0|notes"', 'Sizes.\n\nLevel\tSize\n1st\tFine\n3rd\tSmall', 'x|0|notes');
+  const tabled = foldingNote(noteModel, 'data-item="x|0|notes"', 'Sizes.\n\nLevel\tSize\n1st\tFine\n3rd\tSmall', 'x|0|notes');
   check('a note with a table is read as a table and still edited as text',
     [tabled.includes('<table class="peektable">'), tabled.includes('prose-view rich'), tabled.includes('<textarea data-item="x|0|notes"'), tabled.includes('Level\tSize')],
     [true, true, true, true]);
-  check('a note without one is the plain box', talentNote(noteModel, 'data-item="x|0|notes"', 'Taken at 5th.', 'x|0|notes').includes('prose-view'), false);
+  check('a note without one is the plain box', foldingNote(noteModel, 'data-item="x|0|notes"', 'Taken at 5th.', 'x|0|notes').includes('prose-view'), false);
+
+  // Every Notes cell folds the one way. A long note starts shut on its first
+  // line, with its formulas worked out; a short one has no caret at all.
+  const long = `{= 1 + 1} hits.\n${'More of the rules text. '.repeat(10)}`;
+  const shutNote = foldingNote(noteModel, 'data-item="x|0|notes"', long, 'x|0|notes');
+  check('a long note starts shut on its first line, worked out',
+    [shutNote.includes('class="notepeek"'), shutNote.includes('>2 hits.'), shutNote.includes('<textarea')], [true, true, false]);
+  check('a short note has nothing to fold', foldingNote(noteModel, 'data-item="x|0|notes"', 'Taken at 5th.', 'x|0|notes').includes('data-collapse'), false);
+  // A feat's pack entry folds under the note's caret: open while the note is
+  // short, and shut under the key it folded by before, until chosen again.
+  const pack = { below: '<div class="catface">Pack</div>', belowText: 'What the pack says.', was: 'catref:x|0' };
+  const openPack = foldingNote(noteModel, 'data-item="x|0|note"', '', 'x|0|note', pack);
+  check('a pack entry under an empty note shows, with a caret for both',
+    [openPack.includes('catface'), (openPack.match(/data-collapse=/g) || []).length], [true, 1]);
+  noteModel.data.uiPrefs = { ...(noteModel.data.uiPrefs || {}), collapsed: { 'catref:x|0': true } };
+  const shutPack = foldingNote(noteModel, 'data-item="x|0|note"', '', 'x|0|note', pack);
+  check('folded before, it stays folded, and its line is the pack\'s',
+    [shutPack.includes('catface'), shutPack.includes('>What the pack says.')], [false, true]);
+
+  // The cells that fold this way: traits, race traits, feats and mythic effects.
+  const folding = new Character(blankDocument({ name: 'Folder', level: 3 }));
+  folding.set('traitSlots.trait1.text', long);
+  folding.listAdd('raceTraits', { name: 'Darkvision', text: long });
+  folding.set('featGroups.0.entries.0.note', long);
+  folding.setItem('mythic.abilities', 0, 'effect', long);
+  const over = overview.renderOverviewPanel(folding, { ...CTX, buildView: true });
+  const tab = feats.renderFeaturesPanel(folding, CTX);
+  check('trait, race trait, feat and mythic notes fold',
+    [over.includes('data-collapse="tnote:traitSlots.trait1.text"'),
+      over.includes(`data-collapse="tnote:raceTraits|${folding.data.raceTraits.length - 1}|text"`),
+      tab.includes('data-collapse="tnote:featGroups.0.entries|0|note"'),
+      tab.includes('data-collapse="tnote:mythic.abilities|0|effect"')],
+    [true, true, true, true]);
 }
 
 console.log('skill rows stay put while the player is on the tab');

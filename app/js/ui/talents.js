@@ -82,13 +82,13 @@ export function noteField(model, binding, text) {
 }
 
 /**
- * A talent's Notes cell, which folds.
+ * A Notes cell that folds: a talent's, a trait's, a feat's, a mythic ability's.
  *
  * A note used to be a remark -- "taken at 5th", "via the feat" -- and one line
  * was all it needed. Filled from a pack it is the talent's whole rules text,
  * and a level table of twenty of those is a page per class. So a note with
- * something to fold gets the caret the feat notes have: open, it is the prose
- * box it always was; shut, it is the first line of what the box says, with
+ * something to fold gets a caret: open, it is the prose box it always was;
+ * shut, it is the first line of what the box says (formulas worked out), with
  * the whole of it on the tooltip, and clicking either opens it.
  *
  * Which way it starts depends on what is in it. A short note opens, because
@@ -96,29 +96,38 @@ export function noteField(model, binding, text) {
  * forty notes at once leaves the table the height it was. After that the
  * choice is the player's and is kept per row -- keyed on the row's path for
  * the reason `catFoldKey` gives.
+ *
+ * `below` is what a feat's cell carries under its note: the pack's entry for
+ * the feat. It folds with the note under the one caret, and when the note is
+ * empty the shut line is the start of `belowText`. `was` is the key that
+ * entry folded under before it shared the caret, read while the player has
+ * not chosen again.
  */
-export function talentNote(model, binding, value, path, name = '') {
+export function foldingNote(model, binding, value, path, { name = '', below = '', belowText = '', was = '' } = {}) {
   const text = String(value ?? '');
   const field = noteField(model, binding, text);
-  const foldable = text.length > 60 || text.includes('\n');
+  const foldable = !!below || text.length > 60 || text.includes('\n');
   if (!foldable) return field;
   const key = `tnote:${path}`;
-  const said = model.data?.uiPrefs?.collapsed?.[key];
+  const folds = model.data?.uiPrefs?.collapsed || {};
+  const said = folds[key] ?? (was ? folds[was] : undefined);
   const shut = said === undefined ? text.length > LONG_NOTE : !!said;
+  const what = below ? 'the note and what the pack says' : 'the whole note';
   const caret = foldButton(model, key, {
-    open: !shut, cls: 'disclose catfold', title: shut ? 'Show the whole note' : 'Fold the note to one line',
+    open: !shut, cls: 'disclose catfold', title: shut ? `Show ${what}` : 'Fold it to one line',
   });
   if (!shut) {
-    return `<div class="notecell"><div class="noteline"><div class="notebox">${field}</div>${caret}</div></div>`;
+    return `<div class="notecell"><div class="noteline"><div class="notebox">${field}</div>${caret}</div>${below}</div>`;
   }
-  const first = text.trim().split('\n')[0];
+  const shown = (hasTokens(text) ? plainTokens(model.renderProse(text)) : text).trim() || String(belowText ?? '').trim();
+  const first = shown.split('\n')[0];
   return `<div class="notecell"><div class="noteline">
       ${foldButton(model, key, {
     open: false,
     cls: 'notepeek',
     attrs: `type="button" data-tpop="${esc(JSON.stringify({ k: 'note', p: path, ...(name ? { n: name } : {}) }))}"`,
-    title: text,
-    text: esc(first.length > 90 ? `${first.slice(0, 90).replace(/\s+\S*$/, '')}…` : first),
+    title: shown,
+    text: esc(first.length > 90 ? `${first.slice(0, 90).replace(/\s+\S*$/, '')}…` : first || 'What the pack says'),
   })}
       ${caret}</div></div>`;
 }
@@ -345,16 +354,18 @@ export function talentPopHtml(model, spec) {
     // A sphere tab's note is a field of a row in a list, `list|index|field`.
     // The Alternate Training ladder keeps its notes by level under a plain
     // path, and says what the row is called itself.
+    // As the note reads: its formulas worked out.
+    const read = (raw) => (hasTokens(raw) ? plainTokens(model.renderProse(raw)) : raw).trim();
     if (!where.includes('|')) {
-      const text = String(where.split('.').reduce((o, k) => o?.[k], model.data) ?? '').trim();
+      const text = read(String(where.split('.').reduce((o, k) => o?.[k], model.data) ?? ''));
       return text ? panel(String(s.n ?? '').trim() || 'Note', hint, [], text) : '';
     }
     const [list, index, field] = where.split('|');
     const row = model.list(list)?.[Number(index)];
-    const text = String(row?.[field] ?? '').trim();
+    const text = read(String(row?.[field] ?? ''));
     if (!text) return '';
     const talent = String(row?.[field === 'utilityNotes' ? 'utilityTalent' : 'talent'] ?? '').trim();
-    return panel(talent || 'Note', hint, [], text);
+    return panel(talent || String(s.n ?? '').trim() || 'Note', hint, [], text);
   }
   const info = talentInfo(model, s?.s, s?.t);
   if (!info) return '';

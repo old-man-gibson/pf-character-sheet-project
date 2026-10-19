@@ -4610,74 +4610,17 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
-   * Opening and shutting the folded cells (prose.foldedProse).
-   *
-   * One listener for the whole sheet rather than one per cell, because a
-   * click has to be able to shut a cell it did not land on. It listens on
-   * `pointerdown` rather than `click` so that opening a second cell while the
-   * first is open is a single click: the press that shuts the old one is the
-   * same press that opens the new one, and by `click` time the button it
-   * landed on would already have been redrawn away.
-   *
-   * The listener goes on `.wrap`, which every render replaces, so it cannot
-   * pile up the way one on the shadow root itself would.
+   * Escape shuts the `⋯` menu, and stops there: it is the thing most recently
+   * opened, and Escape should shut one layer, not two. The listener goes on
+   * `.wrap`, which every render replaces, so it cannot pile up the way one on
+   * the shadow root itself would.
    */
-  #bindFoldedCells(root) {
-    const wrap = root.querySelector('.wrap');
-    if (!wrap) return;
-    wrap.addEventListener('pointerdown', (e) => {
-      const peek = e.target.closest?.('[data-foldcell]');
-      if (peek) {
-        e.preventDefault();          // focus is placed below, not by the press
-        const key = peek.dataset.foldcell;
-        this.#shutFoldedCell();
-        this.#view.openCell = key;
-        this.#render();
-        this.shadowRoot.querySelector('.foldcell.open textarea')?.focus();
-        return;
-      }
-      if (!this.#view.openCell || e.target.closest?.('.foldcell.open')) return;
-      this.#shutFoldedCell();
-      this.#render();
+  #bindEscape(root) {
+    root.querySelector('.wrap')?.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !this.#chromeMenu) return;
+      e.stopPropagation();
+      this.#action('chrome-menu');
     });
-    // Enter or Space on a shut cell that was tabbed to. A mouse press never
-    // reaches here: it opened the cell on the way down, and by now the button
-    // it landed on has been redrawn away.
-    wrap.addEventListener('click', (e) => {
-      const peek = e.target.closest?.('[data-foldcell]');
-      if (!peek || this.#view.openCell === peek.dataset.foldcell) return;
-      this.#shutFoldedCell();
-      this.#view.openCell = peek.dataset.foldcell;
-      this.#render();
-      this.shadowRoot.querySelector('.foldcell.open textarea')?.focus();
-    });
-    wrap.addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape') return;
-      // The `⋯` menu first: it is the thing most recently opened if both are,
-      // and Escape should shut one layer, not two.
-      if (this.#chromeMenu) {
-        e.stopPropagation();
-        this.#action('chrome-menu');
-        return;
-      }
-      if (!this.#view.openCell) return;
-      this.#shutFoldedCell();
-      this.#render();
-    });
-  }
-
-  /**
-   * Shut whatever folded cell is open, keeping what was typed in it.
-   *
-   * A textarea commits on blur, so the field has to be blurred while it is
-   * still in the document -- taking it away first would drop the edit. The
-   * flag is cleared before the blur so that the re-render the commit triggers
-   * already draws the cell shut, rather than opening it again for one frame.
-   */
-  #shutFoldedCell() {
-    const field = this.shadowRoot.querySelector('.foldcell.open textarea');
-    this.#view.openCell = null;
-    field?.blur();
   }
 
   /**
@@ -6134,7 +6077,7 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
-    this.#bindFoldedCells(root);
+    this.#bindEscape(root);
 
     // `/` opens the search, the way it does everywhere else -- but only when
     // it is not a character being typed into a field. It rides on `.wrap`,

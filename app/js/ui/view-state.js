@@ -89,8 +89,6 @@ export function blankView() {
     /* Reading */
     /** Which long pack texts have been opened out to read. */
     openText: new Set(),
-    /** Which folded table cell is open ("mythic:3:effect", or null). One at a time. */
-    openCell: null,
 
     /** The armed two-click × ("<list>|<index>", or another key), or null: the
         first click arms it, the second removes. */

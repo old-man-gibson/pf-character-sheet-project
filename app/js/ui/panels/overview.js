@@ -20,6 +20,7 @@ import { effectiveMythicTier } from '../../rules.js';
 import { minus, signed } from '../format.js';
 import { collapsible, collapsibleSub, foldButton, isCollapsed, isOpen } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
+import { foldingNote } from '../talents.js';
 import { proseText } from '../rows.js';
 import { forwardedBadge, sheetBonusCell, sheetBonusField, sheetBonusHead, sheetBonusHint } from '../badges.js';
 import { rollButton } from '../roll.js';
@@ -2207,7 +2208,8 @@ function traitsPanel(model, ctx) {
         <td data-label="Category">${isDrawback ? '<span class="hint">—</span>'
           : select(`traitSlots.${def.key}.category`, v.category, categories)}</td>
         <td data-stack="name">${text(`traitSlots.${def.key}.name`, v.name, wants || (isDrawback ? 'Drawback' : 'Trait'))}</td>
-        <td data-label="Trait / effect">${prose(model, `data-set="traitSlots.${def.key}.text"`, v.text, 1, 'grow')}</td>
+        <td data-label="Trait / effect">${foldingNote(model, `data-set="traitSlots.${def.key}.text"`, v.text,
+    `traitSlots.${def.key}.text`, { name: v.name })}</td>
       </tr>`;
     };
 
@@ -2227,10 +2229,11 @@ function traitsPanel(model, ctx) {
                 <td data-stack="head">Additional</td>
                 <td data-label="Category">${itemSelect('traitSlots.additional', i, 'category', x.category, categories)}</td>
                 <td data-stack="name">${itemText('traitSlots.additional', i, 'name', x.name, 'Trait')}</td>
-                <td data-label="Trait / effect"><span class="pair" style="width:100%">
-                  ${prose(model, `data-item="traitSlots.additional|${i}|text"`, x.text, 1, 'grow')}
+                <td data-label="Trait / effect"><div class="pair" style="flex-wrap:nowrap;align-items:flex-start">
+                  <div style="flex:1 1 auto;min-width:0">${foldingNote(model, `data-item="traitSlots.additional|${i}|text"`, x.text,
+    `traitSlots.additional|${i}|text`, { name: x.name })}</div>
                   ${removeButton('traitSlots.additional', i, { what: 'trait slot' })}
-                </span></td>
+                </div></td>
               </tr>`).join('')}
             </tbody>
           </table></div>
@@ -2258,7 +2261,7 @@ function traitsPanel(model, ctx) {
             <tbody>${race.map((t, i) => `<tr${String(t.name || '').trim() || String(t.text || '').trim() ? '' : ' class="needsfill" title="A race-trait slot still to fill"'}>
               <td data-stack="name">${itemText('raceTraits', i, 'name', t.name, 'Darkvision')}${Array.isArray(t.replaced) && t.replaced.length
     ? ` <span class="badge player" title="${esc(`Alternate racial trait — took the place of ${t.replaced.map((r) => r.name).join(' and ')}. Removing this row does not put them back; add them again from the race's pack if you need them.`)}">alt</span>` : ''}</td>
-              <td data-label="Effect">${prose(model, `data-item="raceTraits|${i}|text"`, t.text, 1, 'grow')}</td>
+              <td data-label="Effect">${foldingNote(model, `data-item="raceTraits|${i}|text"`, t.text, `raceTraits|${i}|text`, { name: t.name })}</td>
               ${rowTools('raceTraits', i)}
             </tr>`).join('')}
             ${race.length ? '' : '<tr><td colspan="3" class="empty">No race traits yet — add what the race grants.</td></tr>'}

@@ -207,11 +207,12 @@ function placeOf(model, ref) {
     case 'approvalNotes': return { tab: 'extras', sel: [set('extras.approvalNotes')] };
     case 'background': return { tab: 'lore', sel: [item('backgroundSections', a, 'text')] };
     case 'defenses': return overviewPlace([set(`defenses.${a}`)], ['sg-defenses']);
+    // A trait's effect is a note that may be folded, in a panel that may be.
     case 'trait':
       return a === 'additional'
-        ? overviewPlace([item('traitSlots.additional', b, 'text')])
-        : overviewPlace([set(`traitSlots.${a}.text`)]);
-    case 'raceTrait': return overviewPlace([item('raceTraits', a, 'text')]);
+        ? overviewPlace([item('traitSlots.additional', b, 'text')], ['traits', `tnote:traitSlots.additional|${b}|text`])
+        : overviewPlace([set(`traitSlots.${a}.text`)], ['traits', `tnote:traitSlots.${a}.text`]);
+    case 'raceTrait': return overviewPlace([item('raceTraits', a, 'text')], ['race-traits', `tnote:raceTraits|${a}|text`]);
     // A buff's note is in its editor, on the Overview's Buffs panel -- and on
     // the session dashboard's Buffs card, so this one needs no Build view.
     // `buff:<i>` is its note; `buff:<i>:<field>` one of its dials or bonuses.
@@ -279,27 +280,28 @@ function placeOf(model, ref) {
       return { tab: 'template', sel: [item(`${list}.${at}.tables.${bi}.rows`, ri, `cells.${cj}`)] };
     }
     // Feats & Mythic. The mythic abilities and the mythic feats are folds
-    // inside the mythic fold, and an ability's effect is a folded cell.
+    // inside the mythic fold, and an effect is a note that may be folded.
     case 'mythic': {
       const field = b || 'name';
       const group = field === 'featChoice' || field === 'featEffect' ? 'mythic-feats' : 'mythic-abilities';
       const place = { tab: 'features', sel: [item('mythic.abilities', a, field)], ...folded(['mythic', group]) };
-      if (field === 'effect' || field === 'featEffect') place.open.push(attr('data-foldcell', `mythic:${a}:${field}`));
+      if (field === 'effect' || field === 'featEffect') place.open.push(shutFold(`tnote:mythic.abilities|${a}|${field}`));
       return place;
     }
+    // A feat's note folds as a talent's does.
     case 'feat':
       return {
         tab: 'features', sel: [item(`featGroups.${a}.entries`, b, 'note')],
-        ...folded([a === '0' ? 'featgroup-0' : 'feats']),
+        ...folded([a === '0' ? 'featgroup-0' : 'feats', `tnote:featGroups.${a}.entries|${b}|note`]),
       };
     case 'grantedFeat':
       return /^\d+$/.test(a)
-        ? { tab: 'features', sel: [item('grantedFeats.others', a, 'note')], ...folded(['feats']) }
-        : { tab: 'features', sel: [set(`grantedFeats.${a}.note`)], ...folded(['feats']) };
+        ? { tab: 'features', sel: [item('grantedFeats.others', a, 'note')], ...folded(['feats', `tnote:grantedFeats.others|${a}|note`]) }
+        : { tab: 'features', sel: [set(`grantedFeats.${a}.note`)], ...folded(['feats', `tnote:grantedFeats.${a}.note`]) };
     case 'mythicTradition':
       return { tab: 'features', sel: [set(`mythic.tradition.${a}`)], ...folded(['mythic-tradition']) };
     case 'mythicTraditionNote':
-      return { tab: 'features', sel: [set(`mythic.tradition.notes.${a}`)], ...folded(['mythic-tradition']) };
+      return { tab: 'features', sel: [set(`mythic.tradition.notes.${a}`)], ...folded(['mythic-tradition', `tnote:mythic.tradition.notes.${a}`]) };
     case 'talent': {
       const [side, ci, li, ...rest] = parts.slice(1);
       const field = rest.join(':') === 'notes' ? 'notes'

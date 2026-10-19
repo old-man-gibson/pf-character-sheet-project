@@ -13,7 +13,7 @@
  */
 import { esc, val } from '../html.js';
 import { itemArea, prose, renderedProse } from '../prose.js';
-import { fillNotesButton, talentLegend, talentMark, talentNote } from '../talents.js';
+import { fillNotesButton, talentLegend, talentMark, foldingNote } from '../talents.js';
 import { forwardedBadge } from '../badges.js';
 import { D20_ICON, rollButton } from '../roll.js';
 import { DEFAULT_ROLL_FORMAT, rollText } from '../../roll20.js';
@@ -1298,8 +1298,8 @@ function altTrainingLadder(model, k) {
     .replace(/^One /, 'a ').replace(/ added to your spells known$/, ''))} instead</span></label>` : ''}
           `).join('')}</td>
           <td class="choice${state}" data-stack="name">${altTrainingPick(model, row, k.talents?.sphere)}</td>
-          <td class="picknote" data-label="Notes">${talentNote(model, `data-set="altTraining.rowNotes.${row.level}"`, row.note,
-    `altTraining.rowNotes.${row.level}`, row.name)}</td>
+          <td class="picknote" data-label="Notes">${foldingNote(model, `data-set="altTraining.rowNotes.${row.level}"`, row.note,
+    `altTraining.rowNotes.${row.level}`, { name: row.name })}</td>
         </tr>`;
   }).join('')}</tbody>
       </table></div>
