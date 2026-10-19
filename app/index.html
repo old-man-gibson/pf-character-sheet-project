@@ -22,6 +22,9 @@
     --cs-text: #e6e8ef; --cs-muted: #9aa2b8; --cs-accent: #d4a24a; --cs-accent-soft: rgba(212, 162, 74, 0.14);
     --cs-edit: #6ea8fe; --cs-good: #6bbf7b; --cs-bad: #e0635f;
     --cs-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    /* The sheet's column on a wide monitor (sheet.css, `.wrap`); the header
+       below keeps to the same width so the two line up. */
+    --cs-sheet-max: 90rem;
     color-scheme: dark;
   }
   /* Off-screen until it is the thing being used, which is the only time it is
@@ -40,6 +43,7 @@
      stacking context of its own) and below the menus the rail hangs under
      itself, which never reach up this far. */
   header.app { position: sticky; top: 0; z-index: 35; flex-wrap: wrap; }
+  header.app { padding-inline: max(14px, calc((100% - var(--cs-sheet-max)) / 2)); }
   header.app .tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   /* The roster: a strip of chips in the header, one per character, the level
      as the chip's number. */
@@ -102,6 +106,10 @@
     display: flex; flex-direction: column; width: 100%; box-sizing: border-box;
   }
   character-sheet { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; border: 0; }
+  /* Once the sheet keeps to its column (--cs-sheet-max), a gutter the width of
+     its scrollbar on the left too, so the column and the header's line up to
+     the pixel instead of half a scrollbar apart. */
+  @media (min-width: 92rem) { character-sheet { scrollbar-gutter: stable both-edges; } }
   character-sheet[hidden], .welcome[hidden] { display: none; }
   .welcome {
     max-width: 40rem; margin: 8vh auto 0; padding: 28px 30px; text-align: center;

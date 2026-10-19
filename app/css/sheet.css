@@ -365,6 +365,14 @@
    host's line up and a coordinate measured off the host lands here unchanged. */
 /* The padding has a name so the side rail can allow for it (see the rail). */
 .wrap { --cs-wrap-pad: 14px; padding: var(--cs-wrap-pad); position: relative; }
+/* On a large monitor the sheet keeps to a 90rem column, centred: past that
+   every row had 400-500px more than its panels could use, and the bands
+   handed it out as stretch. The extra goes into the side padding rather than
+   a margin, so the scrollbar stays at the edge of the window and this box
+   still starts where the host does (the colour panel is placed by that).
+   --cs-sheet-max is inherited from the page when it sets one (the app page
+   does, to line its header up with this column); 90rem otherwise. */
+.wrap { padding-inline: max(var(--cs-wrap-pad), calc((100% - var(--cs-sheet-max, 90rem)) / 2)); }
 
 /* ---------- header ---------- */
 .head {
@@ -4058,13 +4066,16 @@ table.compattacks td > input[type="number"] { min-width: 3.4rem; }
    what put the eidolon's seven columns two pixels over a 400px panel. */
 table.build.compact input[type="number"] { width: 3rem; }
 @container (max-width: 560px) { .grid.companion { grid-template-columns: minmax(0, 1fr); } }
-/* On a phone three small tables came out 9 to 24px wider than their panel and
-   scrolled for it: the eidolon's scores, the optional ability picks and a
-   Vancian slot table. Less padding between their columns fits them. */
+/* On a phone some small tables came out a few pixels wider than their panel
+   and scrolled for it: the eidolon's scores, the optional ability picks and a
+   Vancian slot table at 375 (9-24px), the attack modes and a companion's
+   skills at 430 (14px, 3px). Less padding between their columns fits them. */
 @container (max-width: 520px) {
   table.build.compact th, table.build.compact td,
   table.build.picks th, table.build.picks td,
-  table.build.vslots th, table.build.vslots td { padding-left: 2px; padding-right: 2px; }
+  table.build.vslots th, table.build.vslots td,
+  table.attackmodes th, table.attackmodes td,
+  .compskills table.build th, .compskills table.build td { padding-left: 2px; padding-right: 2px; }
 }
 
 /* ---------- the class table ----------
@@ -4215,20 +4226,26 @@ table.speeds input[type="text"] { min-width: 4.4rem; }
 table.speeds td.num input[type="number"] { width: 4.4rem; }
 table.speeds td.total { white-space: nowrap; }
 
-/* A short table that can be handed a whole row -- the saves, initiative,
-   armour class, attack modes and speeds, each a panel that ends up alone on
-   its row of a band when the window is too narrow to pair it. Shared out
-   evenly, the spare width went into the controls, and a picker for three
-   letters at 200px reads as stretched. So every column is as wide as what it
-   holds, and the first -- the row's name -- takes the rest. `:where` keeps
-   this under the narrow screen's card rules, which give each cell its own
-   line. */
+/* A short table that can be handed more room than it needs -- the saves,
+   initiative, armour class, attack modes and speeds. Their panels are `.fit`
+   and keep to their tables' width in a band, but the saves and initiative
+   share the wider one's width when stacked, and a companion's speeds sit in a
+   panel of their own. Shared out evenly, the spare width went into the
+   controls, and a picker for three letters at 200px reads as stretched. So
+   every column is as wide as what it holds, and the first -- the row's name --
+   takes the rest. `:where` keeps this under the narrow screen's card rules,
+   which give each cell its own line. */
 table.fitcols :where(th:not(:first-child), td:not(:first-child)) { width: 1%; white-space: nowrap; }
 table.fitcols select { min-width: 4.6rem; }
 td.tools.quiet { width: 1%; padding-left: 2px; padding-right: 2px; }
 td.tools.quiet button { opacity: 0; transition: opacity 0.12s; }
 tr:hover > td.tools.quiet button,
 td.tools.quiet button:focus-visible { opacity: 1; }
+/* A phone or tablet has no hover to bring it out, so there it is always shown:
+   otherwise a row's remove button was invisible until tapped by luck. A media
+   query, not a container one: it is about the pointer, not the room. The
+   condition chips' × does the same, below. */
+@media (hover: none) { td.tools.quiet button { opacity: 1; } }
 
 /* Bonus skill ranks: what each row asks for, beside the row. A requirement the
    sheet could confirm is stated plainly; one it could not is underlined the way
@@ -4276,6 +4293,7 @@ label.cond .tiny {
   grid-column: 3; grid-row: 1 / span 2; opacity: 0; transition: opacity 0.12s;
 }
 label.cond:hover .tiny, label.cond:focus-within .tiny { opacity: 1; }
+@media (hover: none) { label.cond .tiny { opacity: 1; } }
 label.cond.on { border-color: var(--cs-bad); }
 label.cond.on .cname { color: var(--cs-bad); }
 label.cond.on .ceffect { color: var(--cs-text); }
