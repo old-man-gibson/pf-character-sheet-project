@@ -26,6 +26,14 @@ export function itemArea(model, list, i, field, value, rows = 3, local = null, o
 }
 
 /**
+ * Does a prose field show this text through its read view: does it hold a
+ * {…} formula or a web address? A cell that is a prose field only while it
+ * holds one (rows.gridCell) asks the same, and so does the element when a
+ * field or such a cell changes.
+ */
+export const hasView = (text) => hasTokens(text) || hasLink(text);
+
+/**
  * A prose field that may carry {…} inline formulas and web addresses.
  *
  * Two layers in one wrapper: the textarea holds the raw source and shows
