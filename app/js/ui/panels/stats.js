@@ -56,10 +56,10 @@ export function renderStatsPanel(model, ctx) {
       // On or off, worth +2. An imported value that is neither says so
       // rather than being silently rounded away by the checkbox.
       return `<td class="mid ${banding}">
-          <input type="checkbox" ${v ? 'checked' : ''} data-build="${ab}|attunement" data-kind="bool"
+          <label class="chk tick"><input type="checkbox" ${v ? 'checked' : ''} data-build="${ab}|attunement" data-kind="bool"
             aria-label="${ABILITY_LABELS[ab]} attunement"
             ${unlocked ? `title="+${ATTUNEMENT_BONUS} when attuned"`
-  : `disabled title="Attunement unlocks at level ${ATTUNEMENT_MIN_LEVEL}"`}>
+  : `disabled title="Attunement unlocks at level ${ATTUNEMENT_MIN_LEVEL}"`}></label>
           ${v && v !== ATTUNEMENT_BONUS ? `<span class="hint">${fmt(v)}</span>` : ''}
         </td>`;
     }

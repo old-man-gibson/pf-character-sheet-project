@@ -46,7 +46,19 @@ export function itemNum(list, i, field, value) {
   return `<input type="number" value="${Number(value) || 0}" data-item="${list}|${i}|${field}" data-kind="number">`;
 }
 
-export function itemCheck(list, i, field, value) {
+/**
+ * A switch, in a label: its words if it has any, `title` for a rule it obeys
+ * (as `fields.check`). One with no words is a `tick` -- a column of them, a
+ * buff's on/off. Its label is what a touch screen hangs a bigger hit area on,
+ * and sheet.css lays it out as the checkbox alone would be.
+ */
+export function itemCheck(list, i, field, value, label = '', title = '') {
+  return `<label class="chk${label ? '' : ' tick'}"${title ? ` title="${esc(title)}"` : ''}>${
+    itemBox(list, i, field, value)}${label ? `<span>${esc(label)}</span>` : ''}</label>`;
+}
+
+/** The checkbox alone, for a label that is already there: a `field`'s. */
+export function itemBox(list, i, field, value) {
   return `<input type="checkbox" ${value ? 'checked' : ''} data-item="${list}|${i}|${field}" data-kind="bool">`;
 }
 

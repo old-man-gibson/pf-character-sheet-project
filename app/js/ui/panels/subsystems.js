@@ -1859,8 +1859,8 @@ function companionSavesPanel(model, cc) {
           <th scope="row">${name}<span class="hint" style="margin-left:4px">${ab}</span></th>
           ${kind === 'familiar' ? '' : k.formSaves
     // The base form sets these; a tick here would change nothing.
-    ? `<td class="good"><input type="checkbox" disabled ${k.formSaves[key] ? 'checked' : ''}
-        title="${esc(`${k.formSaves[key] ? 'Good' : 'Poor'} — set by the ${b.baseForm} form`)}"></td>`
+    ? `<td class="good"><label class="chk tick"><input type="checkbox" disabled ${k.formSaves[key] ? 'checked' : ''}
+        title="${esc(`${k.formSaves[key] ? 'Good' : 'Poor'} — set by the ${b.baseForm} form`)}"></label></td>`
     : `<td class="good">${check(`${p}.goodSaves.${key}`, b.goodSaves?.[key])}</td>`}
           <td class="num derived">${fmt(saves[key]?.base ?? 0)}</td>
           <td class="num derived">${fmt(saves[key]?.mod ?? 0)}</td>

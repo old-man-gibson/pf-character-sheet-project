@@ -628,8 +628,7 @@
 .buffhead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .buffhead .bname { font-weight: 620; font-size: 0.9rem; }
 .buffhead > input[type="text"] { flex: 1 1 10rem; min-width: 8rem; max-width: 20rem; width: auto; }
-.buffhead > input[type="checkbox"] { flex: none; width: auto; }
-.effectrow .pair > input[type="checkbox"] { flex: none; width: auto; }
+.buffhead > label.tick, .effectrow .pair > label.tick { flex: none; }
 /* The full-attack weapon pick: a name, not a paragraph. */
 .dashboard .statline select { max-width: 10rem; }
 /* One reminder per block: the tick and name on the first line, the note under. */
@@ -2229,13 +2228,17 @@ tr.untrained { color: var(--cs-muted); }
   table.stacked > tbody > tr:not(.shut) > td.mid[data-label]::before {
     margin-bottom: 0; flex: none; white-space: nowrap;
   }
-  /* A bare checkbox is `display: block` under `input { width: 100% }`, so as a
-     flex item it resolves its basis from that width and takes the whole line
-     -- 289px of checkbox with the tick drawn in the middle of it, an inch away
-     from the words it answers. `flex: none` alone does not fix that: the basis
-     comes from `width`, so the width is what has to go. */
+  /* A checkbox in a cell is `width: 100%`, so as a flex item it resolves its
+     basis from that width and takes the whole line -- 289px of checkbox with
+     the tick drawn in the middle of it, an inch away from the words it
+     answers. `flex: none` alone does not fix that: the basis comes from
+     `width`, so the width is what has to go. Its label goes back to being the
+     checkbox's own size, as in any row of controls: as the block a table cell
+     makes it, the label is the height of a line of text, which is taller
+     than the box. */
   table.stacked > tbody > tr:not(.shut) > td.mid[data-label] > * { flex: none; }
-  table.stacked > tbody > tr:not(.shut) > td.mid[data-label] > input[type="checkbox"] { width: auto; }
+  table.stacked > tbody > tr:not(.shut) > td.mid[data-label] > label.chk.tick { display: inline-flex; }
+  table.stacked > tbody > tr:not(.shut) > td.mid[data-label] > label.chk.tick > input { width: auto; }
   /* Same bargain for a figure: the column that made right-alignment read is
      gone, so a full-width box with a lone 9 against its far edge is all the
      alignment is doing now.
@@ -2576,6 +2579,14 @@ label.fld > .value.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
 .pair.slots select { width: auto; min-width: 4.4rem; max-width: 11rem; }
 label.chk { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
 label.chk input { width: auto; }
+/* A checkbox with no words of its own (`rows.itemCheck`) is still in a label:
+   the label is what a touch screen hangs its bigger hit area on (the end of
+   this file). In a row of controls the label is the checkbox's own size. In a
+   table cell it is a block round the line the checkbox sat in, and the
+   checkbox keeps the cell's width, so the cell lays out as it did without a
+   label. */
+td > label.chk.tick { display: block; }
+td > label.chk.tick > input { width: 100%; }
 td.mid { text-align: center; }
 td.tools { white-space: nowrap; text-align: right; }
 td.tools button { padding: 2px 6px; font-size: 0.72rem; margin-left: 2px; }
@@ -5657,6 +5668,9 @@ table.stacked .catface { margin-left: 0; }
   /* Move, remove and fold side by side, 24px buttons: 8px apart in a card
      (its 4px gap and this), about as far across a table's whitespace. */
   td.tools button + button { margin-left: 4px; }
+  /* And 3px under the cell above them, which their overhang more than
+     crosses: a tick there (a Guile bonus talent's Free) kept 30px of its 32. */
+  table.stacked > tbody > tr:not(.shut) > td.mid[data-label] + td.tools { margin-top: 2px; }
   /* A native checkbox ignores padding and draws itself at the size of its
      box, so a bare one can only get bigger. `min-` because a dozen rules set
      `width: auto` on the ones they place, and `:host` over the tables that

@@ -33,7 +33,7 @@ import {
 import { WEAPON_MODE_KEYS } from '../../roll20.js';
 import { check, field, num, autoNum, select, text } from '../fields.js';
 import {
-  addButton, addManyButton, bigStat, collapsibleSub, editLine, exprField, itemCheck, itemExpr,
+  addButton, addManyButton, bigStat, collapsibleSub, editLine, exprField, itemBox, itemCheck, itemExpr,
   itemNum, itemSelect, itemText, line, movedValue, removeAction, removeButton, rowRemove,
 } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
@@ -280,8 +280,8 @@ export function weaponsPanel(model, e) {
               title: w.useUnarmedDice ? 'Overridden by the unarmed strike dice'
                 : 'Literal dice (12d8), or a reference like {kinetic.fist} to a name defined in prose',
             })}
-            <label class="chk" title="Use the unarmed strike dice — ticked, the card shows how they are worked out">
-              ${itemCheck('equipment.weapons', i, 'useUnarmedDice', w.useUnarmedDice)}<span>🥊</span></label>
+            ${itemCheck('equipment.weapons', i, 'useUnarmedDice', w.useUnarmedDice, '🥊',
+    'Use the unarmed strike dice — ticked, the card shows how they are worked out')}
           </span>`)}
           ${field('Ability', itemSelect('equipment.weapons', i, 'damageAbility', w.damageAbility, ABILITIES.map((k) => ABILITY_LABELS[k])))}
           ${field('×', `<input type="number" value="${esc(w.abilityMult ?? 1)}" step="0.5" min="0"
@@ -326,7 +326,7 @@ export function weaponsPanel(model, e) {
     `Auto${w.proficient === true ? ' ✓' : w.proficient === false ? ' ✗' : ''}`, null, {
       attrs: `title="${esc(w.proficiencyWhy || 'Auto reads the row against the Overview\'s Proficiencies and the [Enhanced] veil rule')}"`,
     }))}
-          ${w.proficient === false ? field('−4 to hit', `<span title="Untick when the −4 is already written in Misc">${itemCheck('equipment.weapons', i, 'nonproficiencyPenalty', w.nonproficiencyPenalty !== false)}</span>`) : ''}
+          ${w.proficient === false ? field('−4 to hit', `<span title="Untick when the −4 is already written in Misc">${itemBox('equipment.weapons', i, 'nonproficiencyPenalty', w.nonproficiencyPenalty !== false)}</span>`) : ''}
           ${w.proficiency ? field('Via', `<input type="text" value="${esc(w.proficiencyNote ?? '')}" data-item="equipment.weapons|${i}|proficiencyNote"
             data-kind="text" placeholder="Custom Training" style="width:8rem"
             title="What grants or denies it — a talent, a class feature, a trait">`) : ''}
@@ -967,7 +967,7 @@ function craftProject(ctx, model, cr, p, i) {
         ${field('Discount %', autoNum(`data-item="${list}|${i}|discountOverride"`, p.discountOverride, {
     placeholder: Number(cr.discount) || 0, width: '4.4rem', title: "Blank uses the crafter's standing discount",
   }))}
-        ${field('Zero profit', `<span class="pair">${itemCheck(list, i, 'zeroProfit', p.zeroProfit)}
+        ${field('Zero profit', `<span class="pair">${itemBox(list, i, 'zeroProfit', p.zeroProfit)}
           <span class="hint">sell at cost</span></span>`)}
         <span class="wsep"></span>
         ${field('Item DC', itemExpr(list, i, 'itemDC', p, { width: '4.4rem' }))}
