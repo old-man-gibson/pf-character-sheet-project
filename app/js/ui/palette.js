@@ -294,7 +294,7 @@ function vitals(model, add) {
 function identity(model, add) {
   const i = model.data.identity || {};
   const pairs = [
-    ['Name', i.name], ['Player', i.player], ['Race', i.race], ['Size', i.size],
+    ['Name', i.name], ['Nickname', i.nickname], ['Player', i.player], ['Race', i.race], ['Size', i.size],
     ['Alignment', i.alignment], ['Deity', i.deity], ['Specialty', i.specialty],
     ['Guild', i.guild], ['Age', i.age], ['Height', i.height], ['Weight', i.weight],
     ['Gender', i.gender],
