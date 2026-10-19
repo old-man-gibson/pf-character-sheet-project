@@ -4406,6 +4406,10 @@ table.feats th.src, table.granted th.src { width: 20%; }
 table.feats th.flvl, table.granted th.flvl { width: 5.5rem; }
 table.feats.levelup th.src { width: 6.5rem; }
 table.granted th.src { width: 7.5rem; }
+/* The last column holds a row's × and, in the card layout only, its move arrows.
+   Where no row can be removed -- the Level Up slots, the granted feats while only
+   Drawback and Specialty are there -- it would be an empty strip, so it closes. */
+table.notools > thead > tr > th:last-child { width: 0; padding: 0; }
 table.feats th:last-child, table.feats td.tools,
 table.granted th:last-child, table.granted td.tools { width: 2.6rem; }
 table.feats td input[type="text"],

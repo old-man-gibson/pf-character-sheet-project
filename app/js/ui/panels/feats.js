@@ -68,7 +68,7 @@ function grantedFeatsSection(model, ctx) {
     return `<h4 class="subhead">Granted feats
         <span class="badge">${(hasMajor ? 2 : 1) + (g.others || []).length}</span>
       </h4>
-      <div class="tablewrap"><table class="granted stacked">
+      <div class="tablewrap"><table class="granted stacked${(g.others || []).length ? '' : ' notools'}">
         <thead><tr><th class="grip"></th><th class="src">Source</th><th class="fname">Feat</th>
           ${fromLevelHead()}
           <th class="fnote">Notes</th><th></th></tr></thead>
@@ -177,7 +177,7 @@ function featGroupTable(model, ctx, group, g) {
     const level = Number(model.data.identity?.level) || 0;
     // Any other feat can wait for a level (From lvl), the way a slot does.
     const ahead = (f) => isAhead(featLevel(group, f), level);
-    return `<div class="tablewrap"><table class="feats stacked${fixed ? ' levelup' : ''}">
+    return `<div class="tablewrap"><table class="feats stacked${fixed ? ' levelup notools' : ''}">
         <thead><tr><th class="grip"></th><th class="fname">Feat</th><th class="src">${fixed ? 'Source / level' : 'Source'}</th>
           ${fixed ? '' : `${fromLevelHead()}`}
           <th class="fnote">Notes</th><th></th></tr></thead>
