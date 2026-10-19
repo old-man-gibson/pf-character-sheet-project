@@ -11,14 +11,15 @@
  *  shut, or once its opener has been pressed.
  *
  *  The panels are string builders that run in Node (see tests/panels.test.mjs);
- *  the few still drawn by the element itself (Feats & Mythic) are checked for a
- *  place, not for markup, and left to the browser.
+ *  a tab still drawn by the element itself is checked for a place, not for
+ *  markup, and left to the browser.
  *
  *  Run: node tests/formula-places.test.mjs */
 import { blankDocument } from '../app/js/convert.js';
 import { Character } from '../app/js/model.js';
 import { formulaPlace, selectorAttribute } from '../app/js/ui/formula-places.js';
 import * as overview from '../app/js/ui/panels/overview.js';
+import * as feats from '../app/js/ui/panels/feats.js';
 import * as combat from '../app/js/ui/panels/combat.js';
 import * as guile from '../app/js/ui/panels/guile.js';
 import * as subsystems from '../app/js/ui/panels/subsystems.js';
@@ -94,6 +95,7 @@ function ctxFor(model, pressed = []) {
 const RENDER = {
   overview: (m, c) => overview.renderOverviewPanel(m, c.overview),
   stats: (m) => renderStatsPanel(m, {}),
+  features: (m) => feats.renderFeaturesPanel(m, { openText: new Set() }),
   skills: (m, c) => renderSkillsPanel(m, c.skills),
   martial: (m) => combat.renderMartialPanel(m),
   magic: (m) => combat.renderMagicPanel(m),
@@ -213,6 +215,17 @@ function everywhere() {
   d.backgroundSections = [{ label: 'History', text: 'history {a.bg = 3}' }];
   d.defenses.dr = 'DR {= 5 + floor(level / 2)}/magic';
   d.raceTraits = [{ name: 'Fiendish', text: 'racial {skill.disguise += 2}' }];
+  // Notes long enough to start folded, in panels folded too (below): a trait,
+  // a race trait, feats, a mythic ability and a mythic tradition note.
+  const long = (f) => `${f} ${'Rules text that runs on past one line. '.repeat(5)}`;
+  d.raceTraits.push({ name: 'Scaled', text: long('scaled {scaled.ac = 1}') });
+  d.traitSlots.trait1.text = long('trait {trait.one = 1}');
+  d.traitSlots.additional = [{ category: null, name: 'Extra', text: long('extra {trait.extra = 1}') }];
+  d.featGroups[0].entries[0].note = long('feat {feat.one = 1}');
+  d.grantedFeats.specialty.note = long('specialty {feat.specialty = 1}');
+  d.grantedFeats.others = [{ source: 'Oath', name: 'Oath feat', note: long('oath {feat.oath = 1}') }];
+  d.mythic.abilities[0] = { ...(d.mythic.abilities[0] || {}), effect: long('{mythic.one = 1}'), featEffect: long('{mythic.feat = 1}') };
+  d.mythic.tradition = { ...(d.mythic.tradition || {}), notes: { quality: long('{tradition.quality = 1}') } };
   d.buffs = [{ name: 'Rage', on: true, note: 'raging {rage.bonus = 2}', attack: 'floor(level / 4)',
     bonuses: [{ target: 'str', value: 'floor(level / 2)' }] }];
   // A save's and the AC's typed-bonus cells, written as rules.
@@ -318,6 +331,10 @@ function everywhere() {
     'cfnotes-Incanter': true,
     'cfnote-Incanter-Ki pool': true,
     'customized-weapons': true,
+    traits: true,
+    'race-traits': true,
+    feats: true,
+    mythic: true,
   };
   return c;
 }
