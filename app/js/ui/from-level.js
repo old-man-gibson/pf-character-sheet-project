@@ -18,11 +18,17 @@ export const FROM_LEVEL_TITLE = 'The character level this is gained at. Until th
 /** The column heading. */
 export const fromLevelHead = () => `<th class="num flvl" title="${esc(FROM_LEVEL_TITLE)}">From lvl</th>`;
 
-/** A From lvl box: a level, or blank for "from the start". */
+/**
+ * A From lvl box: a level, or blank for "from the start". A plain box rather
+ * than a number spinner -- a level is typed, not stepped to -- with the numeric
+ * keypad on a phone. Its leading digits are the level; blank or anything else is
+ * no level (`int-or-null` in the element).
+ */
 export function fromLevelField(list, i, row) {
   const at = rowLevel(row);
-  return `<input type="number" min="1" max="40" value="${at ?? ''}" data-item="${list}|${i}|level" data-kind="number"
-    placeholder="—" aria-label="From level" style="width:3.6rem;max-width:100%">`;
+  return `<input type="text" inputmode="numeric" maxlength="2" value="${at ?? ''}" data-item="${list}|${i}|level"
+    data-kind="int-or-null" placeholder="—" aria-label="From level" title="The level this is gained at; blank for from the start"
+    style="width:3.6rem;max-width:100%;text-align:center">`;
 }
 
 /** A row waiting for a level: the `future` class every planned row wears, and why on hover. */

@@ -318,6 +318,12 @@ function readControl(input) {
     const n = Number(input.value);
     return Number.isFinite(n) ? n : null;
   }
+  // A whole number typed into a plain box (a From lvl): its leading digits,
+  // or nothing at all.
+  if (kind === 'int-or-null') {
+    const m = /^\s*(\d+)/.exec(String(input.value));
+    return m ? parseInt(m[1], 10) : null;
+  }
   if (kind === 'number') {
     const n = Number(input.value);
     return Number.isFinite(n) ? n : 0;
