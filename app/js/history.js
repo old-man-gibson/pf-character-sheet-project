@@ -294,10 +294,15 @@ export function historyFor(id, { storageKey = null } = {}) {
     }
   }
 
-  function writeWorking(doc) {
+  /*
+   * `by` names the browser tab that wrote it, so a reload in that tab can tell
+   * whether the copy it finds is still its own -- and so whether the undo
+   * stacks it kept beside it still apply (see `#restoreUndo` in the element).
+   */
+  function writeWorking(doc, by) {
     try {
       preserveWorking();
-      localStorage.setItem(wKey, JSON.stringify({ savedAt: stamp(), data: doc }));
+      localStorage.setItem(wKey, JSON.stringify({ savedAt: stamp(), ...(by ? { by } : {}), data: doc }));
       return true;
     } catch {
       return false;                      // full or blocked: in-session only

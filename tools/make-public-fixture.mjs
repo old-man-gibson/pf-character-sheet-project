@@ -261,6 +261,9 @@ function playerValues(c) {
  * the model, and this is a better place to find out than CI.
  */
 function settle(c) {
+  // A play action writes a dated line to the play log; pinned like the
+  // trackers' createdAt, so the file is the same from run to run.
+  for (const e of c.data.log || []) e.at = CREATED_AT_UTC;
   let current = JSON.parse(JSON.stringify(c.toJSON()));
   for (let pass = 0; pass < 5; pass++) {
     const reloaded = new Character(JSON.parse(JSON.stringify(current)));

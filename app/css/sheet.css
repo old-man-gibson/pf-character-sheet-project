@@ -365,6 +365,14 @@
    host's line up and a coordinate measured off the host lands here unchanged. */
 /* The padding has a name so the side rail can allow for it (see the rail). */
 .wrap { --cs-wrap-pad: 14px; padding: var(--cs-wrap-pad); position: relative; }
+/* On a large monitor the sheet keeps to a 90rem column, centred: past that
+   every row had 400-500px more than its panels could use, and the bands
+   handed it out as stretch. The extra goes into the side padding rather than
+   a margin, so the scrollbar stays at the edge of the window and this box
+   still starts where the host does (the colour panel is placed by that).
+   --cs-sheet-max is inherited from the page when it sets one (the app page
+   does, to line its header up with this column); 90rem otherwise. */
+.wrap { padding-inline: max(var(--cs-wrap-pad), calc((100% - var(--cs-sheet-max, 90rem)) / 2)); }
 
 /* ---------- header ---------- */
 .head {
@@ -592,6 +600,22 @@
 .buffcard.open { border-color: var(--cs-edit); }
 .buffcard.invalid { border-color: var(--cs-bad); }
 .buffcard.off .bname, .buffcard.off .bsum { opacity: 0.55; }
+/* Why a ticked buff is not moving a number: a bigger bonus of its type. */
+.bstack { margin: 4px 0 0; padding-left: 1.2rem; font-size: 0.78rem; color: var(--cs-muted); }
+/* The coin purse on the Load panel: four small boxes in a row. */
+.coinrow { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 4px 0 6px; }
+/* The play log: one dated line per action, notes picked out. */
+.playlog .logl { list-style: none; margin: 8px 0 4px; padding: 0; display: grid; gap: 2px; font-size: 0.82rem; }
+.playlog .logl time { color: var(--cs-muted); font-variant-numeric: tabular-nums; margin-right: 6px; font-size: 0.76rem; }
+.playlog .logl li.note span { color: var(--cs-accent); font-weight: 600; }
+.logl li.logday { margin-top: 6px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--cs-muted); font-weight: 650; }
+.logl li.logday:first-child { margin-top: 0; }
+.playlog input[type="search"] { width: 100%; }
+.logl { list-style: none; margin: 8px 0 4px; padding: 0; display: grid; gap: 2px; font-size: 0.82rem; }
+.logl time { color: var(--cs-muted); font-variant-numeric: tabular-nums; margin-right: 6px; font-size: 0.76rem; }
+/* Session notes: the play log of the day under each, folded. */
+.sessionnote .sessionlog { margin-top: 6px; }
+.sessionnote .sessionlog summary { cursor: pointer; font-size: 0.8rem; color: var(--cs-muted); }
 .buffeditor {
   margin-top: 8px; padding: 8px 10px; background: var(--cs-panel-2);
   border: 1px solid var(--cs-edit); border-radius: var(--cs-radius);
@@ -604,8 +628,7 @@
 .buffhead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .buffhead .bname { font-weight: 620; font-size: 0.9rem; }
 .buffhead > input[type="text"] { flex: 1 1 10rem; min-width: 8rem; max-width: 20rem; width: auto; }
-.buffhead > input[type="checkbox"] { flex: none; width: auto; }
-.effectrow .pair > input[type="checkbox"] { flex: none; width: auto; }
+.buffhead > label.tick, .effectrow .pair > label.tick { flex: none; }
 /* The full-attack weapon pick: a name, not a paragraph. */
 .dashboard .statline select { max-width: 10rem; }
 /* One reminder per block: the tick and name on the first line, the note under. */
@@ -1024,7 +1047,7 @@ tr.needsfill td:first-child { box-shadow: inset 3px 0 0 var(--cs-bad); }
   padding: 6px 8px; font-size: 0.82rem; white-space: pre-wrap; min-height: 1.6em;
 }
 .techpick { flex-wrap: wrap; gap: 8px; }
-.techpick > select { min-width: 18rem; flex: 1; }
+.techpick > select { min-width: min(100%, 18rem); }
 .techpick .pair input { width: 8rem; }
 textarea.exportbox { width: 100%; font-family: var(--cs-mono); font-size: 0.76rem; line-height: 1.4; }
 .cooksheet td select { min-width: 8rem; }
@@ -1476,14 +1499,24 @@ select.jumpto[hidden] { display: none; }
    the whole band is, at any window size, font size or character.
 
    `lead` hands what is left to the first panel, so the one beside it keeps
-   its measure. A band can sit in a band: it asks for the width of its
-   widest panel, its panels stacked, and puts them side by side when what it
-   is given holds them. */
+   its measure. A band can sit in a band: it is as wide as its widest panel,
+   its panels stacked, and the panels in it share that width so they line up.
+
+   `.fit` marks a panel of short tables -- saves, initiative, armour class,
+   attack, speed -- that reads no better wider. It keeps the width its tables
+   need and leaves the rest of the row to the panels beside it. Handed a whole
+   row, its table's first column took the spare width: on an 878px window
+   Fortitude sat 400px from its total, and so did Initiative and the attack
+   modes. A band in a band does not grow either, for the same reason. */
 .band {
   grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start;
 }
 .band > * { flex: 1 1 auto; min-width: min(100%, 12rem); max-width: 100%; }
-.band > .band { width: min-content; }
+.band > .band { width: min-content; flex-grow: 0; }
+.band > .panel.fit { flex-grow: 0; }
+.band > .band > .panel.fit { flex-grow: 1; }
+/* On a phone every panel is the width of the screen, as in `.flow`. */
+@container (max-width: 620px) { .band > .band, .band > .panel.fit { flex-grow: 1; } }
 .band.lead > :first-child { flex-grow: 1000; }
 .band p:not(.empty), .band .longhint, .band .langlist, .band .chips { contain: inline-size; }
 .band td p, .band th p { contain: none; }
@@ -1499,6 +1532,10 @@ select.jumpto[hidden] { display: none; }
 .band > .panel.wide { flex: 1.5 1 30rem; }
 /* The mythic tier grants beside the tradition: a reading width, never the whole row. */
 .band > .panel.mythgrants { flex: 1 1 28rem; max-width: 46rem; }
+/* Hit points is the one panel in Defenses that grows, beside armour class and
+   the saves (both .fit), so it would take all the rest of a wide row: 947px at
+   1920. Capped, the meter and its fields keep a reading width. */
+.band > .panel.hitpoints { max-width: 36rem; }
 /* Flowing Power's round controls, above the buff list. */
 .flowing { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 0 0 8px; padding: 6px 8px; border: 1px solid var(--cs-line); border-radius: 6px; }
 .flowing .d { font-size: 0.78rem; color: var(--cs-muted); }
@@ -1514,6 +1551,16 @@ select.jumpto[hidden] { display: none; }
 .statline .label { color: var(--cs-muted); font-size: 0.82rem; }
 .statline .value { font-weight: 640; font-variant-numeric: tabular-nums; }
 .statline .value.big { font-size: 1.05rem; color: var(--cs-accent); }
+/* The five defence boxes (SR, DR, resistances…) share one grid, so they line up
+   at any width: a label column as wide as the longest label, and a box column at
+   the right of the panel like every other value on it -- up to 21rem, enough for
+   "5/magic, fire 10", never the whole width of a wide panel, and narrowing with a
+   narrow one. Each row keeps its own line between it and the next (subgrid). */
+.defboxes { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 8px; }
+.defboxes > .statline.defbox { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; }
+.statline.defbox > .value { min-width: 0; width: 100%; max-width: 21rem; justify-self: end; }
+/* A score or modifier lowered by ability drain or damage. */
+.harmed { color: var(--cs-bad) !important; }
 /* A total that does not add up -- more spent than the character has. */
 .statline .value.bad { color: var(--cs-bad); }
 
@@ -1919,6 +1966,11 @@ option[data-ab]:not([data-ab=""]) {
   gap: 6px; align-items: center;
 }
 .ability .ab { font-weight: 650; font-size: 0.85rem; }
+/* Damage and drain on a score: a line of its own under the row. */
+.ability .abharm { grid-column: 1 / -1; font-size: 0.75rem; color: var(--cs-muted); margin-top: -3px; }
+.ability .abharm.bad { color: var(--cs-bad); font-weight: 620; }
+.abdmg input[type="number"] { width: 3.2rem; }
+.abdmg th[scope="row"] { text-align: left; font-weight: 600; }
 .ability .mod {
   text-align: center; font-variant-numeric: tabular-nums; font-weight: 640;
   background: var(--cs-panel-2); border-radius: 5px; padding: 3px 0; font-size: 0.85rem;
@@ -2002,6 +2054,11 @@ option[data-ab]:not([data-ab=""]) {
 .tablewrap > table.racetraits { min-width: 26rem; }
 .tablewrap > table.craftlist { min-width: 26rem; }
 .tablewrap > table.perks { min-width: 0; }
+/* These two size every column but Notes in rem (about 37rem and 30rem with
+   padding), and Notes took what was left: 36px on a phone, one word per line.
+   Each floor leaves Notes about 150px. */
+.tablewrap > table.spelllist { min-width: 46rem; }
+.tablewrap > table.evolutions { min-width: 40rem; }
 table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
 th, td { padding: 4px 7px; text-align: left; border-bottom: 1px solid var(--cs-line); }
 th {
@@ -2171,13 +2228,17 @@ tr.untrained { color: var(--cs-muted); }
   table.stacked > tbody > tr:not(.shut) > td.mid[data-label]::before {
     margin-bottom: 0; flex: none; white-space: nowrap;
   }
-  /* A bare checkbox is `display: block` under `input { width: 100% }`, so as a
-     flex item it resolves its basis from that width and takes the whole line
-     -- 289px of checkbox with the tick drawn in the middle of it, an inch away
-     from the words it answers. `flex: none` alone does not fix that: the basis
-     comes from `width`, so the width is what has to go. */
+  /* A checkbox in a cell is `width: 100%`, so as a flex item it resolves its
+     basis from that width and takes the whole line -- 289px of checkbox with
+     the tick drawn in the middle of it, an inch away from the words it
+     answers. `flex: none` alone does not fix that: the basis comes from
+     `width`, so the width is what has to go. Its label goes back to being the
+     checkbox's own size, as in any row of controls: as the block a table cell
+     makes it, the label is the height of a line of text, which is taller
+     than the box. */
   table.stacked > tbody > tr:not(.shut) > td.mid[data-label] > * { flex: none; }
-  table.stacked > tbody > tr:not(.shut) > td.mid[data-label] > input[type="checkbox"] { width: auto; }
+  table.stacked > tbody > tr:not(.shut) > td.mid[data-label] > label.chk.tick { display: inline-flex; }
+  table.stacked > tbody > tr:not(.shut) > td.mid[data-label] > label.chk.tick > input { width: auto; }
   /* Same bargain for a figure: the column that made right-alignment read is
      gone, so a full-width box with a lone 9 against its far edge is all the
      alignment is doing now.
@@ -2192,7 +2253,9 @@ tr.untrained { color: var(--cs-muted); }
   table.stacked > tbody > tr > td.num[data-label] input { width: 6rem; text-align: left; }
   /* A card has no column to fill; the field keeps its own width there. */
   table.stacked > tbody > tr > td > .xf:only-child { width: var(--xf-w, 5rem); min-width: 0; }
-  table.stacked > tbody > tr > td.tools { display: flex; gap: 4px; }
+  /* `width: auto` undoes `td.tools.quiet`'s 1%, which in a card is 1% of the
+     card: a 5px cell with the × hanging 14px past it, scrolling the speeds. */
+  table.stacked > tbody > tr > td.tools { display: flex; gap: 4px; width: auto; }
   table.stacked button.rowfold {
     display: inline-block;
     flex: none; padding: 0 5px; font-size: 0.85rem; line-height: 1.5;
@@ -2393,16 +2456,30 @@ table.build tr.costrow td, table.build tr.costrow th {
 .hint.warn { color: var(--cs-bad); }
 
 /* ---------- editable fields ---------- */
-.fieldgrid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+/* `auto-fill`, not `auto-fit`: the empty tracks stay, so a grid holding fewer
+   fields than fit across its panel keeps each one a track wide. `auto-fit`
+   collapsed them and handed the row to whatever was there -- one power-point
+   box 1851px wide on a wide screen, four psionic picks at 457px each. A field
+   that should span says so (`.wide`, or a `grid-column` of its own). `.two` is
+   left on `auto-fit`: it is two things sharing the row, half each. */
+.fieldgrid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 .fieldgrid.two { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
 /* A row of short figures -- a bonus per level, a table's own contribution --
    where the label is the widest thing in the track and the field holds three
    characters. Packs three across a narrow panel instead of one. */
-.fieldgrid.tight { grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); }
+.fieldgrid.tight { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
 /* A field whose value is longer than a track: a URL beside a hero-point count
    got a sixth of what it held, and there was no reading it or checking it. */
 .fieldgrid label.fld.wide { grid-column: 1 / -1; }
 label.fld { display: flex; flex-direction: column; gap: 3px; }
+/* A field standing on its own in a panel rather than in a grid -- a tradition's
+   name, a trade rank, a crafting rate -- is capped like the defence boxes: up
+   to 21rem, never the width of a wide panel. */
+.panel > label.fld > input:not([type="checkbox"]), .panel > label.fld > select { max-width: 21rem; }
+/* A number box under its label holds a few digits. In a `.two` grid on a wide
+   panel it was half the panel, 417px for a "0"; capped, it keeps to the left
+   of its column, under its label. */
+label.fld > input[type="number"] { max-width: 10rem; }
 label.fld > span {
   font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted);
 }
@@ -2451,6 +2528,10 @@ label.fld.tall textarea { min-height: 58px; }
 /* The slot table sized to its figures: at full width four numbers sat a
    quarter of a screen apart and the pips drifted to the far side. */
 table.build.vslots { width: auto; margin-top: 8px; }
+/* In a scroll box for a phone, where the biggest slot table is a few pixels
+   wider than its panel -- but without the `table.build` floor, which would
+   widen every block to 26rem. */
+.tablewrap > table.build.vslots { min-width: 0; }
 /* Six pips to a row, so seven to twelve slots grow the row downward instead
    of widening the block; past twelve `slotSpend` prints the count instead. */
 table.build.vslots .pips {
@@ -2480,6 +2561,10 @@ label.fld > .value.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
    on a narrow screen one long pair carries the page sideways with it. */
 .pair { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; }
 .pair input { width: 3.4rem; }
+/* A pick list in a pair is as wide as its longest option, like the rest of the
+   row. At the global `width: 100%` it took the line to itself, and on a wide
+   screen the condition and discipline pickers ran 1600px for a word or two. */
+.pair > select { width: auto; max-width: 100%; }
 /* A pair whose field is a URL: the input takes whatever the row has left,
    with the ↗ beside it. `.pair input`'s 3.4rem is meant for a number in a
    cluster of them and is nowhere near enough for a link. */
@@ -2494,6 +2579,14 @@ label.fld > .value.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
 .pair.slots select { width: auto; min-width: 4.4rem; max-width: 11rem; }
 label.chk { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
 label.chk input { width: auto; }
+/* A checkbox with no words of its own (`rows.itemCheck`) is still in a label:
+   the label is what a touch screen hangs its bigger hit area on (the end of
+   this file). In a row of controls the label is the checkbox's own size. In a
+   table cell it is a block round the line the checkbox sat in, and the
+   checkbox keeps the cell's width, so the cell lays out as it did without a
+   label. */
+td > label.chk.tick { display: block; }
+td > label.chk.tick > input { width: 100%; }
 td.mid { text-align: center; }
 td.tools { white-space: nowrap; text-align: right; }
 td.tools button { padding: 2px 6px; font-size: 0.72rem; margin-left: 2px; }
@@ -2506,6 +2599,10 @@ h3 input.grouptitle {
 h3 input.grouptitle:hover { border-color: var(--cs-line); }
 .panel > h3 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .panel > h3 button { margin-left: auto; }
+/* A name typed into a panel's heading (a casting or manifesting class, a
+   template) is as wide as a name, with its badges beside it. At the global
+   `width: 100%` it took the heading's first line and pushed the badges under. */
+.panel > h3 > input[type="text"]:not(.grouptitle) { flex: 1 1 12rem; width: auto; max-width: 21rem; }
 
 /* ---------- hit points ---------- */
 .hpbar {
@@ -2960,6 +3057,7 @@ table.gear tr.gearcardrow > td { padding: 0; }
 table.gear td.name input { width: 100%; min-width: 7rem; }
 table.gear td.other input { width: 100%; min-width: 5rem; }
 table.gear td.wt input { width: 3.6rem; }
+table.gear td.qty input { width: 3.2rem; }
 table.gear td.cost input { width: 100%; min-width: 4.2rem; }
 table.gear td.bval > .xf:only-child { min-width: 0; width: var(--xf-w, 3.6rem); }
 table.gear td.btype select { width: auto; min-width: 4.6rem; padding: 3px 4px; }
@@ -3292,8 +3390,10 @@ input.mono:not(.hexin):hover {
   border: 1px solid var(--cs-line); border-radius: 6px; margin-top: 8px;
   padding: 6px 8px; background: var(--cs-panel);
 }
-.ttablehead { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
-.ttablehead input[type="text"] { flex: 1; font-size: 0.78rem; }
+/* Wraps, and the caption keeps 12rem: on a phone the four buttons beside it
+   left the caption box 16px wide. */
+.ttablehead { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+.ttablehead input[type="text"] { flex: 1 1 12rem; font-size: 0.78rem; }
 .ttablehead button { font-size: 0.72rem; }
 .ttablehead select { font-size: 0.72rem; max-width: 11rem; padding: 3px 4px; }
 /* Fixed layout so one long "Additional Information" column does not starve the
@@ -3582,6 +3682,16 @@ table.build td.linked select:disabled {
 .tracker-controls input { width: 3.6rem; }
 .tracker-controls input.neg { color: var(--cs-bad); font-weight: 640; }
 .tracker.editing { grid-template-columns: 1fr; }
+/* The Trackers tab's list is one grid, so the controls line up from tracker to
+   tracker: the name and meter take the rest of the row, and each control
+   (− box / max + ✎ ×) has a column as wide as its widest. Each tracker sized
+   its own controls, so a "/ 274" or a tracker that cannot be removed moved
+   the box over by up to 36px. One with no × leaves that column empty. */
+.trackerlist { display: grid; grid-template-columns: minmax(0, 1fr) repeat(6, auto); }
+.trackerlist > .tracker { grid-column: 1 / -1; grid-template-columns: subgrid; column-gap: 5px; }
+.trackerlist > .tracker > :first-child { margin-right: 3px; min-width: 0; }
+.trackerlist > .tracker > .tracker-controls { grid-column: 2 / -1; display: grid; grid-template-columns: subgrid; }
+.trackerlist > .tracker.editing { grid-template-columns: 1fr; }
 .pool { font-variant-numeric: tabular-nums; font-weight: 640; white-space: nowrap; }
 .pips { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 5px; }
 .pip {
@@ -3938,6 +4048,13 @@ button.helpopen:hover, button.helpopen[aria-expanded="true"] { color: var(--cs-a
 /* A familiar's table carries the master's ranks as well, so it needs more. */
 .compskills.fam { grid-template-columns: repeat(auto-fit, minmax(min(100%, 32rem), 1fr)); }
 .compskills table { width: 100%; }
+/* Each table scrolls in its own box when one is wider than the panel (a phone),
+   at its own width rather than the `table.build` floor. */
+.compskills .tablewrap > table.build { min-width: 0; }
+/* A companion's attacks: the pick lists and number boxes keep a floor, or the
+   table gave them the width of their headings ("Type", "Role"): 26px. */
+table.compattacks td > select { min-width: 6.5rem; }
+table.compattacks td > input[type="number"] { min-width: 3.4rem; }
 .compskills th:not(.cname), .compskills td:not(.cname) { width: 1%; white-space: nowrap; }
 .compskills select { width: auto; min-width: 3.6rem; }
 .compskills td.mid { text-align: center; }
@@ -3960,6 +4077,17 @@ button.helpopen:hover, button.helpopen[aria-expanded="true"] { color: var(--cs-a
    what put the eidolon's seven columns two pixels over a 400px panel. */
 table.build.compact input[type="number"] { width: 3rem; }
 @container (max-width: 560px) { .grid.companion { grid-template-columns: minmax(0, 1fr); } }
+/* On a phone some small tables came out a few pixels wider than their panel
+   and scrolled for it: the eidolon's scores, the optional ability picks and a
+   Vancian slot table at 375 (9-24px), the attack modes and a companion's
+   skills at 430 (14px, 3px). Less padding between their columns fits them. */
+@container (max-width: 520px) {
+  table.build.compact th, table.build.compact td,
+  table.build.picks th, table.build.picks td,
+  table.build.vslots th, table.build.vslots td,
+  table.attackmodes th, table.attackmodes td,
+  .compskills table.build th, .compskills table.build td { padding-left: 2px; padding-right: 2px; }
+}
 
 /* ---------- the class table ----------
    Fixed columns, because the two that were growing to fill are the two with
@@ -3974,7 +4102,9 @@ table.build.compact input[type="number"] { width: 3rem; }
 table.classes { table-layout: fixed; }
 table.classes col.cls { width: 12rem; }
 table.classes col.lvl { width: 4.4rem; }
-table.classes col.hd { width: 3.1rem; }
+/* Room for "d12" and the select's arrow: at 3.1rem the box was 36px and
+   showed "d1" whenever the table was at its narrowest (700 to 1024px wide). */
+table.classes col.hd { width: 4.2rem; }
 table.classes col.bab { width: 4.6rem; }
 table.classes col.save { width: 3rem; }
 table.classes col.ranks { width: 4.2rem; }
@@ -4107,20 +4237,26 @@ table.speeds input[type="text"] { min-width: 4.4rem; }
 table.speeds td.num input[type="number"] { width: 4.4rem; }
 table.speeds td.total { white-space: nowrap; }
 
-/* A short table that can be handed a whole row -- the saves, initiative,
-   armour class, attack modes and speeds, each a panel that ends up alone on
-   its row of a band when the window is too narrow to pair it. Shared out
-   evenly, the spare width went into the controls, and a picker for three
-   letters at 200px reads as stretched. So every column is as wide as what it
-   holds, and the first -- the row's name -- takes the rest. `:where` keeps
-   this under the narrow screen's card rules, which give each cell its own
-   line. */
+/* A short table that can be handed more room than it needs -- the saves,
+   initiative, armour class, attack modes and speeds. Their panels are `.fit`
+   and keep to their tables' width in a band, but the saves and initiative
+   share the wider one's width when stacked, and a companion's speeds sit in a
+   panel of their own. Shared out evenly, the spare width went into the
+   controls, and a picker for three letters at 200px reads as stretched. So
+   every column is as wide as what it holds, and the first -- the row's name --
+   takes the rest. `:where` keeps this under the narrow screen's card rules,
+   which give each cell its own line. */
 table.fitcols :where(th:not(:first-child), td:not(:first-child)) { width: 1%; white-space: nowrap; }
 table.fitcols select { min-width: 4.6rem; }
 td.tools.quiet { width: 1%; padding-left: 2px; padding-right: 2px; }
 td.tools.quiet button { opacity: 0; transition: opacity 0.12s; }
 tr:hover > td.tools.quiet button,
 td.tools.quiet button:focus-visible { opacity: 1; }
+/* A phone or tablet has no hover to bring it out, so there it is always shown:
+   otherwise a row's remove button was invisible until tapped by luck. A media
+   query, not a container one: it is about the pointer, not the room. The
+   condition chips' × does the same, below. */
+@media (hover: none) { td.tools.quiet button { opacity: 1; } }
 
 /* Bonus skill ranks: what each row asks for, beside the row. A requirement the
    sheet could confirm is stated plainly; one it could not is underlined the way
@@ -4168,6 +4304,7 @@ label.cond .tiny {
   grid-column: 3; grid-row: 1 / span 2; opacity: 0; transition: opacity 0.12s;
 }
 label.cond:hover .tiny, label.cond:focus-within .tiny { opacity: 1; }
+@media (hover: none) { label.cond .tiny { opacity: 1; } }
 label.cond.on { border-color: var(--cs-bad); }
 label.cond.on .cname { color: var(--cs-bad); }
 label.cond.on .ceffect { color: var(--cs-text); }
@@ -4740,7 +4877,9 @@ button.fx-name-chip.fx-target { position: relative; }
   padding: 7px 9px; margin-bottom: 6px;
 }
 .fx-row.bad { border-color: var(--cs-bad); }
-.fx-rowhead { display: flex; gap: 6px; align-items: baseline; font-size: 0.82rem; }
+/* Wraps: a long destination name and two badges ran 31px off a phone. */
+.fx-rowhead { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; font-size: 0.82rem; }
+.fx-rowhead > strong { overflow-wrap: anywhere; min-width: 0; }
 .fx-rowval {
   margin-left: auto; color: var(--cs-accent); font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -5157,8 +5296,20 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
 .fxeg code { color: var(--cs-accent); font-size: 0.78rem; }
 .fxcopied { margin: 0; }
 
+/* Print tabs…: the tabs being printed, drawn off screen so their tables can
+   be measured for fitting, and shown only on paper (below). */
+.printstack { position: absolute; left: -100000px; top: 0; width: 1100px; visibility: hidden; pointer-events: none; }
+.printpicks { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+
 @media print {
   .fxdrawer { display: none; }
+  /* Printing several tabs: the stack replaces the open tab, one tab a page. */
+  :host([printing]) #sheet-panel { display: none !important; }
+  .printstack { position: static; left: auto; width: auto; visibility: visible; pointer-events: auto; }
+  .printtab + .printtab { break-before: page; }
+  .printhead { font-size: 1.05rem; margin: 0 0 6px; color: var(--cs-accent); }
+  /* A table wider than the page is scaled to it (#fitPrintTables). */
+  .tablewrap { zoom: var(--print-zoom, 1); }
   :host {
     --cs-bg: #fff;
     --cs-panel: #fff;
@@ -5210,6 +5361,7 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
   .thememenu,
   .tabmenu,
   .bdpop,
+  .charcolor,
   dialog { display: none !important; }
 
   /* The rail loses its tabs above but keeps the session strip, which is a row
@@ -5285,7 +5437,10 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
      table's headings on each sheet it runs onto. */
   thead { display: table-header-group; }
   tr, .bigstat, .mcard, .manacard, .statline { break-inside: avoid; }
-  .panel { break-inside: avoid-page; }
+  /* A small panel stays whole; a big one may run on, or a panel too tall
+     for what is left of a page is pushed to the next and leaves the rest of
+     this one blank -- which is what the first print preview showed. */
+  .band > .panel:not(.span2) { break-inside: avoid; }
   h3, h4 { break-after: avoid; }
 
   /* Backgrounds are dropped by default when printing, which would take the
@@ -5476,3 +5631,91 @@ table.stacked .catface { margin-left: 0; }
 .mcard .bar.title .cost .colorcell:focus-within .mana { display: none; }
 .mcard .bar.title .cost .colorcell.filled:not(:focus-within) input.colorpick,
 .mcard .bar.title .cost .colorcell.filled:not(:focus-within) input.colorpick::placeholder { color: transparent; }
+
+/* ---------- touch screens ----------
+   A fingertip covers far more than a mouse pointer does, and most of the
+   sheet's controls are drawn for a mouse: a 12px pip, a 13px checkbox, a 20px
+   die or fold caret. On a touch screen every button and checkbox is drawn at
+   least 24px each way, and every button and every label that wraps a
+   checkbox gets a transparent overhang that takes its hit area to `--cs-tap`,
+   centred on it, without moving anything. Where controls sit closer together than that, the
+   spacing grows instead, so a tap meant for one does not land on its
+   neighbour's overhang.
+
+   A media query rather than the container queries the widths use, because
+   this is about the input and not the space: a phone, a tablet either way up,
+   a touch laptop. `screen` leaves a print-out from a tablet as it is. */
+@media screen and (pointer: coarse) {
+  :host { --cs-tap: 32px; }
+  /* `:host` for weight: `.disclose`, `button.tiny` and the note caret set
+     their own minimum for the desktop. */
+  :host button { min-width: 24px; min-height: 24px; }
+  /* Positioned, so the overhang has a box to hang from and paints above the
+     in-flow content around it. `min()` leaves an axis that is already as big
+     as the target alone. */
+  button, label.chk { position: relative; }
+  button::before, label.chk::before {
+    content: ""; position: absolute;
+    inset: min(0px, calc(50% - var(--cs-tap) / 2));
+  }
+  /* An overhang at a table's edge would widen what its scroll box scrolls by
+     a few pixels; past the edge there is nothing to tap anyway. */
+  .tablewrap > table { overflow: clip; }
+  /* A folded card's name clips, for its ellipsis, and the fold caret sits at
+     its edge: the cell takes 4px of padding it gives straight back in margin,
+     so the caret's overhang is inside the clip and nothing moves. */
+  table.stacked > tbody > tr.shut > td[data-stack="name"] { padding: 4px; margin: -4px; }
+  /* Move, remove and fold side by side, 24px buttons: 8px apart in a card
+     (its 4px gap and this), about as far across a table's whitespace. */
+  td.tools button + button { margin-left: 4px; }
+  /* And 3px under the cell above them, which their overhang more than
+     crosses: a tick there (a Guile bonus talent's Free) kept 30px of its 32. */
+  table.stacked > tbody > tr:not(.shut) > td.mid[data-label] + td.tools { margin-top: 2px; }
+  /* A native checkbox ignores padding and draws itself at the size of its
+     box, so a bare one can only get bigger. `min-` because a dozen rules set
+     `width: auto` on the ones they place, and `:host` over the tables that
+     zero every field's minimum. */
+  :host input[type="checkbox"], :host input[type="radio"] { min-width: 24px; min-height: 24px; }
+
+  /* Pips are packed for the eye; three pixels apart, every overhang would
+     land on the next pip. The pitch becomes the target, a little more of it
+     drawn. A Vancian slot table fits four to a row rather than six. */
+  button.pip { min-width: 0; min-height: 0; width: 20px; height: 20px; border-radius: 4px; }
+  .pip.zero { width: 5px; height: 26px; }
+  .pips, .pips.square { gap: calc(var(--cs-tap) - 20px); }
+  table.build.vslots .pips { grid-template-columns: repeat(4, max-content); }
+  /* A bar is set by where it is tapped, and it clips what is inside it to
+     round its fill, so an overhang would be clipped with it: the track
+     itself is drawn taller. */
+  .bar[data-pool-bar] { height: 24px; }
+  /* On a phone a tracker's controls left its name and meter 69px, two pips
+     across at this pitch, so 26 pips stood 400px tall. The controls go under
+     the name and meter instead, and still share their columns from one
+     tracker to the next. */
+  @container (max-width: 520px) {
+    .trackerlist { grid-template-columns: repeat(6, auto) minmax(0, 1fr); }
+    .trackerlist > .tracker > :first-child { grid-column: 1 / -1; margin-right: 0; }
+    .trackerlist > .tracker > .tracker-controls { grid-column: 1 / 7; }
+  }
+  /* Rows of chips and swatches three and four pixels apart. */
+  .chips { gap: 4px; }
+  button.chip-toggle { min-height: calc(var(--cs-tap) - 4px); }
+  .swatches { gap: 8px; }
+  .swatch { width: calc(var(--cs-tap) - 8px); height: calc(var(--cs-tap) - 8px); }
+  .hint.countstoward { gap: 8px; }
+  /* Two help lines in a row sat 4px apart, and the field after one 0px;
+     folded sub-sections stack their fold buttons 1px apart. */
+  button.helpopen { margin-block: 8px 4px; }
+  h4.subhead [data-collapse] { margin-block: 4px; }
+  /* A field's cross two or three pixels from it: a language, a template
+     column, a ladder's rule group. */
+  .lang { gap: 6px; }
+  table.tmpltable .colhead { gap: 4px; }
+  /* A gear table's add and remove column, two pixels apart. */
+  .colstep { gap: 8px; }
+  /* A class ladder's column head stacks its menus and buttons two pixels apart. */
+  table.featgrid th .rulegroup { margin-top: 4px; gap: 4px; }
+  table.featgrid th .rulegroup input { min-height: 24px; }
+  table.featgrid th .rulegroup input[type="color"] { width: 24px; }
+  table.featgrid th .colmenu, table.featgrid th .addgroup { min-height: 24px; margin-top: 4px; }
+}

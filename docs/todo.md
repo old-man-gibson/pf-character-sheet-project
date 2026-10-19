@@ -74,23 +74,14 @@ _Part of the [Pathfinder Character Sheet Program](../README.md) docs. Things agr
   (Ronin's *Honorless Tactics* for Resolve's *Determined*) marks the parent as altered and
   sits beside it; it does not edit inside the parent's text. Fine to read, coarse to model.
 - **Improve the print view.** Ctrl-P prints the tab you are looking at, on white, with the
-  chrome hidden — see [Using the sheet](using-the-sheet.md#printing-a-tab). That much
-  works, but it has only ever been checked *structurally*: every rule parsed, every
-  selector matched a real element, and the buttons were audited across every panel. **No
-  page has ever been put through a print preview**, which is the first thing to do, and
-  probably the thing that finds most of what is below.
+  chrome hidden, and **Print tabs…** prints several — see
+  [Using the sheet](using-the-sheet.md#printing-a-tab). Real print output (headless Edge to
+  PDF, A4 and Letter) has now been checked for Overview, Progression and Equipment: the
+  blank pages a whole-panel break rule made are gone, wide tables are scaled to the page,
+  and chrome.css sets 10 mm margins. Still open: the remaining tabs have not been looked
+  at on paper, and a table scaled far down (an Other items table with many empty
+  columns, around 45% in portrait) is small to read; landscape helps, dropping empty
+  columns on paper would help more.
   Resource pips now remain visible on paper (their reset control stays hidden), meters
   request exact colors, and ability and formula colors switch to their light values.
-  The portrait is reduced to 48px. `tests/browser.html` checks computed print styles;
-  actual page pagination still needs print-preview verification.
-  - **Nothing scales a wide table.** `.tablewrap` gets `overflow: visible` so a scroll
-    container cannot clip what it was holding — but a table wider than the page then simply
-    runs off it, which is worse than a scrollbar was. The Progression grid and a full
-    Equipment table are both wider than portrait A4. Wants a landscape `@page` for those
-    tabs, or a scale factor.
-  - **There is no `@page` rule at all**, so margins and orientation are whatever the
-    browser defaults to.
-
-  Worth deciding at the same time whether *the tab you are looking at* stays the rule. It
-  is a rule you can hold in your head while choosing what to hand someone, but a player who
-  wants a sheet for the table prints four or five tabs one at a time to get one.
+  The portrait is reduced to 48px. `tests/browser.html` checks computed print styles.

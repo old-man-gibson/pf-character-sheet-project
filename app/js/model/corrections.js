@@ -22,8 +22,9 @@
  * workbook's totals, and a blank sheet has nothing yet for a fix to move.
  */
 
-import { RULE_CORRECTIONS, SIZE_MODIFIERS, gestaltSaveBase } from '../rules.js';
+import { RULE_CORRECTIONS, SIZE_MODIFIERS, carryState, gestaltSaveBase } from '../rules.js';
 import { classPresence, saveProgressions } from './progression.js';
+import { weaponProficient } from './document.js';
 
 /** The attack slots that take the size modifier the way AC does. */
 const SIZED_ATTACKS = new Set(['Melee', 'Alt Melee', 'Ranged', 'Alt Ranged']);
@@ -98,6 +99,35 @@ FIXES['monster-crit-range'] = (model) => {
 FIXES['hp-meter-fill'] = (model) => {
   const style = model.data.meterStyles?.hp;
   if (style && style.fill !== 'remaining') style.fill = 'remaining';
+};
+
+/*
+ * Load penalties arrived after the document was saved: its AC and skill
+ * totals were worked out with no load cap. A sheet that was already past a
+ * light load would otherwise have that penalty folded into its offsets and
+ * given back twice once it lightened, so it opens with the penalties off --
+ * the Carrying capacity panel's switch -- and its totals stay as saved.
+ * Ticking the switch then moves them, like any edit. A sheet at a light load
+ * has nothing to move and keeps the default, on.
+ */
+FIXES['load-penalties'] = (model) => {
+  const k = model.data.carry;
+  if (!k || k.applyLoad !== undefined) return;
+  if (carryState(model.data).load !== 'light') k.applyLoad = false;
+};
+
+/*
+ * The -4 for a weapon the character is not proficient with was shown and
+ * left for the player to write in Misc. Now it is applied, so a row flagged
+ * before that keeps its total -- its -4 may well be in Misc already -- and
+ * its card offers the -4 as a box to tick. Rows flagged from now on take it.
+ */
+FIXES['nonproficiency-penalty'] = (model) => {
+  const d = model.data;
+  const prof = d.identity?.proficiencies;
+  for (const w of d.equipment?.weapons || []) {
+    if (w && w.nonproficiencyPenalty === undefined && weaponProficient(prof, w).state === false) w.nonproficiencyPenalty = false;
+  }
 };
 
 /**

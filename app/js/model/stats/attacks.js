@@ -12,7 +12,8 @@ import {
   TALENTED_KNUCKLE_TALENTS, UNARMED_NATIVE_THRESHOLD, UNARMED_SPHERES, UNORTHODOX_FEAT,
   UNORTHODOX_SPHERES_PER_FEAT,
   addDice, diceAverage, diceString, fmt, ladderRung, parseDiceExpr, sizeAttackMod, statMod,
-  raiseDice, unarmedDice, SIZE_MODIFIERS, stepDiceMap, critMultOf,
+  raiseDice, unarmedDice, SIZE_MODIFIERS, stepDiceMap, critMultOf, coinValue, equipmentWeights, quantityOf,
+  NONPROFICIENT_ATTACK,
 } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import { parseQuery } from '../../inline.js';
@@ -211,12 +212,15 @@ export function recomputeEquipment(model) {
     // all, while the name a rule has to use is settled here.
     w.handle = handles[wi];
     // Read against the row's own Proficient field, the [Enhanced] veil rule
-    // and the Overview's proficiencies; a `false` is shown, not applied --
-    // the -4 is the player's to write, as it always was.
+    // and the Overview's proficiencies. A `false` is -4 to hit, unless the
+    // row says the -4 is already written in (`nonproficiencyPenalty: false`,
+    // which a row flagged before the sheet applied it starts with; see the
+    // `nonproficiency-penalty` correction).
     const pr = weaponProficient(prof, w);
     w.proficient = pr.state;
     w.proficiencyWhy = pr.why;
     w.proficiencySource = pr.source;
+    w.nonproficiency = pr.state === false && w.nonproficiencyPenalty !== false ? NONPROFICIENT_ATTACK : 0;
     // The Dice field may reference an inline name or hold a formula:
     //   "12d8"                 literal
     //   "{kinetic.fist}"       a {name = …} defined in prose (may be dice text
@@ -269,7 +273,7 @@ export function recomputeEquipment(model) {
     w.diceResolved = w.useUnarmedDice && unarmedDiceNow ? unarmedDiceNow : diceText;
     const base = modeBase(w.attackType);
     const attack = (base ?? (Number(w.baseOverride) || 0))
-      + (Number(w.enhancement) || 0) + (Number(w.miscAttack) || 0);
+      + (Number(w.enhancement) || 0) + (Number(w.miscAttack) || 0) + w.nonproficiency;
     if (w.attackOffset === undefined) {
       w.attackOffset = w.sheetAttack != null ? (Number(w.sheetAttack) || 0) - attack : 0;
     }
@@ -538,18 +542,27 @@ export function recomputeEquipment(model) {
   }
   model.gearBonusCalc = calc;
 
-  // Carried weight: every section's weights, plus a manual adjustment that
-  // reconciles the imported figure.
-  const sum = (arr, key = 'weight') => (arr || []).reduce((t, x) => t + (Number(x[key]) || 0), 0);
-  const computed = sum(e.gear) + sum(e.other) + (Number(e.armor?.weight) || 0)
-    + sum(e.shields) + sum(e.weapons);
+  // A container is pointed at by id, so one is given the first time a row is
+  // made a container; the id stays when the row is renamed or moved.
+  for (const x of e.other || []) {
+    if (x && x.holds && !x.id) x.id = `box-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  // Carried weight: every section's weights (times a row's quantity, less
+  // what a bag of holding or a store holds), coins, and a manual adjustment
+  // that reconciles the imported figure. See equipmentWeights.
+  const weights = equipmentWeights(e);
+  const computed = weights.total;
   if (c.carry.carriedOffset === undefined) {
     c.carry.carriedOffset = (Number(c.carry.carried) || 0) - computed;
   }
   e.totalWeight = computed;
+  e.weights = weights;
   c.carry.carried = computed + (Number(c.carry.carriedOffset) || 0);
+  const sum = (arr, key) => (arr || []).reduce((t, x) => t + (Number(x?.[key]) || 0) * quantityOf(x), 0);
   e.totalValue = sum(e.gear, 'cost') + sum(e.other, 'cost')
     + (Number(e.armor?.cost) || 0) + sum(e.shields, 'cost') + sum(e.weapons, 'price');
+  e.coinValue = coinValue(e.coins);
 }
 
 /* ------------------------------------------------------------------ *

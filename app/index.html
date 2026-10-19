@@ -22,6 +22,9 @@
     --cs-text: #e6e8ef; --cs-muted: #9aa2b8; --cs-accent: #d4a24a; --cs-accent-soft: rgba(212, 162, 74, 0.14);
     --cs-edit: #6ea8fe; --cs-good: #6bbf7b; --cs-bad: #e0635f;
     --cs-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    /* The sheet's column on a wide monitor (sheet.css, `.wrap`); the header
+       below keeps to the same width so the two line up. */
+    --cs-sheet-max: 90rem;
     color-scheme: dark;
   }
   /* Off-screen until it is the thing being used, which is the only time it is
@@ -40,6 +43,7 @@
      stacking context of its own) and below the menus the rail hangs under
      itself, which never reach up this far. */
   header.app { position: sticky; top: 0; z-index: 35; flex-wrap: wrap; }
+  header.app { padding-inline: max(14px, calc((100% - var(--cs-sheet-max)) / 2)); }
   header.app .tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   /* The roster: a strip of chips in the header, one per character, the level
      as the chip's number. */
@@ -102,6 +106,10 @@
     display: flex; flex-direction: column; width: 100%; box-sizing: border-box;
   }
   character-sheet { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; border: 0; }
+  /* Once the sheet keeps to its column (--cs-sheet-max), a gutter the width of
+     its scrollbar on the left too, so the column and the header's line up to
+     the pixel instead of half a scrollbar apart. */
+  @media (min-width: 92rem) { character-sheet { scrollbar-gutter: stable both-edges; } }
   character-sheet[hidden], .welcome[hidden] { display: none; }
   .welcome {
     max-width: 40rem; margin: 8vh auto 0; padding: 28px 30px; text-align: center;
@@ -558,7 +566,7 @@
     const chip = (c) => (c.local
       ? `<span class="member local">
            <button${tint(c)} data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}. Right-click to colour">
-             <span class="cname">${esc(c.name)}</span> <b>L${esc(c.level)}</b><span class="local-tag">${c.origin === 'blank' ? 'new' : 'imported'}</span>
+             <span class="cname">${esc(c.name)}</span> <b>L${esc(c.level)}</b><span class="local-tag">${{ blank: 'new', copy: 'copy' }[c.origin] || 'imported'}</span>
            </button>
            <button class="drop" data-drop="${esc(c.id)}" title="Remove from this browser"
              aria-label="Remove ${esc(c.name)}">×</button>
@@ -581,6 +589,7 @@
         <button type="button" class="more down" hidden tabindex="-1" aria-hidden="true"></button>
       </div>
       ${folded ? '' : `<button class="chip import" id="newBtn" title="Start a character from a blank sheet">+ New</button>
+      ${current ? '<button class="chip import" id="dupBtn" title="Add a copy of the open character, as it is now">Duplicate</button>' : ''}
       <button class="chip import" id="importBtn" title="Add a character: a .xlsx workbook, or a JSON this app exported">+ Import</button>
       <button class="chip exportall" id="exportAllBtn"
         title="Download every character in this picker as one .zip">Export all</button>`}`;
@@ -603,6 +612,7 @@
       b.addEventListener('click', () => remove(b.dataset.drop));
     });
     picker.querySelector('#newBtn')?.addEventListener('click', () => newDialog.showModal());
+    picker.querySelector('#dupBtn')?.addEventListener('click', duplicateOpen);
     picker.querySelector('#importBtn')?.addEventListener('click', () => importFile.click());
     picker.querySelector('#exportAllBtn')?.addEventListener('click', exportAll);
     picker.querySelector('#foldBtn')?.addEventListener('click', () => { setPickerFolded(true); draw(); });
@@ -871,7 +881,21 @@
     return id;
   }
 
-  /** `origin` is 'import' for a file, 'blank' for a character started here. */
+  /**
+   * Duplicate: the open character as it is on screen -- unsaved edits
+   * included -- added beside it under the next free id. The copy starts with
+   * no history and no publish link of its own; both are keyed by id.
+   */
+  async function duplicateOpen() {
+    await sheet.whenReady();
+    const doc = sheet.character;
+    if (!doc) { say('err', 'There is no open character to copy.'); return; }
+    const copy = structuredClone(doc);
+    copy.identity = { ...(copy.identity || {}), name: `${copy.identity?.name || 'Character'} (copy)` };
+    await addNew(copy, [], 'copy', inspectDocument(copy));
+  }
+
+  /** `origin` is 'import' for a file, 'blank' for a character started here, 'copy' for a duplicate. */
   function add(doc, warnings = [], origin = 'import') {
     const verdict = inspectDocument(doc);
     if (!verdict.ok) { say('err', verdict.error); return null; }
@@ -887,22 +911,24 @@
   }
 
   async function addNew(doc, warnings, origin, verdict) {
+    if (!verdict.ok) { say('err', verdict.error); return null; }
     const id = freeId(verdict.summary.id);
     const stored = { ...doc, id };
     if (!(await store(docKey(id), stored, verdict.summary.name))) return null;
     library = [...library, { ...verdict.summary, color: doc.identity?.color || null, id, origin, local: true }];
     writeLibrary(library);
     current = id;
+    rememberOpen();
     draw();
     select();
     // Warnings mean the workbook converted but did not look like the campaign
     // template, so the sheet will be thin in places. Better said than
     // discovered.
     say(warnings.length ? 'info' : 'ok',
-      `${origin === 'blank' ? 'Created' : 'Imported'} ${verdict.summary.name} (level ${verdict.summary.level})`
+      `${{ blank: 'Created', copy: 'Added' }[origin] || 'Imported'} ${verdict.summary.name} (level ${verdict.summary.level})`
       + `${id === verdict.summary.id ? '' : ` as “${id}”, because “${verdict.summary.id}” was taken`}.`
       + (warnings.length ? ` Note — ${warnings.join('; ')}.` : '')
-      + (origin === 'blank' ? ' It is saved in this browser like an import; use Export JSON to keep a copy.' : ''));
+      + (origin !== 'import' ? ' It is saved in this browser like an import; use Export JSON to keep a copy.' : ''));
     return id;
   }
 
@@ -1168,6 +1194,33 @@
       + (held.length > 1 ? ` (and ${held.length - 1} more before it)` : '')
       + '. It is kept for a day, then erased.', { label: 'Restore', run: () => restore(latest.id) });
   });
+</script>
+
+<script type="module">
+  /*
+   * Offline: the deployed site keeps a copy of itself (/sw.js) and opens from
+   * it when the network does not answer. Not on a local server, where the
+   * files are on the same machine anyway and a worker would only stand
+   * between a developer and their edits -- unless `cs-offline` is set to
+   * "on" in localStorage, for trying it there.
+   */
+  const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  let forced = false;
+  try { forced = localStorage.getItem('cs-offline') === 'on'; } catch { /* no storage: not forced */ }
+  if ('serviceWorker' in navigator && (!local || forced)) {
+    navigator.serviceWorker.register('../sw.js', { scope: '../' }).then(async () => {
+      const ready = await navigator.serviceWorker.ready;
+      // Once the sheet has loaded what it needs, the worker is told what that
+      // was, so the copy is complete from this visit on.
+      await customElements.whenDefined('character-sheet');
+      const sheet = document.querySelector('character-sheet');
+      await Promise.race([sheet?.whenReady?.(), new Promise((r) => setTimeout(r, 8000))]);
+      // The site's root and the app's folder too: the addresses a bookmark holds.
+      const keep = [location.href, new URL('./', location.href).href, new URL('../', location.href).href,
+        ...performance.getEntriesByType('resource').map((e) => e.name)];
+      ready.active?.postMessage({ keep });
+    }).catch(() => { /* not offered: the app works online as before */ });
+  }
 </script>
 
 </body>

@@ -34,7 +34,7 @@ import { wealthView } from './stats/wealth.js';
 import { essenceScope } from './subsystems/akashic.js';
 import { manipulationName } from './subsystems/cardcasting.js';
 import { trackerFacts, trackerShown } from './trackers.js';
-import { featNames } from './feats.js';
+import { featLevel, featNames, isAhead, rowLevel } from './feats.js';
 import { MONSTER_PROSE_FIELDS } from '../monster/block.js';
 import { transparencySources } from './transparency.js';
 import {
@@ -1145,7 +1145,7 @@ const ABILITY_COLUMN_TYPES = {
  * an ability score its build. Untyped, dodge and circumstance columns are not
  * here, because those stack.
  */
-function typedColumns(model, key) {
+export function typedColumns(model, key) {
   const c = model.data;
   const row = (resolved, map, types, filter) => {
     const out = {};
@@ -1481,16 +1481,20 @@ export function proseSources(model) {
    * else. The granted feats have carried this column all along and were never
    * walked; they are now, under the same name.
    */
+  // A feat or a granted feat waiting for a level is held back like a
+  // Progression row the character has not reached (see rowLevel in feats.js).
+  const planned = (at) => (isAhead(at, level) ? { future: true } : null);
   (d.featGroups || []).forEach((group, gi) => {
-    (group.entries || []).forEach((f, i) => push(`feat:${gi}:${i}`, f?.note));
+    (group.entries || []).forEach((f, i) => push(`feat:${gi}:${i}`, f?.note, null, planned(featLevel(group, f))));
   });
   for (const key of ['drawback', 'specialty']) {
     push(`grantedFeat:${key}`, d.grantedFeats?.[key]?.note);
   }
-  (d.grantedFeats?.others || []).forEach((f, i) => push(`grantedFeat:${i}`, f?.note));
-  for (const [lvl, text] of Object.entries(d.altTraining?.picks || {})) push(`altTraining:${lvl}`, text);
+  (d.grantedFeats?.others || []).forEach((f, i) => push(`grantedFeat:${i}`, f?.note, null, planned(rowLevel(f))));
+  // Alternate Training is picked level by level, so a pick for a later one waits.
+  for (const [lvl, text] of Object.entries(d.altTraining?.picks || {})) push(`altTraining:${lvl}`, text, null, planned(Number(lvl) || null));
   for (const [lvl, text] of Object.entries(d.altTraining?.rowNotes || {})) {
-    push(`altTrainingNote:${lvl}`, text);
+    push(`altTrainingNote:${lvl}`, text, null, planned(Number(lvl) || null));
   }
   push('altTraining:notes', d.altTraining?.notes);
   // `notes` is the sibling map of one note per slot, not an eighth slot, so it
@@ -1594,8 +1598,9 @@ export function proseSources(model) {
       push(`talent:${side}:${ci}:${li}:u:notes`, lv.utilityNotes);
     }));
     (t?.bonusTalents || []).forEach((b, bi) => {
-      push(`bonusTalent:${side}:${bi}`, b.talent);
-      push(`bonusTalent:${side}:${bi}:notes`, b.notes);
+      const wait = isAhead(rowLevel(b), Number(d.identity?.level) || 0) ? { future: true } : null;
+      push(`bonusTalent:${side}:${bi}`, b.talent, null, wait);
+      push(`bonusTalent:${side}:${bi}:notes`, b.notes, null, wait);
     });
     (t?.tradition?.entries || []).forEach((e, ei) => push(`tradition:${side}:${ei}`, e.talent));
     (t?.tradition?.drawbacks || []).forEach((x, xi) => push(`drawback:${side}:${xi}`, x));

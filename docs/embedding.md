@@ -42,7 +42,13 @@ its own shadow root, `/` included.
 **Properties / methods:** `.character` (get or set a document directly, no fetch),
 `.model`, `.toJSON()`, `.audit()`, `.resetToSource()`, `.whenReady()` (resolves once
 stored state has been reconciled — setting `.character` starts an IndexedDB read, so the
-model is not there on the next line), `.changeCount`.
+model is not there on the next line), `.changeCount`, and `.printTabs(ids, { print,
+landscape })`, which draws those tabs into a print-only stack, one tab a page, and opens
+the print dialog (`print: false` draws the stack and stops). Page margins and orientation
+are the host page's to set: an `@page` rule inside the shadow root does nothing, so the
+app's own page sets `@page { margin: 10mm }` in `chrome.css`, which is the width the sheet
+fits wide tables to, and Landscape adds `@page { size: landscape }` to the page for that
+print.
 
 **Events:** `character-change` (`detail: {character, diff}`) and `tracker-change`
 (`detail: {tracker}`), both composed so they cross the shadow boundary. `tracker-change`

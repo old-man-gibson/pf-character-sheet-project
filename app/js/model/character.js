@@ -33,7 +33,7 @@
  */
 
 import {
-  DERIVED, FORWARD_BY_DERIVED, SIZE_CARRY_MULTIPLIER, abilityMod, armorParts, carryTiers,
+  DERIVED, FORWARD_BY_DERIVED, abilityMod, armorParts,
   flatFootedCmd, iterativeAttacks, skillTotal, statMod,
 } from '../rules.js';
 import {
@@ -53,6 +53,7 @@ import {
 import { emit, subscribe } from './events.js';
 import {
   markUndo, undo, undoLabel, undoLast, undoPlay, clearUndo, playAction, playActions,
+  redoLabel, redoLast, undoState, adoptUndoState,
 } from './undo.js';
 import {
   addClassFeatureColumn, addClassFeatureColumnOptions, addClassFeatureNote,
@@ -136,8 +137,11 @@ import {
 import {
   addSystemPool, addTracker, ensureMythicPower, isProtectedTracker, loadTrackers, missingSystemPools,
   recomputeBuffs, recomputeTrackers, removeTracker, seedTrackers, stepTracker, tierNow, updateTracker,
+  endedText, tickBuffRounds,
 } from './trackers.js';
 import { featCount, recomputeLanguages, recomputeSpeeds } from './traits.js';
+import { applyCarry } from './stats/carry.js';
+import { logPlay, playLog } from './play-log.js';
 import { casterLevelSources, toggleCountsToward } from './transparency.js';
 import { evaluateAmount, getPath, isFormulaText, safe, setPath, skillForwardKey, skillKey } from './util.js';
 
@@ -256,6 +260,8 @@ export class Character {
     this.#resolveOffsets();
     this.#applyGestalt();
     this.#resolveDefenceBonuses();
+    // The load, before the AC and skills it caps; see stats/carry.js.
+    applyCarry(this);
 
     for (const d of DERIVED) {
       // The reconciliation offset and the forwarded bonus are both flat
@@ -270,14 +276,6 @@ export class Character {
     c.defenses.ffCmd = flatFootedCmd(c, this.ffCmdExtra);
 
     c.attack.iterative = iterativeAttacks(c.attack.bab);
-
-    // Carry capacity follows Strength, size, Ant Haul and quadruped status.
-    const tiers = carryTiers((c.abilities.str.workingScore ?? c.abilities.str.tempScore) + (c.carry?.strBonus || 0), {
-      multiplier: SIZE_CARRY_MULTIPLIER[c.identity.size] ?? 1,
-      antHaul: c.carry?.antHaul || 1,
-      quadruped: !!c.carry?.quadruped,
-    });
-    c.carry = { ...c.carry, ...tiers };
 
     this.#recomputeSpeeds();
     // A guile class blended into the sphere sides spends talents there, so its
@@ -487,6 +485,15 @@ export class Character {
 
   get undoLabel() { return undoLabel(this); }
 
+  /* Doing again what was undone, and the stacks kept across a reload. */
+  redoLast(...a) { return redoLast(this, ...a); }
+
+  get redoLabel() { return redoLabel(this); }
+
+  undoState(...a) { return undoState(this, ...a); }
+
+  adoptUndoState(...a) { return adoptUndoState(this, ...a); }
+
   /* Taking back one thing done at the table, and only that. The actions below
      run through `play`, each under the name its Undo button offers it back
      by ("Undo 5 damage"); see playAction in model/undo.js. */
@@ -495,6 +502,15 @@ export class Character {
   undoPlay(...a) { return undoPlay(this, ...a); }
 
   get playActions() { return playActions(this); }
+
+  /* The play log: what happened, kept on the document; see model/play-log.js. */
+  get playLog() { return playLog(this); }
+
+  addLogNote(text) {
+    const entry = logPlay(this, text, 'note');
+    if (entry) this.#emit({ type: 'log' });
+    return entry;
+  }
 
   list(...a) { return listAt(this, ...a); }
   listAdd(...a) { return listAdd(this, ...a); }
@@ -683,6 +699,9 @@ export class Character {
   applyNonlethal(...a) { return this.play((r) => r.taken && `${r.taken} nonlethal damage`, () => applyNonlethal(this, ...a)); }
   grantTempHp(...a) { return this.play((r) => r.granted && `${r.granted} temporary hit points`, () => grantTempHp(this, ...a)); }
   applyHealing(...a) { return this.play((r) => r.healed && `heal ${r.healed}`, () => applyHealing(this, ...a)); }
+
+  /* A round off every ticked buff with rounds left; see tickBuffRounds. */
+  buffRound() { return this.play((r) => r.ticked && ['Next round', endedText(r.ended)].filter(Boolean).join(', '), () => tickBuffRounds(this)); }
   meterStyle(...a) { return meterStyle(this, ...a); }
   setMeterStyle(...a) { return setMeterStyle(this, ...a); }
   meterSpec(...a) { return meterSpec(this, ...a); }

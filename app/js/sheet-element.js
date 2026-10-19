@@ -77,6 +77,10 @@ import * as fields from './ui/fields.js';
  * these are filled on demand is that carrying 8,912 was 61 ms of every render.
  */
 const DATALIST_MAX = 40;
+/** How wide a printed page's text is, in CSS pixels: A4 less 10 mm margins (190 mm). */
+const PRINT_WIDTH = 715;
+/** The same, turned: A4 landscape less the margins (277 mm). */
+const PRINT_WIDTH_LANDSCAPE = 1045;
 import * as rows from './ui/rows.js';
 import { bindDrag, half, side } from './ui/drag.js';
 import { showBrackets, hideBrackets } from './ui/brackets.js';
@@ -127,6 +131,7 @@ import {
 } from './history.js';
 import { SCHEMA_VERSION } from './model.js';
 import { downloadFile } from './download.js';
+import { tabId, undoKey, readUndo, writeUndo } from './undo-store.js';
 import {
   TRACKER_PALETTE, normalizeStyle, normalizeHex, isDefaultStyle, rgba, readableOn,
 } from './tracker-style.js';
@@ -615,6 +620,11 @@ export class CharacterSheetElement extends HTMLElement {
   #chromeMenu = false;
   /** Whether the theme picker is open under the rail. */
   #themeMenu = false;
+  /* Print tabs…: whether its panel is up, and the tabs a print is drawing. */
+  #printMenu = false;
+  #printStack = null;
+  #printWidth = PRINT_WIDTH;
+  #printPage = null;
   /**
    * What this browser asked for: `{ palette, layout }`, either half optional,
    * or null when it never chose and the attributes are the host's. Kept apart
@@ -644,6 +654,10 @@ export class CharacterSheetElement extends HTMLElement {
      only ever one last thing. */
   #undoToast = null;    // { label }
   #undoToastTimer = null;
+  /* The undo stacks kept across a reload (see undo-store.js): written shortly
+     after a change, and the ones found on open waiting for a resumed copy. */
+  #undoSaveTimer = null;
+  #undoKept = null;
   /* The list of earlier play actions under the rail's Undo button, open or not. */
   #playMenu = false;
   /**
@@ -736,7 +750,7 @@ export class CharacterSheetElement extends HTMLElement {
     if (this.getAttribute('hotkeys') === 'off') return;
     if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
     const key = e.key?.toLowerCase();
-    if (key !== 'k' && key !== 's' && key !== 'z') return;
+    if (key !== 'k' && key !== 's' && key !== 'z' && key !== 'y') return;
     // The path, not `contains`: an event from inside the shadow root is
     // retargeted at the host, and `contains` cannot see across the boundary.
     const path = e.composedPath?.() || [];
@@ -757,19 +771,20 @@ export class CharacterSheetElement extends HTMLElement {
       return;
     }
     /*
-     * Ctrl+Z takes back the last row that was removed -- and only ever that.
-     * A field has an undo of its own that works per character rather than per
-     * commit, and it is better at typing than anything here would be, so the
-     * key is left alone wherever a caret is standing. Shift is left alone too:
-     * there is no redo, and taking the key for nothing would be worse than not
-     * taking it.
+     * Ctrl+Z takes back the last removal or play action; Ctrl+Shift+Z and
+     * Ctrl+Y do again what it took back. A field has an undo of its own that
+     * works per character rather than per commit, and it is better at typing
+     * than anything here would be, so the keys are left alone wherever a
+     * caret is standing, and whenever there is nothing to take or redo.
      */
-    if (key === 'z') {
-      if (!inside || e.shiftKey || this.isPublished) return;
+    if (key === 'z' || key === 'y') {
+      if (!inside || this.isPublished) return;
       if (isTypingIn(path[0] ?? e.target)) return;
-      if (!this.#model?.undoLabel) return;
+      const redo = key === 'y' || e.shiftKey;
+      if (!(redo ? this.#model?.redoLabel : this.#model?.undoLabel)) return;
       e.preventDefault();
-      this.#undo();
+      if (redo) this.#redo();
+      else this.#undo();
       return;
     }
     // Typing somewhere else on the page: leave the key to whoever is typing.
@@ -874,6 +889,9 @@ export class CharacterSheetElement extends HTMLElement {
     }
     // The card table's pop-out windows are told when the sheet goes.
     window.addEventListener('pagehide', this.#closeCardWindows);
+    // A reload straight after an action still finds its undo kept.
+    window.addEventListener('pagehide', this.#keepUndoNow);
+    window.addEventListener('beforeprint', this.#onBeforePrint);
     // The same character open in another window: its writes are picked up here.
     window.addEventListener('storage', this.#onStorage);
     if (this.#model && !this.#cardChannel) this.#openCardChannel();
@@ -883,6 +901,9 @@ export class CharacterSheetElement extends HTMLElement {
 
   disconnectedCallback() {
     window.removeEventListener('pagehide', this.#closeCardWindows);
+    window.removeEventListener('pagehide', this.#keepUndoNow);
+    window.removeEventListener('beforeprint', this.#onBeforePrint);
+    this.#keepUndoNow();
     window.removeEventListener('storage', this.#onStorage);
     clearTimeout(this.#syncTimer);
     this.#pendingSync = null;
@@ -1137,6 +1158,11 @@ export class CharacterSheetElement extends HTMLElement {
     this.#recoveries = this.isPublished ? [] : this.#history.readRecoveries();
     const canonical = this.isPublished ? null : await this.#history.readSaved();
     this.#savedDoc = canonical?.data ?? null;
+    // The undo stacks this tab kept, if the working copy is still the one it
+    // wrote: another window's later write makes them someone else's past.
+    const mine = !!working && !!working.by && working.by === tabId();
+    const keptUndo = mine ? readUndo(this.#undoStoreKey(doc?.id)) : null;
+    this.#undoKept = null;
     this.#staleSaved = !!canonical && !canonical.data;
 
     const open = this.isPublished ? doc : (this.#savedDoc ?? working?.data ?? doc);
@@ -1156,6 +1182,15 @@ export class CharacterSheetElement extends HTMLElement {
     }
 
     this.#adoptDocument(open);
+    // Opened on the copy they were kept beside, the stacks come straight back;
+    // opened on the saved version with unsaved work to resume, they wait for
+    // the resume.
+    if (keptUndo && !drifted) {
+      this.#model.adoptUndoState(keptUndo);
+      this.#keepUndoSoon();
+    } else if (keptUndo) {
+      this.#undoKept = keptUndo;
+    }
     // The model is what names the store, so the tab can only be read back once
     // there is one -- and it has to be read before the first render, or the
     // sheet opens on Overview and then jumps.
@@ -1184,6 +1219,9 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #adoptDocument(doc) {
     this.#model = new Character(structuredClone(doc));
+    // A new model starts with empty stacks, and what was kept for the old one
+    // must not come back over this document on the next reload.
+    this.#keepUndoSoon();
     // The card table's windows listen on a channel named for the character.
     this.#openCardChannel();
     // A member handed to the GM stays handed over across a reload: the grants
@@ -1225,6 +1263,7 @@ export class CharacterSheetElement extends HTMLElement {
       // rail's button names it now. After the handler that did it has drawn,
       // because some of those redraw a panel and not the rail.
       if (detail?.type === 'play-mark') {
+        this.#keepUndoSoon();
         this.#playMenu = false;
         if (this.#undoToast) { this.#undoToast = null; queueMicrotask(() => this.#renderRollToast()); }
         queueMicrotask(() => this.#refreshPlayUndo());
@@ -1786,6 +1825,7 @@ export class CharacterSheetElement extends HTMLElement {
   #persist() {
     if (!this.#model || !this.#history) return;
     this.#writeWorking();
+    this.#keepUndoSoon();
 
     clearTimeout(this.#snapshotTimer);
     this.#snapshotTimer = setTimeout(() => this.#considerSnapshot(), 800);
@@ -1808,7 +1848,7 @@ export class CharacterSheetElement extends HTMLElement {
    * actually turns over, so the ordinary path costs one boolean compare.
    */
   #writeWorking() {
-    const ok = this.#history.writeWorking(this.#model.toJSON()) !== false;
+    const ok = this.#history.writeWorking(this.#model.toJSON(), tabId()) !== false;
     if (ok === !this.#storageFailed) return ok;   // nothing has changed
     this.#storageFailed = !ok;
     const banner = this.shadowRoot?.querySelector('.savefail');
@@ -1838,6 +1878,26 @@ export class CharacterSheetElement extends HTMLElement {
   /** A copy from another window waiting for the field being typed in to be left. */
   #pendingSync = null;
   #syncTimer = null;
+
+  /** Where this character's undo stacks are kept for a reload of this tab. */
+  #undoStoreKey(id = this.#model?.data?.id) {
+    return undoKey(this.getAttribute('storage-key') || workingKey(id || 'character'));
+  }
+
+  /** Keep the undo stacks a moment after the change that moved them. */
+  #keepUndoSoon() {
+    if (this.isPublished) return;
+    clearTimeout(this.#undoSaveTimer);
+    this.#undoSaveTimer = setTimeout(this.#keepUndoNow, 400);
+  }
+
+  #keepUndoNow = () => {
+    if (this.#undoSaveTimer === null) return;
+    clearTimeout(this.#undoSaveTimer);
+    this.#undoSaveTimer = null;
+    if (!this.#model || this.isPublished) return;
+    writeUndo(this.#undoStoreKey(), this.#model.undoState());
+  };
 
   /** The marker a save or a checkpoint stamps for the other windows. */
   #historyMarkKey() { return `${workingKey(this.#model?.data?.id || 'character')}:history`; }
@@ -3068,6 +3128,8 @@ export class CharacterSheetElement extends HTMLElement {
         ${monster.menuButton(this.#model, this.isAdmin)}
         <button data-view data-action="theme" aria-pressed="${this.#themeMenu}"
           title="Palettes, and where the tabs go">Theme &amp; layout…</button>
+        <button data-view data-action="print-menu" aria-pressed="${this.#printMenu}"
+          title="Print several tabs at once. Ctrl+P prints the tab that is open.">Print tabs…</button>
         ${this.isPublished ? '' : `
         <button data-action="history" aria-pressed="${this.#showHistory}"
           title="Earlier states of this sheet">History${this.#snapshots.length ? ` (${this.#snapshots.length})` : ''}</button>`}
@@ -3098,6 +3160,7 @@ export class CharacterSheetElement extends HTMLElement {
   #notices() {
     return `<div class="notices">
         ${this.#themeMenu ? this.#themeMenuHtml() : ''}
+        ${this.#printMenu ? this.#printMenuHtml() : ''}
         ${this.#resumeBanner()}
         ${this.#staleSaved ? `<div class="histnote" role="status">
           <span><strong>Saved version kept for recovery.</strong>
@@ -3372,6 +3435,114 @@ export class CharacterSheetElement extends HTMLElement {
       </section></div>`;
     }
   }
+
+  /* ---------------- printing ---------------- */
+
+  /**
+   * Print tabs…: which of the bar's tabs go on paper, the open one ticked.
+   */
+  #printMenuHtml() {
+    const tabs = this.#barEntries().filter((e) => e.id !== 'systabs');
+    return `<div class="panel thememenu printmenu" role="dialog" aria-label="Print tabs">
+        <h3>Print tabs</h3>
+        <p class="hint">Each tab starts on a new page. Wide tables shrink to the page width.</p>
+        <div class="printpicks">${tabs.map((e) => `<label class="chk"><input type="checkbox" data-printtab="${esc(e.id)}"
+          ${e.id === this.#tab ? 'checked' : ''}><span>${esc(e.label)}</span></label>`).join('')}</div>
+        <label class="chk" style="margin-top:8px" title="Turns the page and fits wide tables to its width">
+          <input type="checkbox" data-printlandscape><span>Landscape</span></label>
+        <div class="pair" style="margin-top:8px">
+          <button class="primary" data-action="print-go">Print</button>
+          <button data-view data-action="print-menu">Cancel</button>
+        </div>
+      </div>`;
+  }
+
+  /**
+   * Print several tabs at once. Each is drawn in turn into a stack that only
+   * paper shows, a page break between, and the stack goes when the print
+   * dialog closes. `print: false` draws the stack and stops there, for a
+   * host that prints by other means. Ctrl+P alone prints the open tab.
+   */
+  printTabs(ids, { print = true, landscape = false } = {}) {
+    if (!this.#model) return;
+    const labels = new Map(this.#barEntries().map((e) => [e.id, e.label]));
+    const was = this.#tab;
+    const stack = [];
+    try {
+      for (const id of ids) {
+        if (!labels.has(id) || id === 'systabs') continue;
+        this.#tab = id;
+        stack.push({ id, label: labels.get(id), html: this.#panel() });
+      }
+    } finally {
+      this.#tab = was;
+    }
+    this.#printStack = stack;
+    this.#printWidth = landscape ? PRINT_WIDTH_LANDSCAPE : PRINT_WIDTH;
+    // The page's orientation is the document's to set (an @page rule does
+    // nothing inside a shadow root), so it goes on the page for this print.
+    this.#printPage?.remove();
+    this.#printPage = null;
+    if (landscape) {
+      this.#printPage = this.ownerDocument.createElement('style');
+      this.#printPage.textContent = '@page { size: landscape; }';
+      this.ownerDocument.head.append(this.#printPage);
+    }
+    this.#drawPrintStack();
+    if (!print || !stack.length) return;
+    const done = () => {
+      window.removeEventListener('afterprint', done);
+      this.#printStack = null;
+      this.#printWidth = PRINT_WIDTH;
+      this.#printPage?.remove();
+      this.#printPage = null;
+      this.#drawPrintStack();
+    };
+    window.addEventListener('afterprint', done);
+    window.print();
+  }
+
+  #drawPrintStack() {
+    let holder = this.shadowRoot?.querySelector('.printstack');
+    if (!this.#printStack?.length) {
+      holder?.remove();
+      this.removeAttribute('printing');
+      return;
+    }
+    if (!holder) {
+      holder = document.createElement('div');
+      holder.className = 'printstack';
+      holder.setAttribute('aria-hidden', 'true');
+      (this.shadowRoot.querySelector('.main') ?? this.shadowRoot).append(holder);
+    }
+    holder.innerHTML = this.#printStack.map((t) => `<section class="printtab">
+      <h2 class="printhead">${esc(t.label)}</h2><div class="body">${t.html}</div></section>`).join('');
+    this.setAttribute('printing', '');
+    this.#fitPrintTables(holder);
+  }
+
+  /**
+   * A table wider than the printed page is scaled down to fit it, rather
+   * than running off the edge. The width is read now, on screen, from the
+   * table's own size; the page is taken as A4 with the margins chrome.css
+   * gives it, the narrower of the two common sizes.
+   */
+  #fitPrintTables(root) {
+    for (const wrap of root?.querySelectorAll('.tablewrap') || []) {
+      const table = wrap.querySelector(':scope > table');
+      const wide = Math.max(table?.scrollWidth || 0, wrap.scrollWidth || 0);
+      // Less the panel's own padding and border, which the page width does not leave room for.
+      const room = this.#printWidth - 40;
+      if (wide > room) wrap.style.setProperty('--print-zoom', (room / wide).toFixed(3));
+      else wrap.style.removeProperty('--print-zoom');
+    }
+  }
+
+  /** Ctrl+P: the open tab's wide tables, fitted the same way. */
+  #onBeforePrint = () => {
+    if (this.#printStack) return;
+    this.#fitPrintTables(this.shadowRoot?.getElementById('sheet-panel'));
+  };
 
   /** What the tab bar calls the tab that is up, for a message about it. */
   #tabLabel() {
@@ -3759,20 +3930,23 @@ export class CharacterSheetElement extends HTMLElement {
     // taken back is a receipt too: the rail already names the next one, and
     // an Undo beside "Undid 5 damage" reads as putting the damage back.
     const more = t.offer !== false && this.#model?.undoLabel;
+    // After an undo, the way forward again: Redo, while there is one.
+    const again = t.redo && this.#model?.redoLabel;
     return `<div class="rolltoast undotoast" role="status">
       <div class="rollhead">
         <strong>${esc(t.label)}</strong>
         ${more ? '<button class="primary" data-undo>Undo <kbd>Ctrl</kbd><kbd>Z</kbd></button>' : ''}
+        ${again ? '<button data-redo>Redo <kbd>Ctrl</kbd><kbd>Y</kbd></button>' : ''}
         <button class="rollclose" data-undoclose aria-label="Dismiss">×</button>
       </div>
     </div>`;
   }
 
   /** Offer the last structural change back, or say what an undo did (`offer: false`). */
-  #showUndoToast(label, { offer = true } = {}) {
+  #showUndoToast(label, { offer = true, redo = false } = {}) {
     clearTimeout(this.#rollToastTimer);
     this.#rollToast = null;
-    this.#undoToast = { label, offer };
+    this.#undoToast = { label, offer, redo };
     this.#renderRollToast();
   }
 
@@ -3943,6 +4117,9 @@ export class CharacterSheetElement extends HTMLElement {
     scope.querySelectorAll('[data-undo]').forEach((b) => {
       b.addEventListener('click', () => this.#undo());
     });
+    scope.querySelectorAll('[data-redo]').forEach((b) => {
+      b.addEventListener('click', () => this.#redo());
+    });
     scope.querySelectorAll('[data-undoclose]').forEach((b) => {
       b.addEventListener('click', () => {
         clearTimeout(this.#undoToastTimer);
@@ -3962,6 +4139,18 @@ export class CharacterSheetElement extends HTMLElement {
   #undo() {
     if (!this.#model) return;
     this.#reportUndo(this.#model.undoLast());
+  }
+
+  /** Do again what the last undo took back, and say what came back. */
+  #redo() {
+    if (!this.#model) return;
+    const r = this.#model.redoLast();
+    this.#playMenu = false;
+    if (!r) { this.#showUndoToast('Nothing to redo', { offer: false }); return; }
+    if (!r.ok) { this.#render(); this.#showUndoToast(`Could not redo ${r.label}: ${r.reason}`, { offer: false }); return; }
+    this.#undoToast = null;
+    this.#render();
+    this.#showUndoToast(`Redid ${r.label}`, { redo: true });
   }
 
   /**
@@ -4026,6 +4215,12 @@ export class CharacterSheetElement extends HTMLElement {
     }
     m = /^buffs\.(\d+)\.on$/.exec(path);
     if (m) return `${d.buffs?.[Number(m[1])]?.name || 'buff'} ${value ? 'on' : 'off'}`;
+    // Ability damage and drain are taken at the table like hit points.
+    m = /^abilities\.(str|dex|con|int|wis|cha)\.(damage|drain)$/.exec(path);
+    if (m) {
+      const name = m[1][0].toUpperCase() + m[1].slice(1);
+      return `${name} ${m[2]} ${Number(d.abilities?.[m[1]]?.[m[2]]) || 0} → ${Number(value) || 0}`;
+    }
     return null;
   }
 
@@ -4040,8 +4235,8 @@ export class CharacterSheetElement extends HTMLElement {
     if (!r.ok) { this.#render(); this.#showUndoToast(`Could not undo ${r.label}: ${r.reason}`, { offer: false }); return; }
     this.#undoToast = null;
     this.#render();
-    if (r.kind === 'snapshot') this.#showUndoToast(`${r.label} — put back`);
-    else this.#showUndoToast(`Undid ${r.label}`, { offer: false });
+    if (r.kind === 'snapshot') this.#showUndoToast(`${r.label} — put back`, { redo: true });
+    else this.#showUndoToast(`Undid ${r.label}`, { offer: false, redo: true });
   }
 
   /* ---------------- the search palette ---------------- */
@@ -5367,7 +5562,9 @@ export class CharacterSheetElement extends HTMLElement {
          * catalogue face is computed at render, so the render is the thing
          * that was missing.
          */
-        if (AFFECTS_DERIVED.test(list) || input.hasAttribute('list')) this.#rerender(input);
+        // So does a From lvl box: the row turns planned or reached with it,
+        // and what it counts toward moves.
+        if (AFFECTS_DERIVED.test(list) || input.hasAttribute('list') || field === 'level') this.#rerender(input);
       });
     });
 
@@ -6289,6 +6486,47 @@ export class CharacterSheetElement extends HTMLElement {
         // has to rebuild it.
         if (key === 'fullAttackWeapon') this.#render();
       });
+      // Enter adds the play log's note, as its Add button does.
+      if (key === 'logNote') {
+        input.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          input.closest('.playlog')?.querySelector('[data-action="log-note"]')?.click();
+        });
+      }
+    });
+
+    // The play log's search: lines filtered in place as the query is typed,
+    // over every line kept rather than the latest few, so the caret stays put.
+    root.querySelectorAll('[data-logsearch]').forEach((input) => {
+      const filter = () => {
+        this.#view.logQuery = input.value;
+        const panel = input.closest('.playlog');
+        const words = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+        const lines = [...panel.querySelectorAll('li[data-logline]')];
+        let hits = 0;
+        for (const li of lines) {
+          const show = words.length
+            ? words.every((w) => li.textContent.toLowerCase().includes(w))
+            : !li.hasAttribute('data-logmore');
+          li.hidden = !show;
+          if (show && words.length) hits += 1;
+        }
+        // A day's heading shows while any line under it does.
+        for (const head of panel.querySelectorAll('li.logday')) {
+          let next = head.nextElementSibling;
+          let any = false;
+          while (next && !next.classList.contains('logday')) { if (!next.hidden) any = true; next = next.nextElementSibling; }
+          head.hidden = !any;
+        }
+        const count = panel.querySelector('.logcount');
+        if (count) {
+          count.hidden = !words.length;
+          count.textContent = `${hits} of ${lines.length} line${lines.length === 1 ? '' : 's'} match.`;
+        }
+      };
+      input.addEventListener('input', filter);
+      if (input.value) filter();
     });
 
     // The word that arms Reset. Toggled in place -- a re-render per keystroke
@@ -7013,6 +7251,20 @@ export class CharacterSheetElement extends HTMLElement {
         this.#themeMenu = !this.#themeMenu;
         this.#renderHeader();
         break;
+      case 'print-menu':
+        this.#printMenu = !this.#printMenu;
+        this.#chromeMenu = false;
+        this.#renderHeader();
+        break;
+      case 'print-go': {
+        const ids = [...this.shadowRoot.querySelectorAll('.printmenu input[data-printtab]:checked')]
+          .map((b) => b.dataset.printtab);
+        const landscape = !!this.shadowRoot.querySelector('.printmenu input[data-printlandscape]')?.checked;
+        this.#printMenu = false;
+        this.#renderHeader();
+        if (ids.length) this.printTabs(ids, { landscape });
+        break;
+      }
       case 'theme-close':
         this.#themeMenu = false;
         this.#renderHeader();
@@ -7149,17 +7401,28 @@ export class CharacterSheetElement extends HTMLElement {
         }
         break;
       }
-      case 'resume':
+      case 'resume': {
         // The unsaved work was filed as a snapshot on load, so picking it up is
-        // an ordinary restore -- and one that is itself undoable.
-        if (this.#resume?.key) this.#restoreSnapshot(this.#resume.key);
+        // an ordinary restore -- and one that is itself undoable. The undo kept
+        // beside that work comes back with it.
+        const kept = this.#undoKept;
+        this.#undoKept = null;
+        const adoptKept = () => {
+          if (!kept || !this.#model) return;
+          this.#model.adoptUndoState(kept);
+          this.#keepUndoSoon();
+          this.#render();
+        };
+        if (this.#resume?.key) this.#restoreSnapshot(this.#resume.key).then(adoptKept);
         else if (this.#resume?.doc) {
           this.#adoptDocument(this.#resume.doc);
           if (this.#history) this.#writeWorking();
           this.#resume = null;
           this.#render();
+          adoptKept();
         }
         break;
+      }
       case 'discard-resume': {
         const key = this.#resume?.key;
         this.#resume = null;
@@ -7443,8 +7706,12 @@ export class CharacterSheetElement extends HTMLElement {
       case 'buff-add':
         this.#view.openBuff = (this.#model.data.buffs || []).length;
         this.#model.listAdd('buffs', {
-          name: '', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [],
+          name: '', on: true, type: '', rounds: '', attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [],
         });
+        this.#render();
+        break;
+      case 'buff-round':
+        this.#model.buffRound();
         this.#render();
         break;
       case 'buff-bonus-add': {
@@ -7537,6 +7804,17 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       }
+      case 'log-note': {
+        const text = String(this.#view.draft.logNote ?? '').trim();
+        if (text) this.#model.addLogNote(text);
+        this.#view.draft.logNote = '';
+        this.#render();
+        break;
+      }
+      case 'log-all':
+        this.#view.logAll = !this.#view.logAll;
+        this.#render();
+        break;
       case 'quick-heal': {
         const n = Number(this.#view.draft.quickHp) || 0;
         if (n > 0) {

@@ -16,7 +16,7 @@ import {
   loadCharacter, fixtureIds, missingCharacters, missingNote, CHARACTERS_DIR,
 } from './fixtures.mjs';
 import {
-  Character, MYTHIC_POWER_FORMULA, SCHEMA_VERSION, DEFAULT_TAB_ORDER, inspectDocument,
+  Character, MYTHIC_POWER_FORMULA, SCHEMA_VERSION, DEFAULT_TAB_ORDER, inspectDocument, abilityCollapse, LOG_MAX,
   setManeuverCatalogue, disciplineEntries, describeSource, maneuverDetails, maneuverIsWritten,
   maneuverOwn, blankWeapon, blankClassRow,
   setVancianTables, castingTableNames, castingTable, closestName,
@@ -42,7 +42,7 @@ import {
   ATTACK_MODES, ATTACK_MODE_KEY, attackModeTotal, attackModeAbility,
   WEAPON_ATTACK_TYPES,
   KHESHIG_VEILS, wikiUrl, mergeLayout,
-  CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod, statKeys, critMultOf, threatText, readCrit, weaponMoves,
+  CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, skillConditionDelta, fmt, abilityMod, armorParts, statMod, statKeys, critMultOf, threatText, readCrit, weaponMoves,
   AC_BONUS_TYPES, SAVE_BONUS_TYPES, SHEET_ALIASES, ABILITIES,
   MONK_UNARMED_LADDER, UNARMED_NATIVE_THRESHOLD, ladderDice, stepDice, raiseDice, unarmedDice,
   gestaltSaveBase,
@@ -53,6 +53,7 @@ import { blankDocument } from '../app/js/convert.js';
 import { importConjuredCompanion } from '../app/js/model/subsystems/companions.js';
 import { companionTabNumber } from '../app/js/companions.js';
 import { featNames } from '../app/js/model/feats.js';
+import { possessedSpheres } from '../app/js/model/spheres.js';
 import { emptyMonster } from '../app/js/monster/block.js';
 import { subsystems } from '../app/js/model/subsystems/registry.js';
 import { GAME_SYSTEMS } from '../app/js/rules.js';
@@ -61,7 +62,7 @@ import { isComputedPath } from '../app/js/model/computed-paths.js';
 import { importCrafting } from '../app/js/model/subsystems/crafting.js';
 import { importVancian } from '../app/js/model/subsystems/vancian.js';
 import { importPsionics } from '../app/js/model/subsystems/psionics.js';
-import { sessionState, useSessionAction } from '../app/js/model/session.js';
+import { advanceTurn, sessionState, useSessionAction } from '../app/js/model/session.js';
 import {
   CONJURED_TABLE, COMPANION_KINDS, companionBreakdown, companionScopeName, defaultCompanion, normalizeCompanion,
   splitAbilities, setCompanionAbilityText, companionAbilityText, abilityTextKey, companionById, companionEntries,
@@ -71,9 +72,9 @@ import { namedTextFrom } from '../app/js/extensions.js';
 import { parseDiceExpr as readDice, stepDamageDice, stepDiceMap } from '../app/js/rules.js';
 import {
   GUILE_SPHERES, expertiseTalents, guilePackages, guileRanges, guileSkillHint,
-  leveragePool,
+  leveragePool, carryTiers, reducedSpeed,
 } from '../app/js/rules.js';
-import { concentrationRollSpec, rollSpec } from '../app/js/roll20.js';
+import { concentrationRollSpec, rollSpec, skillRollSpec } from '../app/js/roll20.js';
 import { NameIndex, evaluateFormula, resolvePath } from '../app/js/formula.js';
 import { positionedRows } from '../app/js/model/templates.js';
 import { blankGuileClass, guileTally } from '../app/js/model/subsystems/guile.js';
@@ -3049,6 +3050,230 @@ console.log('undo at the table -- one action back, and only that');
   check('then the removal, and the damage stays undone', [c.undo(), lost()], ['Removed Test Axe', 0]);
 }
 
+console.log('redo -- what was undone comes back, until something new is done');
+{
+  const c = new Character(blankDocument({ name: 'Redoer', level: 5 }));
+  const lost = () => c.hpState.max - c.hpState.current;
+  c.listAdd('equipment.weapons', { name: 'Test Axe', dice: '1d8' });
+  const n = c.list('equipment.weapons').length;
+  c.listRemove('equipment.weapons', n - 1);
+  c.applyDamage(4);
+  check('nothing to redo before an undo', [c.redoLabel, c.redoLast()], [null, null]);
+  c.undo();
+  c.undo();
+  check('both undone, the newer one redoes first', [c.redoLabel, lost(), c.list('equipment.weapons').length], ['Removed Test Axe', 0, n]);
+  check('the removal comes back', [c.redoLast().label, c.list('equipment.weapons').length], ['Removed Test Axe', n - 1]);
+  check('then the damage', [c.redoLast().label, lost(), c.redoLabel], ['4 damage', 4, null]);
+  check('and both can be undone again', [c.undo(), c.undo(), lost(), c.list('equipment.weapons').length],
+    ['4 damage', 'Removed Test Axe', 0, n]);
+
+  // A redo waiting behind an out-of-turn undo keeps the play undone since.
+  c.redoLast();                        // removal again; damage still waiting
+  c.applyHealing(1);                   // new play: the redo stack is gone
+  check('a new action empties the redo stack', c.redoLabel, null);
+  c.undo();
+  c.set('identity.player', 'Someone');
+  check('so does an edit', c.redoLabel, null);
+
+  // Kept across a reload: the stacks survive JSON and a fresh model.
+  c.applyDamage(3);
+  c.undo();
+  const kept = JSON.parse(JSON.stringify(c.undoState()));
+  const reopened = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  reopened.adoptUndoState(kept);
+  check('a reopened sheet can redo and undo what the old one could',
+    [reopened.redoLabel, reopened.redoLast().label, reopened.hpState.max - reopened.hpState.current, reopened.undo()],
+    ['3 damage', '3 damage', 3, '3 damage']);
+  reopened.applyDamage(1);
+  check('and newer entries still sort newest', reopened.undoLabel, '1 damage');
+}
+
+console.log('typed buffs -- the largest of a type counts, penalties stack, rounds run out');
+{
+  const c = new Character(blankDocument({ name: 'Buffed', level: 6 }));
+  const buff = (o) => ({ name: '', on: true, type: '', rounds: '', attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [], ...o });
+  c.data.buffs = [
+    buff({ name: 'Heroism', type: 'morale', attack: 2, saves: 2 }),
+    buff({ name: 'Good Hope', type: 'morale', attack: 2, damage: 2 }),
+    buff({ name: 'Haste', attack: 1 }),
+    buff({ name: 'Untyped too', attack: 1 }),
+  ];
+  c.recompute();
+  let cs = c.conditionState;
+  check('two morale +2s to attack are +2, the untyped ones still stack', cs.delta.melee, 2 + 1 + 1);
+  check('morale damage from the one that has it', cs.delta.damage, 2);
+  check('the loser says why', cs.buffStacking[1], ['attack: Heroism’s morale bonus counts instead']);
+
+  c.data.buffs.push(buff({ name: 'Crushing Despair', type: 'morale', attack: -2 }));
+  c.recompute();
+  check('a typed penalty still counts against the best bonus', c.conditionState.delta.melee, 2 + 1 + 1 - 2);
+
+  // Settled against the save's own column of that type, save by save.
+  // ABP's resistance is the same bonus as a cloak's: +1 on every save at
+  // 6th, and the cloak's +2 on Fortitude on top of it is +3 there.
+  c.data.buffs = [buff({ name: 'Resistance', type: 'resistance', saves: 3 })];
+  c.data.saves.fortitude.bonuses.resistance = 2;
+  c.recompute();
+  cs = c.conditionState;
+  check('nothing past ABP and a +2 cloak on Fortitude, +2 past ABP alone',
+    [cs.delta.fortitude, cs.delta.reflex, cs.delta.will], [0, 2, 2]);
+  check('and it says so', cs.buffStacking[0], [
+    'Fortitude: the resistance bonus already there is as large',
+    'Reflex, Will: adds only 2, past the resistance bonus already there',
+  ]);
+  c.data.buffs[0].type = '';
+  c.recompute();
+  check('untyped, it adds everywhere', c.conditionState.delta.fortitude, 3);
+
+  // Rounds: one off per round, off at none, one undo step.
+  c.data.buffs = [buff({ name: 'Haste', attack: 1, rounds: 2 }), buff({ name: 'Bless', attack: 1 })];
+  c.recompute();
+  c.clearUndo();
+  c.buffRound();
+  check('a round off', [c.data.buffs[0].rounds, c.data.buffs[0].on, c.playActions[0].label], [1, true, 'Next round']);
+  c.buffRound();
+  check('at none it switches off, and the label says so',
+    [c.data.buffs[0].rounds, c.data.buffs[0].on, c.data.buffs[1].on, c.playActions[0].label], [0, false, true, 'Next round, Haste ended']);
+  check('a round with nothing counting is not an action', [c.buffRound().ticked, c.playActions.length], [0, 2]);
+  c.undo();
+  check('undo puts it back on', [c.data.buffs[0].rounds, c.data.buffs[0].on, c.conditionState.delta.melee], [1, true, 2]);
+  advanceTurn(c, true);
+  check('the session board’s Next turn is a round too', [c.data.buffs[0].on, c.playActions[0].label], [false, 'Next turn, Haste ended']);
+}
+
+console.log('ability damage and drain -- the modifier, the score, a night’s rest');
+{
+  const c = new Character(blankDocument({ name: 'Drained', level: 5 }));
+  const str = () => c.data.abilities.str;
+  const before = { score: str().workingScore, mod: str().totalMod, melee: c.data.attack.totalMelee };
+  c.set('abilities.str.damage', 3);
+  check('3 damage is −1 to the modifier and leaves the score',
+    [str().workingScore, str().totalMod, c.data.attack.totalMelee], [before.score, before.mod - 1, before.melee - 1]);
+  c.set('abilities.str.damage', 4);
+  check('4 is −2', str().totalMod, before.mod - 2);
+  check('and the conditions’ now-figures leave it alone', [c.conditionState.deltas.str, c.conditionState.changed], [0, false]);
+  c.set('conditions.fatigued', 1);
+  check('fatigue on top is its own −1 to the modifier', c.conditionState.deltas.str, -1);
+  c.set('conditions.fatigued', 0);
+  c.set('abilities.str.drain', 2);
+  check('drain lowers the score itself', [str().workingScore, str().totalMod], [before.score - 2, before.mod - 1 - 2]);
+  check('nothing collapses yet', abilityCollapse('str', str()), null);
+  c.rest('day');
+  check('a New day heals 1 damage, and no drain', [str().damage, str().drain], [3, 2]);
+  c.set('abilities.con.drain', c.data.abilities.con.workingScore);
+  check('Con worn to 0 is death', abilityCollapse('con', c.data.abilities.con), 'dead');
+
+  // Con takes hit points with it: the maximum and what is left fall together.
+  const h = new Character(blankDocument({ name: 'Frail', level: 10 }));
+  h.data.abilities.con.drain = 0;
+  h.recompute();
+  h.applyDamage(5);
+  const [cur, max] = [h.hpState.current, h.hpMax];
+  h.set('abilities.con.drain', 4);
+  check('Con drain lowers current hit points with the maximum, damage taken unchanged',
+    [h.hpMax < max, max - cur, h.hpMax - h.hpState.current], [true, 5, 5]);
+  h.set('abilities.con.drain', 0);
+  check('and restoring it gives them back', [h.hpMax, h.hpState.current], [max, cur]);
+}
+
+console.log('conditions -- skill penalties by ability and by skill, bleed, non-proficiency');
+{
+  const c = new Character(blankDocument({ name: 'Unlucky', level: 5 }));
+  const skill = (name) => c.data.skills.find((s) => s.name === name);
+  c.set('conditions.blinded', 1);
+  let cs = c.conditionState;
+  check('blinded is −4 on a Dex skill and on Perception, nothing on a mental one',
+    [skillConditionDelta(cs, skill('Acrobatics')), skillConditionDelta(cs, skill('Perception')), skillConditionDelta(cs, skill('Diplomacy'))],
+    [-4, -4, 0]);
+  c.set('conditions.blinded', 0);
+  c.set('conditions.dazzled', 1);
+  cs = c.conditionState;
+  check('dazzled is −1 on attack and on Perception', [cs.delta.melee, skillConditionDelta(cs, skill('Perception'))], [-1, -1]);
+  check('the d20 copy reads the same', skillRollSpec(c.data, c.data.skills.indexOf(skill('Perception')), cs).rolls[0].formula,
+    `1d20${fmt((Number(skill('Perception').bonus) || 0) - 1)}`);
+  c.set('conditions.dazzled', 0);
+
+  // Bleed comes off at the start of the turn, with the turn, as one action.
+  c.set('conditions.bleed', 3);
+  const hp = c.hpState.current;
+  c.clearUndo();
+  advanceTurn(c, true);
+  check('bleed 3 is 3 damage at Next turn, named on the undo', [hp - c.hpState.current, c.playActions[0].label], [3, 'Next turn, bleed 3']);
+  c.undo();
+  check('and undoes with it', c.hpState.current, hp);
+  c.set('conditions.bleed', 0);
+
+  // A weapon the character is not proficient with is −4 to hit.
+  c.set('identity.proficiencies.weapons', ['Longsword']);
+  c.listAdd('equipment.weapons', { ...blankWeapon(), name: 'Greataxe', baseWeapon: 'greataxe', groups: ['Axes'], attackType: 'Melee' });
+  const axe = () => c.list('equipment.weapons').at(-1);
+  check('not proficient, −4 applied', [axe().proficient, axe().nonproficiency], [false, -4]);
+  const flagged = axe().attackTotal;
+  c.setItem('equipment.weapons', c.list('equipment.weapons').length - 1, 'nonproficiencyPenalty', false);
+  check('a row with the −4 already in Misc can switch it off', axe().attackTotal, flagged + 4);
+
+  // A row flagged before the sheet applied it keeps its total.
+  const old = JSON.parse(JSON.stringify(c.toJSON()));
+  delete old.equipment.weapons.at(-1).nonproficiencyPenalty;
+  old.corrections = old.corrections.filter((n) => n !== 'nonproficiency-penalty');
+  const reopened = new Character(old);
+  check('an old non-proficient row opens with the −4 off', reopened.list('equipment.weapons').at(-1).nonproficiencyPenalty, false);
+}
+
+console.log('the play log -- every action, its undo and redo, notes, kept through a snapshot undo');
+{
+  const c = new Character(blankDocument({ name: 'Logger', level: 5 }));
+  const texts = () => c.playLog.map((e) => e.text);
+  c.applyDamage(5);
+  c.applyHealing(2);
+  check('actions are logged newest first', texts(), ['heal 2', '5 damage']);
+  c.undo();
+  check('an undo adds a line and keeps the one it undid', texts(), ['Undid heal 2', 'heal 2', '5 damage']);
+  c.redoLast();
+  check('so does a redo', texts()[0], 'Redid heal 2');
+  c.addLogNote('Session 12: the hydra');
+  check('a note is a line of its own', [c.playLog[0].text, c.playLog[0].kind], ['Session 12: the hydra', 'note']);
+  c.listAdd('equipment.weapons', { name: 'Spare Axe', dice: '1d8' });
+  c.listRemove('equipment.weapons', c.list('equipment.weapons').length - 1);
+  c.applyDamage(1);
+  c.undo();   // the damage
+  c.undo();   // the removal: a snapshot, older than the log
+  check('a snapshot undo leaves the log as it is', texts().slice(0, 3), ['Undid 1 damage', '1 damage', 'Session 12: the hydra']);
+  check('and the log is saved with the character', JSON.parse(JSON.stringify(c.toJSON())).log.length, c.playLog.length);
+  for (let i = 0; i < LOG_MAX + 10; i++) c.addLogNote(`n${i}`);
+  check('the oldest go past the cap', [c.playLog.length, c.playLog[0].text], [LOG_MAX, `n${LOG_MAX + 9}`]);
+}
+
+console.log('from level -- feats, granted feats and bonus talents wait for the level they are gained at');
+{
+  const c = new Character(blankDocument({ name: 'Planner', level: 5 }));
+  const stealth = () => c.forwardedInto('skill.stealth')?.total ?? 0;
+  // A feat in the 9th-level Level Up slot is the plan at 5th.
+  const lu = c.data.featGroups.findIndex((g) => g.levelUp);
+  const slot9 = c.data.featGroups[lu].entries.findIndex((f) => String(f.detail) === '9');
+  Object.assign(c.data.featGroups[lu].entries[slot9], { name: 'Skill Focus (Stealth)', note: '{skill.stealth += 3}' });
+  // Another group's feat says its own level; one with none is had now.
+  c.data.featGroups.push({ name: 'Bonus', entries: [
+    { name: 'Alertness', detail: 'Trait', note: '{skill.perception += 2}', level: 7 },
+    { name: 'Toughness', detail: 'Fighter', note: '' },
+  ] });
+  c.data.grantedFeats.others.push({ source: 'Oath 2', name: 'Iron Will', note: '{saves.will += 2}', level: 6 });
+  c.data.training.magic.bonusTalents = [{ talent: 'Darkness', sphere: 'Dark', source: 'Item', notes: '', level: 8 }];
+  c.recompute();
+  const names = () => featNames(c.data);
+  check('nothing waiting counts yet: no bonus, no name, no sphere',
+    [stealth(), c.forwardedInto('skill.perception')?.total ?? 0, c.forwardedInto('saves.will')?.total ?? 0,
+      names().includes('Skill Focus (Stealth)'), names().includes('Alertness'), names().includes('Iron Will'),
+      names().includes('Toughness'), possessedSpheres(c).has('dark')],
+    [0, 0, 0, false, false, false, true, false]);
+  check('the plan still lists them', featNames(c.data, { planned: true }).includes('Alertness'), true);
+  c.set('identity.level', 9);
+  check('at 9th all of it has arrived',
+    [stealth(), c.forwardedInto('skill.perception')?.total, c.forwardedInto('saves.will')?.total,
+      names().includes('Skill Focus (Stealth)'), possessedSpheres(c).has('dark')],
+    [3, 2, 2, true, true]);
+}
+
 console.log('undo at the table -- cards, a use, slots across a rest');
 {
   const c = new Character(blankDocument({ name: 'Dealer', level: 5 }));
@@ -4312,8 +4537,69 @@ console.log('carry capacity follows Strength');
   if (!(c.data.carry.light > light0)) {
     fail++; console.log('  FAIL carry capacity did not rise with Str');
   } else pass++;
-  check('medium is 2x light', c.data.carry.medium, c.data.carry.light * 2);
-  check('heavy is 3x light', c.data.carry.heavy, c.data.carry.light * 3);
+  // The heavy load is the table's figure; light and medium are a third and
+  // two thirds of it, rounded down -- 33 / 66 / 100 at Str 10, not 99.
+  const k = c.data.carry;
+  check('light and medium are a third and two thirds of heavy',
+    [k.light, k.medium], [Math.floor(k.heavy / 3), Math.floor((k.heavy * 2) / 3)]);
+}
+
+console.log('load -- the table, the worse of armour and load, quantities, coins, containers');
+{
+  check('Str 10 is 33 / 66 / 100', [carryTiers(10).light, carryTiers(10).medium, carryTiers(10).heavy], [33, 66, 100]);
+  check('Str 30 is Str 20 four times over', carryTiers(30).heavy, 4 * carryTiers(20).heavy);
+  check('a load cuts 30 to 20 and 20 to 15', [reducedSpeed(30), reducedSpeed(20), reducedSpeed(40)], [20, 15, 30]);
+
+  const c = new Character(blankDocument({ name: 'Packmule', level: 5 }));
+  c.data.equipment.armor = { ...c.data.equipment.armor, active: true, type: 'Light', name: 'Leather', acBonus: 2, maxDex: 6, acp: 0, weight: 15 };
+  c.recompute();
+  const str = c.data.carry.score;
+  const { light, medium } = c.data.carry;
+  const acAt = () => c.data.defenses.ac;
+  const stealth = () => c.data.skills.find((s) => s.name === 'Stealth');
+  const lightAc = acAt();
+  c.listAdd('equipment.other', { slot: 'Other', name: 'Rations', qty: 1, weight: 1, cost: 0.5, note: '' });
+  const rations = c.list('equipment.other').length - 1;
+  c.setItem('equipment.other', rations, 'qty', medium - 15 - (light - 15) + light - 15);   // lands in the medium band
+  check('a quantity multiplies the weight', c.data.carry.carried, 15 + (medium - 15));
+  check('which is a medium load', c.data.carry.load, 'medium');
+  check('the load caps Dexterity at +3 and has a −3 check penalty, worse than the leather',
+    [armorParts(c.data).maxDex, armorParts(c.data).acp], [3, -3]);
+  check('AC follows the cap when Dex is over it',
+    acAt(), lightAc - Math.max(0, statMod(c.data, 'dex') - 3));
+  c.set('carry.applyLoad', false);
+  check('switched off, the leather alone applies', [armorParts(c.data).maxDex, armorParts(c.data).acp, acAt()], [6, 0, lightAc]);
+  c.set('carry.applyLoad', true);
+
+  // A bag of holding carries what is in it for nothing; a store is not carried.
+  c.listAdd('equipment.other', { slot: 'Other', name: 'Bag of holding', qty: 1, weight: 15, cost: 2500, holds: 'weightless', note: '' });
+  c.recompute();
+  const bag = c.list('equipment.other').at(-1);
+  check('a container is given an id', typeof bag.id, 'string');
+  c.setItem('equipment.other', rations, 'inside', bag.id);
+  check('rations in the bag weigh nothing; the bag weighs 15', [c.data.carry.carried, c.data.carry.load], [15 + 15, 'light']);
+  c.setItem('equipment.other', rations, 'inside', 'stored');
+  check('stored is not carried either', c.data.equipment.weights.stored > 0, true);
+
+  c.set('equipment.coins', { gp: 500, sp: 120, cp: 5 });
+  check('coins weigh a pound per fifty and are worth their gold', [c.data.equipment.weights.coins, c.data.equipment.coinValue], [12, 512.05]);
+
+  // Carrying by another score: a class feature that carries by Intelligence.
+  c.setBuild('int', 'untyped', 10);
+  c.set('carry.ability', 'int');
+  check('capacity reads the chosen score', [c.data.carry.score > str, c.data.carry.heavy], [true, carryTiers(c.data.carry.score).heavy]);
+
+  // A sheet saved before load penalties, already past a light load, opens with
+  // them off and its totals as saved.
+  const old = JSON.parse(JSON.stringify(c.toJSON()));
+  old.carry = { ...old.carry, ability: 'str', carried: 9999 };
+  delete old.carry.applyLoad;
+  delete old.carry.carriedOffset;
+  old.corrections = old.corrections.filter((n) => n !== 'load-penalties');
+  const savedAc = old.defenses.ac;
+  const reopened = new Character(old);
+  check('a heavy sheet from before opens with the penalties off, its AC as saved',
+    [reopened.data.carry.applyLoad, reopened.data.defenses.ac], [false, savedAc]);
 }
 
 console.log('custom trackers');

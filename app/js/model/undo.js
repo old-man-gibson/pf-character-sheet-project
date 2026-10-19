@@ -37,9 +37,16 @@
  * snapshot also undid the damage taken after it. So a play action keeps what
  * it changed rather than what the sheet was, and taking it back touches that
  * and nothing else. See `playAction`.
+ *
+ * Redo is the third stack, filled only by undoing: a snapshot taken back
+ * leaves the document it replaced, a play action taken back leaves its own
+ * changes to make again. Anything new done to the character empties it, the
+ * way every editor's redo works -- a redo replayed over later work would
+ * have to guess which of the two was meant.
  */
 
-import { emit } from './events.js';
+import { emit, subscribe } from './events.js';
+import { logPlay } from './play-log.js';
 
 /** How many steps back the stack holds. */
 export const UNDO_DEPTH = 20;
@@ -91,11 +98,16 @@ function capture(model) {
 }
 
 function restore(model, state) {
+  // The play log is the record of what has happened, and stays as it is: the
+  // document put back is older than the lines written since. See play-log.js.
+  const log = model.data.log;
   // Into the same object rather than over it: `model.data` is held in a good
   // many places across a render, and swapping it would leave every one of them
   // pointing at the version that was just undone.
   for (const key of Object.keys(model.data)) delete model.data[key];
   Object.assign(model.data, state.data);
+  if (log !== undefined) model.data.log = log;
+  else delete model.data.log;
   if (Array.isArray(model.trackers)) model.trackers.splice(0, model.trackers.length, ...state.trackers);
   else model.trackers = state.trackers;
   model.offsets = state.offsets;
@@ -112,13 +124,12 @@ export function markUndo(model, label) {
   // Inside a play action the action's own entry already covers this, and a
   // snapshot as well would put the whole document back behind its back.
   if (model.playing) return model;
-  if (!model.undoStack) model.undoStack = [];
   // The same defaults a play action reads first (see there), so that play
   // written into this snapshot later lands on a figure and not on nothing.
   readDefaults(model);
   const named = String(label || 'change');
-  model.undoStack.push({ label: named, state: capture(model), seq: ++counter });
-  if (model.undoStack.length > UNDO_DEPTH) model.undoStack.shift();
+  pushSnapshot(model, named, capture(model));
+  model.redoStack = [];
   // Announced rather than returned, so that every destructive operation offers
   // itself back without each of its thirty call sites having to remember to.
   emit(model, { type: 'undo-mark', label: named });
@@ -126,6 +137,42 @@ export function markUndo(model, label) {
 }
 
 const top = (list) => list?.[list.length - 1] ?? null;
+
+function pushSnapshot(model, label, state) {
+  if (!model.undoStack) model.undoStack = [];
+  model.undoStack.push({ label, state, seq: ++counter });
+  if (model.undoStack.length > UNDO_DEPTH) model.undoStack.shift();
+}
+
+/*
+ * What does not empty the redo stack: the undo and redo themselves (and the
+ * recompute each runs on the way out), switching views, and the two marks,
+ * which empty it on purpose where they are made. Anything else announced is
+ * an edit to the character.
+ */
+const KEEPS_REDO = new Set(['undo', 'redo', 'recompute', 'view-mode', 'undo-mark', 'play-mark']);
+
+function pushRedo(model, entry) {
+  if (!model.redoStack) model.redoStack = [];
+  // Watched from the first entry on, once per model: an edit made after an
+  // undo is the new branch, and a redo would put back what it replaced.
+  if (!model.redoWatched) {
+    model.redoWatched = true;
+    subscribe(model, (m, detail) => {
+      if (m.undoing || KEEPS_REDO.has(detail?.type)) return;
+      if (m.redoStack?.length) m.redoStack = [];
+    });
+  }
+  model.redoStack.push(entry);
+  if (model.redoStack.length > UNDO_DEPTH + PLAY_DEPTH) model.redoStack.shift();
+}
+
+/** Run `fn` as part of an undo or redo, which must not empty the redo stack. */
+function asUndo(model, fn) {
+  const was = model.undoing;
+  model.undoing = true;
+  try { return fn(); } finally { model.undoing = was; }
+}
 
 /* Hit points fill in their defaults when read; a sheet with none has none to fill. */
 function readDefaults(model) {
@@ -157,10 +204,91 @@ export function undoLast(model) {
   if (!last) return null;
   if (last.kind === 'play') return { kind: 'play', ...undoPlay(model, last.entry.seq) };
   model.undoStack.pop();
-  restore(model, last.entry.state);
-  model.recompute();
-  emit(model, { type: 'undo', label: last.entry.label });
+  asUndo(model, () => {
+    pushRedo(model, { kind: 'snapshot', label: last.entry.label, state: capture(model) });
+    restore(model, last.entry.state);
+    model.recompute();
+    emit(model, { type: 'undo', label: last.entry.label });
+  });
   return { kind: 'snapshot', label: last.entry.label, ok: true, reason: '' };
+}
+
+/** What the next `redoLast()` would do again, or null when there is nothing. */
+export function redoLabel(model) {
+  return top(model.redoStack)?.label ?? null;
+}
+
+/**
+ * Do again the last thing undone.
+ *
+ * A snapshot puts back the document the undo replaced, and the document it
+ * replaces goes on the undo stack as an ordinary snapshot. A play action makes
+ * its changes again under the same rules an undo uses, so what happened in
+ * between stays, and goes back on the play stack as the newest action.
+ *
+ * Returns `{ kind, label, ok, reason }`, or null when there is nothing to redo.
+ */
+export function redoLast(model) {
+  const entry = top(model.redoStack);
+  if (!entry) return null;
+  const { label } = entry;
+  if (entry.kind === 'snapshot') {
+    model.redoStack.pop();
+    asUndo(model, () => {
+      pushSnapshot(model, label, capture(model));
+      restore(model, entry.state);
+      model.recompute();
+      emit(model, { type: 'redo', label });
+    });
+    return { kind: 'snapshot', label, ok: true, reason: '' };
+  }
+  const doc = liveDoc(model);
+  if (entry.changes.some((change) => applyChange(doc, change, { dry: true }) === 'conflict')) {
+    return { kind: 'play', label, ok: false, reason: 'the sheet has changed there since.' };
+  }
+  model.redoStack.pop();
+  asUndo(model, () => {
+    for (const change of entry.changes) applyChange(doc, change);
+    if (!model.playStack) model.playStack = [];
+    model.playStack.push({ label, changes: entry.changes, seq: ++counter });
+    if (model.playStack.length > PLAY_DEPTH) model.playStack.shift();
+    patchSnapshots(model, entry.changes);
+    logPlay(model, `Redid ${label}`);
+    model.recompute();
+    settle(model, entry.changes);
+    emit(model, { type: 'redo', label });
+  });
+  return { kind: 'play', label, ok: true, reason: '' };
+}
+
+/**
+ * The three stacks as plain data, to be kept across a reload, and put back.
+ *
+ * Only for the document they were taken from: the caller checks that the
+ * document being opened is the one this was written beside. `seq` numbers
+ * carry over, and the counter moves past them so new entries still sort as
+ * newer.
+ */
+export function undoState(model) {
+  return {
+    undo: model.undoStack ?? [],
+    play: model.playStack ?? [],
+    redo: model.redoStack ?? [],
+  };
+}
+
+export function adoptUndoState(model, state) {
+  if (!state || typeof state !== 'object') return model;
+  const list = (v) => (Array.isArray(v) ? v.filter((e) => e && typeof e === 'object') : []);
+  model.undoStack = list(state.undo).filter((e) => e.state?.data).slice(-UNDO_DEPTH);
+  model.playStack = list(state.play).filter((e) => Array.isArray(e.changes)).slice(-PLAY_DEPTH);
+  const redo = list(state.redo).filter((e) => (e.kind === 'snapshot' ? e.state?.data : Array.isArray(e.changes)));
+  model.redoStack = [];
+  for (const entry of redo) pushRedo(model, entry);
+  for (const e of [...model.undoStack, ...model.playStack]) {
+    if (Number.isFinite(e.seq) && e.seq > counter) counter = e.seq;
+  }
+  return model;
 }
 
 /** `undoLast`, answering with the label of what came back, or null. */
@@ -173,6 +301,7 @@ export function undo(model) {
 export function clearUndo(model) {
   model.undoStack = [];
   model.playStack = [];
+  model.redoStack = [];
   return model;
 }
 
@@ -461,7 +590,10 @@ const liveDoc = (model) => ({ data: model.data, trackers: model.trackers });
  * that cannot take a change keeps what it had.
  */
 function patchSnapshots(model, changes) {
-  for (const entry of model.undoStack || []) {
+  // A snapshot waiting to be redone is the document as it stood too, and
+  // redoing it must not bring back damage undone since.
+  const redone = (model.redoStack || []).filter((entry) => entry.kind === 'snapshot');
+  for (const entry of [...(model.undoStack || []), ...redone]) {
     const doc = { data: entry.state.data, trackers: entry.state.trackers };
     for (const change of changes) applyChange(doc, change);
   }
@@ -500,11 +632,14 @@ export function playAction(model, label, fn) {
   }
   const named = typeof label === 'function' ? label(result) : label;
   if (!changes.length || !named) return result;
+  model.redoStack = [];
   if (!model.playStack) model.playStack = [];
   const entry = { label: String(named), changes, seq: ++counter };
   model.playStack.push(entry);
   if (model.playStack.length > PLAY_DEPTH) model.playStack.shift();
   patchSnapshots(model, changes);
+  // After the changes were measured, so the line is never one of them.
+  logPlay(model, entry.label);
   emit(model, { type: 'play-mark', label: entry.label, seq: entry.seq });
   return result;
 }
@@ -572,12 +707,16 @@ export function undoPlay(model, seq) {
   if (back.some((change) => applyChange(doc, change, { dry: true }) === 'conflict')) {
     return { label: entry.label, ok: false, reason: 'the sheet has changed there since.' };
   }
-  for (const change of back) applyChange(doc, change);
-  stack.splice(at, 1);
-  patchSnapshots(model, back);
-  model.recompute();
-  settle(model, back);
-  emit(model, { type: 'undo', label: entry.label });
+  asUndo(model, () => {
+    for (const change of back) applyChange(doc, change);
+    stack.splice(at, 1);
+    pushRedo(model, { kind: 'play', label: entry.label, changes: entry.changes });
+    patchSnapshots(model, back);
+    logPlay(model, `Undid ${entry.label}`);
+    model.recompute();
+    settle(model, back);
+    emit(model, { type: 'undo', label: entry.label });
+  });
   return { label: entry.label, ok: true, reason: '' };
 }
 

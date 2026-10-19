@@ -161,3 +161,6 @@ dialog.box::backdrop{background:rgba(10,12,15,.45)}
 .toast .act{padding:2px 10px;border:1px solid currentColor;border-radius:999px;background:transparent;color:inherit;font-weight:600;font-size:12px;cursor:pointer}
 
 @media (prefers-reduced-motion:no-preference){ .row,.chip,.btn{transition:background .12s} }
+
+/* Printed pages: the margins the sheet fits wide tables to (PRINT_WIDTH in sheet-element.js). */
+@page{margin:10mm}

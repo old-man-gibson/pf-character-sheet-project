@@ -303,8 +303,7 @@ function weaponSet(model, block, bi, si, set, list, spheres, Unit = 'Weapon') {
       </table>
       <div class="listrow weapondrawback">
         ${itemText(list, si, 'drawback', set.drawback, 'Drawback…', true)}
-        <label class="chk" title="Bought off — which costs the talent it bought">
-          ${itemCheck(list, si, 'boughtOff', set.boughtOff)}<span>off</span></label>
+        ${itemCheck(list, si, 'boughtOff', set.boughtOff, 'off', 'Bought off — which costs the talent it bought')}
       </div>
     </div>`;
   }

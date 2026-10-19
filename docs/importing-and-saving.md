@@ -191,6 +191,10 @@ answers:
 - **Add it as a new character**, alongside the ones already there. The default, and what
   the app always used to do silently. A document whose id collides takes the next free
   one — `saburo-2` — so nothing is overwritten.
+
+To copy a character without a file, **Duplicate** beside **+ New** in the picker adds the
+open character as it is on screen, unsaved edits included, as *<name> (copy)* under the
+next free id. The copy starts with no history and no publish link of its own.
 - **Replace one that is already here**, chosen from a list of them. The slot, the id and
   the history stay; what was there is filed as a checkpoint named *before import* first,
   so replacing is never a way to lose a character — **History** on the sheet goes back to
@@ -243,9 +247,13 @@ sheet. It is deliberately not the same machinery as what follows: History is a s
 every twenty changes, which can put back a weapon you deleted but not without also
 putting back the twelve edits you made after it. Actions at the table — damage, a spent
 pip, a card, a rest — have an **Undo** of their own on the tab rail that takes back that
-action alone; see [Using the sheet](using-the-sheet.md). Both undo stacks live in memory
-for as long as the sheet is open and are not part of the document, so they do not survive
-a reload — the stores below are what does.
+action alone; see [Using the sheet](using-the-sheet.md). Both undo stacks, and the redo
+stack, are not part of the document. They are kept in the browser tab's session storage,
+so a reload of that tab finds them again — but only when that tab wrote the working copy
+last: if another window has changed the character since, the reload starts with empty
+stacks, because a snapshot taken here would otherwise put that window's work back. When
+the sheet opens on the saved version with unsaved work to resume, the stacks come back
+with the resume. The stores below are what keeps the character.
 
 Three things are kept per character, each in the store that suits it — and the
 extension packs a player has imported sit beside them, in a database of their own.

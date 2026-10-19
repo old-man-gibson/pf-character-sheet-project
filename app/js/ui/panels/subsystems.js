@@ -998,7 +998,7 @@ function castingClassPanel(model, c, i) {
       ${countsTowardLine(model, vancianForwardKey(c) || '')}
       ${c.levelClass && c.levelClass !== String(c.name || '').trim()
     ? `<p class="hint">Counts <strong>${esc(c.levelClass)}</strong> levels.</p>` : ''}
-      <table class="build vslots"><thead><tr>
+      <div class="tablewrap"><table class="build vslots"><thead><tr>
         <th title="${esc(noun.one)} level">Level</th>
         <th class="num" title="${esc(noun.many)} per day">/day</th>
         ${hasBonus ? '<th class="num" title="Granted by the class itself, on top of the slots">Bonus</th>' : ''}
@@ -1033,7 +1033,7 @@ function castingClassPanel(model, c, i) {
       })}</td>` : ''}
         </tr>`;
   }).join('')}
-      </tbody></table>
+      </tbody></table></div>
     </section>`;
   }
 
@@ -1140,7 +1140,7 @@ function vancianPreparedPanel(model, v, ctx = {}) {
         spell's text can include its numbers and keep them current:
         <code>heals {2 + level}d8</code>.</p>
       ${spellDatalist(v)}
-      ${rows.length ? `<table class="spelllist"><thead><tr>
+      ${rows.length ? `<div class="tablewrap"><table class="spelllist"><thead><tr>
         <th style="width:6.5rem">Label</th>
         <th style="width:4.5rem" title="Class and spell level">C / L</th>
         <th style="width:13rem">Spell</th>
@@ -1162,7 +1162,7 @@ function vancianPreparedPanel(model, v, ctx = {}) {
   }) : ''}</td>
           ${rowRemove(list, i, { what: r.name || 'this row', armed: ctx.armedRemove ?? null })}
         </tr>`).join('')}
-      </tbody></table>` : '<p class="empty">No spells listed.</p>'}
+      </tbody></table></div>` : '<p class="empty">No spells listed.</p>'}
       <div style="margin-top:6px">${addButton(list, 'Add spell', {
     prepUsed: '', classLevel: '', name: '', uses: 1, used: 0, note: '',
   })}</div>
@@ -1859,8 +1859,8 @@ function companionSavesPanel(model, cc) {
           <th scope="row">${name}<span class="hint" style="margin-left:4px">${ab}</span></th>
           ${kind === 'familiar' ? '' : k.formSaves
     // The base form sets these; a tick here would change nothing.
-    ? `<td class="good"><input type="checkbox" disabled ${k.formSaves[key] ? 'checked' : ''}
-        title="${esc(`${k.formSaves[key] ? 'Good' : 'Poor'} — set by the ${b.baseForm} form`)}"></td>`
+    ? `<td class="good"><label class="chk tick"><input type="checkbox" disabled ${k.formSaves[key] ? 'checked' : ''}
+        title="${esc(`${k.formSaves[key] ? 'Good' : 'Poor'} — set by the ${b.baseForm} form`)}"></label></td>`
     : `<td class="good">${check(`${p}.goodSaves.${key}`, b.goodSaves?.[key])}</td>`}
           <td class="num derived">${fmt(saves[key]?.base ?? 0)}</td>
           <td class="num derived">${fmt(saves[key]?.mod ?? 0)}</td>
@@ -1918,7 +1918,7 @@ function companionAttacksPanel(model, cc) {
           <label class="fld"><span>Misc</span>${num(`${p}.attackBonus`, b.attackBonus, 'style="width:3.6rem"')}</label>
         </span>
       </h3>
-      ${rows.length ? `<table><thead><tr>
+      ${rows.length ? `<div class="tablewrap"><table class="compattacks"><thead><tr>
         <th>Type</th><th>Damage</th><th title="A flat bonus to this attack’s damage">Dmg +</th>
         <th>Crit</th><th>Role</th><th title="A flat bonus to this attack’s to-hit">Bonus</th>
         <th class="num">To hit</th><th>Damage type</th><th>Qualities</th><th></th>
@@ -1939,7 +1939,7 @@ function companionAttacksPanel(model, cc) {
           <td>${itemArea(model, list, i, 'qualities', a.qualities, 1)}</td>
           ${rowRemove(list, i)}
         </tr>`).join('')}
-      </tbody></table>` : '<p class="empty">No attacks yet.</p>'}
+      </tbody></table></div>` : '<p class="empty">No attacks yet.</p>'}
       <div style="margin-top:6px">${addButton(list, 'Add attack', { type: 'Bite', damage: '', crit: '20/×2', primary: null, bonus: 0, dmgBonus: 0, qualities: '' })}</div>
       <p class="hint">Secondary attacks take −5${k.multiattack ? ' (−2 here, with Multiattack)' : ' (−2 with Multiattack)'}.
         Role on auto follows the natural-attack table. Damage is kept as you write it,
@@ -1966,7 +1966,7 @@ function eidolonEvolutionsPanel(model, cc) {
             room for fifty characters it never uses while the type was penned
             into 8rem -- not enough for "4-point evolution" -- and the notes
             took what was left. Capped to what each actually holds. */''}
-      ${rows.length ? `<table><thead><tr>
+      ${rows.length ? `<div class="tablewrap"><table class="evolutions"><thead><tr>
         <th style="width:13rem">Evolution</th><th style="width:4rem">Cost</th>
         <th style="width:10rem">Type</th><th>Notes</th><th></th>
       </tr></thead><tbody>
@@ -1977,7 +1977,7 @@ function eidolonEvolutionsPanel(model, cc) {
           <td>${itemArea(model, list, i, 'notes', e.notes, 1)}</td>
           ${rowRemove(list, i)}
         </tr>`).join('')}
-      </tbody></table>` : '<p class="empty">No evolutions yet.</p>'}
+      </tbody></table></div>` : '<p class="empty">No evolutions yet.</p>'}
       <div style="margin-top:6px">${addButton(list, 'Add evolution', { name: '', cost: 1, type: '', notes: '' })}</div>
       ${over ? `<p class="hint warn">${-(k.evoLeft ?? 0)} point${k.evoLeft === -1 ? '' : 's'} over the pool.</p>` : ''}
       <div class="fieldgrid" style="margin-top:8px">
@@ -2262,14 +2262,14 @@ function companionSkillsPanel(model, cc) {
             rollButton(model, roll, `skill:${i}`, `a ${skillLabel(s.name, s.spec) || 'skill'} check`)}</span></td>
           ${rowRemove(list, i)}
         </tr>`;
-    const table = (indexed) => `<table class="build"><thead><tr>
+    const table = (indexed) => `<div class="tablewrap"><table class="build"><thead><tr>
         <th scope="col" class="cname">Skill</th><th scope="col">Ability</th>
         <th scope="col" title="Class skill">Class</th><th scope="col">Ranks</th>
         ${fam ? '<th scope="col" class="num" title="The master’s ranks in the same skill">Master</th>' : ''}
         <th scope="col">Misc</th><th scope="col" class="num">Total</th><th scope="col"></th>
       </tr></thead><tbody>
         ${indexed.map(([s, i]) => row(s, i)).join('')}
-      </tbody></table>`;
+      </tbody></table></div>`;
     const indexed = rows.map((s, i) => [s, i]);
     const half = Math.ceil(indexed.length / 2);
     return `<section class="panel span2">

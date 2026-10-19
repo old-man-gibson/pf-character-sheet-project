@@ -20,7 +20,7 @@ import { esc } from '../html.js';
 import { postBox, roField } from '../fields.js';
 import { MATERIAL_CASTING_PER_LEVEL } from '../../model.js';
 import {
-  group, pct, round, signed,
+  group, minus, pct, round, signed,
 } from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, ASURA_TALENTS_PER_ESSENCE, BRAWLERS_VEST_TALENTS, COMBAT_SPHERES,
@@ -28,11 +28,12 @@ import {
   CRAFT_TIME_BASES, GEAR_BONUS_TYPES, GEAR_BONUS_TYPE_SHORT, MONK_UNARMED_LADDER, SIZE_MODIFIERS,
   TALENTED_KNUCKLE_TALENTS, UNARMED_SPHERES, WEAPON_ATTACK_TYPES, WEAPON_CRIT_MULTS,
   WEAPON_FAMILIARITY, WEAPON_GROUPS, WEAPON_HANDEDNESS, attackModeAbility, diceString, fmt, ARMOR_TYPES,
+  COIN_KINDS, LOAD_PENALTIES, quantityOf,
 } from '../../rules.js';
 import { WEAPON_MODE_KEYS } from '../../roll20.js';
 import { check, field, num, autoNum, select, text } from '../fields.js';
 import {
-  addButton, addManyButton, bigStat, collapsibleSub, editLine, exprField, itemCheck, itemExpr,
+  addButton, addManyButton, bigStat, collapsibleSub, editLine, exprField, itemBox, itemCheck, itemExpr,
   itemNum, itemSelect, itemText, line, movedValue, removeAction, removeButton, rowRemove,
 } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
@@ -253,7 +254,7 @@ export function weaponsPanel(model, e) {
     })}`;
   })()}
           ${w.proficient === false ? `<span class="badge err nonprof"
-            title="${esc(w.proficiencyWhy)} — non-proficiency is −4 to hit, yours to write in Misc">not proficient</span>`
+            title="${esc(w.proficiencyWhy)} — ${w.nonproficiency ? 'non-proficiency is −4 to hit, applied' : 'the −4 is switched off on this row'}">not proficient${w.nonproficiency ? ' · −4' : ''}</span>`
     : w.proficient === true && w.proficiencySource !== 'overview' ? `<span class="badge ok nonprof"
             title="${esc(w.proficiencyWhy)}">proficient · ${w.proficiencySource === 'veil' ? 'veil' : esc(w.proficiencyNote || 'row')}</span>` : ''}
           ${rollButton(model, 'weapon', i, `${String(w.name || '').trim() || 'this weapon'} — attack and damage`, cs)}
@@ -279,8 +280,8 @@ export function weaponsPanel(model, e) {
               title: w.useUnarmedDice ? 'Overridden by the unarmed strike dice'
                 : 'Literal dice (12d8), or a reference like {kinetic.fist} to a name defined in prose',
             })}
-            <label class="chk" title="Use the unarmed strike dice — ticked, the card shows how they are worked out">
-              ${itemCheck('equipment.weapons', i, 'useUnarmedDice', w.useUnarmedDice)}<span>🥊</span></label>
+            ${itemCheck('equipment.weapons', i, 'useUnarmedDice', w.useUnarmedDice, '🥊',
+    'Use the unarmed strike dice — ticked, the card shows how they are worked out')}
           </span>`)}
           ${field('Ability', itemSelect('equipment.weapons', i, 'damageAbility', w.damageAbility, ABILITIES.map((k) => ABILITY_LABELS[k])))}
           ${field('×', `<input type="number" value="${esc(w.abilityMult ?? 1)}" step="0.5" min="0"
@@ -325,6 +326,7 @@ export function weaponsPanel(model, e) {
     `Auto${w.proficient === true ? ' ✓' : w.proficient === false ? ' ✗' : ''}`, null, {
       attrs: `title="${esc(w.proficiencyWhy || 'Auto reads the row against the Overview\'s Proficiencies and the [Enhanced] veil rule')}"`,
     }))}
+          ${w.proficient === false ? field('−4 to hit', `<span title="Untick when the −4 is already written in Misc">${itemBox('equipment.weapons', i, 'nonproficiencyPenalty', w.nonproficiencyPenalty !== false)}</span>`) : ''}
           ${w.proficiency ? field('Via', `<input type="text" value="${esc(w.proficiencyNote ?? '')}" data-item="equipment.weapons|${i}|proficiencyNote"
             data-kind="text" placeholder="Custom Training" style="width:8rem"
             title="What grants or denies it — a talent, a class feature, a trait">`) : ''}
@@ -557,6 +559,7 @@ function gearRow(model, ctx, list, i, g, cols, tools) {
       <td class="name" data-stack="name">${itemText(list, i, 'name', g.name, '', true)}</td>
       ${Array.from({ length: cols.bonuses }, (_, bi) => bonusCells(model, list, i, bi, g)).join('')}
       ${Array.from({ length: cols.others }, (_, oi) => `<td class="other" data-label="Other ${oi + 1}">${itemText(list, i, `others.${oi}`, g.others?.[oi], '', true)}</td>`).join('')}
+      ${cols.qty ? `<td class="num qty" data-label="Qty">${itemNum(list, i, 'qty', quantityOf(g))}</td>` : ''}
       <td class="num wt" data-label="Weight">${itemNum(list, i, 'weight', g.weight)}</td>
       <td class="num cost" data-label="Cost">${itemNum(list, i, 'cost', g.cost)}</td>
       ${tools || '<td></td>'}
@@ -565,7 +568,7 @@ function gearRow(model, ctx, list, i, g, cols, tools) {
   }
 
 /** How many cells a row of this width has, so a full-width row can span them. */
-const gearSpan = (cols) => 5 + cols.bonuses * 3 + cols.others;
+const gearSpan = (cols) => 5 + cols.bonuses * 3 + cols.others + (cols.qty ? 1 : 0);
 
 /**
  * The header, and the buttons that widen or narrow the table.
@@ -579,6 +582,7 @@ const gearSpan = (cols) => 5 + cols.bonuses * 3 + cols.others;
  * its own face: plain while nothing would be lost.
  */
 function gearHead(list, cols, inUse, armed) {
+    // (The Qty head is drawn where the Qty cell is: see gearRow.)
     const step = (kind, label) => {
       const arm = `gearcol|${list}|${kind}`;
       const on = inUse[kind] && armed === arm;
@@ -611,6 +615,7 @@ function gearHead(list, cols, inUse, armed) {
     return `<thead><tr>
       <th class="slot">Slot</th><th>Item</th>
       ${bonusHeads}${otherHeads}
+      ${cols.qty ? '<th class="num" title="How many: weight and cost are per item">Qty</th>' : ''}
       <th class="num">Wt</th><th class="num">Cost</th><th></th></tr></thead>`;
   }
 
@@ -648,8 +653,10 @@ function gearCard(model, list, i, g, cols) {
         <div class="fieldgrid">
           ${field('Slot', itemText(list, i, 'slot', g.slot, 'Head, Ring 1…'))}
           ${field('Item', itemText(list, i, 'name', g.name, 'What it is'))}
-          ${field('Weight', itemNum(list, i, 'weight', g.weight))}
-          ${field('Cost', itemNum(list, i, 'cost', g.cost))}
+          ${cols.qty ? field('Quantity', itemNum(list, i, 'qty', quantityOf(g))) : ''}
+          ${field(cols.qty ? 'Weight each' : 'Weight', itemNum(list, i, 'weight', g.weight))}
+          ${field(cols.qty ? 'Cost each' : 'Cost', itemNum(list, i, 'cost', g.cost))}
+          ${list === 'equipment.other' ? whereCarried(model, i, g) : ''}
         </div>
         <h5>Bonuses</h5>
         <table class="gearbonuses"><thead><tr>
@@ -672,6 +679,23 @@ function gearCard(model, list, i, g, cols) {
           <code>resistance.fire</code>.</p>
       </div>
     </td></tr>`;
+  }
+
+/**
+ * Where an Other item is: on the character, inside one of the containers
+ * among the Other items, or stored somewhere it is not carried. And whether
+ * it is a container itself -- one that carries its contents for nothing
+ * (a bag of holding) or one whose contents weigh as usual.
+ */
+function whereCarried(model, i, g) {
+    const others = model.data.equipment?.other || [];
+    const boxes = others.filter((x, j) => j !== i && x?.holds && x.id)
+      .map((x) => [x.id, `In ${String(x.name || '').trim() || 'a container'}${x.holds === 'weightless' ? ' (weightless)' : ''}`]);
+    return `${field('Carried', itemSelect('equipment.other', i, 'inside', g.inside,
+    [...boxes, ['stored', 'Stored elsewhere (not carried)']], 'On you'))}
+          ${field('Container', itemSelect('equipment.other', i, 'holds', g.holds,
+    [['counted', 'Holds things'], ['weightless', 'Holds things, weightless inside']], 'Not a container',
+    null, { attrs: 'title="A weightless container (a bag of holding) carries what is in it for nothing; its own weight still counts."' }))}`;
   }
 
 function gearSlotsPanel(model, ctx, e) {
@@ -704,7 +728,7 @@ function gearSlotsPanel(model, ctx, e) {
   }
 
 function otherItemsPanel(model, ctx, e) {
-    const cols = gearCols(e.other);
+    const cols = { ...gearCols(e.other), qty: true };
     return `<section class="panel span2">
       <h3>Other items <span class="badge">${(e.other || []).length}</span></h3>
       <div class="tablewrap"><table class="gear stacked" data-fold="shut">
@@ -728,21 +752,42 @@ function otherItemsPanel(model, ctx, e) {
 
 function loadPanel(model, e) {
     const c = model.data;
-    const sum = (arr, key = 'weight') => (arr || []).reduce((t, x) => t + (Number(x[key]) || 0), 0);
+    const w = e.weights || {};
+    const coins = e.coins || {};
     return `<section class="panel">
       <h3>Load &amp; value</h3>
-      ${line('Slotted gear', `${sum(e.gear)} lbs`)}
-      ${line('Other items', `${sum(e.other)} lbs`)}
-      ${line('Armor & shields', `${(Number(e.armor?.weight) || 0) + sum(e.shields)} lbs`)}
-      ${line('Weapons', `${sum(e.weapons)} lbs`)}
+      ${line('Slotted gear', `${w.gear ?? 0} lbs`)}
+      ${line('Other items', `${w.other ?? 0} lbs`)}
+      ${line('Armor & shields', `${w.armor ?? 0} lbs`)}
+      ${line('Weapons', `${w.weapons ?? 0} lbs`)}
+      ${line('Coins', `${w.coins ?? 0} lbs${w.coinCount ? ` (${w.coinCount} coins)` : ''}`)}
+      ${w.inWeightless ? line('In weightless containers', `${w.inWeightless} lbs, not counted`) : ''}
+      ${w.stored ? line('Stored elsewhere', `${w.stored} lbs, not counted`) : ''}
       ${editLine('Adjustment', 'carry.carriedOffset', c.carry?.carriedOffset ?? 0)}
       <div class="statline"><span class="label">Total carried</span>
         <span class="value big">${c.carry?.carried ?? 0} lbs</span></div>
-      ${line('Light load', `≤ ${c.carry?.light ?? 0} lbs`)}
-      ${(c.carry?.carried ?? 0) > (c.carry?.light ?? 0)
-    ? `<p class="hint warn">Over light load (${c.carry?.carried} > ${c.carry?.light}).</p>` : ''}
-      ${line('Total value', `${e.totalValue ?? 0} gp`)}
+      ${line('Light / medium / heavy', `${c.carry?.light ?? 0} / ${c.carry?.medium ?? 0} / ${c.carry?.heavy ?? 0} lbs`)}
+      ${loadLine(c)}
+      <h4>Coins</h4>
+      <div class="coinrow">${COIN_KINDS.map(([k, label]) => `<label class="minifield" title="${esc(label)}">${k}
+        ${num(`equipment.coins.${k}`, coins[k], 'min="0" style="width:5.5rem"')}</label>`).join('')}</div>
+      ${line('Coins worth', `${round(e.coinValue ?? 0)} gp`)}
+      ${line('Items worth', `${e.totalValue ?? 0} gp`)}
     </section>`;
+  }
+
+/** What the load is, and what it does while the penalties are on. */
+export function loadLine(c) {
+    const load = c.carry?.load || 'light';
+    const p = LOAD_PENALTIES[load];
+    const name = { light: 'Light', medium: 'Medium', heavy: 'Heavy', over: 'Over heavy' }[load] || load;
+    if (!p) return line('Load', 'Light');
+    const off = c.carry?.applyLoad === false;
+    const what = `max Dex +${p.maxDex}, check penalty ${minus(p.acp)}, land speed cut, run ×${p.run}`;
+    return `${line('Load', `${name}${off ? ' (penalties off)' : ''}`)}
+      <p class="hint${off ? '' : ' warn'}">${off
+    ? `A ${name.toLowerCase()} load would mean ${what}. Switched off on the Overview's Carrying capacity panel.`
+    : `${what}. Armour's own figures apply instead where they are worse.${p.note ? ` ${p.note}` : ''}`}</p>`;
   }
 
   /* ---------------- item crafting ---------------- */
@@ -922,7 +967,7 @@ function craftProject(ctx, model, cr, p, i) {
         ${field('Discount %', autoNum(`data-item="${list}|${i}|discountOverride"`, p.discountOverride, {
     placeholder: Number(cr.discount) || 0, width: '4.4rem', title: "Blank uses the crafter's standing discount",
   }))}
-        ${field('Zero profit', `<span class="pair">${itemCheck(list, i, 'zeroProfit', p.zeroProfit)}
+        ${field('Zero profit', `<span class="pair">${itemBox(list, i, 'zeroProfit', p.zeroProfit)}
           <span class="hint">sell at cost</span></span>`)}
         <span class="wsep"></span>
         ${field('Item DC', itemExpr(list, i, 'itemDC', p, { width: '4.4rem' }))}

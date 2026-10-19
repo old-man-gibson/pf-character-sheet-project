@@ -160,6 +160,17 @@ const panelsWith = (CTX) => [
 const CTX = shutCtx();
 const PANELS = panelsWith(CTX);
 
+/** The first checkbox not inside a `<label>`, or null. */
+function looseCheckbox(html) {
+  let depth = 0;
+  for (const [tag] of html.matchAll(/<label\b|<\/label>|<input\b[^>]*\btype="checkbox"[^>]*>/g)) {
+    if (tag === '<label') depth++;
+    else if (tag === '</label>') depth = Math.max(0, depth - 1);
+    else if (!depth) return tag;
+  }
+  return null;
+}
+
 /** Render one panel, reporting a throw as the failure it is on the page. */
 function renders(who, name, draw, model) {
   let html = null;
@@ -213,6 +224,15 @@ function renders(who, name, draw, model) {
   if (bare.length) {
     fail++;
     console.log(`  FAIL ${who} — ${name} draws a × by hand: ${bare[0].slice(0, 120)}`);
+    return html;
+  }
+  // Every checkbox sits in a label (`rows.itemCheck`, `fields.check`): a
+  // touch screen hangs its bigger hit area on the label, and a bare one
+  // stops at the 24px it is drawn.
+  const loose = looseCheckbox(html);
+  if (loose) {
+    fail++;
+    console.log(`  FAIL ${who} — ${name} has a checkbox outside a label: ${loose.slice(0, 120)}`);
     return html;
   }
   pass++;

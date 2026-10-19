@@ -24,6 +24,7 @@ import { optionCatalogues } from '../../model.js';
 import { parseLevelRule, levelRuleLevels, summariseLevels } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
 import { rgba } from '../../tracker-style.js';
+import { logDay, logLinesHtml } from '../play-log.js';
 
 
 export function renderProgressionPanel(model, ctx) {
@@ -584,6 +585,42 @@ function menuField(ctx, ref, field, menu, placeholder, atLevel) {
   /* ---------------- lore & leftover tabs ---------------- */
 
 
+/**
+ * Session notes: one card a session, newest first -- the date, a title and
+ * what you want to remember -- and under each, folded, the play log's lines
+ * from that day, so what happened at the table sits beside what was written
+ * about it. Kept in `sessionNotes`, in the order they were added.
+ */
+function sessionNotesPanel(model) {
+    const notes = Array.isArray(model.data.sessionNotes) ? model.data.sessionNotes : [];
+    const log = model.playLog;
+    const today = logDay(new Date().toISOString());
+    const card = (n, i) => {
+      const lines = n.date ? log.filter((e) => logDay(e.at) === n.date) : [];
+      return `<div class="notecard editable sessionnote">
+        <div class="noterow">
+          <input type="date" value="${esc(n.date || '')}" data-item="sessionNotes|${i}|date" data-kind="text"
+            aria-label="When the session was" style="width:auto;flex:none">
+          ${itemText('sessionNotes', i, 'title', n.title, 'Session title')}
+          ${removeButton('sessionNotes', i, { what: 'session note' })}
+        </div>
+        ${itemArea(model, 'sessionNotes', i, 'body', n.body, 4)}
+        ${lines.length ? `<details class="sessionlog"><summary>From the play log that day (${lines.length})</summary>
+          <ol class="logl">${logLinesHtml(lines)}</ol></details>` : ''}
+      </div>`;
+    };
+    const shown = notes.map((n, i) => ({ n, i })).reverse();
+    return `<section class="panel span2">
+        <h3>Session notes <span class="badge">${notes.length}</span>
+          <span style="margin-left:auto">${addButton('sessionNotes', 'Add session', {
+    date: today, title: `Session ${notes.length + 1}`, body: '',
+  })}</span></h3>
+        ${shown.map(({ n, i }) => card(n, i)).join('')
+    || '<p class="empty">No sessions yet. Add one after a game: what happened, who you met, what to follow up.</p>'}
+        <p class="hint">Newest first. The play log's lines from a session's date are listed under it.</p>
+      </section>`;
+  }
+
 export function renderExtrasPanel(model, ctx) {
     const c = model.data;
     const x = c.extras || {};
@@ -603,6 +640,8 @@ export function renderExtrasPanel(model, ctx) {
         <p class="hint">Plain text, with inline formulas if you want them: <code>{= level * 2}</code>.
           Links are kept as typed.</p>
       </section>
+
+      ${sessionNotesPanel(model)}
 
       <section class="panel span2">
         <h3>Approvals <span class="badge">${(x.approvals || []).length}</span></h3>

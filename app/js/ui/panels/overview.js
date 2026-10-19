@@ -18,7 +18,7 @@ import { renderSessionBoard } from './session.js';
 import { field } from '../fields.js';
 import { effectiveMythicTier } from '../../rules.js';
 import { minus, signed } from '../format.js';
-import { collapsible, foldButton, isCollapsed, isOpen } from '../rows.js';
+import { collapsible, collapsibleSub, foldButton, isCollapsed, isOpen } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
 import { proseText } from '../rows.js';
 import { forwardedBadge, sheetBonusCell, sheetBonusField, sheetBonusHead, sheetBonusHint } from '../badges.js';
@@ -56,6 +56,7 @@ const DASH_CARDS = [
   ['skills', 'Key skills'],
   ['effects', 'Active effects'],
   ['quick', 'Quick actions'],
+  ['log', 'Play log'],
 ];
 
 const DASH_CARD_LABELS = new Map(DASH_CARDS);
@@ -94,16 +95,17 @@ function progressionSelect(i, field, value, choices, label, format = String, bea
     kind: 'number', attrs: `aria-label="${esc(label)}" class="${all ? 'beaten' : ''}"${why ? ` title="${esc(why)}"` : ''}`,
   });
 }
-import { weaponsPanel, wealthPanel } from './gear.js';
+import { loadLine, weaponsPanel, wealthPanel } from './gear.js';
+import { playLogPanel } from '../play-log.js';
 import {
   ABILITIES, ABILITY_LABELS, ALT_ATTACK_OF, ATTACK_MODES, ATTACK_MODE_KEY,
-  ATTACK_MODE_LABELS, BUFF_MOD_KEYS, BUFF_TARGETS, CONDITIONS, CONDITION_CATS, GAME_SYSTEMS,
+  ATTACK_MODE_LABELS, BONUS_TYPES, BUFF_MOD_KEYS, BUFF_TARGETS, CONDITIONS, CONDITION_CATS, GAME_SYSTEMS,
   SIZE_MODIFIERS, TRAIT_SLOTS, WEAPON_GROUPS, WEAPON_FAMILIARITY, WEAPON_HANDEDNESS,
   ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES, attackModeTotal, castingNoun,
-  conditionInfo, conditionTotals, fmt, prepStyle, skillLabel, statModDelta,
+  conditionInfo, conditionTotals, fmt, prepStyle, skillConditionDelta, skillLabel, statModDelta,
 } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
-import { blankClassRow, maneuverDetails } from '../../model.js';
+import { abilityCollapse, abilityHarm, blankClassRow, maneuverDetails } from '../../model.js';
 import { colorControl } from '../color-control.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
@@ -234,9 +236,10 @@ export function renderDashboardPanel(model, ctx) {
       skills: () => dashSkillsCard(model, open('skills')),
       effects: () => dashEffectsCard(model),
       quick: () => dashQuickCard(model, ctx),
+      log: () => playLogPanel(model, ctx, { span: false }),
     };
     const ids = dashCardIds(model);
-    const support = new Set(['quick', 'resources', 'conditions', 'buffs', 'effects', 'vancian', 'psionics', 'spheres']);
+    const support = new Set(['quick', 'resources', 'conditions', 'buffs', 'effects', 'vancian', 'psionics', 'spheres', 'log']);
     return `<div class="dashboard session-dashboard">
       <div class="dashtools span2">
         <button class="linkish" data-action="dash-arrange" aria-expanded="${ctx.dashArrange}">
@@ -281,7 +284,7 @@ function dashDefaultCards(model) {
     // Keyed by tab: the old single combat tab is two now, and asking for it
     // meant the casting card was never added for anyone.
     if (on('magic') && model.data.training?.magic) out.push('spheres');
-    out.push('offense', 'defense', 'abilities', 'speed', 'skills', 'effects');
+    out.push('offense', 'defense', 'abilities', 'speed', 'skills', 'effects', 'log');
     return out;
   }
 
@@ -395,6 +398,8 @@ function dashCondNumbers(model) {
       score = Math.max(0, score);
       if (score !== base) bits.push(`${ABILITY_LABELS[key]} ${base} → ${score}`);
     }
+    for (const [key, v] of Object.entries(t.skillsBy || {})) if (v) bits.push(`${ABILITY_LABELS[key] || key} skills ${fmt(v)}`);
+    for (const [key, v] of Object.entries(t.skillMods || {})) if (v) bits.push(`${key[0].toUpperCase()}${key.slice(1)} ${fmt(v)}`);
     if (t.losesDex) bits.push('no Dex to AC');
     if (t.speed === 0) bits.push('no move');
     else if (t.speed < 1) bits.push('half speed');
@@ -446,6 +451,11 @@ function buffsPanel(model, ctx) {
     const buffs = model.data.buffs || [];
     const cs = model.conditionState;
     const list = 'buffs';
+    // The bonus types a buff can be; Untyped is the blank choice.
+    const typeOptions = Object.entries(BONUS_TYPES).filter(([k]) => k !== 'untyped').map(([k, t]) => [k, t.name]);
+    const typeName = (b) => BONUS_TYPES[b.type]?.name?.toLowerCase() || '';
+    const roundsLeft = (b) => Math.max(0, Math.floor(Number(b.rounds) || 0));
+    const counting = buffs.some((b) => b?.on && roundsLeft(b) > 0);
     // Collapsed, a buff is one line: tick, name, what it comes to. Opened, each
     // dial is a full-width formula field with its working, because the formulas
     // worth writing -- nested if(…) off hit points and essence -- need room.
@@ -462,7 +472,8 @@ function buffsPanel(model, ctx) {
             : row.target === 'sizeStacking' ? `${signed(v)} size (stacks)`
               : `${fmt(v)} ${targetLabels.get(row.target) || row.target}`);
       }
-      return bits.join(' · ') || 'no numbers yet';
+      const out = bits.join(' · ') || 'no numbers yet';
+      return typeName(b) && bits.length ? `${out} (${typeName(b)})` : out;
     };
     const dial = (b, i, [key, label]) => `<label class="fld"><span>${label}</span>
       ${itemExpr(list, i, key, b, { width: '100%', placeholder: '0, or a formula' })}</label>`;
@@ -470,11 +481,15 @@ function buffsPanel(model, ctx) {
     // grid, tied to the open card by the shared highlight.
     const row = (b, i) => {
       const open = ctx.openBuff === i;
+      const left = roundsLeft(b);
+      const stacking = cs.buffStacking?.[i] || [];
       return `<div class="buffcard${b.on ? '' : ' off'}${b.error ? ' invalid' : ''}${open ? ' open' : ''}">
         <div class="buffhead">
           ${itemCheck(list, i, 'on', b.on !== false)}
           <span class="bname">${esc(b.name || 'Unnamed buff')}</span>
           <span class="bsum hint" style="margin:0">${esc(summary(b))}</span>
+          ${left ? `<span class="badge" title="Rounds left. Next turn on the session board, or Next round here, takes one off; at none the buff switches off.">${left} round${left === 1 ? '' : 's'}</span>` : ''}
+          ${stacking.length ? '<span class="badge">does not stack</span>' : ''}
           ${b.error ? `<span class="badge err" title="${esc(b.error)}">formula problem</span>` : ''}
           <span class="pair" style="margin-left:auto">
             <button data-action="buff-open" data-index="${i}" aria-expanded="${open}"
@@ -482,6 +497,7 @@ function buffsPanel(model, ctx) {
             ${removeButton('buffs', i, { what: 'buff' })}
           </span>
         </div>
+        ${stacking.length ? `<ul class="bstack">${stacking.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
       </div>`;
     };
     const editing = buffs[ctx.openBuff] ? ctx.openBuff : null;
@@ -498,6 +514,9 @@ function buffsPanel(model, ctx) {
       return `<div class="buffeditor">
         <div class="fieldgrid">
           <label class="fld"><span>Buff</span>${itemText(list, i, 'name', b.name, 'Citadel banner')}</label>
+          <label class="fld"><span>Bonus type</span>${itemSelect(list, i, 'type', b.type, typeOptions, 'Untyped', null,
+    { attrs: 'title="Typed bonuses do not stack with another of the same type: only the largest counts. Untyped, dodge and circumstance stack."' })}</label>
+          <label class="fld"><span>Rounds left</span>${itemNum(list, i, 'rounds', b.rounds)}</label>
           ${BUFF_MOD_KEYS.map((k) => dial(b, i, k)).join('')}
         </div>
         ${BUFF_MOD_KEYS.filter(([key]) => typeof b[key] === 'string' && b[key].trim() !== '')
@@ -506,6 +525,11 @@ function buffsPanel(model, ctx) {
           ${(b.bonuses || []).map(bonusRow).join('')}
           <button data-action="buff-bonus-add" data-index="${i}">+ Add bonus</button>
         </div>
+        <p class="hint">The bonus type applies to every number on this buff. Within a type only the
+          largest bonus counts, among the ticked buffs and, on saves, AC and ability scores, against
+          the sheet's own bonus of that type (a cloak's resistance, a belt's enhancement, worn armour).
+          Penalties always count. Rounds left counts down by one on the session board's Next turn or
+          this panel's Next round; at none the buff switches off. 0 means it lasts until unticked.</p>
         <p class="hint">Extra bonuses cover targets the dials do not. An ability score bonus
           changes everything built on that modifier. <em>Save DCs</em> and <em>Essence pool</em>
           show where those values are read. <em>Size</em> has three types. Different types
@@ -555,7 +579,11 @@ function buffsPanel(model, ctx) {
     })() : '';
     return `<section class="panel span2">
       <h3>Buffs ${cs.buffsOn ? `<span class="badge ok">${cs.buffsOn} on</span>` : ''}
-        <button style="margin-left:auto" data-action="buff-add">+ Add buff</button>
+        <span class="pair" style="margin-left:auto">
+          ${counting ? `<button data-action="buff-round"
+            title="A round passes: every ticked buff with rounds left loses one">Next round</button>` : ''}
+          <button data-action="buff-add">+ Add buff</button>
+        </span>
       </h3>
       ${flowing}
       <div class="bufflist">
@@ -711,7 +739,7 @@ function dashSkillsCard(model, openNow) {
     // whatever the skill's own ability lost or gained.
     const row = ({ s, i }) => {
       const delta = cs.changed
-        ? statModDelta(cs.deltas || {}, (s.abilities || [])[0], null) + (cs.delta.skills || 0) : 0;
+        ? skillConditionDelta(cs, s) : 0;
       const shown = movedValue(fmt((Number(s.bonus) || 0) + delta), delta, { base: fmt(s.bonus), sources: cs.sources });
       return `<div class="statline">
       <span class="label">${esc(skillLabel(s.name, s.spec) || s.name || '—')}</span>
@@ -1267,6 +1295,35 @@ function languagesPanel(model) {
   }
 
 
+/**
+ * Damage and drain beside a score: what each comes to, and what a score
+ * worn to nothing means. Drawn under the score's row so the grid keeps its
+ * columns.
+ */
+function harmMark(k, a) {
+    // The working score and modifier beside it already carry both; this says why.
+    const { damage, drain } = abilityHarm(a);
+    if (!damage && !drain) return '';
+    const bits = [damage ? `${damage} damage (${minus(-Math.floor(damage / 2))} mod)` : '', drain ? `${drain} drain` : ''].filter(Boolean);
+    const collapse = abilityCollapse(k, a);
+    return `<span class="abharm${collapse ? ' bad' : ''}">${esc(bits.join(', '))}${collapse ? ` — ${esc(collapse)}` : ''}</span>`;
+  }
+
+/** The six damage and drain boxes, folded away until something is in them. */
+function abilityHarmTable(model) {
+    const c = model.data;
+    const any = ABILITIES.some((k) => { const h = abilityHarm(c.abilities[k]); return h.damage || h.drain; });
+    const body = `<div class="tablewrap"><table class="abdmg">
+      <thead><tr><th></th>${ABILITIES.map((k) => `<th class="num">${ABILITY_LABELS[k]}</th>`).join('')}</tr></thead>
+      <tbody>
+        <tr><th scope="row" title="Each 2 points is −1 to the modifier. A New day heals 1 point in each.">Damage</th>
+          ${ABILITIES.map((k) => `<td>${num(`abilities.${k}.damage`, c.abilities[k]?.damage, `min="0" aria-label="${ABILITY_LABELS[k]} damage"`)}</td>`).join('')}</tr>
+        <tr><th scope="row" title="Lowers the score itself. Rest does not heal it.">Drain</th>
+          ${ABILITIES.map((k) => `<td>${num(`abilities.${k}.drain`, c.abilities[k]?.drain, `min="0" aria-label="${ABILITY_LABELS[k]} drain"`)}</td>`).join('')}</tr>
+      </tbody></table></div>`;
+    return collapsibleSub(model, 'ability-harm', 'Damage &amp; drain', body, '', !any);
+  }
+
 function abilityScoresPanel(model) {
     const c = model.data;
     const cs = model.conditionState;
@@ -1303,15 +1360,17 @@ function abilityScoresPanel(model) {
                 attrs: bd(`${k}.temp`, `${a.workingScore ?? a.tempScore} before conditions`).trim(),
               })
               : built
-                ? `<span class="mod temp-score working" title="${tip(`${k}.temp`)}"${bd(`${k}.temp`)}>${a.tempScore}</span>`
+                ? `<span class="mod temp-score working${abilityHarm(a).drain ? ' harmed' : ''}" title="${tip(`${k}.temp`)}"${bd(`${k}.temp`)}>${a.workingScore ?? a.tempScore}</span>`
                 : `<input class="temp-score" type="number" value="${a.tempScore}" data-set="abilities.${k}.tempScore" aria-label="${ABILITY_LABELS[k]} temporary score" title="${tip(`${k}.temp`)}">`}
             ${movedValue(fmt(a.totalMod + (moved ? cs.deltas[k] : 0)), moved ? cs.deltas[k] : 0, {
     tag: 'span', cls: 'mod temp temp-mod', title: moved ? `${fmt(a.totalMod)} before conditions` : '', keep: true,
   })}
             ${rollButton(model, 'ability', k, `a ${ABILITY_LABELS[k]} check`, cs)}
+            ${harmMark(k, a)}
           </div>`;
         }).join('')}
       </div>
+      ${abilityHarmTable(model)}
       ${built ? `<p class="hint" style="margin-top:8px">
         Scores are built from point buy, race, ABP and other sources.
         Edit them on the <strong>Stats</strong> tab.
@@ -1328,7 +1387,7 @@ function acPanel(model) {
     const d = model.data.defenses;
     const cs = model.conditionState;
     const cell = (key, base) => `<td class="num total">${movedInline(cs, key, base, String, model)}</td>`;
-    return `<section class="panel">
+    return `<section class="panel fit">
       <h3>Armor class</h3>
       <div class="tablewrap"><table class="defense fitcols">
         <thead><tr><th></th><th class="num">Total</th>
@@ -1358,11 +1417,13 @@ function acPanel(model) {
           <span class="hint">+</span>${abilitySelect('defenses.acStat2', d.acStat2)}</span></div>
       <div class="statline"><span class="label">Uncanny dodge</span>
         <span class="value">${check('defenses.uncannyDodge', d.uncannyDodge)}</span></div>
+      <div class="defboxes">
       ${defenceBox(model, 'spellResistance', 'Spell resistance', 'Yes (17), or {= 11 + level}')}
       ${defenceBox(model, 'dr', 'DR', '5/magic')}
       ${defenceBox(model, 'resistance', 'Resistance', 'fire 10, cold 5')}
       ${defenceBox(model, 'weakness', 'Vulnerability', 'sonic 5')}
       ${defenceBox(model, 'immunities', 'Immunities', 'sleep, paralysis')}
+      </div>
       <p class="hint">These five boxes read <code>{…}</code> like prose. Each part of
         them is a bonus target: <code>{dr.magic += 2}</code>, <code>{resistance.fire += 5}</code>,
         <code>{immune.sleep += 1}</code>, <code>{defenses.sr += 2}</code>. A bonus to a part the box
@@ -1414,7 +1475,7 @@ function defenceBox(model, key, label, example) {
     // every named part, saying the line as it now stands; its panel has one
     // row a rule, each naming the part it went to.
     const names = [spec.dest, ...parts.map((p) => p.key)];
-    return `<div class="statline">
+    return `<div class="statline defbox">
       <span class="label" title="${esc(`For example: ${example}`)}">${esc(label)}</span>
       <span class="value">${prose(model, `data-set="defenses.${key}"`, d[key], 1, 'grow')}
         ${moved ? forwardedBadge(model, names, { shown: now || '—' }) : ''}</span></div>`;
@@ -1424,7 +1485,7 @@ function defenceBox(model, key, label, example) {
 function savesPanel(model) {
     const s = model.data.saves;
     const cs = model.conditionState;
-    return `<section class="panel">
+    return `<section class="panel fit">
       <h3>Saving throws</h3>
       <div class="tablewrap"><table class="saves stacked fitcols" data-fold="shut">
         <thead><tr><th>Save</th><th class="num">Total</th>
@@ -1457,7 +1518,7 @@ function savesPanel(model) {
 function initiativePanel(model) {
     const c = model.data;
     const cs = model.conditionState;
-    return `<section class="panel">
+    return `<section class="panel fit">
       <h3>Initiative</h3>
       <div class="tablewrap"><table class="saves stacked fitcols" data-fold="shut">
         <thead><tr><th></th><th class="num">Total</th>
@@ -1484,7 +1545,7 @@ function initiativePanel(model) {
 function attackPanel(model) {
     const c = model.data;
     const cs = model.conditionState;
-    return `<section class="panel">
+    return `<section class="panel fit">
       <h3>Attack</h3>
       ${lineHtml('Melee', `${movedInline(cs, 'melee', c.attack.totalMelee, fmt, model)}${
         rollButton(model, 'mode', 'melee', 'a melee attack', cs)}`, true)}
@@ -1578,19 +1639,22 @@ function speedPanel(model) {
     const c = model.data;
     const cs = model.conditionState;
     const speeds = c.identity.speeds || [];
-    return `<section class="panel">
+    return `<section class="panel fit">
       <h3>Speed</h3>
       ${speedTable('identity.speeds', speeds, speeds.map((sp) => ({
     bonus: sp.bonusNum, error: sp.bonusError, handle: sp.handle, final: sp.final,
+    loadSlowed: sp.loadSlowed,
   })), {
     named: true,
     exampleFor: ' for fast movement',
     // What conditions and buffs do to the rate, where they move it.
     final: (i, w) => {
       const adj = cs.speeds[i];
-      return cs.changed && adj && adj.adjusted !== adj.final
+      const moved = cs.changed && adj && adj.adjusted !== adj.final
         ? movedValue(`${adj.adjusted} ft.`, adj.adjusted - adj.final, { base: `${adj.final} ft.`, sources: cs.sources })
         : null;
+      if (!w.loadSlowed) return moved;
+      return `${moved ?? `${Number(w.final) || 0} ft.`} <span class="badge" title="Cut by a medium or heavy load">load</span>`;
     },
     badge: (handle) => forwardedBadge(model, handle),
   })}
@@ -1679,24 +1743,34 @@ function proficienciesPanel(model) {
     : 'No weapon proficiencies recorded. '}A weapon on Equipment is checked against these by its
         familiarity, handedness, group, name and <strong>As</strong> (the base weapon it is). It is marked
         when nothing covers it. A veil weapon is proficient by the [Enhanced] rule. A row's own
-        <strong>Proficient</strong> field overrides all of this, for Custom Training and the like. The −4 penalty is not applied for you. Write it yourself.</p>
+        <strong>Proficient</strong> field overrides all of this, for Custom Training and the like. A weapon
+        you are not proficient with takes −4 to hit. Its card can switch the −4 off for a row where it is
+        already written in Misc.</p>
     </section>`;
   }
 
 
 function carryPanel(model) {
     const c = model.data;
+    const abilities = ABILITIES.map((k) => [k, ABILITY_LABELS[k] || k]);
     return `<section class="panel">
       <h3>Carrying capacity</h3>
+      <div class="statline"><span class="label">Carrying score</span>
+        <span class="value">${select('carry.ability', c.carry?.ability || 'str', abilities, null,
+    { attrs: 'title="The score capacity is read from. Strength, unless a feature says otherwise (carrying by Intelligence)."' })}</span></div>
       ${['light', 'medium', 'heavy', 'offGround', 'pushDrag'].map((k) => line(
         k === 'offGround' ? 'Off ground' : k === 'pushDrag' ? 'Push / drag' : k[0].toUpperCase() + k.slice(1),
         c.carry?.[k] != null ? `${c.carry[k]} lbs` : '—',
       )).join('')}
       ${line('Currently carried', `${c.carry?.carried ?? 0} lbs`)}
+      ${loadLine(c)}
       ${editLine('Ant Haul multiplier', 'carry.antHaul', c.carry?.antHaul ?? 1)}
-      ${editLine('Carry Str bonus', 'carry.strBonus', c.carry?.strBonus ?? 0)}
+      ${editLine('Carry score bonus', 'carry.strBonus', c.carry?.strBonus ?? 0)}
       <div class="statline"><span class="label">Quadruped</span>
         <span class="value">${check('carry.quadruped', c.carry?.quadruped)}</span></div>
+      <div class="statline"><span class="label">Apply load penalties</span>
+        <span class="value">${check('carry.applyLoad', c.carry?.applyLoad !== false, '',
+    'A medium or heavy load caps Dex to AC, has a check penalty, and cuts land speed. Untick for a table that does not track encumbrance.')}</span></div>
     </section>`;
   }
 
@@ -1968,7 +2042,7 @@ function hpBuild(model) {
 function hitPointsPanel(ctx, model) {
     const hp = model.hpState;
     const status = hp.dead ? 'dead' : hp.dying ? 'dying' : hp.unconscious ? 'unconscious' : null;
-    return `<section class="panel">
+    return `<section class="panel hitpoints">
       <h3>Hit points
         ${hp.temp > 0 ? `<span class="badge">+${hp.temp} temp</span>` : ''}
         ${hp.nonlethal > 0 ? `<span class="badge${hp.nonlethal >= hp.effective ? ' err' : ''}">${hp.nonlethal} nonlethal</span>` : ''}
@@ -2054,6 +2128,9 @@ function conditionsPanel(model) {
       if (m.hp) bits.push(`${fmt(m.hp)} hp`);
       for (const [k, v] of Object.entries(info.ability || {})) bits.push(`${fmt(v)} ${ABILITY_LABELS[k]}`);
       for (const [k, v] of Object.entries(info.abilitySet || {})) bits.push(`${ABILITY_LABELS[k]} ${v}`);
+      const by = Object.entries(info.skillsBy || {});
+      if (by.length) bits.push(`${fmt(by[0][1])} ${by.map(([k]) => ABILITY_LABELS[k] || k).join('/')} skills`);
+      for (const [k, v] of Object.entries(info.skill || {})) bits.push(`${fmt(v)} ${k[0].toUpperCase()}${k.slice(1)}`);
       if (info.losesDex) bits.push('no Dex to AC');
       if (info.speed === 0) bits.push('no move');
       else if (info.speed !== undefined && info.speed < 1) bits.push('half speed');
