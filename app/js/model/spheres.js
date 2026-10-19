@@ -26,6 +26,7 @@ import { markUndo, rowLabel } from './undo.js';
 import {
   classForwardKey, evaluateAmount, isPinned, normalizeName, splitTags, packRows, packWords, slug, sphereForwardKey,
 } from './util.js';
+import { isAhead, rowLevel } from './feats.js';
 
 /* ------------------------------------------------------------------ *
  * The sphere catalogue.
@@ -468,11 +469,12 @@ const abilityKey = (name) => String(name ?? '').replace(/\s+/g, ' ').trim().toLo
  */
 export function possessedSpheres(model) {
   const out = new Set();
+  const level = Number(model?.data?.identity?.level) || 0;
   const put = (s) => { const k = String(s ?? '').trim().toLowerCase(); if (k) out.add(k); };
   for (const side of Object.values(model?.data?.training || {})) {
     if (!side || typeof side !== 'object') continue;
     for (const cls of side.classes || []) for (const lv of cls.levels || []) { put(lv.sphere); put(lv.utilitySphere); }
-    for (const b of side.bonusTalents || []) put(b.sphere);
+    for (const b of side.bonusTalents || []) if (!isAhead(rowLevel(b), level)) put(b.sphere);
     for (const e of side.tradition?.entries || []) put(e.sphere);
     for (const c of side.customizations || []) for (const t of c.talents || []) put(t.sphere);
   }
@@ -1343,7 +1345,9 @@ export function* ownTalentRows(model, side, { sideKey = null, includeTradition =
       }
     }
   }
+  // A bonus talent waiting for a level is the plan, like a ladder row not reached.
   for (const b of side.bonusTalents || []) {
+    if (isAhead(rowLevel(b), Number(model?.data?.identity?.level) || 0)) continue;
     yield { sphere: b.sphere, talent: b.talent, utility: !!b.utility, spent: !b.free };
   }
   if (includeTradition) {

@@ -5562,7 +5562,9 @@ export class CharacterSheetElement extends HTMLElement {
          * catalogue face is computed at render, so the render is the thing
          * that was missing.
          */
-        if (AFFECTS_DERIVED.test(list) || input.hasAttribute('list')) this.#rerender(input);
+        // So does a From lvl box: the row turns planned or reached with it,
+        // and what it counts toward moves.
+        if (AFFECTS_DERIVED.test(list) || input.hasAttribute('list') || field === 'level') this.#rerender(input);
       });
     });
 

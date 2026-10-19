@@ -7,6 +7,8 @@
  * from here and import nothing from each other.
  */
 import { esc } from '../html.js';
+import { isAhead, rowLevel } from '../../model/feats.js';
+import { fromLevelField, fromLevelHead, plannedRow } from '../from-level.js';
 import { talentCell, talentNote } from '../talents.js';
 import {
   SYSTEM_NOUNS, poolMode, poolSpheres, poolSystems, talentLandsOn, TRAINING_SYSTEMS, classForwardKey, sideSphereNames,
@@ -447,18 +449,20 @@ export function singleLadderTable(model, slots, cls, spheres, systems = null) {
  */
 export function bonusTalentTable(model, list, rows, spheres, { guile = false, placeholder = 'Feat, item…' } = {}) {
   return `<div class="tablewrap"><table class="talents bonus stacked">
-        <colgroup><col class="grip"><col class="talent"><col class="sphere"><col class="source"><col class="notes">${guile ? `
+        <colgroup><col class="grip"><col class="talent"><col class="sphere"><col class="source"><col class="tool"><col class="notes">${guile ? `
           <col class="tool"><col class="tool">` : ''}<col class="tools"></colgroup>
-        <thead><tr><th class="grip"></th><th>Talent</th><th>Sphere</th><th>Source</th><th>Notes</th>${guile ? `
+        <thead><tr><th class="grip"></th><th>Talent</th><th>Sphere</th><th>Source</th>
+          ${fromLevelHead()}<th>Notes</th>${guile ? `
           <th class="num" title="Had to be a [utility] talent">[u]</th>
           <th class="num" title="Granted by a base sphere or a drawback — not a talent spent, so it buys no skill ranks">free</th>
           ` : ''}<th></th></tr></thead>
-        <tbody>${rows.map((e, i) => `<tr ${rowDrop(list, i)}>
+        <tbody>${rows.map((e, i) => `<tr ${rowDrop(list, i)}${plannedRow(isAhead(rowLevel(e), Number(model.data.identity?.level) || 0), rowLevel(e))}>
           ${rowGrip()}
           <td data-stack="name">${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
     { sphere: 'sphere', notes: 'notes' })}</td>
           <td data-label="Sphere">${itemSelect(list, i, 'sphere', e.sphere, spheres)}</td>
           <td data-label="Source">${itemText(list, i, 'source', e.source, placeholder)}</td>
+          <td class="num" data-label="From lvl">${fromLevelField(list, i, e)}</td>
           <td data-label="Notes">${talentNote(model, `data-item="${list}|${i}|notes"`, e.notes, `${list}|${i}|notes`)}</td>${guile ? `
           <td class="mid" data-label="Utility">${itemCheck(list, i, 'utility', e.utility)}</td>
           <td class="mid" data-label="Free">${itemCheck(list, i, 'free', e.free)}</td>` : ''}

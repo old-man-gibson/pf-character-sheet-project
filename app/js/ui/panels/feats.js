@@ -15,6 +15,8 @@ import * as rows from '../rows.js';
 import * as prose from '../prose.js';
 import { pickSelect, mythicPickAt } from './stats.js';
 import { featDetails, featCatalogue } from '../../model.js';
+import { featLevel, isAhead, rowLevel } from '../../model/feats.js';
+import { fromLevelField, fromLevelHead, plannedRow } from '../from-level.js';
 import {
   MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS, MYTHIC_TIERS, MYTHIC_TIER_LEVEL,
   effectiveMythicTier, mythicTierGrant,
@@ -41,6 +43,7 @@ const foldsOf = (model) => model.data.uiPrefs?.collapsed || {};
 function grantedFeatsSection(model, ctx) {
     const c = model.data;
     const g = c.grantedFeats || { others: [] };
+    const level = Number(c.identity?.level) || 0;
     const major = c.traitSlots?.majorDrawback || {};
     const hasMajor = !!(major.name || major.category || major.text);
     // What bought the feat is the drawback's NAME -- "Spell Vulnerability
@@ -55,6 +58,7 @@ function grantedFeatsSection(model, ctx) {
       <td class="grip"></td>
       <td data-stack="head"><span class="fsource">${esc(label)}</span>${hint ? `<div class="hint">${esc(hint)}</div>` : ''}</td>
       <td data-stack="name">${fields.text(`grantedFeats.${key}.name`, g[key]?.name, 'Which feat?', { list: FEAT_LIST_ID })}</td>
+      <td></td>
       <td class="fnote" data-label="Notes">${noteCell(
     prose.prose(model, `data-set="grantedFeats.${key}.note"`, g[key]?.note, 1, 'grow'),
     featDetails(g[key] || {}), foldsOf(model), `grantedFeats.${key}`, ctx,
@@ -66,14 +70,16 @@ function grantedFeatsSection(model, ctx) {
       </h4>
       <div class="tablewrap"><table class="granted stacked">
         <thead><tr><th class="grip"></th><th class="src">Source</th><th class="fname">Feat</th>
+          ${fromLevelHead()}
           <th class="fnote">Notes</th><th></th></tr></thead>
         <tbody>
           ${hasMajor ? fixed('drawback', 'Drawback', majorName.slice(0, 60)) : ''}
           ${fixed('specialty', 'Specialty')}
-          ${(g.others || []).map((f, i) => `<tr ${rows.rowDrop('grantedFeats.others', i)}>
+          ${(g.others || []).map((f, i) => `<tr ${rows.rowDrop('grantedFeats.others', i)}${plannedRow(isAhead(rowLevel(f), level), rowLevel(f))}>
             ${rows.rowGrip()}
             <td data-stack="head">${rows.itemText('grantedFeats.others', i, 'source', f.source, 'Oath 2, Attunement…')}</td>
             <td data-stack="name">${rows.itemText('grantedFeats.others', i, 'name', f.name, 'Which feat?', { list: FEAT_LIST_ID })}</td>
+            <td class="num" data-label="From lvl">${fromLevelField('grantedFeats.others', i, f)}</td>
             <td class="fnote" data-label="Notes">${noteCell(
     prose.prose(model, `data-item="grantedFeats.others|${i}|note"`, f.note, 1, 'grow'),
     featDetails(f), foldsOf(model), `grantedFeats.others|${i}`, ctx,
@@ -168,15 +174,20 @@ function featGroupTable(model, ctx, group, g) {
     // slot, and a row can be moved among them but not added or removed.
     const fixed = group.levelUp === true;
     const list = `featGroups.${g}.entries`;
+    const level = Number(model.data.identity?.level) || 0;
+    // Any other feat can wait for a level (From lvl), the way a slot does.
+    const ahead = (f) => isAhead(featLevel(group, f), level);
     return `<div class="tablewrap"><table class="feats stacked">
-        <thead><tr><th class="grip"></th><th class="fname">Feat</th><th class="src">Source / level</th>
+        <thead><tr><th class="grip"></th><th class="fname">Feat</th><th class="src">${fixed ? 'Source / level' : 'Source'}</th>
+          ${fixed ? '' : `${fromLevelHead()}`}
           <th class="fnote">Notes</th><th></th></tr></thead>
-        <tbody>${group.entries.map((f, i) => `<tr data-featdrop="${g}|${i}">
+        <tbody>${group.entries.map((f, i) => `<tr data-featdrop="${g}|${i}"${plannedRow(ahead(f), featLevel(group, f))}>
           <td class="grip"><span class="grip" data-featgrip title="${fixed ? 'Drag to another level' : 'Drag to reorder — or onto another group'}">&#10495;</span></td>
           <td data-stack="name">${rows.itemText(`featGroups.${g}.entries`, i, 'name', f.name, '', { list: FEAT_LIST_ID })}</td>
-          <td data-label="Source / level">${fixed
+          <td data-label="${fixed ? 'Source / level' : 'Source'}">${fixed
     ? `<span class="dim" title="Set by the slot; move the feat to change its level">Level ${esc(f.detail)}</span>`
     : rows.itemText(list, i, 'detail', f.detail)}</td>
+          ${fixed ? '' : `<td class="num" data-label="From lvl">${fromLevelField(list, i, f)}</td>`}
           <td class="fnote" data-label="Notes">${noteCell(
     prose.prose(model, `data-item="featGroups.${g}.entries|${i}|note"`, f.note, 1, 'grow'),
     featDetails(f), folds, `featGroups.${g}.entries|${i}`, ctx,
@@ -187,7 +198,7 @@ function featGroupTable(model, ctx, group, g) {
           ${fixed ? rows.rowToolsMoveOnly(list, i) : rows.rowToolsDragged(list, i)}
         </tr>`).join('')}
         ${group.entries.length ? '' : `<tr class="featempty" data-featdrop="${g}|0">
-          <td colspan="5" class="empty">No feats here yet — add one, or drag one in.</td>
+          <td colspan="${fixed ? 5 : 6}" class="empty">No feats here yet — add one, or drag one in.</td>
         </tr>`}</tbody>
       </table></div>
       ${fixed ? '' : `<div style="margin-top:8px">

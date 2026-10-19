@@ -49,6 +49,7 @@ import {
   ownTalentRows, sphereTalent, talentsIn, tallyAdd, walkClassLadder,
 } from '../spheres.js';
 import { amountOrText, evaluateAmount, sphereForwardKey } from '../util.js';
+import { rowLevel } from '../feats.js';
 
 /** Twenty rows, one per character level, the way both other sides are built. */
 const blankLevels = () => Array.from({ length: 20 }, (_, i) => ({
@@ -123,6 +124,8 @@ export function normalizeGuileTraining(raw) {
     talent: str(b?.talent) ?? '', sphere: str(b?.sphere), source: str(b?.source) ?? '',
     notes: str(b?.notes) ?? '',
     utility: !!b?.utility,
+    // The level it waits for, if any (see rowLevel in feats.js).
+    ...(rowLevel(b) !== null ? { level: rowLevel(b) } : {}),
     // A talent handed over by a base sphere or a drawback is not a talent
     // *spent*, so it buys no skill ranks. The rulebook is explicit about it
     // and the distinction is invisible from the name, so it is a tick.

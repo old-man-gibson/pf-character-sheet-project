@@ -53,6 +53,7 @@ import { blankDocument } from '../app/js/convert.js';
 import { importConjuredCompanion } from '../app/js/model/subsystems/companions.js';
 import { companionTabNumber } from '../app/js/companions.js';
 import { featNames } from '../app/js/model/feats.js';
+import { possessedSpheres } from '../app/js/model/spheres.js';
 import { emptyMonster } from '../app/js/monster/block.js';
 import { subsystems } from '../app/js/model/subsystems/registry.js';
 import { GAME_SYSTEMS } from '../app/js/rules.js';
@@ -3241,6 +3242,36 @@ console.log('the play log -- every action, its undo and redo, notes, kept throug
   check('and the log is saved with the character', JSON.parse(JSON.stringify(c.toJSON())).log.length, c.playLog.length);
   for (let i = 0; i < LOG_MAX + 10; i++) c.addLogNote(`n${i}`);
   check('the oldest go past the cap', [c.playLog.length, c.playLog[0].text], [LOG_MAX, `n${LOG_MAX + 9}`]);
+}
+
+console.log('from level -- feats, granted feats and bonus talents wait for the level they are gained at');
+{
+  const c = new Character(blankDocument({ name: 'Planner', level: 5 }));
+  const stealth = () => c.forwardedInto('skill.stealth')?.total ?? 0;
+  // A feat in the 9th-level Level Up slot is the plan at 5th.
+  const lu = c.data.featGroups.findIndex((g) => g.levelUp);
+  const slot9 = c.data.featGroups[lu].entries.findIndex((f) => String(f.detail) === '9');
+  Object.assign(c.data.featGroups[lu].entries[slot9], { name: 'Skill Focus (Stealth)', note: '{skill.stealth += 3}' });
+  // Another group's feat says its own level; one with none is had now.
+  c.data.featGroups.push({ name: 'Bonus', entries: [
+    { name: 'Alertness', detail: 'Trait', note: '{skill.perception += 2}', level: 7 },
+    { name: 'Toughness', detail: 'Fighter', note: '' },
+  ] });
+  c.data.grantedFeats.others.push({ source: 'Oath 2', name: 'Iron Will', note: '{saves.will += 2}', level: 6 });
+  c.data.training.magic.bonusTalents = [{ talent: 'Darkness', sphere: 'Dark', source: 'Item', notes: '', level: 8 }];
+  c.recompute();
+  const names = () => featNames(c.data);
+  check('nothing waiting counts yet: no bonus, no name, no sphere',
+    [stealth(), c.forwardedInto('skill.perception')?.total ?? 0, c.forwardedInto('saves.will')?.total ?? 0,
+      names().includes('Skill Focus (Stealth)'), names().includes('Alertness'), names().includes('Iron Will'),
+      names().includes('Toughness'), possessedSpheres(c).has('dark')],
+    [0, 0, 0, false, false, false, true, false]);
+  check('the plan still lists them', featNames(c.data, { planned: true }).includes('Alertness'), true);
+  c.set('identity.level', 9);
+  check('at 9th all of it has arrived',
+    [stealth(), c.forwardedInto('skill.perception')?.total, c.forwardedInto('saves.will')?.total,
+      names().includes('Skill Focus (Stealth)'), possessedSpheres(c).has('dark')],
+    [3, 2, 2, true, true]);
 }
 
 console.log('undo at the table -- cards, a use, slots across a rest');

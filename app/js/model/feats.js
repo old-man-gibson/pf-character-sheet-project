@@ -23,16 +23,45 @@ const hasContent = (e) => Boolean(String(e?.name ?? '').trim() || String(e?.note
  * feats keyed by group under `feats`; that shape is read too. The one walk
  * every "does the character have this feat" question goes through.
  */
-export function featNames(d, { granted = true } = {}) {
-  const groups = Array.isArray(d?.featGroups) ? d.featGroups.map((g) => g?.entries)
-    : Object.values(d?.feats || {});
-  const names = groups.flatMap((rows) => (Array.isArray(rows) ? rows.map((f) => String(f?.name ?? '')) : []));
+export function featNames(d, { granted = true, planned = false } = {}) {
+  // A feat waiting for a level not reached yet is the plan, not the
+  // character: it meets no requirement and grants nothing until then.
+  // `planned` asks for those too.
+  const level = Number(d?.identity?.level) || 0;
+  const had = (at) => planned || !isAhead(at, level);
+  const names = Array.isArray(d?.featGroups)
+    ? d.featGroups.flatMap((g) => (Array.isArray(g?.entries) ? g.entries : [])
+      .filter((f) => had(featLevel(g, f))).map((f) => String(f?.name ?? '')))
+    : Object.values(d?.feats || {}).flatMap((rows) => (Array.isArray(rows) ? rows.map((f) => String(f?.name ?? '')) : []));
   if (granted) {
     const gf = d?.grantedFeats || {};
-    for (const f of [gf.drawback, gf.specialty, ...(gf.others || [])]) if (f) names.push(String(f.name ?? ''));
+    for (const f of [gf.drawback, gf.specialty]) if (f) names.push(String(f.name ?? ''));
+    for (const f of gf.others || []) if (f && had(rowLevel(f))) names.push(String(f.name ?? ''));
   }
   return names;
 }
+
+/**
+ * The level a feat or a talent waits for, or null when it is had at any
+ * level: a `level` the player wrote on the row (blank or 0 is always).
+ * Rows past the character's level are the plan -- shown, greyed, counted
+ * nowhere, and their {…} bonuses held back -- the way the Progression grid
+ * treats the levels it has not reached.
+ */
+export function rowLevel(row) {
+  const raw = row?.level;
+  if (raw === undefined || raw === null || String(raw).trim() === '') return null;
+  const n = Math.floor(Number(raw));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** A feat's level: a Level Up slot's is the slot's own, any other the row's. */
+export function featLevel(group, entry) {
+  return group?.levelUp ? rowLevel({ level: entry?.detail }) : rowLevel(entry);
+}
+
+/** Whether a row waiting for level `at` is still ahead of a character at `level`. */
+export const isAhead = (at, level) => at !== null && at > (Number(level) || 0);
 
 /** The index of the level-up group in `featGroups`, or -1. */
 export function levelUpGroupIndex(d) {

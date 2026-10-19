@@ -50,7 +50,8 @@ count is the level cell's tooltip rather than a column of its own.
 
 **Bonus talents** — the ones a feat, an item or a template handed over rather than a
 class ladder — are their own full-width group under each side's class blocks, with a
-source and a note per row.
+source and a note per row, and a **From lvl** for a talent gained later: until then it is
+greyed, counts toward nothing, and its notes' bonuses wait.
 
 **Blended classes** (Angou's Legendary Monk, Bryva's Blacksmith) train both ways off
 one pool of talents. The workbook writes them as a block on each tab holding the same

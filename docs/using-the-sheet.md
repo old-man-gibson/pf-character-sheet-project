@@ -1188,6 +1188,13 @@ you took. The smaller feat groups are sections of the same panel, underneath.
 | Specialty | mandatory, so always there |
 | Oath 2, Attunement, … | source named per row |
 
+**Gained at a level.** A feat in any group, a granted feat and a bonus talent can carry a
+**From lvl**: the character level it is gained at. A Level Up slot's level is the slot's
+own. Until the character is there the row is the plan, the way a Progression row past the
+current level is: it is greyed, it meets no requirement and counts toward no sphere, and
+the `{…}` bonuses in its notes wait. A blank From lvl means from the start. Alternate
+Training picks wait for their level the same way.
+
 The workbooks scattered these. The Drawback column ran `[feat, "Specialty", feat]` —
 a header row masquerading as a feat, with each entry's source only implied by its
 position — while Oaths and Attunement were columns of their own. The import folds all
