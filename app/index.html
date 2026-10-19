@@ -44,6 +44,14 @@
      itself, which never reach up this far. */
   header.app { position: sticky; top: 0; z-index: 35; flex-wrap: wrap; }
   header.app { padding-inline: max(14px, calc((100% - var(--cs-sheet-max)) / 2)); }
+  /* A chosen share of the window (the sheet's Width, which followSheet copies
+     to data-width) has no column: the header spans the same share, inset by
+     the sheet's own 14px, so its edges sit over the sheet's. */
+  :root[data-width="100"] { --cs-share: 100%; }
+  :root[data-width="90"] { --cs-share: 90%; }
+  :root[data-width="80"] { --cs-share: 80%; }
+  :root[data-width="70"] { --cs-share: 70%; }
+  :root[data-width]:not([data-width="standard"]) header.app { padding-inline: calc((100% - var(--cs-share, 100%)) / 2 + 14px); }
   header.app .tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   /* The roster: a strip of chips in the header, one per character, the level
      as the chip's number. */
@@ -108,8 +116,11 @@
   character-sheet { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; border: 0; }
   /* Once the sheet keeps to its column (--cs-sheet-max), a gutter the width of
      its scrollbar on the left too, so the column and the header's line up to
-     the pixel instead of half a scrollbar apart. */
-  @media (min-width: 92rem) { character-sheet { scrollbar-gutter: stable both-edges; } }
+     the pixel instead of half a scrollbar apart. Standard width only: a
+     chosen share starts at the sheet's own left edge, as the header does. */
+  @media (min-width: 92rem) {
+    :root:not([data-width]) character-sheet, :root[data-width="standard"] character-sheet { scrollbar-gutter: stable both-edges; }
+  }
   character-sheet[hidden], .welcome[hidden] { display: none; }
   .welcome {
     max-width: 40rem; margin: 8vh auto 0; padding: 28px 30px; text-align: center;
@@ -1106,7 +1117,7 @@
     root.dataset.scheme = sheet.getAttribute('scheme') === 'light' ? 'light' : 'dark';
     root.dataset.theme = sheet.getAttribute('theme') || 'dark';
     root.dataset.layout = sheet.getAttribute('layout') || 'top';
-    root.dataset.width = sheet.getAttribute('width') || '100';
+    root.dataset.width = sheet.getAttribute('width') || 'standard';
     placePicker();
   }
 

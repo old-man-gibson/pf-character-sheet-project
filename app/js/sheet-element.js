@@ -64,7 +64,7 @@ import { applyBlock, looksLikeExtension, looksLikeLibrary, removeArchetype } fro
 import { describePublish, publishDocument } from './publish.js';
 import { SHEET_LINK, adoptSheetStyles } from './styles.js';
 import {
-  PALETTES, LAYOUTS, WIDTHS, AUTO, isPalette, isLayout, isWidth, resolvePalette, schemeOf, flipped,
+  PALETTES, LAYOUTS, WIDTHS, DEFAULT_WIDTH, AUTO, isPalette, isLayout, isWidth, resolvePalette, schemeOf, flipped,
   readThemePrefs, writeThemePrefs, ACTION_MARKS, ACTION_TINTS, DEFAULT_ACTION_MARKS,
   DEFAULT_ACTION_TINT, isActionMarks, isActionTint,
 } from './themes.js';
@@ -1014,7 +1014,7 @@ export class CharacterSheetElement extends HTMLElement {
         theme: this.getAttribute('theme'),
         scheme: this.getAttribute('scheme'),
         layout: this.getAttribute('layout'),
-        width: this.getAttribute('width') || '100',
+        width: this.getAttribute('width') || DEFAULT_WIDTH,
       },
     }));
   }
@@ -1029,7 +1029,7 @@ export class CharacterSheetElement extends HTMLElement {
     const theme = this.getAttribute('theme');
     const pref = this.#themePref?.palette ?? theme;
     const layout = this.getAttribute('layout') || 'top';
-    const width = this.getAttribute('width') || '100';
+    const width = this.getAttribute('width') || DEFAULT_WIDTH;
     const marks = this.getAttribute('action-marks') || DEFAULT_ACTION_MARKS;
     const tint = this.getAttribute('action-tint') || DEFAULT_ACTION_TINT;
     const card = (p) => `
