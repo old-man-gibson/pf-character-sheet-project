@@ -231,6 +231,44 @@ run.addEventListener('click', async () => {
       await until(() => root.querySelector('[data-set="wealth.lastOffering"]') !== box);
       assert(sheet.model.data.wealth.lastOffering === '2026-02-01', 'The date was not kept');
     });
+    // A web address typed into a prose field (a Lore section here; notes,
+    // feats and traits are the same field) is a link once the field is left.
+    // A press on the link is left to the browser, whose click then follows
+    // it; a press anywhere else on the text opens it to edit, as it always
+    // has. Only presses are sent: a click on the link would leave this page.
+    await test('A link in a prose field takes the press, and the rest of the field still edits', async () => {
+      const root = sheet.shadowRoot;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      root.getElementById('tab-lore').click();
+      root.querySelector('[data-add="backgroundSections"]').click();
+      const index = sheet.model.data.backgroundSections.length - 1;
+      const body = () => root.querySelector(`textarea[data-item="backgroundSections|${index}|text"]`);
+      const typed = body();
+      assert(typed, 'New section missing');
+      typed.focus();
+      typed.value = 'Map: https://example.com/map. Ask the GM.';
+      typed.dispatchEvent(new Event('change', { bubbles: true }));
+      await until(() => body() !== typed);
+      body().blur();
+      body().dispatchEvent(new FocusEvent('blur'));
+      const wrap = body().closest('.prose');
+      const link = wrap.querySelector('.prose-view a[href]');
+      assert(link, 'The address is not a link');
+      assert(link.getAttribute('href') === 'https://example.com/map', `Links to ${link.getAttribute('href')}`);
+      assert(link.target === '_blank' && link.rel === 'noopener noreferrer', 'Not a new tab that is told nothing');
+      const press = (target) => {
+        const event = new MouseEvent('mousedown', { bubbles: true, composed: true, cancelable: true, button: 0 });
+        target.dispatchEvent(event);
+        return event;
+      };
+      const onLink = press(link);
+      assert(!onLink.defaultPrevented, 'The press on the link was taken from the browser');
+      assert(!wrap.classList.contains('editing') && root.activeElement !== body(), 'The press on the link opened the field');
+      const onText = press(wrap.querySelector('.prose-view'));
+      assert(onText.defaultPrevented && wrap.classList.contains('editing'), 'A press beside the link did not open the field');
+      body().blur();
+      body().dispatchEvent(new FocusEvent('blur'));
+    });
     // A chip list in a band asks for no width of its own, so beside its label
     // it was given none: one chip per line, each broken at its longest word.
     await test('The proficiency chips take the row beside their label', async () => {

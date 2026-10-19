@@ -3,9 +3,10 @@
  *
  * A prose field is two layers in one wrapper: a textarea holding what was
  * typed, and, over it while the field is not focused, the same text with every
- * {…} token replaced by what it currently comes to. Both layers carry the one
- * binding, so this is still an ordinary data-set / data-item control and the
- * element's delegated handler needs to know nothing about it.
+ * {…} token replaced by what it currently comes to and every web address a
+ * link. Both layers carry the one binding, so this is still an ordinary
+ * data-set / data-item control and the element's delegated handler needs to
+ * know nothing about it.
  *
  * This is the most widely shared thing on the sheet -- two dozen panels put a
  * prose field somewhere -- which is why it is its own module rather than part
@@ -15,6 +16,7 @@ import { esc } from './html.js';
 import { fmt } from '../rules.js';
 import { hasTokens, formatValue, proseScope } from '../inline.js';
 import { workingLine } from '../formula-format.js';
+import { hasLink, linkedText } from './links.js';
 
 const PROSE_HINT = 'Formulas work here: {= 2 + con.mod} shows a value, '
   + '{qi.max = wis.mod} names one, {qi.max} reuses it.';
@@ -24,22 +26,29 @@ export function itemArea(model, list, i, field, value, rows = 3, local = null, o
 }
 
 /**
- * A prose field that may carry {…} inline formulas.
+ * A prose field that may carry {…} inline formulas and web addresses.
  *
  * Two layers in one wrapper: the textarea holds the raw source and shows
- * while focused; a rendered overlay shows computed values while not. Both
- * receive the same events, so this stays a plain data-item/data-set control.
+ * while focused; a rendered overlay shows computed values and links while
+ * not. Both receive the same events, so this stays a plain data-item/data-set
+ * control. Text with neither formulas nor addresses is the textarea alone.
+ *
+ * A click on a link opens it in a new tab and leaves the textarea shut; a
+ * click anywhere else on the overlay opens the textarea, as before (see the
+ * element's `.prose` binding).
  */
 export function prose(model, bindingAttr, value, rows = 3, extraClass = '', local = null,
   { inactive = false, inactiveTitle = '' } = {}) {
   const text = value ?? '';
-  const rendered = hasTokens(text) ? renderedProse(model, text, local, { inactive, inactiveTitle }) : null;
+  const formulas = hasTokens(text);
+  const rendered = formulas ? renderedProse(model, text, local, { inactive, inactiveTitle, links: true })
+    : hasLink(text) ? linkedText(text) : null;
   // The gold edge these fields carry says "formulas work here"; the tooltip
   // is what says how. Set on the wrapper so it covers both layers, and the
   // rendered view's own title still wins while it is showing.
-  return `<span class="prose ${rendered ? 'has-tokens' : ''} ${extraClass}" title="${esc(PROSE_HINT)}">
+  return `<span class="prose ${rendered ? 'has-view' : ''} ${extraClass}" title="${esc(PROSE_HINT)}">
       <textarea ${bindingAttr} data-kind="text" rows="${rows}" spellcheck="false">${esc(text)}</textarea>
-      ${rendered ? `<span class="prose-view" title="Click to edit the formulas">${rendered}</span>` : ''}
+      ${rendered ? `<span class="prose-view" title="${formulas ? 'Click to edit the formulas' : 'Click to edit'}">${rendered}</span>` : ''}
     </span>`;
 }
 
@@ -207,8 +216,11 @@ export function tokenScope(model, local, target = null) {
  *                  bonuses are painted as the dormant things they are and say
  *                  so on the tooltip; the values around them still resolve,
  *                  because reading is not applying.
+ * @param links     draw web addresses in the text as links. Only where a
+ *                  link can go: `prose()` asks for it, while text drawn
+ *                  inside a button or a summary does not.
  */
-export function renderedProse(model, text, local = null, { inactive = false, inactiveTitle = '' } = {}) {
+export function renderedProse(model, text, local = null, { inactive = false, inactiveTitle = '', links = false } = {}) {
   // Built once for the whole field rather than per token: scope() walks
   // every tracker, skill and companion, and a field may hold dozens of them.
   // The memoiser is *not* called tokenScope: as a method it called
@@ -218,7 +230,7 @@ export function renderedProse(model, text, local = null, { inactive = false, ina
   let scope = null;
   const scopeOnce = () => (scope ??= tokenScope(model, local));
   return model.renderProse(text, local).map((seg) => {
-    if (seg.kind === 'text') return esc(seg.text);
+    if (seg.kind === 'text') return links ? linkedText(seg.text) : esc(seg.text);
     if (seg.error) {
       const label = seg.kind === 'define' ? `{${seg.name} = ${seg.expr}}`
         : seg.kind === 'ref' ? `{${seg.name}}` : `{= ${seg.expr}}`;

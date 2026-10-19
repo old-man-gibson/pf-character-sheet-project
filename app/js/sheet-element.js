@@ -126,6 +126,7 @@ import {
 } from './formula-guide.js';
 import { formulaPlace } from './ui/formula-places.js';
 import { hasTokens } from './inline.js';
+import { hasLink } from './ui/links.js';
 import {
   historyFor, countChanges, requestPersistence, workingKey, SNAPSHOT_EVERY, AUTO_KEEP,
 } from './history.js';
@@ -5917,9 +5918,10 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
-    // Prose fields with inline formulas: show computed values until focused,
-    // raw source while editing. Any prose edit may define or change a name
-    // used elsewhere, so it re-renders on change.
+    // Prose fields with inline formulas or web addresses: show computed values
+    // and links until focused, raw source while editing. Any prose edit may
+    // define or change a name used elsewhere, or add or drop a link, so it
+    // re-renders on change.
     root.querySelectorAll('.prose').forEach((wrap) => {
       const ta = wrap.querySelector('textarea');
       const view = wrap.querySelector('.prose-view');
@@ -5930,6 +5932,9 @@ export class CharacterSheetElement extends HTMLElement {
       }
       if (view) {
         view.addEventListener('mousedown', (e) => {
+          // A press on a link is the browser's: its click opens the link, and
+          // the field stays as it is. Anywhere else on the view edits.
+          if (e.target.closest?.('a[href]')) return;
           e.preventDefault();
           wrap.classList.add('editing');
           grow(ta);
@@ -5941,7 +5946,7 @@ export class CharacterSheetElement extends HTMLElement {
       }
       if (!ta.classList.contains('cfeat')) {
         ta.addEventListener('change', () => {
-          if (hasTokens(ta.value) || wrap.classList.contains('has-tokens')) this.#rerender(ta);
+          if (hasTokens(ta.value) || hasLink(ta.value) || wrap.classList.contains('has-view')) this.#rerender(ta);
         });
       }
     });
