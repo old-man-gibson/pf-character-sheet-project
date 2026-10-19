@@ -1573,7 +1573,7 @@ function attackPanel(model) {
         <thead><tr><th>Mode</th>
           <th class="num" title="An alternate is this attack with the ability beside it in the slot instead">Total</th>
           ${sheetBonusHead()}
-          <th>Ability</th><th>2nd ability</th></tr></thead>
+          <th>Ability</th><th title="A second ability that adds its modifier">2nd</th></tr></thead>
         <tbody>${ATTACK_MODES.map((k) => {
           const alt = ALT_ATTACK_OF[k];
           const shut = !!model.data.uiPrefs?.collapsed?.[`atk:${alt || k}`];
@@ -1827,7 +1827,7 @@ function classesPanel(model, ctx) {
     };
     return `<section class="panel span2">
       <h3>Classes</h3>
-      <div class="tablewrap"><table class="classes stacked cardrows">
+      <div class="tablewrap squeeze"><table class="classes stacked cardrows">
         <colgroup><col class="cls"><col class="lvl"><col class="hd"><col class="bab">
           <col class="save"><col class="save"><col class="save">
           <col class="ranks"><col class="arch"><col class="sys"><col class="tools"></colgroup>
@@ -2219,7 +2219,7 @@ function traitsPanel(model, ctx) {
           <h4 class="subhead">Character traits
             <span class="badge${picked < standard.length ? ' err' : ' ok'}">${picked} of ${standard.length} picked</span>
           </h4>
-          <div class="tablewrap"><table class="traits stacked">
+          <div class="tablewrap squeeze"><table class="traits stacked">
             <colgroup><col class="slot"><col class="cat"><col class="tname"><col class="effect"></colgroup>
             <thead><tr><th>Slot</th><th>Category</th><th>Name</th><th>Trait / effect</th></tr></thead>
             <tbody>
