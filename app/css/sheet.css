@@ -4131,10 +4131,13 @@ table.classes { table-layout: fixed; }
    most, then Systems, which is a short button in a wide column; the number
    boxes the least, down to the width of what they hold. The cell padding
    goes from 7px to 3px over the same range. At 19rem short (a 698px wrap)
-   every column is at its narrowest; a wrap narrower than that scrolls. The
-   1px is slack against rounding, so the columns never add up to a hair over
-   the wrap. A wrap of 62.6rem or more has nothing to give back and the table
-   is as it always was.
+   every column is at its narrowest; a wrap narrower than that scrolls.
+   Shrinking Class and Archetypes on down to the 620px card switch was
+   tried: at 626px they were 64px and 61px, class names read "Summc" and
+   "Cerebr", and the Archetypes heading ran into Systems. The 1px is slack
+   against rounding, so the columns never add up to a hair over the wrap. A
+   wrap of 62.6rem or more has nothing to give back and the table is as it
+   always was.
 
    Each column's line reads: its width when there is room, less the rem it
    gives up at the narrowest out of the 19. The shares add up to 19. */
