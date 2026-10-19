@@ -4393,10 +4393,10 @@ table.traits col.slot { width: 7.4rem; }
 table.traits col.cat { width: 8.6rem; }
 table.traits col.tname { width: 12.5rem; }
 /* Same as the classes grid: the effect column was the one left over. The four
-   add up to 44.5rem, 13px more than the panel at 768 and 47px more than this
-   half of the pair at 1280, so the effect gives back the difference, as the
-   class table's columns do (see `squeeze`). Up to 6rem: a wrap narrower than
-   the table can then take is 620px or less, and the table is cards there.
+   add up to 44.5rem, 13px more than the panel at 768, where it has the band's
+   row to itself, so the effect gives back the difference, as the class
+   table's columns do (see `squeeze`). Up to 6rem: a wrap narrower than the
+   table can then take is 620px or less, and the table is cards there.
    One column taking the whole shortfall adds up exactly, so unlike the class
    table this needs no pixel of slack. */
 table.traits { --short: clamp(0px, 44.5rem - 100cqw, 6rem); }
