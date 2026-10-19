@@ -177,7 +177,7 @@ function featGroupTable(model, ctx, group, g) {
     const level = Number(model.data.identity?.level) || 0;
     // Any other feat can wait for a level (From lvl), the way a slot does.
     const ahead = (f) => isAhead(featLevel(group, f), level);
-    return `<div class="tablewrap"><table class="feats stacked">
+    return `<div class="tablewrap"><table class="feats stacked${fixed ? ' levelup' : ''}">
         <thead><tr><th class="grip"></th><th class="fname">Feat</th><th class="src">${fixed ? 'Source / level' : 'Source'}</th>
           ${fixed ? '' : `${fromLevelHead()}`}
           <th class="fnote">Notes</th><th></th></tr></thead>

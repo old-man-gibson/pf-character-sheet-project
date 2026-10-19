@@ -4400,6 +4400,12 @@ table.feats th.grip, table.feats td.grip,
 table.granted th.grip, table.granted td.grip { width: 1%; padding-left: 4px; padding-right: 0; }
 table.feats th.fname, table.granted th.fname { width: 24%; }
 table.feats th.src, table.granted th.src { width: 20%; }
+/* Columns that hold a few words or a number take what those need, and Notes the
+   rest. Left to the fixed layout, a column with no width shares the remainder
+   evenly with Notes -- a From lvl box in a quarter of the table. */
+table.feats th.flvl, table.granted th.flvl { width: 5.5rem; }
+table.feats.levelup th.src { width: 6.5rem; }
+table.granted th.src { width: 7.5rem; }
 table.feats th:last-child, table.feats td.tools,
 table.granted th:last-child, table.granted td.tools { width: 2.6rem; }
 table.feats td input[type="text"],
