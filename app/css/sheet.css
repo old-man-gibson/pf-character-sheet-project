@@ -3141,9 +3141,12 @@ input.tabname:hover, input.tabname:focus { border-color: var(--cs-line); }
 .prose.grow textarea { min-height: 26px; resize: none; overflow: hidden; line-height: 1.35; }
 /* While not editing, the rendered view is the in-flow element (so the row is
    sized to the computed text) and the textarea is hidden underneath; while
-   editing they swap. */
+   editing they swap. The hidden textarea drops its min-height too: a tall
+   field's 58px, or a plain textarea's 60px, beat the 100% and left it hanging
+   below a one-line view, over whatever came next (a panel's help line). */
 .prose.has-tokens:not(.editing) textarea {
-  position: absolute; inset: 0; height: 100% !important; opacity: 0; pointer-events: none;
+  position: absolute; inset: 0; height: 100% !important; min-height: 0 !important;
+  opacity: 0; pointer-events: none;
 }
 .prose-view {
   display: block; min-height: 26px; padding: 4px 7px; box-sizing: border-box;
