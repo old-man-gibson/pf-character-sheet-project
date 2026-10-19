@@ -9,7 +9,8 @@
  * Bodies keep the indentation they had as methods, because the markup they
  * return is whitespace-sensitive; see ui/panels/gear.js for the reasoning.
  */
-import { esc, ABILITY_LABELS_LIST, nameDatalist, noteCell } from '../html.js';
+import { esc, ABILITY_LABELS_LIST, nameDatalist, catalogueFace, catFoldKey } from '../html.js';
+import { foldingNote } from '../talents.js';
 import * as fields from '../fields.js';
 import * as rows from '../rows.js';
 import * as prose from '../prose.js';
@@ -28,8 +29,18 @@ export const MYTHIC_PATHS_LIST_ID = 'mythic-paths';
 /** The one feat catalogue list, shared by every name cell on Feats & Mythic. */
 export const FEAT_LIST_ID = 'cat-feats';
 
-/** What the player has folded away, as `noteCell` and friends want it. */
-const foldsOf = (model) => model.data.uiPrefs?.collapsed || {};
+/**
+ * A feat's Notes cell: the player's note, folding the way a talent's does, and
+ * the pack's entry for the feat under it, folding with it. `at` is the row
+ * (`list|i`, or a plain path for the two fixed granted feats); the pack's
+ * Read all box and the fold it had before it shared the caret are kept on it.
+ */
+function featNote(model, ctx, binding, f, at) {
+  const details = featDetails(f);
+  return foldingNote(model, binding, f.note, at.includes('|') ? `${at}|note` : `${at}.note`, {
+    name: f.name, below: catalogueFace(details, { ctx, key: at }), belowText: details?.text, was: catFoldKey(at),
+  });
+}
 
 /**
  * Feats something hands you, rather than ones picked at a level.
@@ -59,16 +70,13 @@ function grantedFeatsSection(model, ctx) {
       <td data-stack="head"><span class="fsource">${esc(label)}</span>${hint ? `<div class="hint">${esc(hint)}</div>` : ''}</td>
       <td data-stack="name">${fields.text(`grantedFeats.${key}.name`, g[key]?.name, 'Which feat?', { list: FEAT_LIST_ID })}</td>
       <td></td>
-      <td class="fnote" data-label="Notes">${noteCell(
-    prose.prose(model, `data-set="grantedFeats.${key}.note"`, g[key]?.note, 1, 'grow'),
-    featDetails(g[key] || {}), foldsOf(model), `grantedFeats.${key}`, ctx,
-  )}</td>
+      <td class="fnote" data-label="Notes">${featNote(model, ctx, `data-set="grantedFeats.${key}.note"`, g[key] || {}, `grantedFeats.${key}`)}</td>
     </tr>`;
 
     return `<h4 class="subhead">Granted feats
         <span class="badge">${(hasMajor ? 2 : 1) + (g.others || []).length}</span>
       </h4>
-      <div class="tablewrap"><table class="granted stacked">
+      <div class="tablewrap"><table class="granted stacked${(g.others || []).length ? '' : ' notools'}">
         <thead><tr><th class="grip"></th><th class="src">Source</th><th class="fname">Feat</th>
           ${fromLevelHead()}
           <th class="fnote">Notes</th><th></th></tr></thead>
@@ -80,10 +88,7 @@ function grantedFeatsSection(model, ctx) {
             <td data-stack="head">${rows.itemText('grantedFeats.others', i, 'source', f.source, 'Oath 2, Attunement…')}</td>
             <td data-stack="name">${rows.itemText('grantedFeats.others', i, 'name', f.name, 'Which feat?', { list: FEAT_LIST_ID })}</td>
             <td class="num" data-label="From lvl">${fromLevelField('grantedFeats.others', i, f)}</td>
-            <td class="fnote" data-label="Notes">${noteCell(
-    prose.prose(model, `data-item="grantedFeats.others|${i}|note"`, f.note, 1, 'grow'),
-    featDetails(f), foldsOf(model), `grantedFeats.others|${i}`, ctx,
-  )}</td>
+            <td class="fnote" data-label="Notes">${featNote(model, ctx, `data-item="grantedFeats.others|${i}|note"`, f, `grantedFeats.others|${i}`)}</td>
             ${rows.rowToolsDragged('grantedFeats.others', i)}
           </tr>`).join('')}
         </tbody>
@@ -169,7 +174,6 @@ function removeGroupButton(group, g, armedKey) {
  * grants a pool can define it where the feat is written down.
  */
 function featGroupTable(model, ctx, group, g) {
-    const folds = foldsOf(model);
     // The level-up group's rows are fixed slots: the level comes from the
     // slot, and a row can be moved among them but not added or removed.
     const fixed = group.levelUp === true;
@@ -177,7 +181,7 @@ function featGroupTable(model, ctx, group, g) {
     const level = Number(model.data.identity?.level) || 0;
     // Any other feat can wait for a level (From lvl), the way a slot does.
     const ahead = (f) => isAhead(featLevel(group, f), level);
-    return `<div class="tablewrap"><table class="feats stacked">
+    return `<div class="tablewrap"><table class="feats stacked${fixed ? ' levelup notools' : ''}">
         <thead><tr><th class="grip"></th><th class="fname">Feat</th><th class="src">${fixed ? 'Source / level' : 'Source'}</th>
           ${fixed ? '' : `${fromLevelHead()}`}
           <th class="fnote">Notes</th><th></th></tr></thead>
@@ -188,10 +192,7 @@ function featGroupTable(model, ctx, group, g) {
     ? `<span class="dim" title="Set by the slot; move the feat to change its level">Level ${esc(f.detail)}</span>`
     : rows.itemText(list, i, 'detail', f.detail)}</td>
           ${fixed ? '' : `<td class="num" data-label="From lvl">${fromLevelField(list, i, f)}</td>`}
-          <td class="fnote" data-label="Notes">${noteCell(
-    prose.prose(model, `data-item="featGroups.${g}.entries|${i}|note"`, f.note, 1, 'grow'),
-    featDetails(f), folds, `featGroups.${g}.entries|${i}`, ctx,
-  )}</td>
+          <td class="fnote" data-label="Notes">${featNote(model, ctx, `data-item="${list}|${i}|note"`, f, `${list}|${i}`)}</td>
           ${/* The arrows move a feat within its group only: taking one to
                another group stays a drag, on a desktop. The granted feats
                above are the same bargain and write the same cell. */''}
@@ -334,7 +335,7 @@ export function renderFeaturesPanel(model, ctx) {
                 <td class="num derived" data-label="Level" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
                 <td data-label="Path">${rows.itemText('mythic.abilities', i, 'path', a.path, '', { title: true, list: MYTHIC_PATHS_LIST_ID })}</td>
                 <td data-stack="name">${rows.itemText('mythic.abilities', i, 'name', a.name, '', { title: true, list: FEAT_LIST_ID })}</td>
-                <td data-label="Effect">${prose.foldedProse(model, { openCell: ctx.openCell }, `mythic:${i}:effect`, `data-item="mythic.abilities|${i}|effect"`, a.effect, 'What it does')}</td>
+                <td data-label="Effect">${foldingNote(model, `data-item="mythic.abilities|${i}|effect" placeholder="What it does"`, a.effect, `mythic.abilities|${i}|effect`, { name: a.name })}</td>
                 ${t % 2 === 0
                   ? `<td data-label="Stat">${pickSelect('mythicStat', t, 0, mythicPickAt(model, t), ABILITY_LABELS_LIST, false)}</td>`
                   : '<td class="noslot"></td>'}
@@ -373,16 +374,16 @@ export function renderFeaturesPanel(model, ctx) {
                 <td class="num derived" data-label="Level" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
                 <td data-label="Grants"><span class="fsource">${esc(a.feat || mythicTierGrant(t))}</span></td>
                 <td data-stack="name">${rows.itemText('mythic.abilities', i, 'featChoice', a.featChoice, '', true)}</td>
-                <td data-label="Effect">${prose.foldedProse(model, { openCell: ctx.openCell }, `mythic:${i}:featEffect`, `data-item="mythic.abilities|${i}|featEffect"`, a.featEffect, 'What it does')}</td>
+                <td data-label="Effect">${foldingNote(model, `data-item="mythic.abilities|${i}|featEffect" placeholder="What it does"`, a.featEffect, `mythic.abilities|${i}|featEffect`, { name: a.featChoice })}</td>
               </tr>`;
             }).join('')}</tbody>
           </table></div>
           <p class="hint">
             Odd tiers grant a mythic feat. Even tiers grant an RP power.
             <strong>Grants</strong> is what the tier hands over. <strong>Name</strong> is
-            what you took for it. <strong>Effect</strong> says what that does. Effect is
-            folded to one line to keep the table readable. Click one to open it and
-            click away to shut it again. Formulas work here and in the path abilities
+            what you took for it. <strong>Effect</strong> says what that does. A long effect
+            starts folded to one line, like a talent's note; its ▸ opens it, and the
+            sheet remembers which you left open. Formulas work here and in the path abilities
             above. Write “{= tier * 2}” for a value, or “{fort += 2}” to send a bonus
             somewhere. A bonus written above tier ${tier} does not apply until that tier
             is reached.
@@ -470,7 +471,8 @@ function mythicTraditionPanel(model, ctx, m) {
               ${def.requires ? `<div class="hint">needs ${esc(MYTHIC_TRADITION_SLOTS.find((s) => s.key === def.requires)?.label)}</div>` : ''}
               ${def.kind === 'quality' ? '<div class="hint">bonus + drawback</div>' : ''}</td>
             <td data-stack="name">${prose.prose(model, `data-set="mythic.tradition.${def.key}" placeholder="${esc(locked ? `Take ${MYTHIC_TRADITION_SLOTS.find((s) => s.key === def.requires)?.label} first` : '')}"`, tr[def.key], 1, 'grow')}</td>
-            <td data-label="Notes">${prose.prose(model, `data-set="mythic.tradition.notes.${def.key}" placeholder="${esc(locked ? '' : 'What it does')}"`, tr.notes?.[def.key], 1, 'grow')}</td>
+            <td data-label="Notes">${foldingNote(model, `data-set="mythic.tradition.notes.${def.key}" placeholder="${esc(locked ? '' : 'What it does')}"`, tr.notes?.[def.key],
+    `mythic.tradition.notes.${def.key}`, { name: tr[def.key] })}</td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>

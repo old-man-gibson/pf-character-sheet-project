@@ -9,7 +9,7 @@
 import { esc } from '../html.js';
 import { isAhead, rowLevel } from '../../model/feats.js';
 import { fromLevelField, fromLevelHead, plannedRow } from '../from-level.js';
-import { talentCell, talentNote } from '../talents.js';
+import { talentCell, foldingNote } from '../talents.js';
 import {
   SYSTEM_NOUNS, poolMode, poolSpheres, poolSystems, talentLandsOn, TRAINING_SYSTEMS, classForwardKey, sideSphereNames,
 } from '../../model.js';
@@ -283,7 +283,7 @@ export function ladderTable(model, list, ci, cls, systems, spheres) {
     on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
               <td class="${state}${side ? ` side-${side}` : ''}"${cellTitle(side, lv.sphere)}>${on ? itemSelect(slots, li, 'sphere', lv.sphere, spheres)
                   : '<select disabled><option></option></select>'}</td>
-              <td class="${state}">${talentNote(model,
+              <td class="${state}">${foldingNote(model,
     `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, `${slots}|${li}|notes`)}</td>
               <td class="${uState} util ustart">${talentCell(model,
     `data-item="${slots}|${li}|utilityTalent"${uOn ? ' placeholder="[utility]…"' : ' disabled'}`,
@@ -291,7 +291,7 @@ export function ladderTable(model, list, ci, cls, systems, spheres) {
     uOn ? { sphere: 'utilitySphere', notes: 'utilityNotes' } : null)}</td>
               <td class="${uState} util${uSide ? ` side-${uSide}` : ''}"${cellTitle(uSide, lv.utilitySphere)}>${uOn ? itemSelect(slots, li, 'utilitySphere', lv.utilitySphere, spheres)
                   : '<select disabled><option></option></select>'}</td>
-              <td class="${uState} util">${talentNote(model,
+              <td class="${uState} util">${foldingNote(model,
     `data-item="${slots}|${li}|utilityNotes"${uOn ? '' : ' disabled'}`, lv.utilityNotes, `${slots}|${li}|utilityNotes`)}</td>
             </tr>`;
           }).join('')}</tbody>
@@ -333,7 +333,7 @@ export function ladderStack(model, list, ci, cls, systems, spheres) {
     { sphere: f('sphere'), notes: f('notes') })}</td>
         <td class="slot-on${u ? ' util' : ''}${side ? ` side-${side}` : ''}" data-label="Sphere">${
   itemSelect(slots, li, f('sphere'), sphere, spheres)}</td>
-        <td class="slot-on${u ? ' util' : ''}" data-label="Notes">${talentNote(model,
+        <td class="slot-on${u ? ' util' : ''}" data-label="Notes">${foldingNote(model,
     `data-item="${slots}|${li}|${f('notes')}"`, lv[f('notes')], `${slots}|${li}|${f('notes')}`)}</td>
       </tr>`;
   };
@@ -433,7 +433,7 @@ export function singleLadderTable(model, slots, cls, spheres, systems = null) {
                 ${on ? itemSelect(slots, li, 'sphere', lv.sphere, spheres)
       : '<select disabled><option></option></select>'}
               </td>
-              <td class="${state}" data-label="Notes">${talentNote(model,
+              <td class="${state}" data-label="Notes">${foldingNote(model,
       `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, `${slots}|${li}|notes`)}</td>
             </tr>`;
   }).join('')}</tbody>
@@ -449,7 +449,7 @@ export function singleLadderTable(model, slots, cls, spheres, systems = null) {
  */
 export function bonusTalentTable(model, list, rows, spheres, { guile = false, placeholder = 'Feat, item…' } = {}) {
   return `<div class="tablewrap"><table class="talents bonus stacked">
-        <colgroup><col class="grip"><col class="talent"><col class="sphere"><col class="source"><col class="tool"><col class="notes">${guile ? `
+        <colgroup><col class="grip"><col class="talent"><col class="sphere"><col class="source"><col class="flvl"><col class="notes">${guile ? `
           <col class="tool"><col class="tool">` : ''}<col class="tools"></colgroup>
         <thead><tr><th class="grip"></th><th>Talent</th><th>Sphere</th><th>Source</th>
           ${fromLevelHead()}<th>Notes</th>${guile ? `
@@ -463,7 +463,7 @@ export function bonusTalentTable(model, list, rows, spheres, { guile = false, pl
           <td data-label="Sphere">${itemSelect(list, i, 'sphere', e.sphere, spheres)}</td>
           <td data-label="Source">${itemText(list, i, 'source', e.source, placeholder)}</td>
           <td class="num" data-label="From lvl">${fromLevelField(list, i, e)}</td>
-          <td data-label="Notes">${talentNote(model, `data-item="${list}|${i}|notes"`, e.notes, `${list}|${i}|notes`)}</td>${guile ? `
+          <td data-label="Notes">${foldingNote(model, `data-item="${list}|${i}|notes"`, e.notes, `${list}|${i}|notes`)}</td>${guile ? `
           <td class="mid" data-label="Utility">${itemCheck(list, i, 'utility', e.utility)}</td>
           <td class="mid" data-label="Free">${itemCheck(list, i, 'free', e.free)}</td>` : ''}
           ${rowToolsDragged(list, i)}

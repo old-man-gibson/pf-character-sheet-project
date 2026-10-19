@@ -2739,6 +2739,8 @@ table.talents input, table.talents select, table.talents textarea { min-width: 0
 table.talents col.lvl { width: 2.9rem; }
 table.talents col.sphere { width: 8.75rem; }
 table.talents col.tool { width: 2.8rem; }
+/* From lvl: room for its box and its heading on one line, as on the Feats tab. */
+table.talents col.flvl { width: 5.5rem; }
 table.talents col.tools { width: 6rem; }
 table.talents col.talent { width: 27%; }
 table.talents.bonus col.talent { width: 23%; }
@@ -4371,12 +4373,12 @@ label.cond.count input[type="number"] { grid-column: 2; }
 .condsummary li { margin: 1px 0; }
 
 /* ---------- traits ----------
-   Character traits and race traits are two lists that belong under one
-   heading, side by side when the width is there. */
-.traitpair { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); align-items: start; }
-@container (min-width: 1200px) {
-  .traitpair { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
-}
+   Character traits and race traits are two panels in a band (overview.js
+   traitsPanel), side by side when the width is there, each folding on its own. */
+/* Each starts from the width its table needs, not from its prose, which would
+   ask for a whole effect on one line and push the other panel below it. */
+.band > .panel.traitspanel { flex: 1 1 46rem; }
+.band > .panel.racepanel { flex: 1 1 27rem; }
 h4.subhead {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   margin: 0 0 7px; font-size: 0.68rem; text-transform: uppercase;
@@ -4400,8 +4402,11 @@ table.traits col.tname { width: 12.5rem; }
 table.traits { --short: clamp(0px, 44.5rem - 100cqw, 6rem); }
 table.traits col.effect { width: calc(16rem - var(--short)); }
 table.traits select, table.traits input[type="text"] { width: 100%; min-width: 0; }
-table.traits td { vertical-align: top; }
-table.racetraits td:first-child { width: 11rem; }
+/* Both lists read top-down the same way: a row's name and controls sit level
+   with the first line of its effect, however long the effect runs, and the
+   name column is the same width in both. */
+table.traits td, table.racetraits td { vertical-align: top; }
+table.racetraits td:first-child { width: 12.5rem; }
 table.racetraits td:first-child input { min-width: 8rem; }
 td.empty { color: var(--cs-muted); font-style: italic; text-align: center; padding: 10px; }
 
@@ -4452,6 +4457,16 @@ table.feats th.grip, table.feats td.grip,
 table.granted th.grip, table.granted td.grip { width: 1%; padding-left: 4px; padding-right: 0; }
 table.feats th.fname, table.granted th.fname { width: 24%; }
 table.feats th.src, table.granted th.src { width: 20%; }
+/* Columns that hold a few words or a number take what those need, and Notes the
+   rest. Left to the fixed layout, a column with no width shares the remainder
+   evenly with Notes -- a From lvl box in a quarter of the table. */
+table.feats th.flvl, table.granted th.flvl { width: 5.5rem; }
+table.feats.levelup th.src { width: 6.5rem; }
+table.granted th.src { width: 7.5rem; }
+/* The last column holds a row's × and, in the card layout only, its move arrows.
+   Where no row can be removed -- the Level Up slots, the granted feats while only
+   Drawback and Specialty are there -- it would be an empty strip, so it closes. */
+table.notools > thead > tr > th:last-child { width: 0; padding: 0; }
 table.feats th:last-child, table.feats td.tools,
 table.granted th:last-child, table.granted td.tools { width: 2.6rem; }
 table.feats td input[type="text"],
@@ -4505,29 +4520,6 @@ table.mythic col.grants { width: 6.5rem; }
 table.mythic col.mstat { width: 4.6rem; }
 table.mythic td { vertical-align: top; }
 table.mythic input[type="text"], table.mythic select { width: 100%; min-width: 0; }
-
-/* ---------- a table cell folded down to one line ----------
-   The shut state is a button holding the field's computed text, clipped with
-   an ellipsis; the tooltip carries the whole of it. It is drawn as the field
-   it stands in for -- same border, same gold formula edge -- because clicking
-   it is how the field is reached, and anything flatter reads as a label. */
-.foldcell.peek {
-  display: block; width: 100%; box-sizing: border-box; margin: 0;
-  padding: 3px 5px; min-height: 26px; text-align: left;
-  font: inherit; font-size: 0.78rem; line-height: 1.35;
-  color: var(--cs-text); background: var(--cs-panel-2);
-  border: 1px solid var(--cs-line); border-radius: 5px;
-  box-shadow: inset -2px 0 0 var(--cs-formula);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  cursor: text;
-}
-.foldcell.peek:hover { box-shadow: inset -2px 0 0 var(--cs-formula-strong); }
-/* A token inside a shut cell is being read, not pointed at: the cell's own
-   tooltip is what a click-to-open cell should be offering. */
-.foldcell.peek .tok { cursor: inherit; }
-.foldcell.peek .ph { color: var(--cs-muted); font-style: italic; }
-.foldcell.open { display: block; }
-.foldcell.open .prose textarea, .foldcell.open .prose-view { font-size: 0.78rem; }
 
 /* ---------- card casting ----------
    Mana colours are the five a card game uses; a chip is a letter on its
@@ -5569,11 +5561,15 @@ table.stacked .catface { margin-left: 0; }
 }
 .catfold:hover { color: var(--cs-accent); background: var(--cs-panel); }
 .catfold:focus-visible { color: var(--cs-accent); }
-/* A folded talent note: one line of what the box says, in the box's place.
-   A button because the whole line opens it -- the caret is a small target
-   for the thing a reader does most on a filled table. */
+/* A folded note (talent, trait, feat, mythic): one line of what the box says,
+   in the box's place. A button because the whole line opens it -- the caret
+   is a small target for the thing a reader does most on a filled table.
+   No width of its own (it fills the line): a shut line is one long run of
+   text, and in a table that sizes its columns by their contents, as the race
+   traits do, that run was the cell's narrowest width and pushed the table
+   out of its panel. */
 .notepeek {
-  flex: 1 1 auto; min-width: 0;
+  flex: 1 1 auto; min-width: 0; width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   text-align: left; font: inherit; color: var(--cs-muted);
   background: none; border: 0; border-radius: 4px;
