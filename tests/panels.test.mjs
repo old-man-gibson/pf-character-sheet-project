@@ -43,10 +43,12 @@ import * as techniques from '../app/js/ui/panels/techniques.js';
 import * as manager from '../app/js/ui/panels/manager.js';
 import { renderStatsPanel } from '../app/js/ui/panels/stats.js';
 import { renderSkillsPanel, skillRowIndices } from '../app/js/ui/panels/skills.js';
-import { prose, foldedProse, renderedProse, hasView } from '../app/js/ui/prose.js';
+import { prose, foldedProse, renderedProse } from '../app/js/ui/prose.js';
 import * as statBlock from '../app/js/monster/panel.js';
 import { blankDraft, blankTrackerDraft, blankView } from '../app/js/ui/view-state.js';
 import { foldValue } from '../app/js/ui/folds.js';
+import { hasTokens } from '../app/js/inline.js';
+import { hasLink } from '../app/js/ui/links.js';
 
 let pass = 0;
 let fail = 0;
@@ -251,7 +253,10 @@ function renders(who, name, draw, model) {
   // Every cell of a workbook grid is rows.gridCell's, which draws one that
   // holds a formula or a web address as a prose field: its read view shows
   // the value and the link. A box drawn for one shows the source as typed.
-  const sourceBox = (html.match(GRID_BOX) || []).find((tag) => hasView(unesc(/\bvalue="([^"]*)"/.exec(tag)?.[1])));
+  const sourceBox = (html.match(GRID_BOX) || []).find((tag) => {
+    const value = unesc(/\bvalue="([^"]*)"/.exec(tag)?.[1]);
+    return hasTokens(value) || hasLink(value);
+  });
   if (sourceBox) {
     fail++;
     console.log(`  FAIL ${who} — ${name} draws a grid cell with a formula or an address as a box: ${sourceBox.slice(0, 120)}`);
