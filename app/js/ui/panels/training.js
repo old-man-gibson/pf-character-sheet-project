@@ -449,7 +449,7 @@ export function singleLadderTable(model, slots, cls, spheres, systems = null) {
  */
 export function bonusTalentTable(model, list, rows, spheres, { guile = false, placeholder = 'Feat, item…' } = {}) {
   return `<div class="tablewrap"><table class="talents bonus stacked">
-        <colgroup><col class="grip"><col class="talent"><col class="sphere"><col class="source"><col class="tool"><col class="notes">${guile ? `
+        <colgroup><col class="grip"><col class="talent"><col class="sphere"><col class="source"><col class="flvl"><col class="notes">${guile ? `
           <col class="tool"><col class="tool">` : ''}<col class="tools"></colgroup>
         <thead><tr><th class="grip"></th><th>Talent</th><th>Sphere</th><th>Source</th>
           ${fromLevelHead()}<th>Notes</th>${guile ? `

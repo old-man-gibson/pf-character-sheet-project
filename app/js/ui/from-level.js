@@ -22,7 +22,7 @@ export const fromLevelHead = () => `<th class="num flvl" title="${esc(FROM_LEVEL
 export function fromLevelField(list, i, row) {
   const at = rowLevel(row);
   return `<input type="number" min="1" max="40" value="${at ?? ''}" data-item="${list}|${i}|level" data-kind="number"
-    placeholder="—" aria-label="From level" style="width:3.6rem">`;
+    placeholder="—" aria-label="From level" style="width:3.6rem;max-width:100%">`;
 }
 
 /** A row waiting for a level: the `future` class every planned row wears, and why on hover. */

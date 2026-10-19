@@ -2730,6 +2730,8 @@ table.talents input, table.talents select, table.talents textarea { min-width: 0
 table.talents col.lvl { width: 2.9rem; }
 table.talents col.sphere { width: 8.75rem; }
 table.talents col.tool { width: 2.8rem; }
+/* From lvl: room for its box and its heading on one line, as on the Feats tab. */
+table.talents col.flvl { width: 5.5rem; }
 table.talents col.tools { width: 6rem; }
 table.talents col.talent { width: 27%; }
 table.talents.bonus col.talent { width: 23%; }
