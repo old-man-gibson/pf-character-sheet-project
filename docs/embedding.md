@@ -105,7 +105,8 @@ want both:
 `--cs-sticky-top` is where the tab rail — the tab bar, and in the session view the
 strip of hit points, AC and saves — comes to rest when the sheet is scrolled. It
 defaults to `0px`, against the top of the window. A host with a fixed header of its
-own should set this to that header's height, or the rail pins behind it:
+own should set this to that header's height, or the rail pins behind it. Tab switches
+and Jump to scroll the panel to just below this line and the pinned tab bar:
 
 ```css
 character-sheet { --cs-sticky-top: 56px; }

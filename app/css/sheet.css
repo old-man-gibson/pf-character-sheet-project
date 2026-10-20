@@ -1326,9 +1326,18 @@ select.jumpto[hidden] { display: none; }
 .body:focus-visible { outline: 2px solid var(--cs-accent); outline-offset: -2px; }
 /* Read out, never drawn. The standard clip: `display: none` and
    `visibility: hidden` both take a live region out of the accessibility tree,
-   which is the one thing this must not be. */
+   which is the one thing this must not be.
+   Pinned to the top corner of whatever it is positioned against. Left at its
+   own place it sat after the last panel, and the sheet is not a positioned
+   box, so in the app page -- where the sheet scrolls inside itself -- it hung
+   outside that scroll box at the foot of the content and made the page a
+   sheet's height taller (Chromium counted it once the window was wide enough
+   for the sheet's both-edges scrollbar gutter, 92rem). The page's
+   `overflow: hidden` still lets a script
+   scroll it, and every `scrollIntoView` in the sheet then moved the page
+   too, sliding the sheet up under the app's top bar. */
 .srlive {
-  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  position: absolute; top: 0; left: 0; width: 1px; height: 1px; margin: -1px; padding: 0;
   overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
 }
 /* Rearranging by drag: the tab (or manager row) being carried fades, and the

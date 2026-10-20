@@ -870,9 +870,21 @@ export class CharacterSheetElement extends HTMLElement {
     const wrap = this.shadowRoot.querySelector('.wrap');
     if (!rail || !wrap) return;
     if (getComputedStyle(wrap).display !== 'grid') { rail.style.removeProperty('height'); return; }
-    const stickyTop = parseFloat(getComputedStyle(this).getPropertyValue('--cs-sticky-top')) || 0;
-    const top = Math.max(rail.getBoundingClientRect().top, stickyTop);
-    rail.style.height = `${Math.max(200, Math.round(window.innerHeight - top))}px`;
+    // The window when the page scrolls; the box the sheet scrolls in when it
+    // has one (the app page). Measured against the window there, a rail that
+    // a short tab had carried up past its pin came out that much taller than
+    // the box, which kept the box scrolled by the difference and the top of
+    // the rail out of sight under the app's bar.
+    const box = this.#scrollBox();
+    const viewTop = box ? box.getBoundingClientRect().top + box.clientTop : 0;
+    const viewBottom = box ? viewTop + box.clientHeight : window.innerHeight;
+    const top = Math.max(rail.getBoundingClientRect().top, viewTop + this.#stickyTop());
+    rail.style.height = `${Math.max(200, Math.round(viewBottom - top))}px`;
+  }
+
+  /** `--cs-sticky-top` in pixels: how far down a header the host pins over the sheet ends. */
+  #stickyTop() {
+    return parseFloat(getComputedStyle(this).getPropertyValue('--cs-sticky-top')) || 0;
   }
 
   connectedCallback() {
@@ -5065,21 +5077,36 @@ export class CharacterSheetElement extends HTMLElement {
    *
    * Only ever upwards. Clicking a tab while the header is still on screen must
    * not scroll the header away to satisfy a rule about panel tops.
-   *
-   * `scrollIntoView` rather than `window.scrollTo` because an embedded sheet
-   * may sit inside a scroll container belonging to the host, and the margin is
-   * measured rather than written in the stylesheet because the rail stands one
-   * row taller in the session view.
    */
   #showPanelTop() {
     const body = this.shadowRoot.querySelector('.body');
-    if (!body) return;
-    const clear = this.#railClearance();
-    body.style.scrollMarginTop = `${clear}px`;
-    const top = this.getBoundingClientRect().top;
-    if (body.getBoundingClientRect().top < Math.max(top, 0) + clear - 10) {
-      body.scrollIntoView({ block: 'start' });
-    }
+    if (body) this.#landAt(body, { upOnly: true });
+  }
+
+  /**
+   * Scroll so `target`'s top sits just clear of everything pinned over it.
+   *
+   * Only the box the sheet scrolls in moves (`#scrollBox`: the element itself
+   * in the app page, a box of the host's, else the page), not every box above
+   * it. This was `scrollIntoView`, which scrolls them all: in the app page that
+   * included the page itself, whose `overflow: hidden` body a script can still
+   * scroll, so anything that made the page a little taller than the window let
+   * a tab switch slide the sheet up under the app's top bar.
+   *
+   * The line is that box's top, then `--cs-sticky-top` (a header the host pins
+   * over the sheet; zero in the app page), then the rail where it lies over the
+   * panels. Measured rather than written in the stylesheet because the rail
+   * stands one row taller in the session view. `upOnly` leaves a target that
+   * is already below the line where it is.
+   */
+  #landAt(target, { upOnly = false } = {}) {
+    const box = this.#scrollBox();
+    const view = box ? box.getBoundingClientRect().top + box.clientTop : 0;
+    const line = view + this.#stickyTop() + this.#railClearance();
+    const shift = target.getBoundingClientRect().top - line;
+    if (upOnly ? shift >= -10 : Math.abs(shift) < 1) return;
+    if (box) box.scrollTop += shift;
+    else window.scrollBy(0, shift);
   }
 
   /**
@@ -5123,14 +5150,12 @@ export class CharacterSheetElement extends HTMLElement {
   #jumpToSection(index) {
     const head = this.shadowRoot.querySelector(`.body [data-section="${CSS.escape(index)}"]`);
     if (!head) return;
-    const target = head.closest('section.panel, .supergroup') ?? head;
-    target.style.scrollMarginTop = `${this.#railClearance()}px`;
-    target.scrollIntoView({ block: 'start' });
+    this.#landAt(head.closest('section.panel, .supergroup') ?? head);
   }
 
   /**
-   * How far below the top of the window a landing has to be to clear the
-   * pinned rail: the rail's height on the bar, where it sits over the panels,
+   * How far below where the rail pins a landing has to be to clear the
+   * rail: the rail's height on the bar, where it sits over the panels,
    * and next to nothing on the side, where it stands beside them and covers
    * none of them -- a side rail is the height of the window, and a landing
    * pushed that far down would be off the bottom of it.
@@ -5334,8 +5359,15 @@ export class CharacterSheetElement extends HTMLElement {
     const rows = new Set([...bar.children].map((c) => c.offsetTop)).size;
     bar.classList.toggle('oneline', rows <= 1);
     // A side rail scrolls up and down inside itself; the bar scrolls across.
+    // The box is moved by hand rather than with `scrollIntoView`, which would
+    // move the page too wherever the tab is off the window.
     const box = bar.closest('.railbody') || bar;
-    if (box.scrollHeight > box.clientHeight + 1) tab.scrollIntoView({ block: 'nearest' });
+    if (box.scrollHeight > box.clientHeight + 1) {
+      const t = tab.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
+      if (t.top < b.top) box.scrollTop += t.top - b.top;
+      else if (t.bottom > b.bottom) box.scrollTop += t.bottom - b.bottom;
+    }
     if (bar.scrollWidth <= bar.clientWidth) return;
     const t = tab.getBoundingClientRect();
     const b = bar.getBoundingClientRect();
