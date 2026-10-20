@@ -133,7 +133,9 @@ run.addEventListener('click', async () => {
         .flatMap((rule) => [...rule.cssRules]).map((rule) => rule.cssText).join('\n');
       assert(rules, 'No print rules found');
       print.replaceSync(rules);
-      const original = root.adoptedStyleSheets;
+      // A copy: the property is a live list, and keeping the list itself kept
+      // the print sheet added below for every check after this one.
+      const original = [...root.adoptedStyleSheets];
       const probe = document.createElement('div');
       probe.innerHTML = '<button class="pip used">1</button><button class="pip zero">0</button><button class="edit-probe">Edit</button>';
       root.append(probe);
@@ -335,6 +337,50 @@ run.addEventListener('click', async () => {
       } finally {
         if (layout) sheet.setAttribute('layout', layout);
         mount.style.width = '';
+      }
+    });
+    // The app page scrolls the sheet in a box of its own under the app's bar,
+    // and the page itself is meant never to scroll. The sheet's live region,
+    // positioned against the page rather than the sheet, made the page as tall
+    // as the sheet's content, and a tab switch then scrolled the page as well
+    // as the box: the sheet slid up under the bar.
+    await test("A tab switch scrolls only the sheet's own box and lands clear of the rail", async () => {
+      const root = sheet.shadowRoot;
+      const layout = sheet.getAttribute('layout');
+      const page = document.scrollingElement;
+      // The app page's own rules for the sheet (app/index.html), with the
+      // both-edges gutter it gets on a wide window: the stray height only
+      // counted towards the page with that gutter on.
+      const box = { height: '360px', overflowY: 'auto', overflowX: 'hidden', scrollbarGutter: 'stable both-edges' };
+      try {
+        Object.assign(sheet.style, box);
+        sheet.style.setProperty('--cs-view-height', '360px');
+        mount.style.width = '900px';
+        for (const side of [false, true]) {
+          const where = side ? 'side rail' : 'tab bar';
+          sheet.setAttribute('layout', side ? 'side' : 'top');
+          root.getElementById('tab-overview').click();
+          page.scrollTop = 0;
+          const foot = sheet.getBoundingClientRect().bottom + 20;
+          assert(page.scrollHeight <= Math.max(foot + 20, page.clientHeight),
+            `The page runs ${Math.round(page.scrollHeight - foot)}px past the sheet's box (${where})`);
+          sheet.scrollTop = sheet.scrollHeight;
+          root.getElementById('tab-features').click();
+          assert(page.scrollTop === 0, `The page scrolled ${Math.round(page.scrollTop)}px (${where})`);
+          const top = sheet.getBoundingClientRect().top;
+          const rail = root.querySelector('.tabrail').getBoundingClientRect();
+          const body = root.querySelector('.body').getBoundingClientRect();
+          assert(rail.top >= top - 0.5, `The rail starts ${Math.round(top - rail.top)}px above the box (${where})`);
+          const line = top + (side ? 10 : Math.round(rail.height) + 10);
+          assert(sheet.scrollTop > 0 && Math.abs(body.top - line) <= 1.5,
+            `The panel lands ${Math.round(body.top - top)}px down the box, not ${Math.round(line - top)}px (${where})`);
+        }
+      } finally {
+        if (layout) sheet.setAttribute('layout', layout); else sheet.removeAttribute('layout');
+        for (const key of Object.keys(box)) sheet.style[key] = '';
+        sheet.style.removeProperty('--cs-view-height');
+        mount.style.width = '';
+        page.scrollTop = 0;
       }
     });
   } finally {
