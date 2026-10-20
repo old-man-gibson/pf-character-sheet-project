@@ -52,7 +52,7 @@ import {
 } from './edit.js';
 import { emit, subscribe } from './events.js';
 import {
-  markUndo, undo, undoLabel, undoLast, undoPlay, clearUndo, playAction, playActions,
+  markUndo, undo, undoLabel, undoLast, undoPlay, clearUndo, playAction, playActions, clearPlayActions,
   redoLabel, redoLast, undoState, adoptUndoState,
 } from './undo.js';
 import {
@@ -502,6 +502,8 @@ export class Character {
   undoPlay(...a) { return undoPlay(this, ...a); }
 
   get playActions() { return playActions(this); }
+
+  clearPlayActions(...a) { return clearPlayActions(this, ...a); }
 
   /* The play log: what happened, kept on the document; see model/play-log.js. */
   get playLog() { return playLog(this); }

@@ -978,6 +978,11 @@ console.log('\nevery × is the one ×');
     removeAction('remove-cf-group', { class: 'Ghost "One"' }, { what: 'the group', arm: 'cfgroup|Ghost', armed: null })
       .includes('data-action="remove-cf-group" data-class="Ghost &quot;One&quot;" data-arm="cfgroup|Ghost"'), true);
   check('words in place of the ×', removeButton('psionics.classes', 0, { what: 'this class', text: 'Remove' }).endsWith('>Remove</button>'), true);
+  const clear = (armed) => removeControl('data-action="undo-play-clear"', {
+    text: 'Clear list', armedText: 'Clear 3 actions — sure?', arm: 'clear', armed,
+  });
+  check('and in place of sure?, escaped', [clear(null).endsWith('>Clear list</button>'), clear('clear').endsWith('>Clear 3 actions — sure?</button>'),
+    removeControl('', { arm: 'k', armed: 'k', armedText: '<b>' }).endsWith('>&lt;b&gt;</button>')], [true, true, true]);
   check('what it takes is escaped', removeControl('data-x="1"', { what: '<b>' }).includes('aria-label="Remove &lt;b&gt;"'), true);
   check('a row\'s cell holds it', /^<td class="tools">\s*<button class="danger" data-remove="a\|1"/.test(rowRemove('a', 1, { what: 'row' })), true);
 

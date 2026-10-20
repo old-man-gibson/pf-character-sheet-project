@@ -213,6 +213,9 @@ const FIXED_TABS = new Set(['audit', 'formulas']);
  */
 const BREAKDOWN_GRACE = 140;
 
+/** The key the undo list's Clear is armed under (the view's `armedRemove`). */
+const PLAY_CLEAR_ARM = 'play-undo-clear';
+
 /** The modelled sub-systems: tabs whose visibility the ⚙ manager controls by key. */
 const MODELLED_TAB_IDS = new Set([
   'akashic', 'maneuvers', 'vancian', 'psionics', 'cardcasting', 'template',
@@ -4167,21 +4170,30 @@ export class CharacterSheetElement extends HTMLElement {
    * thing every tab has. It takes back that action and nothing else -- damage
    * taken since, a pip spent since, a note typed since all stay -- so it is
    * safe to press late. The ▾ beside it lists the ones before, each with its
-   * own button, for the spend noticed only after the next hit landed.
+   * own button, for the spend noticed only after the next hit landed, and
+   * ends with Clear, which forgets the list and asks twice (the play log
+   * keeps its lines either way).
    */
   #playUndoHtml() {
     if (this.isPublished || !this.#model) return '';
     const list = this.#model.playActions;
     if (!list.length) return '';
     const [last] = list;
-    const more = list.length > 1;
+    const count = `${list.length} action${list.length === 1 ? '' : 's'}`;
+    const clear = rows.removeControl(`role="menuitem" data-action="undo-play-clear" data-arm="${PLAY_CLEAR_ARM}"`, {
+      what: `${list.length === 1 ? 'this action' : `these ${count}`} from the undo list`,
+      title: `Clear the undo list (${count}); the play log keeps them`,
+      text: 'Clear list', armedText: `Clear ${count} — sure?`, arm: PLAY_CLEAR_ARM, armed: this.#view.armedRemove,
+    });
     return `<span class="playundo">
       <button data-action="undo-play" data-seq="${last.seq}"
-        title="Undo ${esc(last.label)} — only that: whatever happened since stays">↶ Undo ${esc(last.label)}</button>${more ? `<button
+        title="Undo ${esc(last.label)} — only that: whatever happened since stays">↶ Undo ${esc(last.label)}</button><button
         class="playundomore" data-action="undo-play-menu" aria-haspopup="menu" aria-expanded="${this.#playMenu}"
-        aria-label="Undo an earlier action" title="Undo an earlier action">▾</button>` : ''}
-      ${more && this.#playMenu ? `<div class="playundomenu" role="menu" aria-label="Undo an earlier action">
+        aria-label="Undo an earlier action" title="Undo an earlier action">▾</button>
+      ${this.#playMenu ? `<div class="playundomenu" role="menu" aria-label="Undo an earlier action">
         ${list.map((a) => `<button role="menuitem" data-action="undo-play" data-seq="${a.seq}">Undo ${esc(a.label)}</button>`).join('')}
+        <hr>
+        ${clear}
       </div>` : ''}
     </span>`;
   }
@@ -7167,7 +7179,14 @@ export class CharacterSheetElement extends HTMLElement {
     // A two-click ×: the first press only arms it (rows.removeControl).
     const arm = button?.dataset?.arm;
     if (arm) {
-      if (this.#view.armedRemove !== arm) { this.#view.armedRemove = arm; this.#render(); return; }
+      if (this.#view.armedRemove !== arm) {
+        this.#view.armedRemove = arm;
+        const focused = this.shadowRoot.activeElement === button;
+        this.#render();
+        // A press from the keyboard can then be repeated where it was made.
+        if (focused) this.shadowRoot.querySelector(`[data-arm="${CSS.escape(arm)}"]`)?.focus();
+        return;
+      }
       this.#view.armedRemove = null;
     }
     switch (name) {
@@ -7784,9 +7803,20 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       case 'undo-play-menu':
         this.#playMenu = !this.#playMenu;
+        // A Clear armed before the list last shut opens unarmed.
+        if (this.#view.armedRemove === PLAY_CLEAR_ARM) this.#view.armedRemove = null;
         this.#refreshPlayUndo();
         this.shadowRoot.querySelector('.playundomenu button')?.focus();
         break;
+      case 'undo-play-clear': {
+        // Reached on the second press: the first only armed it (`data-arm`).
+        const n = this.#model.clearPlayActions();
+        this.#playMenu = false;
+        this.#keepUndoSoon();
+        this.#refreshPlayUndo();
+        this.#showUndoToast(`Cleared the undo list (${n} action${n === 1 ? '' : 's'})`, { offer: false });
+        break;
+      }
       case 'rest-encounter':
       case 'rest-day':
       case 'rest-week': {

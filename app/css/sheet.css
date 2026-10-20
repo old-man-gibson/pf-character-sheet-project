@@ -1139,25 +1139,38 @@ table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
   padding: 4px 6px; line-height: 1; margin-left: -1px;
   border-top-left-radius: 0; border-bottom-left-radius: 0;
 }
+/* The list is as wide as its longest entry, up to 24rem, and a longer entry
+   wraps. Its rows never shrink: the list is a flex column capped at 60vh, and
+   a row allowed to shrink was squeezed to a sliver of its own text once there
+   were twenty of them. The list scrolls instead. Where the rail is narrow the
+   list takes the Undo row's width (the phone and side-rail rules below). */
 .playundomenu {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: 41;
   display: flex; flex-direction: column; gap: 3px; padding: 6px;
-  min-width: 14rem; max-width: min(24rem, 90vw); max-height: 60vh; overflow-y: auto;
+  width: max-content; min-width: 14rem; max-width: min(24rem, 90vw); max-height: 60vh; overflow-y: auto;
   background: var(--cs-panel); border: 1px solid var(--cs-line);
   border-radius: var(--cs-radius); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 .playundomenu button {
-  text-align: left; background: none; border: 0; border-radius: 5px;
-  padding: 5px 8px; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: none; text-align: left; background: none; border: 0; border-radius: 5px;
+  padding: 5px 8px; width: 100%; white-space: normal; overflow-wrap: anywhere;
 }
 .playundomenu button:hover { background: var(--cs-panel-2); }
+.playundomenu hr { flex: none; width: 100%; margin: 3px 0; border: 0; border-top: 1px solid var(--cs-line); }
+.playundomenu button.danger { color: var(--cs-muted); }
+.playundomenu button.danger:hover, .playundomenu button.danger.armed {
+  color: var(--cs-bad); background: color-mix(in srgb, var(--cs-bad) 12%, transparent);
+}
 /* On a phone the rail has no room for a name, and a bare ↶ says nothing about
    what it would take back -- there is no hover to ask. So it takes a row of
    its own under the others, name and all. */
 @container (max-width: 620px) {
-  .railactions:has(.playundo) { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-end; }
+  /* `min-width: 0`, or the longest name the button could show sets the row's
+     width and the sheet clips the rest; the button cuts it instead. */
+  .railactions:has(.playundo) { flex: 1 1 100%; min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
   .playundo { order: 10; flex: 1 1 100%; }
   .playundo > button[data-action="undo-play"] { flex: 1 1 auto; max-width: none; text-align: left; }
+  .playundomenu { left: 0; right: 0; width: auto; min-width: 0; max-width: none; }
 }
 /* Sharing a line with the strip on a phone: the icon carries the search button
    and its title says the rest, which is what the shortcut on its face was
@@ -1375,7 +1388,9 @@ select.jumpto[hidden] { display: none; }
     flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin;
     display: flex; flex-direction: column; padding-bottom: 6px;
   }
-  :host([layout="side"]) .railtop { flex-direction: column; align-items: stretch; margin-bottom: 8px; }
+  /* One line: a wrapping flex column makes each line as wide as its widest
+     item, so a long Undo label pushed the actions past the column's edge. */
+  :host([layout="side"]) .railtop { flex-direction: column; flex-wrap: nowrap; align-items: stretch; margin-bottom: 8px; }
   /* Whatever the host slotted in -- the app page's roster -- sits above the
      strip, ruled off from it. Nothing is slotted in the ordinary case. */
   :host([layout="side"]) ::slotted([slot="rail"]) {
@@ -1392,7 +1407,12 @@ select.jumpto[hidden] { display: none; }
   :host([layout="side"]) .railactions select.jumpto[hidden] { display: block; }
   :host([layout="side"]) .railactions select.jumpto:disabled { opacity: 0.45; cursor: default; }
   :host([layout="side"]) .chromemenu { right: auto; left: 0; }
-  :host([layout="side"]) .playundomenu { right: auto; left: 0; }
+  /* The Undo row takes the column's width, as it does on a phone, and its
+     list takes the row's: the list sits inside `.railbody`, which scrolls,
+     so anything wider than the column made it scroll sideways. */
+  :host([layout="side"]) .playundo { flex: 1 1 100%; }
+  :host([layout="side"]) .playundo > button[data-action="undo-play"] { flex: 1 1 auto; max-width: none; text-align: left; }
+  :host([layout="side"]) .playundomenu { left: 0; right: 0; width: auto; min-width: 0; max-width: none; }
   :host([layout="side"]) .tabs { flex: none; flex-direction: column; flex-wrap: nowrap; gap: 2px; }
   :host([layout="side"]) .tabs button {
     flex: none; text-align: left; border-radius: 6px; padding: 6px 10px 6px 12px;
