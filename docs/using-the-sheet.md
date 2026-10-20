@@ -325,7 +325,7 @@ the character (`uiPrefs.tabOrder`), so it survives a reload and travels with an 
 once the header above it has scrolled away — a tab runs several screens deep, and the way
 through them should not be one of the things that leaves first. **Search** and **Save**
 ride the rail with it, and everything else the sheet can do is under **⋯**: switching
-view, ƒx Formulas, the theme and layout, History, Export JSON, Publish, Preview published,
+view, ƒx Formulas, the campaign rules, the theme and layout, History, Export JSON, Publish, Preview published,
 Import and Reset. **Publish** puts the character on the site the app is served from and
 gives you a link anyone can open read-only; it is the same view Preview published shows,
 and publishing again keeps the link (see Publishing it, in the README).
@@ -339,6 +339,44 @@ a fixed header of its own sets `--cs-sticky-top` to that header's height; see
 A table longer than the window scrolls inside its own box rather than running the page
 down, which is what keeps its column headings in place while you read the rows. The
 threshold is `--cs-table-max`.
+
+### Campaign rules
+
+The sheet's arithmetic is our table's rules: a 30-point buy, a level typed in by hand,
+hero points, mythic tiers that come with level, and Automatic Bonus Progression. **Campaign rules** lets one
+character be played under other rules, a switch at a time. It is the first panel on the
+**⚙** tab, and **⋯ → Campaign rules…** or the search (*settings*, *mythic*, *ABP*…) goes
+straight there (*xp*, *milestones* and *trials* find it too).
+
+| Switch | The table's rule | Changed |
+|---|---|---|
+| **Point buy** | 30 points | The budget the Stats tab checks the spend against. |
+| **Levels** | typed in | *Experience points*: XP is kept under the Details panel against the core slow, medium or fast table, any level's figure replaceable. *Milestones*: a count of milestones since the last level, so many a level (the rate), any level its own. Either way a bar shows how far there is to go, and a **Level up** button appears once the next level is earned. |
+| **Hero points** | tracked | Off, the Details panel drops its counter. |
+| **Mythic** | in play | Off, the tier is 0: no mythic hit points, Mythic Power, mythic ability increases or tradition bonuses. *Feats & Mythic* is called *Feats*, with a note in place of the mythic panels, and the Mythic Power tracker can be removed. |
+| **Mythic tier** | from level (1 at 8th, 2 at 10th, 3 at 12th, 4 at 14th, then one a level to 10 at 20th) | *From level* with a ladder of the campaign's own: any tier's level replaceable. *From trials*: trials completed, counted on Feats & Mythic, so many a tier (the rate), any tier its own; the tier follows the count, and the field beside it says how many the next tier still needs. *Awarded by the GM*: the tier is whatever is typed in **Tier**, 0 until then. |
+| **Automatic Bonus Progression** | in play | Off, no resistance, deflection or natural armour from the ladder and no prowess picks; the Stats tab drops those columns and the prowess panel. |
+
+A switch nobody has touched is not saved, and reads as the table's rule, so every sheet
+made before the panel existed, and every new one, opens with its numbers where they were.
+A changed switch is marked on its row and counted in the heading, and **Back to the
+table's rules** puts them all back (undoable). Nothing written on the sheet is thrown away
+by a switch: mythic abilities, prowess picks and hero points stay where they are and count
+again when the rule comes back.
+
+**Ladders.** Levels and mythic tiers each carry a ladder, folded under their row: a box
+per step, blank where the step follows the table or the rate (shown in the box), a number
+where the campaign has its own (marked). Milestones and trials are entered **per step**:
+how many a level or tier takes from the one before. XP is entered as the running total, as
+XP tables are.
+
+**Levelling.** The level never moves on its own: XP or milestones reaching the next mark
+offers **Level up to N**, which takes it as one step, undone like a play action and written
+in the play log. Levelling by milestones spends what the level took, and the rest carries
+over. **Add** beside the XP box adds an award at the table the same way. A mythic tier from
+trials follows the count directly, as the level ladder does.
+
+Gestalt off and rolled hit points are not switches yet.
 
 ### Themes and layout
 
@@ -1011,8 +1049,8 @@ Costs come from the sheet's own table (`dataSheet!K21:L33`):
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | Cost | −4 | −2 | −1 | 0 | 1 | 2 | 3 | 5 | 7 | 10 | 13 | 17 |
 
-The total spend is calculated live and shown against the budget (30), turning red if
-you go over. All five characters import at exactly 30/30.
+The total spend is calculated live and shown against the budget (30, or what the
+character's campaign rules set), turning red if you go over. All five characters import at exactly 30/30.
 
 ### The +6 enhancement cap
 

@@ -18,8 +18,9 @@ import { pickSelect, mythicPickAt } from './stats.js';
 import { featDetails, featCatalogue } from '../../model.js';
 import { featLevel, isAhead, rowLevel } from '../../model/feats.js';
 import { fromLevelField, fromLevelHead, plannedRow } from '../from-level.js';
+import { campaignRules, mythicTierReached, trialProgress } from '../../model/campaign.js';
 import {
-  MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS, MYTHIC_TIERS, MYTHIC_TIER_LEVEL,
+  MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS, MYTHIC_TIERS,
   effectiveMythicTier, mythicTierGrant,
 } from '../../rules.js';
 
@@ -212,6 +213,14 @@ export function renderFeaturesPanel(model, ctx) {
     const feats = c.feats || {};
     const m = c.mythic || {};
     const tier = Number(c.identity.mythicTier) || 0;
+    const rules = campaignRules(c);
+    const awarded = rules.mythicTier === 'awarded';
+    // What each tier is reached at: a level, or trials in all (a campaign rule).
+    const reached = (t) => mythicTierReached(c, t);
+    const reachedHead = reached(1).head;
+    // Trials completed, when the tier comes from them (a campaign rule).
+    const trials = trialProgress(c);
+    const auto = trials ? `from trials: ${trials.tier}` : `auto: ${m.computedTier ?? 0}`;
     /*
      * The feats stack, each panel the width of the page.
      *
@@ -260,16 +269,31 @@ export function renderFeaturesPanel(model, ctx) {
           feats move between levels but cannot be added, removed or dragged out.</span>
       </div>
 
-      ${rows.collapsible(model, 'mythic', `<section class="panel span2">
+      ${rules.mythic ? '' : `<section class="panel span2 mythicoff">
+        <h3>Mythic <span class="badge">off</span></h3>
+        <p class="hint">Mythic is off for this character in its campaign rules, so the tier is 0
+          and nothing mythic counts. What was written here is kept, and comes back when mythic
+          is turned on again.
+          <button data-view data-action="campaign-rules">Campaign rules…</button></p>
+      </section>`}
+      ${rules.mythic ? `${rows.collapsible(model, 'mythic', `<section class="panel span2">
         <h3>Mythic <span class="badge">tier ${tier}</span></h3>
         <div class="fieldgrid">
           ${fields.field('Path', fields.text('mythic.path', m.path))}
-          ${fields.field(`Tier (auto: ${esc(m.computedTier ?? 0)})`, `<span class="pair">
+          ${fields.field(awarded ? 'Tier (awarded by the GM)' : `Tier (${esc(auto)})`, `<span class="pair">
             ${fields.autoNum('data-set="mythic.tierOverride"', m.tierOverride, {
-    placeholder: m.computedTier ?? 0, width: '3.6rem', auto: true, label: 'Mythic tier',
-    title: 'Automatic from level; enter a number to override.',
+    placeholder: m.computedTier ?? 0, width: '3.6rem', auto: !awarded, label: 'Mythic tier',
+    title: awarded
+      ? 'The tier the GM has awarded (for trials, say). Blank is 0. The campaign rules on the ⚙ tab set where the tier comes from.'
+      : trials ? 'From the trials completed; enter a number to override.'
+        : 'Automatic from level; enter a number to override.',
   })}
             <span class="value">→ ${esc(c.identity.mythicTier ?? 0)}</span></span>`)}
+          ${trials ? fields.field('Trials completed', `<span class="pair">
+            <input type="number" min="0" value="${esc(trials.have)}" data-set="mythic.trials" data-kind="number"
+              aria-label="Trials completed" style="width:4.2rem">
+            <span class="hint">${trials.next === null ? 'tier 10, the last'
+    : `${trials.toward} of ${trials.need} for tier ${trials.next}, ${trials.short} to go`}</span></span>`) : ''}
           ${fields.field(`Bonus HP / tier (path: ${MYTHIC_PATH_HP[String(m.path || '').trim()] ?? '—'})`,
     fields.autoNum('data-set="mythic.bonusHpPerTier"', m.bonusHpPerTier, {
       placeholder: MYTHIC_PATH_HP[String(m.path || '').trim()] ?? 0, width: '3.6rem', auto: true,
@@ -321,7 +345,7 @@ export function renderFeaturesPanel(model, ctx) {
             </colgroup>
             <thead><tr>
               <th class="num">Tier</th>
-              <th class="num" title="The character level this tier is reached at">Level</th>
+              <th class="num" title="${esc(reachedHead === 'Trials' ? 'The trials completed in all when this tier is reached' : 'The character level this tier is reached at')}">${reachedHead}</th>
               <th>Path</th>
               <th>Ability</th>
               <th title="What the path ability does. Formulas work here.">Effect</th>
@@ -332,7 +356,7 @@ export function renderFeaturesPanel(model, ctx) {
               const i = t - 1;
               return `<tr class="${t > tier ? 'future' : ''}" data-rowkey="mythladder">
                 <td class="num" data-stack="head" data-headlabel="Tier">${t}</td>
-                <td class="num derived" data-label="Level" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
+                <td class="num derived" data-label="${reachedHead}" title="${esc(reached(t).title)}">${esc(reached(t).value)}</td>
                 <td data-label="Path">${rows.itemText('mythic.abilities', i, 'path', a.path, '', { title: true, list: MYTHIC_PATHS_LIST_ID })}</td>
                 <td data-stack="name">${rows.itemText('mythic.abilities', i, 'name', a.name, '', { title: true, list: FEAT_LIST_ID })}</td>
                 <td data-label="Effect">${foldingNote(model, `data-item="mythic.abilities|${i}|effect" placeholder="What it does"`, a.effect, `mythic.abilities|${i}|effect`, { name: a.name })}</td>
@@ -361,7 +385,7 @@ export function renderFeaturesPanel(model, ctx) {
             </colgroup>
             <thead><tr>
               <th class="num">Tier</th>
-              <th class="num" title="The character level this tier is reached at">Level</th>
+              <th class="num" title="${esc(reachedHead === 'Trials' ? 'The trials completed in all when this tier is reached' : 'The character level this tier is reached at')}">${reachedHead}</th>
               <th title="What the tier hands over — a feat on odd tiers, an RP power on even ones">Grants</th>
               <th>Name</th>
               <th title="What the granted feat does. Formulas work here.">Effect</th>
@@ -371,7 +395,7 @@ export function renderFeaturesPanel(model, ctx) {
               const i = t - 1;
               return `<tr class="${t > tier ? 'future' : ''}" data-rowkey="mythfeats">
                 <td class="num" data-stack="head" data-headlabel="Tier">${t}</td>
-                <td class="num derived" data-label="Level" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
+                <td class="num derived" data-label="${reachedHead}" title="${esc(reached(t).title)}">${esc(reached(t).value)}</td>
                 <td data-label="Grants"><span class="fsource">${esc(a.feat || mythicTierGrant(t))}</span></td>
                 <td data-stack="name">${rows.itemText('mythic.abilities', i, 'featChoice', a.featChoice, '', true)}</td>
                 <td data-label="Effect">${foldingNote(model, `data-item="mythic.abilities|${i}|featEffect" placeholder="What it does"`, a.featEffect, `mythic.abilities|${i}|featEffect`, { name: a.featChoice })}</td>
@@ -393,7 +417,7 @@ export function renderFeaturesPanel(model, ctx) {
       <div class="band lead">
         ${rows.collapsible(model, 'mythic-tradition', mythicTraditionPanel(model, ctx, m))}
         ${rows.collapsible(model, 'mythic-base', mythicTierGrantsPanel(model, tier))}
-      </div>
+      </div>` : ''}
     </div>`;
 }
 
@@ -411,6 +435,8 @@ function mythicTierGrantsPanel(model, tier) {
     // The numbers the character has now read the tier as effects do (Mythic
     // Paragon's +2 included); the rows are by the tier reached.
     const eff = effectiveMythicTier(model.data);
+    const reached = (t) => mythicTierReached(model.data, t);
+    const reachedHead = reached(1).head;
     // The rule opens in the sheet's popover on hover (data-tip); the title
     // is the fallback for a browser without one.
     const chip = (name, t) => {
@@ -420,7 +446,7 @@ function mythicTierGrantsPanel(model, tier) {
     };
     const row = (t) => `<tr class="${t > tier ? 'future' : ''}">
       <td class="num">${t}</td>
-      <td class="num derived" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
+      <td class="num derived" title="${esc(reached(t).title)}">${esc(reached(t).value)}</td>
       <td>${(MYTHIC_TIER_GRANTS[t] || []).map((name) => chip(name, t)).join(' ')}</td>
     </tr>`;
     const now = tier >= 1 ? [
@@ -435,7 +461,7 @@ function mythicTierGrantsPanel(model, tier) {
       <h3>What each tier grants <span class="badge">tier ${tier}</span></h3>
       <p class="mythnow">${esc(now)}</p>
       <table class="mythtiers">
-        <thead><tr><th class="num">Tier</th><th class="num" title="The character level this tier is reached at">Lvl</th><th>Base abilities gained or improved</th></tr></thead>
+        <thead><tr><th class="num">Tier</th><th class="num" title="${esc(reachedHead === 'Trials' ? 'The trials completed in all when this tier is reached' : 'The character level this tier is reached at')}">${reachedHead === 'Trials' ? 'Trials' : 'Lvl'}</th><th>Base abilities gained or improved</th></tr></thead>
         <tbody>${MYTHIC_TIERS.map(row).join('')}</tbody>
       </table>
       ${rows.collapsibleSub(model, 'mythic-base-text', 'The rules, in brief', `

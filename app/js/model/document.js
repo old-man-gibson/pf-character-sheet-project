@@ -12,13 +12,14 @@ import {
   ABILITIES, AC_BONUS_TYPES, ARMOR_PROFICIENCIES, BACKGROUND_SKILLS, CONDITIONS,
   MYTHIC_STAT_BONUS, MYTHIC_STAT_TIERS, MYTHIC_TIERS, SAVE_BONUS_TYPES,
   SHEET_CONDITIONS, SHIELD_PROFICIENCIES, TRAIT_SLOTS, WEAPON_FAMILIARITY, WEAPON_GROUPS,
-  WEAPON_HANDEDNESS, conditionInfo, performCategory, skillVariantKind, tierAtLevel,
+  WEAPON_HANDEDNESS, conditionInfo, performCategory, skillVariantKind,
 } from '../rules.js';
 import {
   COMPANION_KINDS, companionInUse, companionTabNumber, normalizeCompanionList, uniqueCompanionIds,
 } from '../companions.js';
 import { FEATURE_GROUP_COLORS, normalizeHex } from '../tracker-style.js';
 import { Character } from './character.js';
+import { mythicComputedTier } from './campaign.js';
 import { normalizeWealth } from './stats/wealth.js';
 import { importAkashic, splitVeilName } from './subsystems/akashic.js';
 import {
@@ -1108,7 +1109,7 @@ export function normalise(model) {
   // HP per tier, and even-tier stat picks seeded from the Stats-tab column.
   if (!d.mythic) d.mythic = {};
   if (d.mythic.tierOverride === undefined) {
-    const computed = tierAtLevel(d.identity?.level);
+    const computed = mythicComputedTier(d);
     const imported = Number(d.identity?.mythicTier) || 0;
     d.mythic.tierOverride = imported !== computed ? imported : null;
   }
@@ -1646,10 +1647,10 @@ export function toDocument(model) {
   return {
     ...model.data,
     // resolvedZones is derived every recompute; the zone formulas themselves
-    // live in style.zones.
+    // live in style.zones. `blocked` is the pool's, read again each time.
     customTrackers: model.trackers
       .filter((t) => t.source === 'player')
-      .map(({ resolvedZones, edited, rangeError, ...t }) => t),
+      .map(({ resolvedZones, edited, rangeError, blocked, ...t }) => t),
     sheetTrackerState,
     // The guile side sits inside `training` beside the two that predate it,
     // so it is stripped in place rather than as a block of its own. The two

@@ -3832,7 +3832,11 @@ console.log('spell points and power points are built-in drain trackers');
   check('condensing spell points into essence lowers the pool',
     sp().max, c.data.training.magic.availableSP);
   check('by what it costs', total - sp().max, c.data.training.magic.spOnEssence);
+  check('which the tracker holds back for its meter to draw',
+    [sp().blocked?.count, sp().max + sp().blocked?.count], [c.data.training.magic.spOnEssence, total]);
+  check('and does not save', 'blocked' in (c.toJSON().customTrackers.find((t) => t.pool === 'sp') || {}), false);
   c.set('akashic.essence.spTemp', 0);
+  check('nothing held back once nothing is condensed', 'blocked' in sp(), false);
   c.updateTracker(sp().id, { name: 'Arcane Reserve' });
   check('renamed, it is still the pool cards spend from', [sp()?.name, sp()?.pool], ['Arcane Reserve', 'sp']);
   check('and it cannot be deleted while the character casts', [c.removeTracker(sp().id), !!sp()], [false, true]);
@@ -3948,6 +3952,37 @@ console.log('a draining tracker above a floor: the box, the pips and the squares
   check('filling the other way: three spent', pips(trackerPanels.trackerVisual(t, normalizeStyle({}), [])), [8, 3]);
   const sq = trackerPanels.trackerVisual(t, normalizeStyle({ fill: 'remaining', shape: 'squares' }), []);
   check('squares: five of eight left', /5 of 8 left/.test(sq), true);
+}
+
+console.log('points a pool holds back are drawn after it, and cannot be set');
+{
+  const why = 'condensed into temporary essence';
+  const t = { id: 'spell_points', name: 'Spell Points', min: 0, max: 6, current: 2, style: null, blocked: { count: 4, why } };
+  const drain = (shape = 'pips') => normalizeStyle({ fill: 'remaining', shape });
+  const count = (html, re) => (html.match(re) || []).length;
+  const pips = trackerPanels.trackerVisual(t, drain(), []);
+  check('ten pips: six to spend, four held back',
+    [count(pips, /<button class="pip /g), count(pips, /class="pip blocked"/g)], [6, 4]);
+  check('the held ones last, and spending none of the pool',
+    [pips.lastIndexOf('data-pool-pip') < pips.indexOf('pip blocked'), pips.includes(`4 held back: ${why}`)], [true, true]);
+  const bar = trackerPanels.trackerVisual(t, drain('bar'), []);
+  check('a bar gives the pool its first 60%, the held points the rest',
+    [bar.includes('data-pool-span="0.60000"'), bar.includes('class="blocked" style="left:60.000%;width:40.000%"')], [true, true]);
+  check('and scales the fill into it: 4 left of 6 is 40% of the track',
+    bar.includes('class="fill" style="left:0.000%;width:40.000%'), true);
+  check('a preview draws them but sets nothing',
+    trackerPanels.trackerVisual(t, drain('bar'), [], { interactive: false }).includes('data-pool'), false);
+  const sq = trackerPanels.trackerVisual({ ...t, max: 2, current: 0 }, drain('squares'), []);
+  check('squares fill their four with held points', [count(sq, /<button class="pip /g), count(sq, /pip blocked/g)], [2, 2]);
+  check('held points count toward the pip limit',
+    trackerPanels.trackerVisual({ ...t, max: 38 }, drain(), []), '');
+  check('short of the cost: every pip held, none to spend',
+    [count(trackerPanels.trackerVisual({ ...t, max: -2, current: 0 }, drain(), []), /pip blocked/g),
+      trackerPanels.trackerVisual({ ...t, max: -2, current: 0 }, drain(), []).includes('<button')], [4, false]);
+  const plain = { ...t };
+  delete plain.blocked;
+  check('without held points a bar is drawn as before',
+    trackerPanels.trackerVisual(plain, drain('bar'), []).includes('data-pool-span'), false);
 }
 
 console.log('two sheet resources of one name are two trackers');

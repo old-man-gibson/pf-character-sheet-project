@@ -8,12 +8,13 @@
  * step with the tier.
  */
 
-import { BUFF_MOD_KEYS, tierAtLevel } from '../rules.js';
+import { BUFF_MOD_KEYS } from '../rules.js';
 import { companionById, companionEntries, companionHeading } from '../companions.js';
 import { evaluateFormula } from '../formula.js';
 import { isDefaultStyle, normalizeStyle, resolveZones } from '../tracker-style.js';
 import { forwarded, scopeIfFormulas } from './scope.js';
 import { markUndo, rowLabel } from './undo.js';
+import { campaignRules, mythicTierOf } from './campaign.js';
 import { evaluateAmount, slug, trackerForwardKey } from './util.js';
 
 /**
@@ -47,6 +48,11 @@ const drainStyle = () => normalizeStyle({ fill: 'remaining' });
  * every card and session spend pointed at it; an existing tracker with the
  * pool's name (a workbook's "Spell Points") is adopted rather than doubled.
  *
+ * `blocked` is how much of the pool is held back for the day and so left out
+ * of the maximum: the spell points condensed into essence. The meter still
+ * draws them, after the points that can be spent, so the pool reads at its
+ * full size.
+ *
  * Power points already had a spent count of their own on the Psionics tab,
  * and that stays the one count: the tracker reads it and writes it.
  */
@@ -62,6 +68,12 @@ export const SYSTEM_POOLS = [
     has: (d) => (d.training?.magic?.classes || []).some((c) => String(c?.name ?? '').trim())
       || (Number(d.training?.magic?.totalSP) || 0) > 0,
     max: (d) => Number(d.training?.magic?.availableSP ?? d.training?.magic?.totalSP) || 0,
+    // Never more than the pool itself: asking for more is flagged on the tab.
+    blocked: (d) => ({
+      count: Math.max(0, Math.min(Number(d.training?.magic?.spOnEssence) || 0,
+        Number(d.training?.magic?.totalSP) || 0)),
+      why: 'condensed into temporary essence',
+    }),
   },
   {
     pool: 'pp', id: POWER_POINTS_ID, name: 'Power Points', match: /^power\s*points?$|^pp$/i,
@@ -250,8 +262,7 @@ export function seedTrackers(model) {
 
 /** Mythic tier as it stands (override wins), without needing a recompute first. */
 export function tierNow(model) {
-  const m = model.data.mythic || {};
-  return Number(m.tierOverride ?? tierAtLevel(model.data.identity?.level)) || 0;
+  return Number(mythicTierOf(model.data)) || 0;
 }
 
 export function loadTrackers(model) {
@@ -349,6 +360,10 @@ export function recomputeTrackers(model) {
     // adding the bonus to it again made the range grow on every recompute.
     let max = 0;
     const pool = t.pool ? poolDef(t.pool, model.data) : null;
+    // What the pool holds back, for the meter to draw; not saved.
+    const blocked = pool?.blocked?.(model.data);
+    if (blocked?.count > 0) t.blocked = blocked;
+    else delete t.blocked;
     if (pool) {
       // The system's own number, and for power points its own spent count.
       max = pool.max(model.data);
@@ -481,7 +496,9 @@ function setTracker(model, t, patch) {
  * while its system grants one (it would only come straight back).
  */
 export function isProtectedTracker(model, id) {
-  if (id === MYTHIC_POWER_ID) return true;
+  // Only while mythic is in play: with it off (a campaign rule) the tracker
+  // reads 0 and may go; turning mythic back on brings it back.
+  if (id === MYTHIC_POWER_ID) return campaignRules(model.data).mythic;
   const t = (model.trackers || []).find((x) => x.id === id);
   const pool = t?.pool ? poolDef(t.pool, model.data) : null;
   return !!pool && pool.has(model.data);

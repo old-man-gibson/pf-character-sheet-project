@@ -1326,9 +1326,18 @@ select.jumpto[hidden] { display: none; }
 .body:focus-visible { outline: 2px solid var(--cs-accent); outline-offset: -2px; }
 /* Read out, never drawn. The standard clip: `display: none` and
    `visibility: hidden` both take a live region out of the accessibility tree,
-   which is the one thing this must not be. */
+   which is the one thing this must not be.
+   Pinned to the top corner of whatever it is positioned against. Left at its
+   own place it sat after the last panel, and the sheet is not a positioned
+   box, so in the app page -- where the sheet scrolls inside itself -- it hung
+   outside that scroll box at the foot of the content and made the page a
+   sheet's height taller (Chromium counted it once the window was wide enough
+   for the sheet's both-edges scrollbar gutter, 92rem). The page's
+   `overflow: hidden` still lets a script
+   scroll it, and every `scrollIntoView` in the sheet then moved the page
+   too, sliding the sheet up under the app's top bar. */
 .srlive {
-  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  position: absolute; top: 0; left: 0; width: 1px; height: 1px; margin: -1px; padding: 0;
   overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
 }
 /* Rearranging by drag: the tab (or manager row) being carried fades, and the
@@ -1456,6 +1465,48 @@ select.jumpto[hidden] { display: none; }
 :host([width="90"]) { width: 90%; margin-inline: auto; }
 :host([width="80"]) { width: 80%; margin-inline: auto; }
 :host([width="70"]) { width: 70%; margin-inline: auto; }
+
+/* ---------- campaign rules ----------
+   The first panel on the ⚙ tab (ui/panels/campaign.js). A row per switch: its
+   name, the control, and what it changes, as three columns where there is
+   room and stacked where there is not. A switch moved off the table's rule
+   carries an accent edge, so the changed ones are found by eye. */
+.camprows { display: grid; gap: 4px; }
+.camprow {
+  display: grid; grid-template-columns: 13rem minmax(11rem, auto) minmax(0, 1fr);
+  align-items: baseline; gap: 4px 14px;
+  padding: 6px 8px; border-radius: 6px; border-left: 3px solid transparent;
+}
+.camprow.changed { border-left-color: var(--cs-accent); background: var(--cs-accent-soft); }
+.camprow .campname { font-weight: 600; }
+/* Styled as a hint, but not one: it is what the switch does, so it stays open
+   rather than folding into a Help line the way a long `.hint` does. */
+.camprow .campnote { margin: 0; font-size: 0.72rem; color: var(--cs-muted); }
+@container (max-width: 760px) {
+  .camprow { grid-template-columns: minmax(0, 1fr) auto; }
+  .camprow .campnote { grid-column: 1 / -1; }
+}
+/* What a rule carries under its row: a table pick or a rate, and its ladder
+   folded below. A box per step, its step number over it; a step the
+   campaign has set for itself carries the accent edge the rows do. */
+.camprow .campmore { grid-column: 1 / -1; display: grid; gap: 6px; padding-left: 13rem; }
+@container (max-width: 760px) { .camprow .campmore { padding-left: 0; } }
+.camprow .campmore .subhead { margin: 2px 0; }
+.stepgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.6rem, 1fr)); gap: 4px 6px; }
+.stepcell { display: flex; flex-direction: column; gap: 1px; font-size: 0.72rem; color: var(--cs-muted); }
+.stepcell input { width: 100%; box-sizing: border-box; text-align: right; }
+.stepcell.own input { box-shadow: inset 3px 0 0 var(--cs-accent); }
+
+/* Progress toward the next level (overview.js levelProgressRow), under the
+   Details fields when levels are earned by XP or milestones: the count, an
+   Add box for XP, and a bar from this level's mark to the next with the
+   Level up button at its end once it is full. */
+.levelprogress { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 14px; margin-top: 10px; }
+.levelprogress .lpline { flex: 1 1 16rem; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; }
+.lpbar { flex: 1 1 10rem; height: 8px; border-radius: 4px; background: var(--cs-panel-2); border: 1px solid var(--cs-line); overflow: hidden; }
+.lpbar > div { height: 100%; background: var(--cs-accent); }
+.levelprogress .lpline .hint { flex: 1 1 100%; margin: 0; }
+.levelprogress button.levelup { border-color: var(--cs-accent); color: var(--cs-accent); font-weight: 600; }
 
 /* ---------- the theme picker ---------- */
 /* Under the rail with the other things the rail raises. A card per preset,
@@ -3473,6 +3524,10 @@ table.tmpltable.raw td { background: var(--cs-panel-2); }
 /* ---------- raw sheet grids ---------- */
 table.gridtab td { padding: 2px 3px; }
 table.gridtab input[type="text"] { min-width: 6.5rem; font-size: 0.78rem; padding: 3px 5px; }
+/* A grid cell holding a formula or a web address is a prose field
+   (rows.gridCell). Its read view may break between any two letters, so
+   without the box's floor its column shrank to one letter on a phone. */
+.prose.gridcell { min-width: 6.5rem; }
 table.prog select { min-width: 8rem; padding: 3px 5px; }
 table.prog td.derived { min-width: 2.6rem; text-align: right; }
 table.prog th .colname {
@@ -3790,6 +3845,24 @@ table.build td.linked select:disabled {
 .bar .zero-line {
   position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px;
   background: var(--cs-muted);
+}
+
+/* Points a pool holds back for the day (spell points condensed into essence):
+   drawn after the points that can be spent, so the meter keeps the pool's
+   full size, in a slow pulse rather than a fill, and not clickable. */
+:host { --cs-held: #b0467f; }
+:host([scheme="light"]) { --cs-held: #8c2856; }
+.pip.blocked, .bar .blocked {
+  background: var(--cs-held); border-color: var(--cs-held); cursor: default;
+  animation: cs-held-pulse 2.4s ease-in-out infinite;
+}
+.bar .blocked { position: absolute; top: 0; bottom: 0; }
+@keyframes cs-held-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.95; }
+}
+@media print, (prefers-reduced-motion: reduce) {
+  .pip.blocked, .bar .blocked { animation: none; opacity: 0.7; }
 }
 
 /* ---------- built-in meters ----------
@@ -4999,6 +5072,9 @@ code.fx-formeg { display: block; color: var(--cs-muted); }
 }
 .fx-walkstep .hint { margin: 3px 0 0; }
 .fx-walkstep code.fx-code { display: inline-block; background: var(--cs-bg); padding: 1px 5px; border-radius: 3px; }
+/* A link example in the Links panel: what is typed and the link it makes,
+   at the size of the code. */
+.fx-linkeg { margin-top: 2px; font-size: 0.78rem; }
 .fx-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
 .fx-table td { padding: 5px 6px; border-top: 1px solid var(--cs-line); vertical-align: top; }
 .fx-table tr:first-child td { border-top: 0; }
@@ -5773,6 +5849,8 @@ table.stacked .catface { margin-left: 0; }
      land on the next pip. The pitch becomes the target, a little more of it
      drawn. A Vancian slot table fits four to a row rather than six. */
   button.pip { min-width: 0; min-height: 0; width: 20px; height: 20px; border-radius: 4px; }
+  /* Held points are not buttons, but sit in the same row at the same size. */
+  button.pip ~ .pip.blocked { width: 20px; height: 20px; border-radius: 4px; }
   .pip.zero { width: 5px; height: 26px; }
   .pips, .pips.square { gap: calc(var(--cs-tap) - 20px); }
   table.build.vslots .pips { grid-template-columns: repeat(4, max-content); }

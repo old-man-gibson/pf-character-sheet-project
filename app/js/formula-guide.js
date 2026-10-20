@@ -11,8 +11,8 @@
  *   2. an index -- every value the character publishes and every formula
  *      already written on it, searchable, with live numbers,
  *   3. a reference, folded away underneath, that explains the four token
- *      forms, the operators, every built-in function and the handful of rules
- *      that are not guessable.
+ *      forms, the links the same fields make of web addresses, the operators,
+ *      every built-in function and the handful of rules that are not guessable.
  *
  * It teaches by showing the character's own numbers rather than a tutorial's
  * invented ones: every example on this tab is evaluated against the character
@@ -31,6 +31,7 @@ import {
 } from './formula-format.js';
 
 import { esc } from './html-escape.js';
+import { linkedText } from './ui/links.js';
 
 /* ------------------------------------------------------------------ *
  * Grouping the character's values
@@ -886,6 +887,33 @@ function formsHtml(scope) {
   </section>`;
 }
 
+/**
+ * Links: what the same fields make of a web address, typed on its own or
+ * behind words. Each example is drawn the way such a field draws it.
+ */
+function linksHtml() {
+  const forms = [
+    ['An address', 'https://example.com/map', 'Shown as typed.'],
+    ['Words as a link', '[the map](https://example.com/map)',
+      'The words in square brackets are the link. The address in round brackets is where it goes, and is on its tooltip.'],
+  ];
+  return `<section class="panel span2">
+    <h3>Links</h3>
+    <p class="hint">The fields that work out {…} formulas also make links of web addresses once you
+      leave the field. Click a link to open it in a new tab; click anywhere else on the text to edit it.</p>
+    <div class="rowlist">
+      ${forms.map(([name, source, what]) => `<div class="item">
+        <div class="t">${esc(name)}</div>
+        <div class="d">${esc(what)}</div>
+        <div class="fx-linkeg"><code class="fx-code">${esc(source)}</code> <span class="d">shows as</span> ${linkedText(source)}</div>
+      </div>`).join('')}
+    </div>
+    <p class="hint">Only http:// and https:// addresses are links. A full stop, a comma or a closing
+      bracket right after an address stays out of it. The words in square brackets are shown as
+      typed, so keep {…} formulas outside the brackets.</p>
+  </section>`;
+}
+
 /** Where formulas may be written. */
 function placesHtml() {
   return `<section class="panel">
@@ -1025,10 +1053,11 @@ export function referenceHtml(scope, open) {
   return `<section class="panel span2 fx-ref">
     <details ${open ? 'open' : ''} data-fx-ref>
       <summary><h3 style="display:inline">Reference</h3>
-        <span class="hint"> — the four forms, where they work, every operator and function,
+        <span class="hint"> — the four forms, links, where they work, every operator and function,
         and the rules that are not guessable</span></summary>
       <div class="grid" style="margin-top:10px">
         ${formsHtml(scope)}
+        ${linksHtml()}
         ${placesHtml()}
         ${operatorsHtml(scope)}
         ${functionsHtml(scope)}

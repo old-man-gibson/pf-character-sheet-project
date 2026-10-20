@@ -1,7 +1,9 @@
 /**
  * ui/panels/manager.js -- the ⚙ tab manager.
  *
- * The tab bar as a list to rearrange, everything that is off it, the
+ * First the character's campaign rules (ui/panels/campaign.js), because the
+ * ⚙ is where a player goes looking for settings. Then the tab bar as a list
+ * to rearrange, everything that is off it, the
  * worksheets kept from the workbook, and the shelf of building blocks the
  * enabled extension packs offer. What it needs of the element's own state --
  * the tab lists, a typed draft, the delete waiting for confirmation, the
@@ -15,6 +17,7 @@ import * as rows from '../rows.js';
 import { signed } from '../format.js';
 import { runtime as extensionRuntime } from '../../extension-runtime.js';
 import { BLOCK_KINDS, archetypeStatus, swapLabel } from '../../extensions.js';
+import { campaignPanel } from './campaign.js';
 
 /**
  * More blocks than this in one supergroup and it arrives folded.
@@ -86,7 +89,7 @@ export function renderSystemManagerPanel(model, ctx) {
     </div>`;
 
     const mode = model.viewMode();
-    return `<div class="grid"><section class="panel span2">
+    return `<div class="grid">${campaignPanel(model)}<section class="panel span2">
       <h3>Tab bar — ${mode === 'session' ? 'session view' : 'build view'}
         <button data-view data-action="view-mode" style="margin-left:auto" title="${mode === 'session'
     ? 'Switch to the build view and edit its bar' : 'Switch to the session view and edit its bar'}">

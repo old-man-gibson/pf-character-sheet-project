@@ -68,6 +68,7 @@ import {
   readThemePrefs, writeThemePrefs, ACTION_MARKS, ACTION_TINTS, DEFAULT_ACTION_MARKS,
   DEFAULT_ACTION_TINT, isActionMarks, isActionTint,
 } from './themes.js';
+import { awardXp, campaignRules, levelUp } from './model/campaign.js';
 import { esc, val, abilityKey, nameDatalist } from './ui/html.js';
 import * as fields from './ui/fields.js';
 
@@ -125,8 +126,6 @@ import {
   workingHtml, browserHtml, myFormulasHtml, forwardedHtml, valueGroups, targetsHtml, targetGroups,
 } from './formula-guide.js';
 import { formulaPlace } from './ui/formula-places.js';
-import { hasTokens } from './inline.js';
-import { hasLink } from './ui/links.js';
 import {
   historyFor, countChanges, requestPersistence, workingKey, SNAPSHOT_EVERY, AUTO_KEEP,
 } from './history.js';
@@ -366,7 +365,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(campaign|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|xp|milestones|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /**
  * The input types a caret can be put back into after a re-render.
@@ -872,9 +871,21 @@ export class CharacterSheetElement extends HTMLElement {
     const wrap = this.shadowRoot.querySelector('.wrap');
     if (!rail || !wrap) return;
     if (getComputedStyle(wrap).display !== 'grid') { rail.style.removeProperty('height'); return; }
-    const stickyTop = parseFloat(getComputedStyle(this).getPropertyValue('--cs-sticky-top')) || 0;
-    const top = Math.max(rail.getBoundingClientRect().top, stickyTop);
-    rail.style.height = `${Math.max(200, Math.round(window.innerHeight - top))}px`;
+    // The window when the page scrolls; the box the sheet scrolls in when it
+    // has one (the app page). Measured against the window there, a rail that
+    // a short tab had carried up past its pin came out that much taller than
+    // the box, which kept the box scrolled by the difference and the top of
+    // the rail out of sight under the app's bar.
+    const box = this.#scrollBox();
+    const viewTop = box ? box.getBoundingClientRect().top + box.clientTop : 0;
+    const viewBottom = box ? viewTop + box.clientHeight : window.innerHeight;
+    const top = Math.max(rail.getBoundingClientRect().top, viewTop + this.#stickyTop());
+    rail.style.height = `${Math.max(200, Math.round(viewBottom - top))}px`;
+  }
+
+  /** `--cs-sticky-top` in pixels: how far down a header the host pins over the sheet ends. */
+  #stickyTop() {
+    return parseFloat(getComputedStyle(this).getPropertyValue('--cs-sticky-top')) || 0;
   }
 
   connectedCallback() {
@@ -2471,9 +2482,12 @@ export class CharacterSheetElement extends HTMLElement {
     const d = this.#model.data;
     const modelled = this.#modelledSystems();
     const out = [];
-    for (const [id, label] of TABS) {
+    // Without mythic (a campaign rule) the feats tab is the feats alone.
+    const mythic = campaignRules(d).mythic;
+    for (const [id, base] of TABS) {
       if (FIXED_TABS.has(id)) continue;                // not the player's to arrange (see FIXED_TABS)
       const m = modelled[id];
+      const label = id === 'features' && !mythic ? 'Feats' : base;
       out.push({
         key: id, id, label, kind: m ? 'modelled' : 'core',
         inUse: m ? m.has || m.tagged : true, has: m ? m.has : true,
@@ -2583,7 +2597,7 @@ export class CharacterSheetElement extends HTMLElement {
   }).join('')}
           <button data-view role="tab" id="tab-systabs" data-tab="systabs" aria-selected="${this.#tab === 'systabs'}"
             aria-controls="sheet-panel" tabindex="${this.#tab === 'systabs' ? '0' : '-1'}"
-            aria-label="Tabs" title="Show, hide and rearrange tabs">⚙</button>
+            aria-label="Settings" title="Settings: campaign rules (point buy, hero points, mythic, ABP), and which tabs show">⚙</button>
         </nav>
         </div>
         <div class="rollslot">${this.#slotHtml()}</div>
@@ -3084,7 +3098,7 @@ export class CharacterSheetElement extends HTMLElement {
             ${i.alignment ? ` &middot; ${esc(i.alignment)}` : ''}
           </div>`}
           <div class="subtitle">
-            ${i.mythicPath ? `${esc(i.mythicPath)} ${val(i.mythicTier)}` : ''}
+            ${i.mythicPath && campaignRules(this.#model.data).mythic ? `${esc(i.mythicPath)} ${val(i.mythicTier)}` : ''}
             ${i.specialty ? ` &middot; ${esc(i.specialty)}` : ''}
             ${diff.length ? `<span class="dirty"> &middot; <span title="${esc(diff.map((d) => `${d.label}: ${d.was} → ${d.now}`).join('\n'))}"
               >${diff.length} value${diff.length === 1 ? '' : 's'} changed from source sheet</span>
@@ -3141,6 +3155,8 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.#viewModeButton()}
         ${this.#formulaButton()}
         ${monster.menuButton(this.#model, this.isAdmin)}
+        <button data-view data-action="campaign-rules" aria-pressed="${this.#tab === 'systabs'}"
+          title="Point buy, hero points, mythic and ABP for this character: the first panel on the ⚙ tab">Campaign rules…</button>
         <button data-view data-action="theme" aria-pressed="${this.#themeMenu}"
           title="Palettes, and where the tabs go">Theme &amp; layout…</button>
         <button data-view data-action="print-menu" aria-pressed="${this.#printMenu}"
@@ -5067,21 +5083,36 @@ export class CharacterSheetElement extends HTMLElement {
    *
    * Only ever upwards. Clicking a tab while the header is still on screen must
    * not scroll the header away to satisfy a rule about panel tops.
-   *
-   * `scrollIntoView` rather than `window.scrollTo` because an embedded sheet
-   * may sit inside a scroll container belonging to the host, and the margin is
-   * measured rather than written in the stylesheet because the rail stands one
-   * row taller in the session view.
    */
   #showPanelTop() {
     const body = this.shadowRoot.querySelector('.body');
-    if (!body) return;
-    const clear = this.#railClearance();
-    body.style.scrollMarginTop = `${clear}px`;
-    const top = this.getBoundingClientRect().top;
-    if (body.getBoundingClientRect().top < Math.max(top, 0) + clear - 10) {
-      body.scrollIntoView({ block: 'start' });
-    }
+    if (body) this.#landAt(body, { upOnly: true });
+  }
+
+  /**
+   * Scroll so `target`'s top sits just clear of everything pinned over it.
+   *
+   * Only the box the sheet scrolls in moves (`#scrollBox`: the element itself
+   * in the app page, a box of the host's, else the page), not every box above
+   * it. This was `scrollIntoView`, which scrolls them all: in the app page that
+   * included the page itself, whose `overflow: hidden` body a script can still
+   * scroll, so anything that made the page a little taller than the window let
+   * a tab switch slide the sheet up under the app's top bar.
+   *
+   * The line is that box's top, then `--cs-sticky-top` (a header the host pins
+   * over the sheet; zero in the app page), then the rail where it lies over the
+   * panels. Measured rather than written in the stylesheet because the rail
+   * stands one row taller in the session view. `upOnly` leaves a target that
+   * is already below the line where it is.
+   */
+  #landAt(target, { upOnly = false } = {}) {
+    const box = this.#scrollBox();
+    const view = box ? box.getBoundingClientRect().top + box.clientTop : 0;
+    const line = view + this.#stickyTop() + this.#railClearance();
+    const shift = target.getBoundingClientRect().top - line;
+    if (upOnly ? shift >= -10 : Math.abs(shift) < 1) return;
+    if (box) box.scrollTop += shift;
+    else window.scrollBy(0, shift);
   }
 
   /**
@@ -5125,14 +5156,12 @@ export class CharacterSheetElement extends HTMLElement {
   #jumpToSection(index) {
     const head = this.shadowRoot.querySelector(`.body [data-section="${CSS.escape(index)}"]`);
     if (!head) return;
-    const target = head.closest('section.panel, .supergroup') ?? head;
-    target.style.scrollMarginTop = `${this.#railClearance()}px`;
-    target.scrollIntoView({ block: 'start' });
+    this.#landAt(head.closest('section.panel, .supergroup') ?? head);
   }
 
   /**
-   * How far below the top of the window a landing has to be to clear the
-   * pinned rail: the rail's height on the bar, where it sits over the panels,
+   * How far below where the rail pins a landing has to be to clear the
+   * rail: the rail's height on the bar, where it sits over the panels,
    * and next to nothing on the side, where it stands beside them and covers
    * none of them -- a side rail is the height of the window, and a landing
    * pushed that far down would be off the bottom of it.
@@ -5336,8 +5365,15 @@ export class CharacterSheetElement extends HTMLElement {
     const rows = new Set([...bar.children].map((c) => c.offsetTop)).size;
     bar.classList.toggle('oneline', rows <= 1);
     // A side rail scrolls up and down inside itself; the bar scrolls across.
+    // The box is moved by hand rather than with `scrollIntoView`, which would
+    // move the page too wherever the tab is off the window.
     const box = bar.closest('.railbody') || bar;
-    if (box.scrollHeight > box.clientHeight + 1) tab.scrollIntoView({ block: 'nearest' });
+    if (box.scrollHeight > box.clientHeight + 1) {
+      const t = tab.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
+      if (t.top < b.top) box.scrollTop += t.top - b.top;
+      else if (t.bottom > b.bottom) box.scrollTop += t.bottom - b.bottom;
+    }
     if (bar.scrollWidth <= bar.clientWidth) return;
     const t = tab.getBoundingClientRect();
     const b = bar.getBoundingClientRect();
@@ -5543,8 +5579,11 @@ export class CharacterSheetElement extends HTMLElement {
          * that was missing.
          */
         // So does a From lvl box: the row turns planned or reached with it,
-        // and what it counts toward moves.
-        if (AFFECTS_DERIVED.test(list) || input.hasAttribute('list') || field === 'level') this.#rerender(input);
+        // and what it counts toward moves. And a grid cell that now holds a
+        // formula or a web address: it is drawn as a prose field from here on
+        // (rows.gridCell), which shows the value or the link.
+        if (AFFECTS_DERIVED.test(list) || input.hasAttribute('list') || field === 'level'
+          || (input.hasAttribute('data-gridcell') && prose.hasView(value))) this.#rerender(input);
       });
     });
 
@@ -5598,8 +5637,12 @@ export class CharacterSheetElement extends HTMLElement {
       bar.addEventListener('click', (e) => {
         const pool = poolFor(bar, 'poolBar');
         const box = bar.getBoundingClientRect();
-        if (!pool || !box.width) return;
-        pool.set(poolBar(pool, (e.clientX - box.left) / box.width));
+        // A pool with points held back owns only the first `span` of its
+        // bar; the rest is those points, and a click there sets nothing.
+        const span = bar.dataset.poolSpan ? Number(bar.dataset.poolSpan) : 1;
+        const at = (e.clientX - box.left) / box.width;
+        if (!pool || !box.width || !(span > 0) || at > span) return;
+        pool.set(poolBar(pool, at / span));
         this.#render();
       });
     });
@@ -5925,7 +5968,7 @@ export class CharacterSheetElement extends HTMLElement {
       }
       if (!ta.classList.contains('cfeat')) {
         ta.addEventListener('change', () => {
-          if (hasTokens(ta.value) || hasLink(ta.value) || wrap.classList.contains('has-view')) this.#rerender(ta);
+          if (prose.hasView(ta.value) || wrap.classList.contains('has-view')) this.#rerender(ta);
         });
       }
     });
@@ -6470,6 +6513,14 @@ export class CharacterSheetElement extends HTMLElement {
         // has to rebuild it.
         if (key === 'fullAttackWeapon') this.#render();
       });
+      // Enter adds an XP award, as its Add button does.
+      if (key === 'xpAward') {
+        input.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          this.#action('xp-award');
+        });
+      }
       // Enter adds the play log's note, as its Add button does.
       if (key === 'logNote') {
         input.addEventListener('keydown', (e) => {
@@ -7273,6 +7324,29 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       case 'palette-tabs':
         this.#tab = 'systabs';
+        this.#render();
+        break;
+      // The campaign rules are the first panel on the ⚙ tab, so opening the
+      // tab is arriving at them.
+      case 'campaign-rules':
+        this.#tab = 'systabs';
+        this.#chromeMenu = false;
+        this.#render();
+        break;
+      // Levels earned by XP or milestones (a campaign rule): taking the next
+      // one, and adding XP at the table. Both are play actions.
+      case 'level-up':
+        if (levelUp(this.#model)) this.#render();
+        break;
+      case 'xp-award':
+        if (awardXp(this.#model, this.#view.draft.xpAward)) {
+          this.#view.draft.xpAward = '';
+          this.#render();
+        }
+        break;
+      case 'campaign-reset':
+        this.#model.markUndo('Put the campaign rules back to the table\'s');
+        this.#model.set('campaign', {});
         this.#render();
         break;
       case 'formulas':

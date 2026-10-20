@@ -1,0 +1,289 @@
+/**
+ * model/campaign.js -- the rules a character is played under.
+ *
+ * The sheet was built for one table, and that table's rules are built into
+ * its arithmetic: a 30-point buy, hero points, mythic tiers that come with
+ * level, Automatic Bonus Progression, a level typed in by hand. A `campaign`
+ * block on the document lets a character be played under other rules, one
+ * switch at a time.
+ *
+ * The block is sparse. A switch nobody has touched is not written, and reads
+ * as the table's rule -- so every document saved before this existed, and
+ * every new one, opens under the table's rules with every number where it
+ * was. That matters more than tidiness: totals are re-measured on load as the
+ * saved figure less what the sheet works out (reconcile.js), so a default
+ * that differed from what the sheet used to do would be folded silently into
+ * the hidden adjustments on the first load, and turning the rule back on
+ * later would count it twice. Flipping a switch while playing is fine: the
+ * figure saved after it already agrees with it.
+ *
+ * Progress is the character's, not the campaign's: the XP and milestones
+ * earned (`identity.xp`, `identity.milestones`) and the mythic trials
+ * completed (`mythic.trials`) live with the rest of the character. The rules
+ * say what they are measured against.
+ */
+import { MAX_LEVEL, MYTHIC_TIER_LEVEL, tierAtLevel } from '../rules.js';
+
+/** The table's rules: what a switch reads as until a player sets it. */
+export const CAMPAIGN_DEFAULTS = Object.freeze({
+  /** Points to spend on ability scores. */
+  pointBuy: 30,
+  /** Hero points are tracked (the Details panel's counter). */
+  heroPoints: true,
+  /** Mythic is in play: tiers, mythic hit points, the mythic panels. */
+  mythic: true,
+  /**
+   * Where the mythic tier comes from: `level`, a ladder of the level each
+   * tier is reached at (the table's unless `mythicLevels` says otherwise);
+   * `trials`, a count of trials completed against so many a tier; or
+   * `awarded`, a tier the GM hands out, typed on Feats & Mythic.
+   */
+  mythicTier: 'level',
+  /** Trials a tier takes, unless `mythicTrialSteps` names one tier's own. */
+  mythicTrialRate: 1,
+  /** Automatic Bonus Progression replaces the big six magic items. */
+  abp: true,
+  /**
+   * How a character gains levels: `typed` (the level is typed in, as it
+   * always was), `xp` (experience points against a table), or `milestones`
+   * (a count of milestones against so many a level).
+   */
+  advancement: 'typed',
+  /** The XP table: `slow`, `medium` or `fast`, unless `xpSteps` names a level's own. */
+  xpTrack: 'medium',
+  /** Milestones a level takes, unless `milestoneSteps` names one level's own. */
+  milestoneRate: 1,
+});
+
+/** The values a select offers for `mythicTier`. */
+export const MYTHIC_TIER_SOURCES = Object.freeze(['level', 'trials', 'awarded']);
+export const ADVANCEMENT_MODES = Object.freeze(['typed', 'xp', 'milestones']);
+
+/**
+ * The experience a level takes in all, from the core rules' three tables:
+ * `XP_TRACKS.medium[9]` is the XP a character has on reaching 9th level.
+ */
+export const XP_TRACKS = Object.freeze({
+  slow: Object.freeze([0, 0, 3000, 7500, 14000, 23000, 35000, 53000, 77000, 115000, 160000,
+    235000, 330000, 475000, 665000, 955000, 1350000, 1900000, 2700000, 3850000, 5350000]),
+  medium: Object.freeze([0, 0, 2000, 5000, 9000, 15000, 23000, 35000, 51000, 75000, 105000,
+    155000, 220000, 315000, 445000, 635000, 890000, 1300000, 1800000, 2550000, 3600000]),
+  fast: Object.freeze([0, 0, 1300, 3300, 6000, 10000, 15000, 23000, 34000, 50000, 71000,
+    105000, 145000, 210000, 295000, 425000, 600000, 850000, 1200000, 1700000, 2400000]),
+});
+
+/** The highest mythic tier. */
+export const MAX_TIER = 10;
+
+/** A count read from a field: a whole number 0 or more, or `fallback`. */
+const count = (v, fallback) => {
+  if (v === undefined || v === null || v === '') return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
+};
+
+/** A sparse per-step map (`{ 9: 51000 }`) as numbers, wrong kinds dropped. */
+const steps = (map) => {
+  const out = {};
+  if (!map || typeof map !== 'object') return out;
+  for (const [k, v] of Object.entries(map)) {
+    const n = count(v, null);
+    if (n !== null && Number.isInteger(Number(k))) out[Number(k)] = n;
+  }
+  return out;
+};
+
+/**
+ * The rules this document is played under: its own choices over the table's.
+ * A value of the wrong kind reads as the default rather than as whatever it
+ * happens to coerce to.
+ */
+export function campaignRules(d) {
+  const c = d?.campaign && typeof d.campaign === 'object' ? d.campaign : {};
+  const bool = (k) => (typeof c[k] === 'boolean' ? c[k] : CAMPAIGN_DEFAULTS[k]);
+  const buy = Number(c.pointBuy);
+  return {
+    pointBuy: c.pointBuy !== undefined && c.pointBuy !== null && c.pointBuy !== '' && Number.isFinite(buy) && buy >= 0
+      ? buy : (Number.isFinite(Number(d?.pointBuyBudget)) ? Number(d.pointBuyBudget) : CAMPAIGN_DEFAULTS.pointBuy),
+    heroPoints: bool('heroPoints'),
+    mythic: bool('mythic'),
+    mythicTier: MYTHIC_TIER_SOURCES.includes(c.mythicTier) ? c.mythicTier : CAMPAIGN_DEFAULTS.mythicTier,
+    mythicTrialRate: count(c.mythicTrialRate, CAMPAIGN_DEFAULTS.mythicTrialRate),
+    abp: bool('abp'),
+    advancement: ADVANCEMENT_MODES.includes(c.advancement) ? c.advancement : CAMPAIGN_DEFAULTS.advancement,
+    xpTrack: Object.hasOwn(XP_TRACKS, c.xpTrack) ? c.xpTrack : CAMPAIGN_DEFAULTS.xpTrack,
+    milestoneRate: count(c.milestoneRate, CAMPAIGN_DEFAULTS.milestoneRate),
+  };
+}
+
+/* ---------------- the ladders ---------------- */
+
+/** The level each tier is reached at, `[, t1, t2, … t10]`: the table's, with the campaign's own. */
+export function mythicLevels(d) {
+  const own = steps(d?.campaign?.mythicLevels);
+  return Array.from({ length: MAX_TIER + 1 }, (_, t) => (t ? own[t] ?? MYTHIC_TIER_LEVEL[t] ?? null : null));
+}
+
+/** The trials each tier takes from the one before, `[, t1, … t10]`. */
+export function mythicTrialSteps(d) {
+  const rate = campaignRules(d).mythicTrialRate;
+  const own = steps(d?.campaign?.mythicTrialSteps);
+  return Array.from({ length: MAX_TIER + 1 }, (_, t) => (t ? own[t] ?? rate : null));
+}
+
+/** The XP each level takes in all, `[, l1, … l20]`: the chosen table, with the campaign's own. */
+export function xpThresholds(d) {
+  const table = XP_TRACKS[campaignRules(d).xpTrack];
+  const own = steps(d?.campaign?.xpSteps);
+  return Array.from({ length: MAX_LEVEL + 1 }, (_, l) => (l ? own[l] ?? table[l] : null));
+}
+
+/** The milestones each level takes from the one before, `[, , l2, … l20]`. */
+export function milestoneSteps(d) {
+  const rate = campaignRules(d).milestoneRate;
+  const own = steps(d?.campaign?.milestoneSteps);
+  return Array.from({ length: MAX_LEVEL + 1 }, (_, l) => (l >= 2 ? own[l] ?? rate : null));
+}
+
+/** The tier a ladder of levels gives at `level`: every tier in turn whose level is reached. */
+function tierOnLadder(ladder, level) {
+  let tier = 0;
+  while (tier < MAX_TIER && ladder[tier + 1] !== null && ladder[tier + 1] <= level) tier += 1;
+  return tier;
+}
+
+/** The tier `trials` completed buy, with the trials each tier takes. */
+function tierFromTrials(perTier, trials) {
+  let tier = 0;
+  let spent = 0;
+  while (tier < MAX_TIER && trials >= spent + perTier[tier + 1]) {
+    spent += perTier[tier + 1];
+    tier += 1;
+  }
+  return tier;
+}
+
+/**
+ * The tier these rules give before anyone types one: the ladder's at the
+ * character's level, or the trials' when the tier comes from trials; nothing
+ * when it is awarded or mythic is off.
+ */
+export function mythicComputedTier(d) {
+  const rules = campaignRules(d);
+  if (!rules.mythic) return 0;
+  if (rules.mythicTier === 'trials') return tierFromTrials(mythicTrialSteps(d), count(d?.mythic?.trials, 0));
+  if (rules.mythicTier !== 'level') return 0;
+  // The table's own ladder goes on through the rules' function, so a sheet
+  // that has not changed it works out exactly as it always did.
+  if (!Object.keys(steps(d?.campaign?.mythicLevels)).length) return tierAtLevel(d?.identity?.level);
+  return tierOnLadder(mythicLevels(d), Number(d?.identity?.level) || 0);
+}
+
+/**
+ * The mythic tier as it stands: 0 with mythic off; otherwise the tier typed on
+ * Feats & Mythic (an override, or the GM's award), or what the rules give.
+ * Every reader of the tier goes through this, so the tier the numbers use,
+ * the tracker's and the one seeded on load cannot disagree.
+ */
+export function mythicTierOf(d) {
+  if (!campaignRules(d).mythic) return 0;
+  return d?.mythic?.tierOverride ?? mythicComputedTier(d);
+}
+
+/**
+ * What a tier is reached at, for the mythic tables' second column: a level,
+ * so many trials in all, or nothing when the GM awards it.
+ */
+export function mythicTierReached(d, tier) {
+  const rules = campaignRules(d);
+  if (rules.mythicTier === 'level') {
+    const level = mythicLevels(d)[tier];
+    return { head: 'Level', value: level ?? '', title: level ? `Tier ${tier} at level ${level}` : '' };
+  }
+  if (rules.mythicTier === 'trials') {
+    const per = mythicTrialSteps(d);
+    const total = per.slice(1, tier + 1).reduce((a, b) => a + b, 0);
+    return { head: 'Trials', value: total, title: `Tier ${tier} after ${total} trial${total === 1 ? '' : 's'} in all (${per[tier]} for this tier)` };
+  }
+  return { head: 'Level', value: '', title: 'Awarded by the GM' };
+}
+
+/* ---------------- progress ---------------- */
+
+/**
+ * Where the character stands on the way to the next level, or null when the
+ * level is typed in. `have` and `need` are measured the way the rules count:
+ * XP in all, or milestones since the last level. `ready` is true once the
+ * next level is earned -- the sheet offers it, and levelling is a press.
+ */
+export function levelProgress(d) {
+  const rules = campaignRules(d);
+  if (rules.advancement === 'typed') return null;
+  const level = Number(d?.identity?.level) || 0;
+  const next = level < MAX_LEVEL ? level + 1 : null;
+  if (rules.advancement === 'xp') {
+    const table = xpThresholds(d);
+    const have = count(d?.identity?.xp, 0);
+    const need = next ? table[next] : null;
+    return { mode: 'xp', level, next, have, need, short: need === null ? 0 : Math.max(0, need - have), ready: need !== null && have >= need, from: table[level] ?? 0 };
+  }
+  const per = milestoneSteps(d);
+  const have = count(d?.identity?.milestones, 0);
+  const need = next ? per[next] : null;
+  return { mode: 'milestones', level, next, have, need, short: need === null ? 0 : Math.max(0, need - have), ready: need !== null && have >= need, from: 0 };
+}
+
+/** Trials done, and what the next tier takes, when the tier comes from trials; else null. */
+export function trialProgress(d) {
+  const rules = campaignRules(d);
+  if (!rules.mythic || rules.mythicTier !== 'trials') return null;
+  const per = mythicTrialSteps(d);
+  const have = count(d?.mythic?.trials, 0);
+  const tier = tierFromTrials(per, have);
+  const spent = per.slice(1, tier + 1).reduce((a, b) => a + b, 0);
+  const next = tier < MAX_TIER ? tier + 1 : null;
+  return { tier, next, have, toward: have - spent, need: next ? per[next] : null, short: next ? Math.max(0, spent + per[next] - have) : 0 };
+}
+
+/**
+ * Take the next level the rules say has been earned: the level goes up one,
+ * and milestones spent on it come off the count. A play action, so it is
+ * undone like one and goes in the log.
+ */
+export function levelUp(model) {
+  const p = levelProgress(model.data);
+  if (!p?.ready) return false;
+  model.play(`Levelled up to ${p.next}`, () => {
+    if (p.mode === 'milestones') model.data.identity.milestones = p.have - p.need;
+    model.set('identity.level', p.next);
+  });
+  return true;
+}
+
+/** Add experience points at the table: a play action, logged and undoable. */
+export function awardXp(model, amount) {
+  const n = Math.trunc(Number(amount));
+  if (!Number.isFinite(n) || !n) return false;
+  model.play(`${n > 0 ? '+' : '−'}${Math.abs(n).toLocaleString('en-US')} XP`, () => {
+    model.set('identity.xp', Math.max(0, count(model.data.identity?.xp, 0) + n));
+  });
+  return true;
+}
+
+/* ---------------- what has changed ---------------- */
+
+/** The per-step maps a rule carries, by the rule they belong to. */
+const OWN_STEPS = { mythicTier: ['mythicLevels', 'mythicTrialSteps'], advancement: ['xpSteps', 'milestoneSteps'] };
+
+/**
+ * The switches that differ from the table's rules, by name. A ladder edited
+ * step by step counts as a change to the rule it belongs to.
+ */
+export function campaignChanges(d) {
+  const now = campaignRules(d);
+  const changed = new Set(Object.keys(CAMPAIGN_DEFAULTS).filter((k) => now[k] !== CAMPAIGN_DEFAULTS[k]));
+  for (const [rule, maps] of Object.entries(OWN_STEPS)) {
+    if (maps.some((m) => Object.keys(steps(d?.campaign?.[m])).length)) changed.add(rule);
+  }
+  return [...changed];
+}

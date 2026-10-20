@@ -10,15 +10,18 @@ import {
   ABILITIES, ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL, BUILD_DERIVED_KEYS, MYTHIC_STAT_BONUS,
   POINT_BUY_COST, abilityKey, abilityMod, abpFollowers, arrayFollowers, foldPicks, pointBuyCost,
   resolveAbility,
-  tierAtLevel,
 } from '../rules.js';
 import { forwardedSplit } from './scope.js';
+import { campaignRules, mythicComputedTier, mythicTierOf } from './campaign.js';
 
-/** Mythic tier derives from level (with a manual override). */
+/**
+ * Mythic tier derives from level (with a manual override) -- or, under other
+ * campaign rules, from the GM's award alone, or is 0 with mythic off.
+ */
 export function applyMythic(model) {
   const m = model.data.mythic || (model.data.mythic = {});
-  m.computedTier = tierAtLevel(model.data.identity?.level);
-  model.data.identity.mythicTier = m.tierOverride ?? m.computedTier;
+  m.computedTier = mythicComputedTier(model.data);
+  model.data.identity.mythicTier = mythicTierOf(model.data);
 }
 
 /**
@@ -35,6 +38,9 @@ export function refreshAbilities(model) {
   if (build) {
     const level = Number(model.data.identity.level) || 0;
     const folded = foldPicks(model.data.progressionPicks, level);
+    // Without ABP (a campaign rule) the prowess picks stay written and add
+    // nothing; a belt or headband's enhancement is the gear column's.
+    if (!campaignRules(model.data).abp) folded.abp = Object.fromEntries(ABILITIES.map((k) => [k, 0]));
 
     // Mythic ability picks: +2 at each even tier reached.
     const tier = Number(model.data.identity.mythicTier) || 0;
@@ -165,7 +171,7 @@ export function pointBuySummary(model) {
     per[key] = cost;
     total += cost;
   }
-  return { per, total, budget: model.data.pointBuyBudget ?? 30 };
+  return { per, total, budget: campaignRules(model.data).pointBuy };
 }
 
 /** Attunement can only be purchased at level 20 and above. */

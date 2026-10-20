@@ -17,7 +17,7 @@ import { prose, renderedProse } from '../prose.js';
 import { systemExtrasPanel } from './subsystems.js';
 import { itemArea } from '../prose.js';
 import {
-  addButton, foldButton, isCollapsed, isOpen, itemText, removeAction, removeButton, rowTools,
+  addButton, foldButton, gridCell, isCollapsed, isOpen, itemText, removeAction, removeButton, rowTools,
 } from '../rows.js';
 import { linkField } from '../fields.js';
 import { same } from '../format.js';
@@ -638,7 +638,8 @@ export function renderExtrasPanel(model, ctx) {
         </div>`).join('') || '<p class="empty">No notes yet — jot anything here: links, ideas, things to ask the GM.</p>'}
         <div style="margin-top:8px">${addButton('notes', 'Add note', { title: '', body: '' })}</div>
         <p class="hint">Plain text, with inline formulas if you want them: <code>{= level * 2}</code>.
-          Web addresses (http:// or https://) are links: click one to open it, anywhere else to edit.</p>
+          Web addresses (http:// or https://) are links: click one to open it, anywhere else to edit.
+          <code>[words](https://…)</code> makes the words the link.</p>
       </section>
 
       ${sessionNotesPanel(model)}
@@ -666,7 +667,7 @@ export function renderExtrasPanel(model, ctx) {
           is cut on screen but never lost. The Link column takes the rest of the row, because
           a URL cannot be abbreviated. The notes box reads {…} like the rest of the sheet.</p>
       </section>
-      ${systemExtrasPanel(x, 'extras', 'ExtrasNotes')}
+      ${systemExtrasPanel(model, x, 'extras', 'ExtrasNotes')}
     </div>`;
   }
 
@@ -704,9 +705,7 @@ export function gridTab(model, index, tab) {
         <span class="badge">${rows.length} rows</span></h3>
       <div class="tablewrap"><table class="gridtab"><tbody>
         ${rows.map((r, ri) => `<tr>
-          ${Array.from({ length: width }, (_, ci) => `<td>${
-  hasTokens(r.cells[ci]) ? prose(model, `data-item="${list}|${ri}|cells.${ci}"`, r.cells[ci], 1, 'grow')
-    : itemText(list, ri, `cells.${ci}`, r.cells[ci])}</td>`).join('')}
+          ${Array.from({ length: width }, (_, ci) => `<td>${gridCell(model, list, ri, `cells.${ci}`, r.cells[ci])}</td>`).join('')}
           ${rowTools(list, ri)}
         </tr>`).join('')}
       </tbody></table></div>

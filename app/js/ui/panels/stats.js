@@ -11,6 +11,7 @@
  * draws the same pickers; everything else here is local.
  */
 import { esc, abAttr, picksAbility, ABILITY_LABELS_LIST } from '../html.js';
+import { campaignRules } from '../../model/campaign.js';
 import { roField } from '../fields.js';
 import { exprField } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
@@ -200,7 +201,7 @@ export function renderStatsPanel(model, ctx) {
             columns and more than the other two need -- so they share a band,
             which gives each the width its table wants. */''}
       <div class="band">
-        ${abpPicksPanel(model)}
+        ${campaignRules(model.data).abp ? abpPicksPanel(model) : ''}
         ${milestonePicksPanel(model)}
         ${arrayPicksPanel(model)}
       </div>
@@ -248,13 +249,16 @@ function defenceBonusPanel(model) {
   const saveKeys = ['fortitude', 'reflex', 'will'];
   const savesSheet = saveKeys.some((k) => holdsSheet(c.saves?.[k]?.bonuses?.sheet));
   const acSheet = holdsSheet(c.defenses?.acBonuses?.sheet);
-  const saveTypes = SAVE_BONUS_TYPES.filter(([key]) => key !== 'sheet' || savesSheet);
-  const acTypes = AC_BONUS_TYPES.filter(([key]) => key !== 'sheet' || acSheet);
   // The ABP columns are read off the level, and each sits beside the typed
   // bonus of the same kind: the pair sums to the cap, and a typed value past
-  // the cap stands alone. The group styling says so.
+  // the cap stands alone. The group styling says so. Without ABP (a campaign
+  // rule) the columns go, and a typed bonus stands on its own.
+  const abpOn = campaignRules(c).abp;
   const abpOf = Object.fromEntries(ABP_DEFENCE_GROUPS);
-  const typedOf = Object.fromEntries(ABP_DEFENCE_GROUPS.map(([a, t]) => [t, a]));
+  const typedOf = abpOn ? Object.fromEntries(ABP_DEFENCE_GROUPS.map(([a, t]) => [t, a])) : {};
+  const shown = (sheetShown) => ([key]) => (key !== 'sheet' || sheetShown) && (abpOn || !abpOf[key]);
+  const saveTypes = SAVE_BONUS_TYPES.filter(shown(savesSheet));
+  const acTypes = AC_BONUS_TYPES.filter(shown(acSheet));
   const groupClass = (key) => (key === 'sheet' || abpOf[key] ? ' grouped groupstart'
     : typedOf[key] ? ' grouped groupend' : '');
   const cells = (block, resolved, errors, types, bind) => types.map(([key, , flags]) => {
@@ -345,19 +349,21 @@ function milestonePicksPanel(model) {
   const c = model.data;
   const level = Number(c.identity.level) || 0;
   const tier = Number(c.identity.mythicTier) || 0;
+  // Without mythic (a campaign rule) the table is the Level/4 half alone.
+  const mythic = campaignRules(c).mythic;
   const level4 = (l) => (c.progressionPicks?.level4 || []).find((p) => p.level === l) || {};
-  const rows = Math.max(LEVEL4_LEVELS.length, MYTHIC_STAT_TIERS.length);
+  const rows = mythic ? Math.max(LEVEL4_LEVELS.length, MYTHIC_STAT_TIERS.length) : LEVEL4_LEVELS.length;
   return `<section class="panel">
-      <h3>Level/4 &amp; mythic increases</h3>
+      <h3>${mythic ? 'Level/4 &amp; mythic increases' : 'Level/4 increases'}</h3>
       <div class="tablewrap"><table class="build picks">
         <thead>
           <tr class="groups">
             <th class="num grouphead" colspan="2">Level/4 <span class="capnote">+1</span></th>
-            <th class="num grouphead grouped groupstart" colspan="2">Mythic <span class="capnote">+2</span></th>
+            ${mythic ? '<th class="num grouphead grouped groupstart" colspan="2">Mythic <span class="capnote">+2</span></th>' : ''}
           </tr>
           <tr>
             <th class="num">Lvl</th><th>Ability</th>
-            <th class="num grouped groupstart">Tier</th><th class="grouped groupend">Ability</th>
+            ${mythic ? '<th class="num grouped groupstart">Tier</th><th class="grouped groupend">Ability</th>' : ''}
           </tr>
         </thead>
         <tbody>${Array.from({ length: rows }, (_, i) => {
@@ -371,18 +377,21 @@ function milestonePicksPanel(model) {
         return `<tr>
             ${pair(l, l <= level, l === undefined ? ''
             : pickSelect('level4', l, 0, level4(l).ability, ABILITY_LABELS_LIST, false), '')}
-            ${pair(t, t <= tier, t === undefined ? ''
+            ${mythic ? pair(t, t <= tier, t === undefined ? ''
             : pickSelect('mythicStat', t, 0, mythicPickAt(model, t), ABILITY_LABELS_LIST, false),
-          'grouped')}
+          'grouped') : ''}
           </tr>`;
       }).join('')}</tbody>
       </table></div>
-      <p class="hint">
+      <p class="hint">${mythic ? `
         <strong>Level/4</strong> is +1 at every fourth level. <strong>Mythic</strong> is
         +2 at every even tier. These are the same increases as the ladder on
         <strong>Feats &amp; Mythic</strong>. Either place edits the one set.
         Currently level ${level}, tier ${tier}. Anything past that is greyed and does not
-        count yet.
+        count yet.` : `
+        <strong>Level/4</strong> is +1 at every fourth level. Currently level ${level}.
+        Anything past that is greyed and does not count yet. Mythic is off in the campaign
+        rules, so its increases are not shown.`}
       </p>
     </section>`;
 }

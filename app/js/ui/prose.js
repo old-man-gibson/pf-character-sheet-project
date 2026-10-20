@@ -19,11 +19,20 @@ import { workingLine } from '../formula-format.js';
 import { hasLink, linkedText } from './links.js';
 
 const PROSE_HINT = 'Formulas work here: {= 2 + con.mod} shows a value, '
-  + '{qi.max = wis.mod} names one, {qi.max} reuses it.';
+  + '{qi.max = wis.mod} names one, {qi.max} reuses it. '
+  + 'So do links: https://… on its own, or [words](https://…).';
 
 export function itemArea(model, list, i, field, value, rows = 3, local = null, opts = {}) {
   return prose(model, `data-item="${list}|${i}|${field}"`, value, rows, '', local, opts);
 }
+
+/**
+ * Does a prose field show this text through its read view: does it hold a
+ * {…} formula or a web address? A cell that is a prose field only while it
+ * holds one (rows.gridCell) asks the same, and so does the element when a
+ * field or such a cell changes.
+ */
+export const hasView = (text) => hasTokens(text) || hasLink(text);
 
 /**
  * A prose field that may carry {…} inline formulas and web addresses.

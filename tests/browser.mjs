@@ -133,7 +133,9 @@ run.addEventListener('click', async () => {
         .flatMap((rule) => [...rule.cssRules]).map((rule) => rule.cssText).join('\n');
       assert(rules, 'No print rules found');
       print.replaceSync(rules);
-      const original = root.adoptedStyleSheets;
+      // A copy: the property is a live list, and keeping the list itself kept
+      // the print sheet added below for every check after this one.
+      const original = [...root.adoptedStyleSheets];
       const probe = document.createElement('div');
       probe.innerHTML = '<button class="pip used">1</button><button class="pip zero">0</button><button class="edit-probe">Edit</button>';
       root.append(probe);
@@ -296,6 +298,37 @@ run.addEventListener('click', async () => {
       assert(help.getAttribute('aria-expanded') !== shut, 'The help button no longer opens the help');
       help.click();
     });
+    // A worksheet cell is a one-line box until it holds a formula or a web
+    // address, and a prose field from then on (rows.gridCell). An edit to a
+    // worksheet redraws nothing else, so a box that gains one is drawn again
+    // to show it: the value, or the link, which a press leaves to the browser.
+    await test('A worksheet cell that gains an address or a formula is drawn again to show it', async () => {
+      const root = sheet.shadowRoot;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      sheet.model.set('sheetTabs', [{ name: 'Scratch', custom: true, rows: [{ cells: ['words', null, null] }] }]);
+      sheet.model.showTab('sys:Scratch');
+      root.getElementById('tab-overview').click();   // drawn again, with the worksheet on the bar
+      root.getElementById('tab-sys-0').click();
+      const cell = (col) => root.querySelector(`[data-item="sheetTabs.0.rows|0|cells.${col}"]`);
+      for (const [col, typed] of [[1, 'Map: https://example.com/grid.'], [2, 'Reach {= level * 2} ft.']]) {
+        const box = cell(col);
+        assert(box?.matches('input[data-gridcell]'), `Cell ${col} is not a plain box`);
+        box.focus();
+        box.value = typed;
+        box.dispatchEvent(new Event('change', { bubbles: true }));
+        await until(() => cell(col) !== box);
+        cell(col).blur();
+        cell(col).dispatchEvent(new FocusEvent('blur'));
+      }
+      const view = (col) => cell(col).closest('.prose')?.querySelector('.prose-view');
+      assert(view(1)?.querySelector('a[href="https://example.com/grid"]'), 'The address is not a link');
+      assert(view(2)?.querySelector('.tok')?.textContent === '20', 'The formula does not show its value');
+      assert(cell(0).matches('input[data-gridcell]'), 'A cell of plain words is not a box');
+      const wrap = cell(1).closest('.prose');
+      const press = new MouseEvent('mousedown', { bubbles: true, composed: true, cancelable: true, button: 0 });
+      view(1).querySelector('a').dispatchEvent(press);
+      assert(!press.defaultPrevented && !wrap.classList.contains('editing'), 'A press on the link opened the cell');
+    });
     // A chip list in a band asks for no width of its own, so beside its label
     // it was given none: one chip per line, each broken at its longest word.
     await test('The proficiency chips take the row beside their label', async () => {
@@ -362,6 +395,50 @@ run.addEventListener('click', async () => {
       } finally {
         if (layout) sheet.setAttribute('layout', layout);
         mount.style.width = '';
+      }
+    });
+    // The app page scrolls the sheet in a box of its own under the app's bar,
+    // and the page itself is meant never to scroll. The sheet's live region,
+    // positioned against the page rather than the sheet, made the page as tall
+    // as the sheet's content, and a tab switch then scrolled the page as well
+    // as the box: the sheet slid up under the bar.
+    await test("A tab switch scrolls only the sheet's own box and lands clear of the rail", async () => {
+      const root = sheet.shadowRoot;
+      const layout = sheet.getAttribute('layout');
+      const page = document.scrollingElement;
+      // The app page's own rules for the sheet (app/index.html), with the
+      // both-edges gutter it gets on a wide window: the stray height only
+      // counted towards the page with that gutter on.
+      const box = { height: '360px', overflowY: 'auto', overflowX: 'hidden', scrollbarGutter: 'stable both-edges' };
+      try {
+        Object.assign(sheet.style, box);
+        sheet.style.setProperty('--cs-view-height', '360px');
+        mount.style.width = '900px';
+        for (const side of [false, true]) {
+          const where = side ? 'side rail' : 'tab bar';
+          sheet.setAttribute('layout', side ? 'side' : 'top');
+          root.getElementById('tab-overview').click();
+          page.scrollTop = 0;
+          const foot = sheet.getBoundingClientRect().bottom + 20;
+          assert(page.scrollHeight <= Math.max(foot + 20, page.clientHeight),
+            `The page runs ${Math.round(page.scrollHeight - foot)}px past the sheet's box (${where})`);
+          sheet.scrollTop = sheet.scrollHeight;
+          root.getElementById('tab-features').click();
+          assert(page.scrollTop === 0, `The page scrolled ${Math.round(page.scrollTop)}px (${where})`);
+          const top = sheet.getBoundingClientRect().top;
+          const rail = root.querySelector('.tabrail').getBoundingClientRect();
+          const body = root.querySelector('.body').getBoundingClientRect();
+          assert(rail.top >= top - 0.5, `The rail starts ${Math.round(top - rail.top)}px above the box (${where})`);
+          const line = top + (side ? 10 : Math.round(rail.height) + 10);
+          assert(sheet.scrollTop > 0 && Math.abs(body.top - line) <= 1.5,
+            `The panel lands ${Math.round(body.top - top)}px down the box, not ${Math.round(line - top)}px (${where})`);
+        }
+      } finally {
+        if (layout) sheet.setAttribute('layout', layout); else sheet.removeAttribute('layout');
+        for (const key of Object.keys(box)) sheet.style[key] = '';
+        sheet.style.removeProperty('--cs-view-height');
+        mount.style.width = '';
+        page.scrollTop = 0;
       }
     });
   } finally {

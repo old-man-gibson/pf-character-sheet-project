@@ -27,6 +27,7 @@ import {
 } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
+import { campaignRules } from './campaign.js';
 import { sphereTableNames, talentsIn } from './spheres.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
 import { tempHpGrant } from './stats/defenses.js';
@@ -1499,12 +1500,15 @@ export function proseSources(model) {
   push('altTraining:notes', d.altTraining?.notes);
   // `notes` is the sibling map of one note per slot, not an eighth slot, so it
   // is walked rather than pushed as though it were a name.
+  // With mythic off (a campaign rule) a tradition is written down, not in
+  // force; its tiers' bonuses already wait, at tier 0.
+  const tradition = campaignRules(d).mythic ? null : { future: true };
   for (const [k, v] of Object.entries(d.mythic?.tradition || {})) {
     if (k === 'notes') continue;
-    push(`mythicTradition:${k}`, v);
+    push(`mythicTradition:${k}`, v, null, tradition);
   }
   for (const [k, v] of Object.entries(d.mythic?.tradition?.notes || {})) {
-    push(`mythicTraditionNote:${k}`, v);
+    push(`mythicTraditionNote:${k}`, v, null, tradition);
   }
   (d.crafting?.projects || []).forEach((p, i) => {
     push(`crafting:${i}:resources`, p.resources);
