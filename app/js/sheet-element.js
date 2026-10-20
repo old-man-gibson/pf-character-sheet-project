@@ -502,6 +502,9 @@ function stackRowKey(row) {
 /** Longer than this and a hint is a paragraph rather than a caption. */
 const HELP_LENGTH = 180;
 
+/** The elements a `<label>` can be the label of. */
+const LABELABLE = 'button, input:not([type="hidden"]), meter, output, progress, select, textarea';
+
 /**
  * What the help is about.
  *
@@ -646,6 +649,8 @@ export class CharacterSheetElement extends HTMLElement {
   #schemeQuery = null;
   /* Which of the narrow-screen help disclosures are open; see `#clampHints`. */
   #openHelp = new Set();
+  /* The last id `#clampHints` gave a field so that its label could name it. */
+  #helpFieldId = 0;
   /* Which stacked rows the player has moved off the fold their table starts
      on -- so on an ordinary table these are the rows folded to their name, and
      on a `data-fold="shut"` one they are the rows opened out. Holding the
@@ -5263,6 +5268,19 @@ export class CharacterSheetElement extends HTMLElement {
       button.setAttribute('aria-expanded', String(open));
       button.textContent = `${open ? '\u25be' : '\u25b8'} Help \u2014 ${label}`;
       hint.parentNode.insertBefore(button, hint);
+      // A hint inside a field's caption puts the button inside the field's
+      // label, ahead of the field. A label with no `for` hands its clicks to
+      // the first control in it, which is now the button: a click on a
+      // formula field's computed view opened the help and took the caret
+      // out of the field. Named, the label goes back to its field.
+      const owner = button.closest('label');
+      if (owner?.control === button) {
+        const field = [...owner.querySelectorAll(LABELABLE)].find((el) => el !== button && !el.matches('button.helpopen'));
+        if (field) {
+          if (!field.id) field.id = `cs-field-${++this.#helpFieldId}`;
+          owner.htmlFor = field.id;
+        }
+      }
     }
   }
 
