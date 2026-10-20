@@ -22,8 +22,9 @@
  *  whole Overview down for anyone who clicked *Arrange cards*.
  *
  *  Runs everywhere: the roster it sweeps is the private one when it is there
- *  and the committed public fixture otherwise, plus a blank sheet and a
- *  character with a formula in every kind of prose field, built here.
+ *  and the committed public fixture otherwise, plus a blank sheet, a
+ *  character with a formula in every kind of prose field and one with a
+ *  formula and an address in every grid of workbook cells, built here.
  *
  *  Run: node tests/panels.test.mjs */
 import { blankDocument } from '../app/js/convert.js';
@@ -46,6 +47,8 @@ import { prose, foldedProse, renderedProse } from '../app/js/ui/prose.js';
 import * as statBlock from '../app/js/monster/panel.js';
 import { blankDraft, blankTrackerDraft, blankView } from '../app/js/ui/view-state.js';
 import { foldValue } from '../app/js/ui/folds.js';
+import { hasTokens } from '../app/js/inline.js';
+import { hasLink } from '../app/js/ui/links.js';
 
 let pass = 0;
 let fail = 0;
@@ -155,6 +158,9 @@ const panelsWith = (CTX) => [
   ['Auto-Cooking', (m) => techniques.renderCookingPanel(m, CTX)],
   ['⚙ manager', (m) => manager.renderSystemManagerPanel(m, CTX)],
   ['Stat Block', (m) => statBlock.renderStatBlockPanel(m, CTX)],
+  // A workbook tab the sheet does not model: the element's tab around this
+  // grid, one per worksheet.
+  ['Worksheets', (m) => (m.data.sheetTabs || []).map((tab, i) => lore.gridTab(m, i, tab)).join('')],
 ];
 
 const CTX = shutCtx();
@@ -170,6 +176,16 @@ function looseCheckbox(html) {
   }
   return null;
 }
+
+/**
+ * A box bound to a cell of a workbook grid: a worksheet's (`sheetTabs.N.rows`)
+ * or a sub-system tab's cells from the source tab (`akashic.sourceExtras`).
+ */
+const GRID_BOX = /<input\b[^>]*\bdata-item="(?:sheetTabs\.\d+\.rows|\w+\.sourceExtras)\|\d+\|cells\.\d+"[^>]*>/g;
+
+/** An attribute value as it was before `esc`. */
+const unesc = (s) => String(s ?? '').replace(/&(quot|#39|lt|gt|amp);/g,
+  (_, e) => ({ quot: '"', '#39': "'", lt: '<', gt: '>', amp: '&' })[e]);
 
 /** Render one panel, reporting a throw as the failure it is on the page. */
 function renders(who, name, draw, model) {
@@ -232,6 +248,18 @@ function renders(who, name, draw, model) {
   if (arrow) {
     fail++;
     console.log(`  FAIL ${who} — ${name} draws a link's ↗ by hand: ${arrow[0].slice(0, 120)}`);
+    return html;
+  }
+  // Every cell of a workbook grid is rows.gridCell's, which draws one that
+  // holds a formula or a web address as a prose field: its read view shows
+  // the value and the link. A box drawn for one shows the source as typed.
+  const sourceBox = (html.match(GRID_BOX) || []).find((tag) => {
+    const value = unesc(/\bvalue="([^"]*)"/.exec(tag)?.[1]);
+    return hasTokens(value) || hasLink(value);
+  });
+  if (sourceBox) {
+    fail++;
+    console.log(`  FAIL ${who} — ${name} draws a grid cell with a formula or an address as a box: ${sourceBox.slice(0, 120)}`);
     return html;
   }
   // Every checkbox sits in a label (`rows.itemCheck`, `fields.check`): a
@@ -479,6 +507,70 @@ ok('a field wraps both layers',
 ok('a folded cell computes its peek',
   drew('a folded cell', () => foldedProse(proseModel, { openCell: null }, 'k', 'data-item="x|0|y"', '{= 1 + 1} hits')).includes('class="tok'));
 
+/**
+ * The tabs that keep a workbook's cells no heading claimed ("From the source
+ * tab"), by the key their block has in the document.
+ */
+const SOURCE_TABS = {
+  akashic: (m) => subsystems.akashicPanel(m, CTX),
+  maneuvers: (m) => subsystems.maneuversPanel(m, CTX),
+  vancian: (m) => subsystems.vancianPanel(m),
+  psionics: (m) => subsystems.psionicsPanel(m, CTX),
+  // On the deck view; the tab opens on the table.
+  cardcasting: (m) => subsystems.cardcastingPanel(m, { ...CTX, deckView: 'deck' }),
+  crafting: (m) => gear.renderCraftingPanel(m, CTX),
+  extras: (m) => lore.renderExtrasPanel(m, CTX),
+};
+
+/**
+ * Both grids of workbook cells, with a formula, a web address and plain words
+ * in each: a worksheet the sheet does not model, and the cells from the
+ * source tab on every tab that keeps them. No roster character has a
+ * worksheet, or a formula or an address in a grid cell.
+ */
+function gridsCharacter() {
+  const c = new Character(blankDocument({ name: 'Grids', level: 4 }));
+  const cells = (where) => [`${where}: {= level * 5} ft.`, `see https://zq.example/${where}.`, 'plain words'];
+  c.set('sheetTabs', [{ name: 'Scratch', custom: true, rows: [{ cells: cells('scratch') }] }]);
+  for (const key of Object.keys(SOURCE_TABS)) c.set(`${key}.sourceExtras`, [{ cells: cells(key) }]);
+  c.recompute();
+  return c;
+}
+
+/**
+ * A cell of a grid as it is drawn: a prose field's read view as text, with
+ * the address it links, or a box's value and whether it carries the mark
+ * that has it drawn again as a prose field once it gains a formula or an
+ * address. Null when the cell is not there.
+ */
+function gridCellShown(html, list, row, col) {
+  const item = `data-item="${list}|${row}|cells.${col}"`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const field = new RegExp(`<textarea ${item}[^>]*>[^<]*</textarea>\\s*<span class="prose-view"[^>]*>([\\s\\S]*?)</span>\\s*</span>`).exec(html);
+  if (field) {
+    const link = /<a class="weblink" href="([^"]*)"/.exec(field[1]);
+    return { view: field[1].replace(/<[^>]+>/g, ''), ...(link ? { link: link[1] } : {}) };
+  }
+  const box = new RegExp(`<input type="text" value="([^"]*)" ${item}[^>]*>`).exec(html);
+  return box ? { box: unesc(box[1]), gridcell: /\sdata-gridcell[\s>]/.test(box[0]) } : null;
+}
+
+console.log('\nboth grids of workbook cells show a formula\'s value and an address as a link');
+{
+  const c = gridsCharacter();
+  // Every panel, every view: `renders` fails a grid cell drawn as a box while
+  // it holds a formula or an address.
+  sweep('a character with workbook grids', c);
+  const grids = [['scratch', 'sheetTabs.0.rows', lore.gridTab(c, 0, c.data.sheetTabs[0])],
+    ...Object.entries(SOURCE_TABS).map(([key, draw]) => [key, `${key}.sourceExtras`, draw(c)])];
+  for (const [key, list, html] of grids) {
+    check(`${list}: the formula shows its value, the address is a link, the words are a box`,
+      [0, 1, 2].map((col) => gridCellShown(html, list, 0, col)),
+      [{ view: `${key}: 20 ft.` },
+        { view: `see https://zq.example/${key}.`, link: `https://zq.example/${key}` },
+        { box: 'plain words', gridcell: true }]);
+  }
+}
+
 console.log('\nthe unarmed practitioner table folds, and the shared increases do not go with it');
 {
   // A default fold is not the same as a stored one: the practitioner table
@@ -702,14 +794,17 @@ console.log('\nno character text reaches the page as markup');
     return v;
   };
 
-  const ids = hasFixtures() ? fixtureIds() : [];
+  // The roster, and a character with both grids of workbook cells, which no
+  // roster character fills with formulas or addresses.
+  const subjects = [...(hasFixtures() ? fixtureIds() : []).map((id) => [id, () => loadCharacter(id)]),
+    ['workbook grids', () => gridsCharacter().toJSON()]];
   for (const [kind, picks] of Object.entries(KINDS)) {
     for (const [where, payload] of Object.entries(SHAPES)) {
       const poison = poisonWith(payload, picks);
       let leaked = 0;
       let drawn = 0;
-      for (const id of ids) {
-        const model = new Character(poison(loadCharacter(id)));
+      for (const [id, load] of subjects) {
+        const model = new Character(poison(load()));
         for (const [name, draw] of [...PANELS, ...panelsWith(openCtx(model))]) {
           let html;
           try { html = String(draw(model) ?? ''); } catch { continue; }

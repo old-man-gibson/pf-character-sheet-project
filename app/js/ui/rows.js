@@ -20,7 +20,7 @@ import { foldButton, isCollapsed } from './folds.js';
 // import without this one; panels have always reached them through here.
 export { foldButton, isCollapsed, isOpen } from './folds.js';
 import { fmt } from '../rules.js';
-import { prose } from './prose.js';
+import { hasView, prose } from './prose.js';
 
 /**
  * `title` is for a cell narrow enough to cut its own value off: an input
@@ -33,13 +33,34 @@ import { prose } from './prose.js';
  * catalogue behind them, which wants a `list`. It still takes the bare
  * boolean every existing caller passes -- `true` is `{ title: true }` -- so
  * that adding the option changed nothing that was already written.
+ * `attrs` is markup added to the box as written: `gridCell`'s mark.
  */
 export function itemText(list, i, field, value, placeholder = '', opts = false) {
   const o = (opts && typeof opts === 'object') ? opts : { title: !!opts };
   const text = String(value ?? '');
   return `<input type="text" value="${esc(text)}" data-item="${list}|${i}|${field}"
       data-kind="text" placeholder="${esc(placeholder)}"${
-  o.list ? ` list="${esc(o.list)}"` : ''}${o.title && text.trim() ? ` title="${esc(text)}"` : ''}>`;
+  o.list ? ` list="${esc(o.list)}"` : ''}${o.title && text.trim() ? ` title="${esc(text)}"` : ''}${
+  o.attrs ? ` ${o.attrs}` : ''}>`;
+}
+
+/**
+ * One cell of a grid copied from a workbook: a worksheet the sheet does not
+ * model (lore.js `gridTab`) or the cells a sub-system tab's headings left
+ * over (subsystems.js `systemExtrasPanel`).
+ *
+ * Most hold a word or a number and are a one-line box. One that holds a {…}
+ * formula or a web address is a prose field, whose read view shows what the
+ * formula comes to and the address as a link. Both commit on change. A box
+ * that gains a formula or an address is drawn again as a prose field
+ * (`data-gridcell`, in the element's change handler), and a prose field that
+ * loses its last one goes back to a box. A grid can run to thousands of
+ * cells, which is why the rest stay boxes.
+ */
+export function gridCell(model, list, i, field, value) {
+  return hasView(value)
+    ? prose(model, `data-item="${list}|${i}|${field}"`, value, 1, 'grow gridcell')
+    : itemText(list, i, field, value, '', { attrs: 'data-gridcell' });
 }
 
 export function itemNum(list, i, field, value) {
