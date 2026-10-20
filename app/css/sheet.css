@@ -1486,6 +1486,27 @@ select.jumpto[hidden] { display: none; }
   .camprow { grid-template-columns: minmax(0, 1fr) auto; }
   .camprow .campnote { grid-column: 1 / -1; }
 }
+/* What a rule carries under its row: a table pick or a rate, and its ladder
+   folded below. A box per step, its step number over it; a step the
+   campaign has set for itself carries the accent edge the rows do. */
+.camprow .campmore { grid-column: 1 / -1; display: grid; gap: 6px; padding-left: 13rem; }
+@container (max-width: 760px) { .camprow .campmore { padding-left: 0; } }
+.camprow .campmore .subhead { margin: 2px 0; }
+.stepgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.6rem, 1fr)); gap: 4px 6px; }
+.stepcell { display: flex; flex-direction: column; gap: 1px; font-size: 0.72rem; color: var(--cs-muted); }
+.stepcell input { width: 100%; box-sizing: border-box; text-align: right; }
+.stepcell.own input { box-shadow: inset 3px 0 0 var(--cs-accent); }
+
+/* Progress toward the next level (overview.js levelProgressRow), under the
+   Details fields when levels are earned by XP or milestones: the count, an
+   Add box for XP, and a bar from this level's mark to the next with the
+   Level up button at its end once it is full. */
+.levelprogress { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 14px; margin-top: 10px; }
+.levelprogress .lpline { flex: 1 1 16rem; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; }
+.lpbar { flex: 1 1 10rem; height: 8px; border-radius: 4px; background: var(--cs-panel-2); border: 1px solid var(--cs-line); overflow: hidden; }
+.lpbar > div { height: 100%; background: var(--cs-accent); }
+.levelprogress .lpline .hint { flex: 1 1 100%; margin: 0; }
+.levelprogress button.levelup { border-color: var(--cs-accent); color: var(--cs-accent); font-weight: 600; }
 
 /* ---------- the theme picker ---------- */
 /* Under the rail with the other things the rail raises. A card per preset,

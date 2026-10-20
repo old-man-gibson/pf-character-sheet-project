@@ -68,7 +68,7 @@ import {
   readThemePrefs, writeThemePrefs, ACTION_MARKS, ACTION_TINTS, DEFAULT_ACTION_MARKS,
   DEFAULT_ACTION_TINT, isActionMarks, isActionTint,
 } from './themes.js';
-import { campaignRules } from './model/campaign.js';
+import { awardXp, campaignRules, levelUp } from './model/campaign.js';
 import { esc, val, abilityKey, nameDatalist } from './ui/html.js';
 import * as fields from './ui/fields.js';
 
@@ -365,7 +365,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(campaign|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(campaign|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|xp|milestones|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /**
  * The input types a caret can be put back into after a re-render.
@@ -6513,6 +6513,14 @@ export class CharacterSheetElement extends HTMLElement {
         // has to rebuild it.
         if (key === 'fullAttackWeapon') this.#render();
       });
+      // Enter adds an XP award, as its Add button does.
+      if (key === 'xpAward') {
+        input.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          this.#action('xp-award');
+        });
+      }
       // Enter adds the play log's note, as its Add button does.
       if (key === 'logNote') {
         input.addEventListener('keydown', (e) => {
@@ -7324,6 +7332,17 @@ export class CharacterSheetElement extends HTMLElement {
         this.#tab = 'systabs';
         this.#chromeMenu = false;
         this.#render();
+        break;
+      // Levels earned by XP or milestones (a campaign rule): taking the next
+      // one, and adding XP at the table. Both are play actions.
+      case 'level-up':
+        if (levelUp(this.#model)) this.#render();
+        break;
+      case 'xp-award':
+        if (awardXp(this.#model, this.#view.draft.xpAward)) {
+          this.#view.draft.xpAward = '';
+          this.#render();
+        }
         break;
       case 'campaign-reset':
         this.#model.markUndo('Put the campaign rules back to the table\'s');

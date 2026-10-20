@@ -108,7 +108,7 @@ import {
 import { hasTokens } from '../../inline.js';
 import { abilityCollapse, abilityHarm, blankClassRow, maneuverDetails } from '../../model.js';
 import { colorControl } from '../color-control.js';
-import { campaignRules } from '../../model/campaign.js';
+import { campaignRules, levelProgress } from '../../model/campaign.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
@@ -165,7 +165,7 @@ export function renderOverviewPanel(model, ctx) {
       </section>
 
       <div class="band lead">
-        ${detailsPanel(model)}
+        ${detailsPanel(model, ctx)}
         ${abilityScoresPanel(model)}
       </div>
       <div class="band">
@@ -1108,7 +1108,7 @@ export function dashSystemCards(model) {
     return out.join('');
   }
 
-function detailsPanel(model) {
+function detailsPanel(model, ctx) {
     const c = model.data;
     const rules = campaignRules(c);
     return `<section class="panel details">
@@ -1157,8 +1157,46 @@ function detailsPanel(model) {
           ${field('Portrait URL', text('identity.image', c.identity.image, 'https://…'), 'portraiturl')}
         </div>
       </div>
+      ${levelProgressRow(model, ctx)}
       ${characterColorRow(c.identity.color)}
     </section>`;
+  }
+
+  /**
+   * How far the character is toward the next level, when the campaign earns
+   * levels by XP or milestones: the count, a bar from this level's mark to
+   * the next, and -- once the next level is earned -- a button that takes it.
+   * The level never moves on its own: it drives a great deal, and the button
+   * is one undoable step that also goes in the play log. XP has an Add box
+   * for an award at the table, since a running total is not what a GM reads
+   * out.
+   */
+function levelProgressRow(model, ctx) {
+    const p = levelProgress(model.data);
+    if (!p) return '';
+    const xp = p.mode === 'xp';
+    const n = (v) => Number(v).toLocaleString('en-US');
+    const span = p.need === null ? 0 : p.need - p.from;
+    const done = p.need === null ? 1 : span > 0 ? Math.min(1, Math.max(0, (p.have - p.from) / span)) : (p.ready ? 1 : 0);
+    const said = p.next === null ? `Level ${p.level} is the top of the table.`
+      : p.ready ? `Level ${p.next} is earned.`
+        : xp ? `${n(p.short)} XP to level ${p.next} (${n(p.need)} in all).${p.have < p.from
+          ? ` Level ${p.level} itself takes ${n(p.from)}: the level was set before the XP was.` : ''}`
+          : `${p.short} more milestone${p.short === 1 ? '' : 's'} to level ${p.next}.`;
+    return `<div class="levelprogress">
+      <label class="fld"><span>${xp ? 'Experience points' : 'Milestones toward the next level'}</span>
+        <input type="number" min="0" value="${esc(p.have)}" data-set="identity.${xp ? 'xp' : 'milestones'}" data-kind="number"
+          aria-label="${xp ? 'Experience points' : 'Milestones'}" style="width:${xp ? '8rem' : '4.5rem'}"></label>
+      ${xp ? `<span class="pair xpaward"><input type="number" data-draft="xpAward" value="${esc(ctx?.draft?.xpAward ?? '')}"
+          placeholder="+ XP" aria-label="XP to add" style="width:6rem">
+        <button data-action="xp-award" title="Add this to the total, as a play action you can undo">Add</button></span>` : ''}
+      <div class="lpline">
+        <div class="lpbar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(done * 100)}"
+          title="${esc(said)}"><div style="width:${(done * 100).toFixed(1)}%"></div></div>
+        <span class="hint">${esc(said)}</span>
+        ${p.ready ? `<button class="levelup" data-action="level-up" title="Take level ${p.next}: one step, undone like a play action">Level up to ${p.next}</button>` : ''}
+      </div>
+    </div>`;
   }
 
   /**

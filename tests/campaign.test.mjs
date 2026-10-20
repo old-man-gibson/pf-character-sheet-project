@@ -9,9 +9,12 @@
  *  Run: node tests/campaign.test.mjs */
 import { blankDocument } from '../app/js/convert.js';
 import { Character } from '../app/js/model.js';
-import { CAMPAIGN_DEFAULTS, campaignChanges, campaignRules } from '../app/js/model/campaign.js';
+import {
+  CAMPAIGN_DEFAULTS, XP_TRACKS, awardXp, campaignChanges, campaignRules, levelProgress, levelUp, mythicComputedTier,
+  mythicLevels, mythicTierReached, trialProgress, xpThresholds,
+} from '../app/js/model/campaign.js';
 import { MYTHIC_POWER_ID } from '../app/js/model/trackers.js';
-import { abpDefence } from '../app/js/rules.js';
+import { abpDefence, tierAtLevel } from '../app/js/rules.js';
 import { fixtureIds, loadCharacter } from './fixtures.mjs';
 
 let pass = 0;
@@ -34,7 +37,8 @@ const reopen = (m) => new Character(JSON.parse(JSON.stringify(m.toJSON())));
 console.log('the rules read back with the table\'s as the default');
 check('no block is the table\'s rules', campaignRules({}), { ...CAMPAIGN_DEFAULTS });
 check('a value of the wrong kind is the default',
-  campaignRules({ campaign: { abp: 'no', mythic: 0, mythicTier: 'trials', pointBuy: 'lots' } }), { ...CAMPAIGN_DEFAULTS });
+  campaignRules({ campaign: { abp: 'no', mythic: 0, mythicTier: 'sometimes', pointBuy: 'lots', advancement: 'vibes', xpTrack: 'glacial', milestoneRate: -2, mythicTrialRate: 'x' } }),
+  { ...CAMPAIGN_DEFAULTS });
 check('a number typed as text is still a number', campaignRules({ campaign: { pointBuy: '25' } }).pointBuy, 25);
 check('the old top-level budget is still read', campaignRules({ pointBuyBudget: 20 }).pointBuy, 20);
 check('changes name only what differs', campaignChanges({ campaign: { abp: false, mythic: true } }), ['abp']);
@@ -52,7 +56,8 @@ for (const id of fixtureIds()) {
 
 console.log('\na switch flipped in play survives a reload, and flipping it back restores everything');
 for (const id of fixtureIds()) {
-  for (const [key, value] of [['abp', false], ['mythic', false], ['heroPoints', false], ['pointBuy', 20], ['mythicTier', 'awarded']]) {
+  for (const [key, value] of [['abp', false], ['mythic', false], ['heroPoints', false], ['pointBuy', 20], ['mythicTier', 'awarded'],
+    ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3]]) {
     const m = new Character(loadCharacter(id));
     const before = numbers(m);
     m.set(`campaign.${key}`, value);
@@ -125,6 +130,90 @@ console.log('\nmythic off, and a tier the GM awards');
   check('on: the tradition\'s bonus counts', fort(), without + 2);
   c.set('campaign.mythic', false);
   check('off: it waits', fort(), without);
+}
+
+console.log('\nlevels earned by XP or milestones');
+{
+  check('the core tables', [XP_TRACKS.slow[20], XP_TRACKS.medium[9], XP_TRACKS.fast[2]], [5350000, 75000, 1300]);
+  const c = new Character(blankDocument({ name: 'Levels', level: 1 }));
+  c.set('identity.level', 8);
+  check('typed: no progress to show', levelProgress(c.data), null);
+  c.set('campaign.advancement', 'xp');
+  c.set('identity.xp', 51000);
+  const p = levelProgress(c.data);
+  check('xp: what the next level takes', [p.next, p.need, p.short, p.ready], [9, 75000, 24000, false]);
+  check('xp: no level up before it is earned', levelUp(c), false);
+  check('xp: an award is a play action', [awardXp(c, 24000), c.data.identity.xp, c.playActions[0]?.label], [true, 75000, '+24,000 XP']);
+  check('xp: the level does not move on its own', c.data.identity.level, 8);
+  check('xp: levelling is a press', [levelUp(c), c.data.identity.level, c.playActions[0]?.label], [true, 9, 'Levelled up to 9']);
+  c.undoPlay();
+  check('xp: and undone like one', c.data.identity.level, 8);
+  c.set('campaign.xpTrack', 'fast');
+  check('xp: the fast table', xpThresholds(c.data)[9], 50000);
+  c.set('campaign.xpSteps.9', 60000);
+  check('xp: a level of the campaign\'s own', [xpThresholds(c.data)[9], xpThresholds(c.data)[10]], [60000, 71000]);
+  check('xp: and it counts as a change', campaignChanges(c.data).includes('advancement'), true);
+  c.set('campaign.xpSteps.9', null);
+  check('xp: blank goes back to the table', xpThresholds(c.data)[9], 50000);
+
+  c.set('campaign.advancement', 'milestones');
+  c.set('campaign.milestoneRate', 2);
+  c.set('campaign.milestoneSteps.9', 3);
+  c.set('identity.milestones', 4);
+  const m = levelProgress(c.data);
+  check('milestones: counted since the last level', [m.have, m.need, m.ready], [4, 3, true]);
+  levelUp(c);
+  check('milestones: levelling spends what it took', [c.data.identity.level, c.data.identity.milestones], [9, 1]);
+  check('milestones: the next takes the rate', [levelProgress(c.data).need, levelProgress(c.data).short], [2, 1]);
+}
+
+console.log('\nthe Overview shows the progress, and offers the level once it is earned');
+{
+  const { renderOverviewPanel } = await import('../app/js/ui/panels/overview.js');
+  const { campaignPanel } = await import('../app/js/ui/panels/campaign.js');
+  const c = new Character(blankDocument({ name: 'Bar', level: 1 }));
+  const draw = () => renderOverviewPanel(c, { draft: {}, buildView: true });
+  check('typed: no progress row', draw().includes('class="levelprogress"'), false);
+  c.set('campaign.advancement', 'xp');
+  c.set('identity.xp', 1000);
+  check('xp: the row, the box and the Add, no button yet',
+    [draw().includes('class="levelprogress"'), draw().includes('data-set="identity.xp"'), draw().includes('data-action="xp-award"'), draw().includes('data-action="level-up"')],
+    [true, true, true, false]);
+  c.set('identity.xp', 99999);
+  check('xp: earned, the button', draw().includes(`Level up to ${c.data.identity.level + 1}`), true);
+  check('the rules panel draws in every mode', ['typed', 'xp', 'milestones'].flatMap((a) => ['level', 'trials', 'awarded'].map((t) => {
+    c.set('campaign.advancement', a);
+    c.set('campaign.mythicTier', t);
+    const h = campaignPanel(c);
+    return h.includes('id="campaign-rules"') && !h.includes('undefined') && !h.includes('NaN');
+  })).every(Boolean), true);
+}
+
+console.log('\nmythic tiers from trials, and a ladder of the campaign\'s own');
+{
+  const c = new Character(blankDocument({ name: 'Trials', level: 1 }));
+  c.set('identity.level', 16);
+  c.set('campaign.mythicTier', 'trials');
+  check('no trials, no tier', c.data.identity.mythicTier, 0);
+  c.set('campaign.mythicTrialRate', 2);
+  c.set('campaign.mythicTrialSteps.3', 4);
+  c.set('mythic.trials', 7);
+  check('the tier follows the trials, a tier of its own counted', c.data.identity.mythicTier, 2);
+  const t = trialProgress(c.data);
+  check('and says what the next takes', [t.tier, t.next, t.toward, t.need, t.short], [2, 3, 3, 4, 1]);
+  check('the tables say trials in all', mythicTierReached(c.data, 3), { head: 'Trials', value: 8, title: 'Tier 3 after 8 trials in all (4 for this tier)' });
+  check('a typed tier still overrides', (c.set('mythic.tierOverride', 5), c.data.identity.mythicTier), 5);
+  c.set('mythic.tierOverride', null);
+
+  c.set('campaign.mythicTier', 'level');
+  check('back to the level ladder', c.data.identity.mythicTier, 6);
+  c.set('campaign.mythicLevels.1', 1);
+  c.set('campaign.mythicLevels.6', 18);
+  check('a ladder of the campaign\'s own', [c.data.identity.mythicTier, mythicLevels(c.data)[1], mythicLevels(c.data)[2]], [5, 1, 10]);
+  for (let level = 0; level <= 25; level++) {
+    const same = mythicComputedTier({ identity: { level }, campaign: { mythicLevels: { 4: 14 } } }) === tierAtLevel(level);
+    if (!same) check(`the table's ladder written down agrees at ${level}`, false, true);
+  }
 }
 
 console.log(`${pass} passed, ${fail} failed`);

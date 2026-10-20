@@ -44,7 +44,7 @@ import { trackerReading } from './panels/trackers.js';
 import { COMPANION_KINDS, COMPANION_LABELS, companionInUse } from '../companions.js';
 import { fmt, ABILITIES, ABILITY_LABELS, critMultOf, threatText } from '../rules.js';
 import { rollSpec } from '../roll20.js';
-import { campaignRules } from '../model/campaign.js';
+import { campaignRules, levelProgress, trialProgress } from '../model/campaign.js';
 
 /* ---------------- kinds ---------------- */
 
@@ -281,6 +281,24 @@ function vitals(model, add) {
     const shown = text(resolved) || text(d?.[field]);
     if (!shown) continue;
     add({ kind: 'stat', title: label, tab: 'overview', value: clip(shown, 40), keys: 'defense' });
+  }
+  // Progress toward the next level or tier, when the campaign counts it.
+  const lp = levelProgress(c);
+  if (lp) {
+    const xp = lp.mode === 'xp';
+    add({
+      kind: 'stat', title: xp ? 'Experience points' : 'Milestones', tab: 'overview',
+      value: lp.need === null ? String(lp.have) : `${lp.have.toLocaleString('en-US')} / ${lp.need.toLocaleString('en-US')}`,
+      keys: 'xp experience milestones level up progress',
+    });
+  }
+  const tp = trialProgress(c);
+  if (tp) {
+    add({
+      kind: 'stat', title: 'Mythic trials', tab: 'features',
+      value: tp.need === null ? `${tp.have}` : `${tp.toward} / ${tp.need} for tier ${tp.next}`,
+      keys: 'mythic trials tier progress',
+    });
   }
   const hero = c.identity?.heroPoints;
   if (hero && campaignRules(c).heroPoints && (Number(hero.max) || Number(hero.current))) {
@@ -1091,8 +1109,8 @@ function commands(model, add) {
   if ((model.data.psionics?.classes || []).length) {
     cmd('New day — power points', 'psionics-new-day', 'Refill the power point pool', 'new day psionics rest');
   }
-  cmd('Campaign rules', 'campaign-rules', 'Point buy, hero points, mythic and ABP for this character',
-    'settings options campaign rules house table point buy hero points mythic tier trials abp automatic bonus progression xp experience gestalt');
+  cmd('Campaign rules', 'campaign-rules', 'Point buy, levels by XP or milestones, hero points, mythic and ABP for this character',
+    'settings options campaign rules house table point buy hero points mythic tier trials rate thresholds abp automatic bonus progression xp experience milestones levelling gestalt');
   cmd('Show, hide and rearrange tabs', 'palette-tabs', 'The ⚙ tab manager', 'tabs manage hide show arrange settings');
   cmd('Reset to the character as imported', 'reset', 'Asks first; named checkpoints are kept', 'reset revert discard');
 }
