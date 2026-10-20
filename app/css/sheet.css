@@ -3772,6 +3772,24 @@ table.build td.linked select:disabled {
   background: var(--cs-muted);
 }
 
+/* Points a pool holds back for the day (spell points condensed into essence):
+   drawn after the points that can be spent, so the meter keeps the pool's
+   full size, in a slow pulse rather than a fill, and not clickable. */
+:host { --cs-held: #b0467f; }
+:host([scheme="light"]) { --cs-held: #8c2856; }
+.pip.blocked, .bar .blocked {
+  background: var(--cs-held); border-color: var(--cs-held); cursor: default;
+  animation: cs-held-pulse 2.4s ease-in-out infinite;
+}
+.bar .blocked { position: absolute; top: 0; bottom: 0; }
+@keyframes cs-held-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.95; }
+}
+@media print, (prefers-reduced-motion: reduce) {
+  .pip.blocked, .bar .blocked { animation: none; opacity: 0.7; }
+}
+
 /* ---------- built-in meters ----------
    Hit points and essence borrow the tracker's shapes, and add what a tracker
    has no use for: layers over the track for capacity that was borrowed rather
@@ -5753,6 +5771,8 @@ table.stacked .catface { margin-left: 0; }
      land on the next pip. The pitch becomes the target, a little more of it
      drawn. A Vancian slot table fits four to a row rather than six. */
   button.pip { min-width: 0; min-height: 0; width: 20px; height: 20px; border-radius: 4px; }
+  /* Held points are not buttons, but sit in the same row at the same size. */
+  button.pip ~ .pip.blocked { width: 20px; height: 20px; border-radius: 4px; }
   .pip.zero { width: 5px; height: 26px; }
   .pips, .pips.square { gap: calc(var(--cs-tap) - 20px); }
   table.build.vslots .pips { grid-template-columns: repeat(4, max-content); }

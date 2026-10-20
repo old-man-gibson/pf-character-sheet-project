@@ -28,7 +28,7 @@ import { playLogPanel } from '../play-log.js';
 /** What a casting pool's maximum is, said once for the row and the editor. */
 const poolWhat = (model, t) => poolDef(t?.pool, model.data)?.what || '';
 import {
-  THEME_ACCENT, THEME_NEGATIVE, barLayout, normalizeStyle, resolveZones,
+  SQUARE_PIP_LIMIT, THEME_ACCENT, THEME_NEGATIVE, barLayout, normalizeStyle, resolveZones,
   rgba, squareLayout, stepColor, trackBand, zoneAt,
 } from '../../tracker-style.js';
 
@@ -262,6 +262,11 @@ function trackerRow(model, ctx, t) {
  * `interactive: false` renders inert spans (the editor's live preview).
  * Clicks name the pool by `ref` (see model/pools.js), the tracker's own
  * unless another pool is drawn with its shapes.
+ *
+ * A pool that holds points back for the day (`t.blocked`: spell points
+ * condensed into essence) draws them after its maximum, as pips or a stretch
+ * of the bar that pulse and cannot be clicked, so the meter keeps the pool's
+ * full size.
  */
 export function trackerVisual(t, style, resolvedZones, {
   interactive = true, current = null, layers = null, ref = trackerRef(t),
@@ -273,9 +278,18 @@ export function trackerVisual(t, style, resolvedZones, {
   const draining = !twoSided && style.fill === 'remaining';
   const ctx = { min, max, style, resolvedZones };
   const pct = (f) => `${(f * 100).toFixed(3)}%`;
+  const blocked = twoSided ? 0 : Math.max(0, Math.floor(Number(t.blocked?.count) || 0));
+  const heldTitle = `${blocked} held back: ${t.blocked?.why || 'not available'}`;
+  const heldPips = (n) => `<span class="pip blocked" title="${esc(heldTitle)}"></span>`.repeat(n);
 
   if (style.shape === 'bar') {
     const layout = barLayout({ min, max, current: cur, style, resolvedZones });
+    // With points held back the track runs on past the maximum: the pool's
+    // own range takes the first `live` of it and every position is scaled
+    // into that, and the click handler is told where the range ends.
+    const whole = Math.max(max, min) + blocked - min;
+    const live = blocked ? Math.max(0, max - min) / whole : 1;
+    const at = (f) => pct(f * live);
     let fill = '';
     if (layout.fill) {
       const f = layout.fill;
@@ -293,17 +307,20 @@ export function trackerVisual(t, style, resolvedZones, {
           ? `linear-gradient(to right, ${base}, ${style.gradientTo}) left / ${pct(side / width)} 100% no-repeat`
           : base;
       }
-      fill = `<div class="fill" style="left:${pct(f.from)};width:${pct(width)};background:${background}"></div>`;
+      fill = `<div class="fill" style="left:${at(f.from)};width:${at(width)};background:${background}"></div>`;
     }
     const shownValue = draining ? max - cur : cur;
     const title = twoSided ? signed(cur) : `${shownValue} of ${draining ? max - Math.max(0, min) : max}`;
-    return `<div class="bar ${twoSided ? 'two-sided' : ''}" ${interactive ? `data-pool-bar="${esc(ref)}"` : ''}
+    const held = blocked
+      ? `<div class="blocked" style="left:${pct(live)};width:${pct(1 - live)}" title="${esc(heldTitle)}"></div>` : '';
+    return `<div class="bar ${twoSided ? 'two-sided' : ''}" ${interactive ? `data-pool-bar="${esc(ref)}"` : ''}${
+      interactive && blocked ? ` data-pool-span="${live.toFixed(5)}"` : ''}
           title="${esc(title)}${interactive ? ' — click to set' : ''}">
-        ${layout.bands.map((b) => `<div class="band" style="left:${pct(b.from)};width:${pct(b.to - b.from)};background:${rgba(b.color, 0.22)}"
+        ${layout.bands.map((b) => `<div class="band" style="left:${at(b.from)};width:${at(b.to - b.from)};background:${rgba(b.color, 0.22)}"
           ${b.label ? `title="${esc(b.label)}"` : ''}></div>`).join('')}
         ${fill}
-        ${layout.segments.map((s) => `<div class="seg" style="left:${pct(s.from)};width:${pct(s.to - s.from)};background:${s.color}"></div>`).join('')}
-        ${layout.zero !== null ? `<div class="zero-line" style="left:${pct(layout.zero)}"></div>` : ''}
+        ${layout.segments.map((s) => `<div class="seg" style="left:${at(s.from)};width:${at(s.to - s.from)};background:${s.color}"></div>`).join('')}
+        ${layout.zero !== null ? `<div class="zero-line" style="left:${at(layout.zero)}"></div>` : ''}${held}
       </div>`;
   }
 
@@ -337,15 +354,16 @@ export function trackerVisual(t, style, resolvedZones, {
             title="${esc(`${n} of ${sq.total}`)}"
             aria-label="Set ${esc(t.name)} to ${floor + n}"></${tag}>`;
       }).join('')
-    }</div>`;
+    }${heldPips(Math.min(blocked, SQUARE_PIP_LIMIT - sq.slots))}</div>`;
   }
 
   // One pip per step above the floor: a pool of 2..10 is eight pips, and
   // the floor itself is where none are lit. A two-sided meter has a pip for
-  // every value but zero.
+  // every value but zero. Held points count toward the limit: past it the
+  // pool shows no pips, as it would at that size.
   const first = min > 0 ? min + 1 : min;
   const stepCount = max >= first ? (max - first + 1) - (first <= 0 && max >= 0 ? 1 : 0) : 0;
-  if (!(stepCount > 0 && stepCount <= PIP_LIMIT)) return '';
+  if (!(stepCount + blocked > 0 && stepCount + blocked <= PIP_LIMIT)) return '';
   const steps = [];
   for (let k = first; k <= max; k++) if (k !== 0) steps.push(k);
   const tag = interactive ? 'button' : 'span';
@@ -373,7 +391,7 @@ export function trackerVisual(t, style, resolvedZones, {
     const markBefore = twoSided && k > 0 && (i === 0 || steps[i - 1] < 0);
     const markAfter = twoSided && k < 0 && i === steps.length - 1;
     return `${markBefore ? zeroMark : ''}${pip}${markAfter ? zeroMark : ''}`;
-  }).join('')}</div>`;
+  }).join('')}${heldPips(blocked)}</div>`;
 }
 
 /* ---------------- built-in meters ---------------- */
