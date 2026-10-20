@@ -269,6 +269,33 @@ run.addEventListener('click', async () => {
       body().blur();
       body().dispatchEvent(new FocusEvent('blur'));
     });
+    // The weapon's Special properties caption holds a long help, so the help's
+    // button sat inside the field's label ahead of the field, and the label
+    // passed every click on the field's computed view to the button.
+    await test('A field whose caption holds a help keeps its own clicks', async () => {
+      const root = sheet.shadowRoot;
+      sheet.model.listAdd('equipment.weapons', { name: 'Help check', dice: '1d6', special: 'Bane {{2}} to hit' });
+      const index = sheet.model.data.equipment.weapons.length - 1;
+      root.getElementById('tab-overview').click();
+      root.getElementById('tab-gear').click();
+      const field = root.querySelector(`textarea[data-item="equipment.weapons|${index}|special"]`);
+      assert(field, 'Special properties missing');
+      const label = field.closest('label');
+      const help = label?.querySelector('button.helpopen');
+      assert(help, 'No help in the caption to test with');
+      assert(label.control === field, `The label names ${label.control?.className || 'nothing'}, not the field`);
+      const view = field.closest('.prose').querySelector('.prose-view');
+      assert(view, 'No computed view');
+      const shut = help.getAttribute('aria-expanded');
+      view.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, composed: true, cancelable: true, button: 0 }));
+      view.click();
+      assert(help.getAttribute('aria-expanded') === shut, 'A click on the field opened its help');
+      assert(root.activeElement === field, 'A click on the field left it');
+      field.blur();
+      help.click();
+      assert(help.getAttribute('aria-expanded') !== shut, 'The help button no longer opens the help');
+      help.click();
+    });
     // A chip list in a band asks for no width of its own, so beside its label
     // it was given none: one chip per line, each broken at its longest word.
     await test('The proficiency chips take the row beside their label', async () => {
