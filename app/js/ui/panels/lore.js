@@ -638,7 +638,8 @@ export function renderExtrasPanel(model, ctx) {
         </div>`).join('') || '<p class="empty">No notes yet — jot anything here: links, ideas, things to ask the GM.</p>'}
         <div style="margin-top:8px">${addButton('notes', 'Add note', { title: '', body: '' })}</div>
         <p class="hint">Plain text, with inline formulas if you want them: <code>{= level * 2}</code>.
-          Web addresses (http:// or https://) are links: click one to open it, anywhere else to edit.</p>
+          Web addresses (http:// or https://) are links: click one to open it, anywhere else to edit.
+          <code>[words](https://…)</code> makes the words the link.</p>
       </section>
 
       ${sessionNotesPanel(model)}

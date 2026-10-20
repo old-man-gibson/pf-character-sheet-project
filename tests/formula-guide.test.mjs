@@ -170,6 +170,18 @@ check('a filled one does not',
   scratchpadHtml('level', scope, new Set(names)).includes('fx-starter'), false);
 check('the reference builds without a scope', typeof referenceHtml({}, false), 'string');
 
+console.log('the reference: links');
+{
+  const ref = referenceHtml(scope, true);
+  check('it has a Links panel, after the four forms',
+    [ref.includes('<h3>Links</h3>'), ref.indexOf('<h3>Making your own value</h3>') < ref.indexOf('<h3>Links</h3>')], [true, true]);
+  // Drawn by the code the fields use, so the page shows what a player will see.
+  const shown = [...ref.matchAll(/<a class="weblink" href="([^"]*)"[^>]*>([^<]*)<\/a>/g)].map((m) => [m[1], m[2]]);
+  check('its examples are drawn as a field draws them: an address as typed, and words as a link',
+    shown, [['https://example.com/map', 'https://example.com/map'], ['https://example.com/map', 'the map']]);
+  check('and the folded summary names it', ref.includes('the four forms, links, where they work'), true);
+}
+
 console.log('a formula is judged where it lives, not against the character alone');
 // The bug this pins: essence.self is real inside a veil's own description and
 // nowhere else, so a tab that checked names against the character called four

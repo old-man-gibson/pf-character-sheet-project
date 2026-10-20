@@ -4927,6 +4927,9 @@ code.fx-formeg { display: block; color: var(--cs-muted); }
 }
 .fx-walkstep .hint { margin: 3px 0 0; }
 .fx-walkstep code.fx-code { display: inline-block; background: var(--cs-bg); padding: 1px 5px; border-radius: 3px; }
+/* A link example in the Links panel: what is typed and the link it makes,
+   at the size of the code. */
+.fx-linkeg { margin-top: 2px; font-size: 0.78rem; }
 .fx-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
 .fx-table td { padding: 5px 6px; border-top: 1px solid var(--cs-line); vertical-align: top; }
 .fx-table tr:first-child td { border-top: 0; }

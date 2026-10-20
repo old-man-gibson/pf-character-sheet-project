@@ -19,7 +19,8 @@ import { workingLine } from '../formula-format.js';
 import { hasLink, linkedText } from './links.js';
 
 const PROSE_HINT = 'Formulas work here: {= 2 + con.mod} shows a value, '
-  + '{qi.max = wis.mod} names one, {qi.max} reuses it.';
+  + '{qi.max = wis.mod} names one, {qi.max} reuses it. '
+  + 'So do links: https://… on its own, or [words](https://…).';
 
 export function itemArea(model, list, i, field, value, rows = 3, local = null, opts = {}) {
   return prose(model, `data-item="${list}|${i}|${field}"`, value, rows, '', local, opts);
