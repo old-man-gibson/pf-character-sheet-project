@@ -3,7 +3,7 @@
  *  field. Run: node tests/links.test.mjs */
 import { blankDocument } from '../app/js/convert.js';
 import { Character } from '../app/js/model.js';
-import { fieldUrl, findUrls, hasLink, linkedText } from '../app/js/ui/links.js';
+import { fieldUrl, findLinks, findUrls, hasLink, linkedText } from '../app/js/ui/links.js';
 import { prose, renderedProse } from '../app/js/ui/prose.js';
 import { linkField, text } from '../app/js/ui/fields.js';
 import { itemText } from '../app/js/ui/rows.js';
@@ -76,6 +76,55 @@ console.log('drawn as links, everything else escaped');
   check('javascript: stays text', linkedText('javascript:alert(1)'), 'javascript:alert(1)');
 }
 
+console.log('words as a link: [words](address)');
+{
+  /** Each link's address and what it shows, in order. */
+  const shown = (s) => [...linkedText(s).matchAll(/<a\b[^>]*\shref="([^"]*)"[^>]*>([^<]*)<\/a>/g)].map((m) => [m[1], m[2]]);
+  const html = linkedText('Read [the rules](https://a.example/rules?a=1&b=2). Then ask.');
+  check('the words are the link, and the address is where it goes',
+    shown('Read [the rules](https://a.example/rules). Then ask.'), [['https://a.example/rules', 'the rules']]);
+  check('it opens in a new tab and tells it nothing about the sheet',
+    html.includes('<a class="weblink" href="https://a.example/rules?a=1&amp;b=2" target="_blank" rel="noopener noreferrer"'), true);
+  check('its tooltip says where it goes', html.includes('title="Open https://a.example/rules?a=1&amp;b=2 in a new tab"'), true);
+  check('the brackets and the address are not shown', [html.includes('['), html.includes('](')], [false, false]);
+  check('the text after it stays text', html.endsWith('</a>. Then ask.'), true);
+  check('findLinks says where its source starts and ends, and what the words are',
+    findLinks('Read [the rules](https://a.example/r).'),
+    [{ at: 5, end: 37, url: 'https://a.example/r', words: 'the rules' }]);
+  check('a pair of brackets inside the address is part of it',
+    shown('[Fire](https://wiki.example/Fire_(element))'), [['https://wiki.example/Fire_(element)', 'Fire']]);
+  check('a bracket around the whole of it is not',
+    shown('(see [Fire](https://wiki.example/Fire))'), [['https://wiki.example/Fire', 'Fire']]);
+  check('words and an address in one line, in order',
+    shown('[a](https://a.example) and https://b.example.'), [['https://a.example', 'a'], ['https://b.example', 'https://b.example']]);
+  check('two side by side', shown('[a](https://a.example)[b](https://b.example)'), [['https://a.example', 'a'], ['https://b.example', 'b']]);
+  check('an address as the words', shown('[https://a.example](https://b.example)'), [['https://b.example', 'https://a.example']]);
+  check('hasLink sees one', hasLink('[the map](https://a.example/map)'), true);
+  check('words with markup in them are escaped',
+    linkedText('[<b>bold</b> & "so"](https://a.example)').includes('>&lt;b&gt;bold&lt;/b&gt; &amp; &quot;so&quot;</a>'), true);
+  for (const [label, typed] of [
+    ['javascript:', '[a](javascript:alert(1))'], ['data:', '[a](data:text/html,x)'], ['ftp:', '[a](ftp://a.example)'],
+    ['no scheme', '[a](www.a.example)'], ['a scheme alone', '[a](https://)'],
+  ]) {
+    check(`not a link: ${label}`, [linkedText(typed).includes('<a'), hasLink(typed)], [false, false]);
+  }
+  // Where the words or the address are not well formed, what is left is
+  // text, and an address in it is still a link as typed.
+  for (const [label, typed, url] of [
+    ['no words', '[](https://a.example)', 'https://a.example'],
+    ['words that are only spaces', '[  ](https://a.example)', 'https://a.example'],
+    ['words over two lines', '[two\nlines](https://a.example)', 'https://a.example'],
+    ['a bracket in the words', '[a [b]](https://a.example)', 'https://a.example'],
+    ['a space in the address', '[a](https://a.example/x y)', 'https://a.example/x'],
+    ['a formula in the words', '[{= level} pages](https://a.example)', 'https://a.example'],
+  ]) {
+    check(`${label}: the address is shown as typed`, shown(typed), [[url, url]]);
+  }
+  const bad = linkedText('[a](https://a.example/"><svg/onload=x(1)>) [Zq<svg/onload=x(1)>](https://b.example)');
+  check('a payload in the address or the words does not open a tag', bad.includes('<svg'), false);
+  check('and the addresses are still links', hrefs(bad), ['https://a.example/', 'https://b.example']);
+}
+
 console.log('prose fields: the read view');
 {
   const model = new Character(blankDocument({ name: 'Links', level: 4 }));
@@ -96,6 +145,13 @@ console.log('prose fields: the read view');
   check('an address the box is escaped in', field('https://a.example/</textarea><svg>').includes('<svg'), false);
   check('renderedProse draws no link unless asked', hrefs(renderedProse(model, '{= 1} at https://a.example')), []);
   check('and draws one when asked', hrefs(renderedProse(model, '{= 1} at https://a.example', null, { links: true })), ['https://a.example']);
+  const worded = field('Read [the rules](https://a.example/rules) first.');
+  check('words as a link get the read view, which shows the words',
+    [worded.includes('has-view'), hrefs(worded), />the rules<\/a> first\.<\/span>/.test(worded)], [true, ['https://a.example/rules'], true]);
+  check('and the box keeps them as typed', worded.includes('>Read [the rules](https://a.example/rules) first.</textarea>'), true);
+  const mixed = field('{= level * 2} hit points: [the table](https://a.example/hp)');
+  check('a formula beside words as a link: both in the one view',
+    [/class="tok value"[^>]*>8</.test(mixed), mixed.includes('>the table</a>')], [true, true]);
 }
 
 console.log('notes with a table in them');
@@ -105,6 +161,8 @@ console.log('notes with a table in them');
   check('the table view links the text and the cells', hrefs(richText(note)), ['https://a.example/rules', 'https://b.example/one']);
   const cell = noteField(model, 'data-item="x|0|notes"', note);
   check('and the note cell shows it as its read view', [cell.includes('has-view'), hrefs(cell).length], [true, 2]);
+  check('a cell with words as a link shows the words',
+    richText('Level\tSource\n1st\t[the book](https://b.example/one)').includes('>the book</a></td>'), true);
 }
 
 console.log('a field that holds one address');
@@ -118,6 +176,8 @@ console.log('a field that holds one address');
     [false, false, false]);
   check('nor for another scheme', box('javascript:alert(1)').includes('<a '), false);
   check('the ↗ opens the address at the start of the value', fieldUrl('https://a.example/form, approved by Sam'), 'https://a.example/form');
+  check('or the address behind the words it starts with', hrefs(box('[the form](https://a.example/form), approved')),
+    ['https://a.example/form']);
   check('a path field works the same way', hrefs(linkField(text('templates.0.link', 'https://a.example/t'), 'https://a.example/t')),
     ['https://a.example/t']);
   check('an address with a quote in it stays in its attribute',

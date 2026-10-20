@@ -82,7 +82,7 @@ import { countsTowardLine } from '../counts-toward.js';
 import { squareLayout } from '../../tracker-style.js';
 import { abilitySelect, check, field, num, autoNum, levelPin, levelPinHint, postBox, select, text } from '../fields.js';
 import {
-  addButton, bigStat, collapsible, exprField, foldButton, isCollapsed, isOpen, itemCheck, itemNum,
+  addButton, bigStat, collapsible, exprField, foldButton, gridCell, isCollapsed, isOpen, itemCheck, itemNum,
   itemSelect, itemText, line,
   lineHtml, miniStat, proseList, removeButton, rowRemove, rowTools, working,
 } from '../rows.js';
@@ -184,10 +184,10 @@ export function modelledSystems(model) {
 
   /**
    * Cells from a source tab that no label claimed. Kept and shown; a {…}
-   * formula in one works as it does in any cell, but nothing on the tab reads
-   * the cells themselves.
+   * formula in one works as it does in any cell, and shows what it comes to,
+   * but nothing on the tab reads the cells themselves.
    */
-export function systemExtrasPanel(block, path, tabName) {
+export function systemExtrasPanel(model, block, path, tabName) {
     const rows = block?.sourceExtras || [];
     if (!rows.length) return '';
     const list = `${path}.sourceExtras`;
@@ -201,7 +201,7 @@ export function systemExtrasPanel(block, path, tabName) {
       </p>
       <div class="tablewrap" style="margin-top:8px"><table class="gridtab"><tbody>
         ${rows.map((r, ri) => `<tr>
-          ${Array.from({ length: width }, (_, ci) => `<td>${itemText(list, ri, `cells.${ci}`, r.cells[ci])}</td>`).join('')}
+          ${Array.from({ length: width }, (_, ci) => `<td>${gridCell(model, list, ri, `cells.${ci}`, r.cells[ci])}</td>`).join('')}
           ${rowTools(list, ri)}
         </tr>`).join('')}
       </tbody></table></div>
@@ -235,7 +235,7 @@ export function akashicPanel(model, ctx) {
       ${akashicSlotsPanel(model, ctx, a)}
       ${akashicKheshigPanel(model, ctx, a)}
       ${akashicReceptaclesPanel(model, a)}
-      ${systemExtrasPanel(a, 'akashic', 'Akashic')}
+      ${systemExtrasPanel(model, a, 'akashic', 'Akashic')}
     </div>`;
   }
 
@@ -720,7 +720,7 @@ export function maneuversPanel(model, ctx) {
     : '<p class="empty">No disciplines trained. Pick one above to see what it grants.</p>'}
       </section>
 
-      ${systemExtrasPanel(m, 'maneuvers', 'Maneuvers')}
+      ${systemExtrasPanel(model, m, 'maneuvers', 'Maneuvers')}
     </div>`;
   }
 
@@ -934,7 +934,7 @@ export function vancianPanel(model, ctx = {}) {
   })}
       </section>
       ${vancianPreparedPanel(model, v, ctx)}
-      ${systemExtrasPanel(v, 'vancian', 'Vancian Magic')}
+      ${systemExtrasPanel(model, v, 'vancian', 'Vancian Magic')}
     </div>`;
   }
 
@@ -1440,7 +1440,7 @@ export function psionicsPanel(model, ctx) {
     name: '', stat: '', stat2: '', curveTotal: 0, manifesterLevelOverride: null, powers: [],
   })}
       </section>
-      ${systemExtrasPanel(p, 'psionics', 'Psionics')}
+      ${systemExtrasPanel(model, p, 'psionics', 'Psionics')}
     </div>`;
   }
 
@@ -2540,7 +2540,7 @@ export function cardcastingPanel(model, ctx) {
         <h3>Notes</h3>
         ${prose(model, 'data-set="cardcasting.notes"', p.notes, 3)}
       </section>
-      ${systemExtrasPanel(p, 'cardcasting', 'Cardcaster Deck')}
+      ${systemExtrasPanel(model, p, 'cardcasting', 'Cardcaster Deck')}
     </div>`;
   }
 
