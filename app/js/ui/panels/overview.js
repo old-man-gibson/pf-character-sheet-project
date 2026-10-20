@@ -108,6 +108,7 @@ import {
 import { hasTokens } from '../../inline.js';
 import { abilityCollapse, abilityHarm, blankClassRow, maneuverDetails } from '../../model.js';
 import { colorControl } from '../color-control.js';
+import { campaignRules } from '../../model/campaign.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
@@ -1109,6 +1110,7 @@ export function dashSystemCards(model) {
 
 function detailsPanel(model) {
     const c = model.data;
+    const rules = campaignRules(c);
     return `<section class="panel details">
       <h3>Details</h3>
       ${/* The `col*` classes are how many of six columns each field takes once
@@ -1133,16 +1135,21 @@ function detailsPanel(model) {
         ${field('Deity', text('identity.deity', c.identity.deity), 'col3')}
         ${field('Size', select('identity.size', c.identity.size, Object.keys(SIZE_MODIFIERS)), 'col3')}
         ${field('Alignment', text('identity.alignment', c.identity.alignment), 'col3')}
-        ${field('Level', num('identity.level', c.identity.level), 'col2')}
-        ${field('Hero points', `<span class="pair">
+        ${/* Without hero points (a campaign rule) the level pairs with Gender
+              instead, so the phone's rows still come out whole. */''}
+        ${field('Level', num('identity.level', c.identity.level), rules.heroPoints ? 'col2' : 'col3')}
+        ${rules.heroPoints ? field('Hero points', `<span class="pair">
           ${num('identity.heroPoints.current', c.identity.heroPoints?.current ?? 0)}
-          <span>/</span>${num('identity.heroPoints.max', c.identity.heroPoints?.max ?? 3)}</span>`, 'col4')}
+          <span>/</span>${num('identity.heroPoints.max', c.identity.heroPoints?.max ?? 3)}</span>`, 'col4') : ''}
         ${field('Gender', text('identity.gender', c.identity.gender), 'col3')}
         ${field('Age', text('identity.age', c.identity.age), 'col3')}
         ${field('Height', text('identity.height', c.identity.height), 'col3')}
         ${field('Weight', text('identity.weight', c.identity.weight), 'col3')}
-        ${field('Mythic path', text('identity.mythicPath', c.identity.mythicPath), 'col3')}
-        ${field('Mythic tier (auto)', `<span class="value" title="From level; override on Feats & Mythic">${esc(c.identity.mythicTier ?? 0)}</span>`, 'col3')}
+        ${/* Mythic off (a campaign rule) takes the whole row with it. */''}
+        ${rules.mythic ? `${field('Mythic path', text('identity.mythicPath', c.identity.mythicPath), 'col3')}
+        ${rules.mythicTier === 'awarded'
+    ? field('Mythic tier (awarded)', `<span class="value" title="The tier the GM has awarded, typed on Feats &amp; Mythic">${esc(c.identity.mythicTier ?? 0)}</span>`, 'col3')
+    : field('Mythic tier (auto)', `<span class="value" title="From level; override on Feats &amp; Mythic">${esc(c.identity.mythicTier ?? 0)}</span>`, 'col3')}` : ''}
         ${/* The last row: a nickname in the first column, and the portrait's
               link across the rest -- a URL still wants more than a column. */''}
         <div class="portraitrow">

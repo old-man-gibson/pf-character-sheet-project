@@ -18,6 +18,7 @@ import { pickSelect, mythicPickAt } from './stats.js';
 import { featDetails, featCatalogue } from '../../model.js';
 import { featLevel, isAhead, rowLevel } from '../../model/feats.js';
 import { fromLevelField, fromLevelHead, plannedRow } from '../from-level.js';
+import { campaignRules } from '../../model/campaign.js';
 import {
   MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS, MYTHIC_TIERS, MYTHIC_TIER_LEVEL,
   effectiveMythicTier, mythicTierGrant,
@@ -212,6 +213,8 @@ export function renderFeaturesPanel(model, ctx) {
     const feats = c.feats || {};
     const m = c.mythic || {};
     const tier = Number(c.identity.mythicTier) || 0;
+    const rules = campaignRules(c);
+    const awarded = rules.mythicTier === 'awarded';
     /*
      * The feats stack, each panel the width of the page.
      *
@@ -260,14 +263,23 @@ export function renderFeaturesPanel(model, ctx) {
           feats move between levels but cannot be added, removed or dragged out.</span>
       </div>
 
-      ${rows.collapsible(model, 'mythic', `<section class="panel span2">
+      ${rules.mythic ? '' : `<section class="panel span2 mythicoff">
+        <h3>Mythic <span class="badge">off</span></h3>
+        <p class="hint">Mythic is off for this character in its campaign rules, so the tier is 0
+          and nothing mythic counts. What was written here is kept, and comes back when mythic
+          is turned on again.
+          <button data-view data-action="campaign-rules">Campaign rules…</button></p>
+      </section>`}
+      ${rules.mythic ? `${rows.collapsible(model, 'mythic', `<section class="panel span2">
         <h3>Mythic <span class="badge">tier ${tier}</span></h3>
         <div class="fieldgrid">
           ${fields.field('Path', fields.text('mythic.path', m.path))}
-          ${fields.field(`Tier (auto: ${esc(m.computedTier ?? 0)})`, `<span class="pair">
+          ${fields.field(awarded ? 'Tier (awarded by the GM)' : `Tier (auto: ${esc(m.computedTier ?? 0)})`, `<span class="pair">
             ${fields.autoNum('data-set="mythic.tierOverride"', m.tierOverride, {
-    placeholder: m.computedTier ?? 0, width: '3.6rem', auto: true, label: 'Mythic tier',
-    title: 'Automatic from level; enter a number to override.',
+    placeholder: m.computedTier ?? 0, width: '3.6rem', auto: !awarded, label: 'Mythic tier',
+    title: awarded
+      ? 'The tier the GM has awarded (for trials, say). Blank is 0. The campaign rules on the ⚙ tab set where the tier comes from.'
+      : 'Automatic from level; enter a number to override.',
   })}
             <span class="value">→ ${esc(c.identity.mythicTier ?? 0)}</span></span>`)}
           ${fields.field(`Bonus HP / tier (path: ${MYTHIC_PATH_HP[String(m.path || '').trim()] ?? '—'})`,
@@ -393,7 +405,7 @@ export function renderFeaturesPanel(model, ctx) {
       <div class="band lead">
         ${rows.collapsible(model, 'mythic-tradition', mythicTraditionPanel(model, ctx, m))}
         ${rows.collapsible(model, 'mythic-base', mythicTierGrantsPanel(model, tier))}
-      </div>
+      </div>` : ''}
     </div>`;
 }
 
