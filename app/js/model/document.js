@@ -1646,10 +1646,10 @@ export function toDocument(model) {
   return {
     ...model.data,
     // resolvedZones is derived every recompute; the zone formulas themselves
-    // live in style.zones.
+    // live in style.zones. `blocked` is the pool's, read again each time.
     customTrackers: model.trackers
       .filter((t) => t.source === 'player')
-      .map(({ resolvedZones, edited, rangeError, ...t }) => t),
+      .map(({ resolvedZones, edited, rangeError, blocked, ...t }) => t),
     sheetTrackerState,
     // The guile side sits inside `training` beside the two that predate it,
     // so it is stripped in place rather than as a block of its own. The two

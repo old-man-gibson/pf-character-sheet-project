@@ -5631,8 +5631,12 @@ export class CharacterSheetElement extends HTMLElement {
       bar.addEventListener('click', (e) => {
         const pool = poolFor(bar, 'poolBar');
         const box = bar.getBoundingClientRect();
-        if (!pool || !box.width) return;
-        pool.set(poolBar(pool, (e.clientX - box.left) / box.width));
+        // A pool with points held back owns only the first `span` of its
+        // bar; the rest is those points, and a click there sets nothing.
+        const span = bar.dataset.poolSpan ? Number(bar.dataset.poolSpan) : 1;
+        const at = (e.clientX - box.left) / box.width;
+        if (!pool || !box.width || !(span > 0) || at > span) return;
+        pool.set(poolBar(pool, at / span));
         this.#render();
       });
     });
