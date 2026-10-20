@@ -225,6 +225,14 @@ function renders(who, name, draw, model) {
     console.log(`  FAIL ${who} — ${name} draws a × by hand: ${bare[0].slice(0, 120)}`);
     return html;
   }
+  // Every ↗ is fields.linkField's, which opens only an http or https address
+  // and tells the page it opens nothing about the sheet.
+  const arrow = /<a\b(?![^>]*\bclass="weblink")[^>]*>↗<\/a>/.exec(html);
+  if (arrow) {
+    fail++;
+    console.log(`  FAIL ${who} — ${name} draws a link's ↗ by hand: ${arrow[0].slice(0, 120)}`);
+    return html;
+  }
   // Every checkbox sits in a label (`rows.itemCheck`, `fields.check`): a
   // touch screen hangs its bigger hit area on the label, and a bare one
   // stops at the 24px it is drawn.
@@ -664,6 +672,9 @@ console.log('\nno character text reaches the page as markup');
     'a single-quoted attribute': "Zq'><svg/onload=x(1)>",
     'a textarea': 'Zq</textarea><svg/onload=x(1)>',
     'element content': 'Zq</td></tr><svg/onload=x(1)>',
+    // A web address is drawn as a link, so it leaves through the link's own
+    // markup: its href, and its text.
+    'a link': 'https://zq.example/"><svg/onload=x(1)>',
   };
   // Which values a pass replaces with the payload. Text is most of a
   // document. Blanks and numbers matter as much: an edited file can put a
@@ -963,6 +974,27 @@ console.log('\nevery × is the one ×');
     statBlock.renderStatBlockPanel(m, { ...CTX, armedRemove: 'monster-block' }).includes('>sure?</button>'), true);
   handleAction(m, 'monster-unblock');
   check('and leaves the way back', [m.data.monster, m.undoStack?.at(-1)?.label], [undefined, 'Removed the monster block']);
+}
+
+console.log('\nan address in prose is a link, and every ↗ is the one ↗');
+{
+  // The roster's own links are on characters CI does not have, so these are
+  // written here: a note, an approval and a template, one link field of
+  // which holds no address.
+  const c = new Character(blankDocument({ name: 'Links', level: 3 }));
+  c.listAdd('notes', { title: 'Map', body: 'The map: https://zq.example/map. About {= level} pages.' });
+  c.listAdd('extras.approvals', { name: 'Custom feat', approvedBy: 'GM', link: 'https://zq.example/approval/1' });
+  c.listAdd('templates', {
+    tab: null, name: 'Template', link: 'https://zq.example/template', approvalLink: 'asked, no answer yet', features: [],
+  });
+  c.recompute();
+  // Every panel, every view: `renders` fails on an ↗ drawn by hand.
+  sweep('a character with links', c);
+  const hrefs = (html) => [...html.matchAll(/<a class="weblink" href="([^"]*)"/g)].map((m) => m[1]);
+  check('the note\'s address is a link in its read view, the approval\'s has its ↗',
+    hrefs(lore.renderExtrasPanel(c, CTX)), ['https://zq.example/map', 'https://zq.example/approval/1']);
+  check('the template link has its ↗, and the approval link holding no address has none',
+    hrefs(combat.renderTemplatePanel(c, CTX)), ['https://zq.example/template']);
 }
 
 console.log('\nevery moved number is the one moved number');

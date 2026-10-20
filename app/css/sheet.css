@@ -2493,8 +2493,12 @@ label.fld > span {
   font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted);
 }
 /* A formula box is a span too, and a field's value rather than its label:
-   "40 ft." worked out from a formula is not to be set as "40 FT.". */
-label.fld > span.xf { font-size: inherit; text-transform: none; letter-spacing: normal; color: inherit; }
+   "40 ft." worked out from a formula is not to be set as "40 FT.". So are a
+   prose field, whose read view would otherwise be set in capitals, and a link
+   field, whose ↗ would be set at the label's size. */
+label.fld > span.xf, label.fld > span.prose, label.fld > span.pair.link {
+  font-size: inherit; text-transform: none; letter-spacing: normal; color: inherit;
+}
 label.fld.tall textarea { min-height: 58px; }
 /* A Vancian block's settings are six short picks, each only as wide as what
    it holds. The first row sets the width: the stat, preparation and source
@@ -3253,7 +3257,7 @@ input.tabname:hover, input.tabname:focus { border-color: var(--cs-line); }
    editing they swap. The hidden textarea drops its min-height too: a tall
    field's 58px, or a plain textarea's 60px, beat the 100% and left it hanging
    below a one-line view, over whatever came next (a panel's help line). */
-.prose.has-tokens:not(.editing) textarea {
+.prose.has-view:not(.editing) textarea {
   position: absolute; inset: 0; height: 100% !important; min-height: 0 !important;
   opacity: 0; pointer-events: none;
 }
@@ -3265,6 +3269,11 @@ input.tabname:hover, input.tabname:focus { border-color: var(--cs-line); }
 }
 .prose.grow .prose-view { font-size: 0.78rem; padding: 3px 5px; }
 .prose.editing .prose-view { display: none; }
+/* A web address in what a player wrote (ui/links.js). The edit blue, which
+   tests/themes.test.mjs holds to 4.5:1 on the view's own panel-2 ground in
+   every palette. A long address breaks anywhere rather than run out of its
+   cell. */
+a.weblink { color: var(--cs-edit); text-underline-offset: 2px; overflow-wrap: anywhere; }
 .tok {
   border-bottom: 1px dotted var(--cs-accent); color: var(--cs-accent);
   font-weight: 620; font-variant-numeric: tabular-nums; cursor: help;

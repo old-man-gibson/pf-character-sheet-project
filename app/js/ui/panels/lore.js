@@ -19,6 +19,7 @@ import { itemArea } from '../prose.js';
 import {
   addButton, foldButton, isCollapsed, isOpen, itemText, removeAction, removeButton, rowTools,
 } from '../rows.js';
+import { linkField } from '../fields.js';
 import { same } from '../format.js';
 import { optionCatalogues } from '../../model.js';
 import { parseLevelRule, levelRuleLevels, summariseLevels } from '../../rules.js';
@@ -625,7 +626,6 @@ export function renderExtrasPanel(model, ctx) {
     const c = model.data;
     const x = c.extras || {};
     const list = 'extras.approvals';
-    const isUrl = (s) => /^https?:\/\//i.test(String(s || '').trim());
     return `<div class="grid">
       <section class="panel span2">
         <h3>Notes <span class="badge">${(c.notes || []).length}</span></h3>
@@ -638,7 +638,7 @@ export function renderExtrasPanel(model, ctx) {
         </div>`).join('') || '<p class="empty">No notes yet — jot anything here: links, ideas, things to ask the GM.</p>'}
         <div style="margin-top:8px">${addButton('notes', 'Add note', { title: '', body: '' })}</div>
         <p class="hint">Plain text, with inline formulas if you want them: <code>{= level * 2}</code>.
-          Links are kept as typed.</p>
+          Web addresses (http:// or https://) are links: click one to open it, anywhere else to edit.</p>
       </section>
 
       ${sessionNotesPanel(model)}
@@ -654,8 +654,7 @@ export function renderExtrasPanel(model, ctx) {
           <tbody>${x.approvals.map((a, i) => `<tr>
             <td data-stack="name">${itemText(list, i, 'name', a.name, 'What was applied for', true)}</td>
             <td data-label="Approved by">${itemText(list, i, 'approvedBy', a.approvedBy, 'Who', true)}</td>
-            <td data-label="Link"><span class="pair link">${itemText(list, i, 'link', a.link, 'https://…', true)}
-              ${isUrl(a.link) ? `<a href="${esc(a.link)}" target="_blank" rel="noopener" title="Open">↗</a>` : ''}</span></td>
+            <td data-label="Link">${linkField(itemText(list, i, 'link', a.link, 'https://…', true), a.link)}</td>
             ${rowTools(list, i)}
           </tr>`).join('')}</tbody>
         </table></div>` : '<p class="empty">No approvals recorded.</p>'}

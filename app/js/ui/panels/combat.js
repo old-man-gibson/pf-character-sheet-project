@@ -29,7 +29,7 @@ import {
 import {
   COMBAT_SPHERES, SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule,
 } from '../../rules.js';
-import { check, field, roField, select, text } from '../fields.js';
+import { check, field, linkField, roField, select, text } from '../fields.js';
 import {
   abilityField, blendTicks, blendedSection, bonusTalentTable, classLevelsField, classNames, singleLadderTable, traditionTable,
 } from './training.js';
@@ -634,8 +634,8 @@ export function renderTemplatePanel(model, ctx) {
           ${removeButton('templates', ti, { what: 'template' })}
         </h3>
         <div class="fieldgrid two">
-          ${field('Template link', text(`templates.${ti}.link`, tp.link))}
-          ${field('Approval link', text(`templates.${ti}.approvalLink`, tp.approvalLink))}
+          ${field('Template link', linkField(text(`templates.${ti}.link`, tp.link, 'https://…'), tp.link))}
+          ${field('Approval link', linkField(text(`templates.${ti}.approvalLink`, tp.approvalLink, 'https://…'), tp.approvalLink))}
         </div>
         <div class="tmpl" data-tmpl="${ti}">
           ${features.map((f, fi) => templateGroup(ctx, model, ti, fi, f, features.length)).join('')}

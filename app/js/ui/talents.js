@@ -11,6 +11,7 @@
 import { esc } from './html.js';
 import { prose } from './prose.js';
 import { foldButton } from './folds.js';
+import { linkedText } from './links.js';
 import { hasTokens, plainTokens } from '../inline.js';
 import {
   catalogueEntry, sphereCatalogue, sphereTalent, talentPackage,
@@ -75,7 +76,7 @@ export function noteField(model, binding, text) {
   if (hasTokens(text)) return prose(model, binding, text, 1, 'grow');
   const rich = richText(text);
   if (!rich.includes('<table')) return prose(model, binding, text, 1, 'grow');
-  return `<span class="prose has-tokens grow" title="Click to edit">
+  return `<span class="prose has-view grow" title="Click to edit">
       <textarea ${binding} data-kind="text" rows="1" spellcheck="false">${esc(text)}</textarea>
       <span class="prose-view rich">${rich}</span>
     </span>`;
@@ -246,7 +247,8 @@ function talentInfo(model, sphere, value) {
  * has no tables in it. The panel is markup, so here a run of such rows is a
  * real one: the first row its header, and a `Table: …` line just above it the
  * caption. Two rows at least, because one line with a tab in it is a line
- * with a tab in it. Everything else is the text, escaped, as it was.
+ * with a tab in it. Everything else is the text, escaped, as it was, with
+ * any web address a link (ui/links.js), in a cell or out of one.
  *
  * Built without newlines between the tags: the text around it is
  * `white-space: pre-wrap`, and a line break in the markup would be drawn.
@@ -255,7 +257,7 @@ export function richText(text) {
   const lines = String(text ?? '').split('\n');
   const out = [];
   let plain = [];
-  const flush = () => { if (plain.length) { out.push(esc(plain.join('\n'))); plain = []; } };
+  const flush = () => { if (plain.length) { out.push(linkedText(plain.join('\n'))); plain = []; } };
   /*
    * Two spellings of a row, because both are out there: tabs, which is what
    * the reader leaves a wiki table as, and `| a | b |`, which is what an
@@ -280,7 +282,7 @@ export function richText(text) {
     while (plain.length && !plain[plain.length - 1].trim()) plain.pop();
     flush();
     const rows = lines.slice(i, end).map(cellsOf).filter((row) => !isRule(row));
-    const cells = (row, tag) => `<tr>${row.map((c) => `<${tag}>${esc(c)}</${tag}>`).join('')}</tr>`;
+    const cells = (row, tag) => `<tr>${row.map((c) => `<${tag}>${linkedText(c)}</${tag}>`).join('')}</tr>`;
     out.push(`<table class="peektable">${caption ? `<caption>${esc(caption)}</caption>` : ''}`
       + `<thead>${cells(rows[0], 'th')}</thead><tbody>${rows.slice(1).map((r) => cells(r, 'td')).join('')}</tbody></table>`);
     i = end - 1;

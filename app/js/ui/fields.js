@@ -11,6 +11,7 @@
  * See ui/rows.js for the same idea applied to rows of a list (`data-item`).
  */
 import { esc, abAttr, picksAbility, ABILITY_LABELS_LIST } from './html.js';
+import { fieldUrl, linkHtml } from './links.js';
 import { isPinned, numOrNull } from '../model/util.js';
 
 /**
@@ -69,6 +70,18 @@ export function roField(value, title = '', extra = '') {
  */
 export function roValue(value, title = '') {
   return `<span class="rovalue"${title ? ` title="${esc(title)}"` : ''}>${esc(value ?? '')}</span>`;
+}
+
+/**
+ * A box that holds a web address, with ↗ beside it to open it once it holds
+ * one (ui/links.js `fieldUrl`: http or https, at the start of the value).
+ * `control` is the box, `text()` for a path or `rows.itemText()` for a cell
+ * of a row, and `value` what it holds. The box takes the width left beside
+ * the ↗ (`.pair.link`).
+ */
+export function linkField(control, value) {
+  const url = fieldUrl(value);
+  return `<span class="pair link">${control}${url ? linkHtml(url, '↗', 'Open the link in a new tab') : ''}</span>`;
 }
 
 export function area(path, value, rows = 3) {
