@@ -3088,6 +3088,30 @@ console.log('redo -- what was undone comes back, until something new is done');
   check('and newer entries still sort newest', reopened.undoLabel, '1 damage');
 }
 
+console.log('clearing the undo list -- the play actions go, nothing else does');
+{
+  const c = new Character(blankDocument({ name: 'Clearer', level: 5 }));
+  const lost = () => c.hpState.max - c.hpState.current;
+  c.listAdd('equipment.weapons', { name: 'Test Axe', dice: '1d8' });
+  const n = c.list('equipment.weapons').length;
+  c.listRemove('equipment.weapons', n - 1);
+  c.applyDamage(4);
+  c.applyDamage(2);
+  c.applyDamage(1);
+  c.undoPlay();                        // 1 damage, waiting to be redone
+  const log = c.data.log.length;
+  check('the list before', [c.playActions.map((a) => a.label), c.redoLabel], [['2 damage', '4 damage'], '1 damage']);
+  check('answers how many went', c.clearPlayActions(), 2);
+  check('the list is empty, and so is the redo of a play action',
+    [c.playActions.length, c.redoLabel, c.undoState().play.length], [0, null, 0]);
+  check('the character is as it was, and the log keeps every line', [lost(), c.data.log.length], [6, log]);
+  check('a removal can still be taken back', [c.undo(), c.list('equipment.weapons').length, lost()], ['Removed Test Axe', n, 6]);
+  check('and redone', c.redoLabel, 'Removed Test Axe');
+  check('an empty list clears to nothing', c.clearPlayActions(), 0);
+  c.applyDamage(3);
+  check('and play is kept again after it', c.playActions.map((a) => a.label), ['3 damage']);
+}
+
 console.log('typed buffs -- the largest of a type counts, penalties stack, rounds run out');
 {
   const c = new Character(blankDocument({ name: 'Buffed', level: 6 }));

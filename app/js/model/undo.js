@@ -305,6 +305,20 @@ export function clearUndo(model) {
   return model;
 }
 
+/**
+ * Forget the play actions: the list under the rail's Undo button, and any
+ * play action waiting to be redone. Nothing in the character moves, and the
+ * play log keeps its lines -- the log is the record, this was only the way
+ * back. Snapshots stay, so a removal can still be taken back with Ctrl+Z.
+ * Answers how many actions were forgotten.
+ */
+export function clearPlayActions(model) {
+  const n = model.playStack?.length ?? 0;
+  model.playStack = [];
+  if (model.redoStack?.length) model.redoStack = model.redoStack.filter((entry) => entry.kind !== 'play');
+  return n;
+}
+
 /* ------------------------------------------------------------------ *
  * Play actions.
  *

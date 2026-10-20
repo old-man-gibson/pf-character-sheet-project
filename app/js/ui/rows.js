@@ -154,9 +154,10 @@ export function itemSelect(list, i, field, value, options, blank = '—', abOf =
  * @param opts.style   an inline style (a button pushed to the end of its row)
  * @param opts.arm     the key it is armed under, when it asks twice
  * @param opts.armed   the key armed now
+ * @param opts.armedText  words in place of "sure?" once armed
  */
 export function removeControl(attrs, {
-  what = '', title = '', text = '', tiny = false, style = '', arm = null, armed = null,
+  what = '', title = '', text = '', tiny = false, style = '', arm = null, armed = null, armedText = 'sure?',
 } = {}) {
   const label = what ? `Remove ${what}` : 'Remove';
   const on = arm !== null && armed === arm;
@@ -164,7 +165,7 @@ export function removeControl(attrs, {
     : `${title || label}${arm !== null ? ' — asks twice' : ''}`;
   return `<button class="danger${tiny ? ' tiny' : ''}${on ? ' armed' : ''}" ${attrs}${style ? ` style="${style}"` : ''} `
     + `title="${esc(hover)}" aria-label="${esc(on ? `${label} — click again to confirm` : label)}">`
-    + `${on ? 'sure?' : text ? esc(text) : '×'}</button>`;
+    + `${on ? esc(armedText) : text ? esc(text) : '×'}</button>`;
 }
 
 /**

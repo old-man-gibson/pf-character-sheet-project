@@ -305,6 +305,38 @@ run.addEventListener('click', async () => {
         await until(() => !root.querySelector('button.rowfold'));
       } finally { mount.style.width = ''; }
     });
+    // A full undo list in the side rail's column: its rows were squeezed to a
+    // sliver of their text, and the list was wider than the rail.
+    await test('The undo list stays readable in the side rail, and Clear asks twice', async () => {
+      const root = sheet.shadowRoot;
+      const layout = sheet.getAttribute('layout');
+      try {
+        mount.style.width = '900px';
+        sheet.setAttribute('layout', 'side');
+        for (let i = 0; i < 30; i++) sheet.model.applyDamage(1);
+        await until(() => root.querySelector('.playundomore'));
+        root.querySelector('.playundomore').click();
+        await until(() => root.querySelector('.playundomenu'));
+        const rail = root.querySelector('.railbody');
+        const rows = [...root.querySelectorAll('.playundomenu button')];
+        assert(rows.length === 31, `${rows.length} rows in the list`);
+        for (const row of rows) {
+          assert(row.scrollHeight <= row.clientHeight + 1, `"${row.textContent}" is ${row.clientHeight}px of ${row.scrollHeight}px`);
+        }
+        const menu = root.querySelector('.playundomenu').getBoundingClientRect();
+        assert(menu.right <= rail.getBoundingClientRect().right + 0.5, 'The list is wider than the rail');
+        assert(rail.scrollWidth <= rail.clientWidth, `The rail scrolls ${rail.scrollWidth - rail.clientWidth}px sideways`);
+        const count = sheet.model.playActions.length;
+        root.querySelector('[data-action="undo-play-clear"]').click();
+        assert(sheet.model.playActions.length === count, 'The first press cleared the list');
+        assert(/sure\?/.test(root.querySelector('[data-action="undo-play-clear"]')?.textContent), 'Clear did not ask');
+        root.querySelector('[data-action="undo-play-clear"]').click();
+        assert(sheet.model.playActions.length === 0 && !root.querySelector('.playundo'), 'The list is still there');
+      } finally {
+        if (layout) sheet.setAttribute('layout', layout);
+        mount.style.width = '';
+      }
+    });
   } finally {
     sheet.remove();
     await forget(id);
