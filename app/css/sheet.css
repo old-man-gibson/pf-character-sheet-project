@@ -2321,6 +2321,9 @@ tr.untrained { color: var(--cs-muted); }
   .fieldgrid label.fld.col3 { grid-column: span 3; }
   .fieldgrid label.fld.col4 { grid-column: span 4; }
   .fieldgrid label.fld.col6 { grid-column: span 6; }
+  /* The nickname takes two of the six (col2), the URL the other four. The
+     class is doubled to beat the wide-screen rule, which comes later. */
+  .portraitrow.portraitrow > label.fld.portraiturl { grid-column: 3 / -1; }
 
   /* ---- a card whose short fields share a line ----
    *
@@ -2484,6 +2487,11 @@ table.build tr.costrow td, table.build tr.costrow th {
 /* A field whose value is longer than a track: a URL beside a hero-point count
    got a sixth of what it held, and there was no reading it or checking it. */
 .fieldgrid label.fld.wide { grid-column: 1 / -1; }
+/* The Details panel's last row: the nickname in the grid's first column and
+   the portrait's URL across the rest. On the grid's own columns (subgrid), so
+   the split lines up with the fields above it. */
+.fieldgrid > .portraitrow { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; }
+.portraitrow > label.fld.portraiturl { grid-column: 2 / -1; }
 label.fld { display: flex; flex-direction: column; gap: 3px; }
 /* A field standing on its own in a panel rather than in a grid -- a tradition's
    name, a trade rank, a crafting rate -- is capped like the defence boxes: up

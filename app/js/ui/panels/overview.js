@@ -1143,7 +1143,12 @@ function detailsPanel(model) {
         ${field('Weight', text('identity.weight', c.identity.weight), 'col3')}
         ${field('Mythic path', text('identity.mythicPath', c.identity.mythicPath), 'col3')}
         ${field('Mythic tier (auto)', `<span class="value" title="From level; override on Feats & Mythic">${esc(c.identity.mythicTier ?? 0)}</span>`, 'col3')}
-        ${field('Portrait URL', text('identity.image', c.identity.image, 'https://…'), 'wide')}
+        ${/* The last row: a nickname in the first column, and the portrait's
+              link across the rest -- a URL still wants more than a column. */''}
+        <div class="portraitrow">
+          ${field('Nickname', text('identity.nickname', c.identity.nickname), 'col2')}
+          ${field('Portrait URL', text('identity.image', c.identity.image, 'https://…'), 'portraiturl')}
+        </div>
       </div>
       ${characterColorRow(c.identity.color)}
     </section>`;

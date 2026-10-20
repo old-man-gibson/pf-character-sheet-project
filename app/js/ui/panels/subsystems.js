@@ -2481,7 +2481,7 @@ export function cardcastingPanel(model, ctx) {
     // ('deck:<id>'); a member the deck no longer knows falls back to the
     // character's. Each caster's deck has a view of its own.
     const squad = k.squad || [];
-    const me = shortName(model.casterInfo('').name);
+    const me = shortName(model.casterInfo('').name, model.data.identity?.nickname);
     const want = String(ctx.deckView || '');
     const memberView = want.startsWith('deck:') ? squad.find((m) => m.id === want.slice(5)) || null : null;
     const own = memberView ? memberView.id : '';
@@ -2555,7 +2555,7 @@ function otherDecksPanel(model, p, k, own) {
     if (!squad.length) return '';
     const present = new Set(p.table?.squad || []);
     const me = {
-      id: '', name: shortName(model.casterInfo('').name), colors: k.colorsInPlay || '', deck: k, rainbow: k.rainbow, ok: true,
+      id: '', name: shortName(model.casterInfo('').name, model.data.identity?.nickname), colors: k.colorsInPlay || '', deck: k, rainbow: k.rainbow, ok: true,
       manipulationsTaken: k.manipulationsTaken, manipulationsAvailable: k.manipulationsAvailable,
     };
     const rows = [me, ...squad].filter((o) => o.id !== own);
@@ -2660,10 +2660,11 @@ function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = 
 
   /**
    * The character's name short enough for a pick list or a heading: the
-   * nickname in quotes when there is one (Nicodemus "Nico" Vincent Marcone is
-   * Nico), else the first word.
+   * Nickname field when it is filled, else a nickname in quotes in the name
+   * (Alexander "Sandy" Reyes is Sandy), else the first word.
    */
-function shortName(name) {
+function shortName(name, nickname = '') {
+    if (String(nickname || '').trim()) return String(nickname).trim();
     const s = String(name || '').trim();
     const nick = /["“]([^"”]+)["”]/.exec(s);
     return nick ? nick[1].trim() : (s.split(/\s+/)[0] || 'you');
@@ -2952,7 +2953,7 @@ function handZone(s) {
       // With squad members at the table the chooser can also say who casts;
       // the character does unless it says otherwise, so a plain Cast stays a
       // plain Cast and a … beside it opens the chooser.
-      const casters = isEffect && s.present.length && !s.member ? [{ id: '', name: shortName(model.casterInfo('').name), cl: Number(model.scope().caster?.level) || 0 }, ...s.present.map((m) => ({ id: m.id, name: m.name, cl: m.cl }))] : [];
+      const casters = isEffect && s.present.length && !s.member ? [{ id: '', name: shortName(model.casterInfo('').name, model.data.identity?.nickname), cl: Number(model.scope().caster?.level) || 0 }, ...s.present.map((m) => ({ id: m.id, name: m.name, cl: m.cl }))] : [];
       const asks = modes.length > 1;
       // Terrain Casting gives every card a chooser too: a plain Cast pays the
       // default toll, and the … is where another way is picked.
@@ -3310,7 +3311,7 @@ function deckManipulationsPanel(model, p, k, own = '') {
     const NEED = MANIPULATION_NEEDS;
     // With a squad, each copy of a pick carries an owner pick, to give it to another deck.
     const squad = k.squad || [];
-    const owners = [{ id: '', name: shortName(model.casterInfo('').name) }, ...squad.map((m) => ({ id: m.id, name: m.name }))];
+    const owners = [{ id: '', name: shortName(model.casterInfo('').name, model.data.identity?.nickname) }, ...squad.map((m) => ({ id: m.id, name: m.name }))];
     const panels = groups.map((g) => {
       const rows = items.filter(({ m }) => String(m.group || 'General') === g);
       const taken = rows.reduce((n, { m }) => n + (Number(m.count) || 0), 0);
@@ -3477,7 +3478,7 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
           ${manaChips(card.mana, '')}
         </span>
         ${inDeck ? `<span class="pair" title="Copies in the deck">×${itemNum(list, i, 'qty', card.qty)}</span>` : ''}
-        ${(p.calc?.squad || []).length ? `<span class="pair" title="Whose deck this card belongs to">${itemSelect(list, i, 'owner', card.owner || '', [['', shortName(model.casterInfo('').name)], ...p.calc.squad.map((m) => [m.id, m.name])], null)}</span>` : ''}
+        ${(p.calc?.squad || []).length ? `<span class="pair" title="Whose deck this card belongs to">${itemSelect(list, i, 'owner', card.owner || '', [['', shortName(model.casterInfo('').name, model.data.identity?.nickname)], ...p.calc.squad.map((m) => [m.id, m.name])], null)}</span>` : ''}
         <label class="chk" title="A technique card"><input type="checkbox" ${card.tech ? 'checked' : ''} data-item="${list}|${i}|tech" data-kind="bool"><span>tech</span></label>
         ${inDeck && p.useD100 && range ? `<span class="roll" title="d100 roll for this card">${esc(range)}</span>` : ''}
       </div>

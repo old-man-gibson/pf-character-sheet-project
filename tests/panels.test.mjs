@@ -618,6 +618,21 @@ console.log('\nthe ladder offers a peek at what a feature does, once something i
     [shut.includes('class="cfnote collapsed"'), shut.split('data-cfnote=').length - 1], [true, 2]);
 }
 
+console.log('\nthe Details panel has a nickname beside the portrait link');
+{
+  const c = new Character(blankDocument({ name: 'Alexander Reyes', level: 1 }));
+  c.set('identity.nickname', 'Sandy');
+  c.set('identity.image', 'https://example.com/sandy.png');
+  // Saved and opened again, as a reload does.
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  const html = overview.renderOverviewPanel(again, { ...CTX, buildView: true });
+  const row = /<div class="portraitrow">([\s\S]*?)<\/div>/.exec(html)?.[1] || '';
+  check('the nickname is kept, and shares a row with the portrait link',
+    [again.data.identity.nickname, row.includes('data-set="identity.nickname"'), row.includes('value="Sandy"'),
+      row.includes('data-set="identity.image"'), /class="fld portraiturl"/.test(row), /class="fld wide"/.test(row)],
+    ['Sandy', true, true, true, true, false]);
+}
+
 console.log('\nthe dashboard lays out the cards a character uses, and the wallet names its currency once');
 {
   const c = new Character(blankDocument({ name: 'Caster', level: 5 }));
