@@ -1457,6 +1457,27 @@ select.jumpto[hidden] { display: none; }
 :host([width="80"]) { width: 80%; margin-inline: auto; }
 :host([width="70"]) { width: 70%; margin-inline: auto; }
 
+/* ---------- campaign rules ----------
+   The first panel on the ⚙ tab (ui/panels/campaign.js). A row per switch: its
+   name, the control, and what it changes, as three columns where there is
+   room and stacked where there is not. A switch moved off the table's rule
+   carries an accent edge, so the changed ones are found by eye. */
+.camprows { display: grid; gap: 4px; }
+.camprow {
+  display: grid; grid-template-columns: 13rem minmax(11rem, auto) minmax(0, 1fr);
+  align-items: baseline; gap: 4px 14px;
+  padding: 6px 8px; border-radius: 6px; border-left: 3px solid transparent;
+}
+.camprow.changed { border-left-color: var(--cs-accent); background: var(--cs-accent-soft); }
+.camprow .campname { font-weight: 600; }
+/* Styled as a hint, but not one: it is what the switch does, so it stays open
+   rather than folding into a Help line the way a long `.hint` does. */
+.camprow .campnote { margin: 0; font-size: 0.72rem; color: var(--cs-muted); }
+@container (max-width: 760px) {
+  .camprow { grid-template-columns: minmax(0, 1fr) auto; }
+  .camprow .campnote { grid-column: 1 / -1; }
+}
+
 /* ---------- the theme picker ---------- */
 /* Under the rail with the other things the rail raises. A card per preset,
    with the palette's four colours as a strip you can read before pressing,

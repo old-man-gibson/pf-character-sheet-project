@@ -8,12 +8,13 @@
  * step with the tier.
  */
 
-import { BUFF_MOD_KEYS, tierAtLevel } from '../rules.js';
+import { BUFF_MOD_KEYS } from '../rules.js';
 import { companionById, companionEntries, companionHeading } from '../companions.js';
 import { evaluateFormula } from '../formula.js';
 import { isDefaultStyle, normalizeStyle, resolveZones } from '../tracker-style.js';
 import { forwarded, scopeIfFormulas } from './scope.js';
 import { markUndo, rowLabel } from './undo.js';
+import { campaignRules, mythicTierOf } from './campaign.js';
 import { evaluateAmount, slug, trackerForwardKey } from './util.js';
 
 /**
@@ -250,8 +251,7 @@ export function seedTrackers(model) {
 
 /** Mythic tier as it stands (override wins), without needing a recompute first. */
 export function tierNow(model) {
-  const m = model.data.mythic || {};
-  return Number(m.tierOverride ?? tierAtLevel(model.data.identity?.level)) || 0;
+  return Number(mythicTierOf(model.data)) || 0;
 }
 
 export function loadTrackers(model) {
@@ -481,7 +481,9 @@ function setTracker(model, t, patch) {
  * while its system grants one (it would only come straight back).
  */
 export function isProtectedTracker(model, id) {
-  if (id === MYTHIC_POWER_ID) return true;
+  // Only while mythic is in play: with it off (a campaign rule) the tracker
+  // reads 0 and may go; turning mythic back on brings it back.
+  if (id === MYTHIC_POWER_ID) return campaignRules(model.data).mythic;
   const t = (model.trackers || []).find((x) => x.id === id);
   const pool = t?.pool ? poolDef(t.pool, model.data) : null;
   return !!pool && pool.has(model.data);

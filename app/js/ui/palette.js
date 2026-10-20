@@ -44,6 +44,7 @@ import { trackerReading } from './panels/trackers.js';
 import { COMPANION_KINDS, COMPANION_LABELS, companionInUse } from '../companions.js';
 import { fmt, ABILITIES, ABILITY_LABELS, critMultOf, threatText } from '../rules.js';
 import { rollSpec } from '../roll20.js';
+import { campaignRules } from '../model/campaign.js';
 
 /* ---------------- kinds ---------------- */
 
@@ -282,7 +283,7 @@ function vitals(model, add) {
     add({ kind: 'stat', title: label, tab: 'overview', value: clip(shown, 40), keys: 'defense' });
   }
   const hero = c.identity?.heroPoints;
-  if (hero && (Number(hero.max) || Number(hero.current))) {
+  if (hero && campaignRules(c).heroPoints && (Number(hero.max) || Number(hero.current))) {
     add({
       kind: 'tracker', title: 'Hero points', tab: 'overview',
       value: `${hero.current ?? 0}/${hero.max ?? 0}`, keys: 'hero point',
@@ -306,7 +307,7 @@ function identity(model, add) {
       find: text(value),
     });
   }
-  if (text(i.mythicPath)) {
+  if (text(i.mythicPath) && campaignRules(model.data).mythic) {
     add({
       kind: 'stat', title: 'Mythic path', tab: 'features', value: `${text(i.mythicPath)} ${i.mythicTier || 0}`,
       keys: 'mythic tier path',
@@ -477,6 +478,8 @@ function feats(model, add) {
       sel: `[data-item^="raceTraits|${i}|"]`, keys: 'racial trait',
     });
   });
+  // The rest is mythic, and with mythic off (a campaign rule) none of it is in play.
+  if (!campaignRules(c).mythic) return;
   for (const a of c.mythic?.baseAbilities || []) {
     const title = nameOf(a);
     if (!title) continue;
@@ -1088,7 +1091,9 @@ function commands(model, add) {
   if ((model.data.psionics?.classes || []).length) {
     cmd('New day — power points', 'psionics-new-day', 'Refill the power point pool', 'new day psionics rest');
   }
-  cmd('Show, hide and rearrange tabs', 'palette-tabs', 'The ⚙ tab manager', 'tabs manage hide show arrange');
+  cmd('Campaign rules', 'campaign-rules', 'Point buy, hero points, mythic and ABP for this character',
+    'settings options campaign rules house table point buy hero points mythic tier trials abp automatic bonus progression xp experience gestalt');
+  cmd('Show, hide and rearrange tabs', 'palette-tabs', 'The ⚙ tab manager', 'tabs manage hide show arrange settings');
   cmd('Reset to the character as imported', 'reset', 'Asks first; named checkpoints are kept', 'reset revert discard');
 }
 

@@ -68,6 +68,7 @@ import {
   readThemePrefs, writeThemePrefs, ACTION_MARKS, ACTION_TINTS, DEFAULT_ACTION_MARKS,
   DEFAULT_ACTION_TINT, isActionMarks, isActionTint,
 } from './themes.js';
+import { campaignRules } from './model/campaign.js';
 import { esc, val, abilityKey, nameDatalist } from './ui/html.js';
 import * as fields from './ui/fields.js';
 
@@ -366,7 +367,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(campaign|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /**
  * The input types a caret can be put back into after a re-render.
@@ -2471,9 +2472,12 @@ export class CharacterSheetElement extends HTMLElement {
     const d = this.#model.data;
     const modelled = this.#modelledSystems();
     const out = [];
-    for (const [id, label] of TABS) {
+    // Without mythic (a campaign rule) the feats tab is the feats alone.
+    const mythic = campaignRules(d).mythic;
+    for (const [id, base] of TABS) {
       if (FIXED_TABS.has(id)) continue;                // not the player's to arrange (see FIXED_TABS)
       const m = modelled[id];
+      const label = id === 'features' && !mythic ? 'Feats' : base;
       out.push({
         key: id, id, label, kind: m ? 'modelled' : 'core',
         inUse: m ? m.has || m.tagged : true, has: m ? m.has : true,
@@ -2583,7 +2587,7 @@ export class CharacterSheetElement extends HTMLElement {
   }).join('')}
           <button data-view role="tab" id="tab-systabs" data-tab="systabs" aria-selected="${this.#tab === 'systabs'}"
             aria-controls="sheet-panel" tabindex="${this.#tab === 'systabs' ? '0' : '-1'}"
-            aria-label="Tabs" title="Show, hide and rearrange tabs">⚙</button>
+            aria-label="Settings" title="Settings: campaign rules (point buy, hero points, mythic, ABP), and which tabs show">⚙</button>
         </nav>
         </div>
         <div class="rollslot">${this.#slotHtml()}</div>
@@ -3084,7 +3088,7 @@ export class CharacterSheetElement extends HTMLElement {
             ${i.alignment ? ` &middot; ${esc(i.alignment)}` : ''}
           </div>`}
           <div class="subtitle">
-            ${i.mythicPath ? `${esc(i.mythicPath)} ${val(i.mythicTier)}` : ''}
+            ${i.mythicPath && campaignRules(this.#model.data).mythic ? `${esc(i.mythicPath)} ${val(i.mythicTier)}` : ''}
             ${i.specialty ? ` &middot; ${esc(i.specialty)}` : ''}
             ${diff.length ? `<span class="dirty"> &middot; <span title="${esc(diff.map((d) => `${d.label}: ${d.was} → ${d.now}`).join('\n'))}"
               >${diff.length} value${diff.length === 1 ? '' : 's'} changed from source sheet</span>
@@ -3141,6 +3145,8 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.#viewModeButton()}
         ${this.#formulaButton()}
         ${monster.menuButton(this.#model, this.isAdmin)}
+        <button data-view data-action="campaign-rules" aria-pressed="${this.#tab === 'systabs'}"
+          title="Point buy, hero points, mythic and ABP for this character: the first panel on the ⚙ tab">Campaign rules…</button>
         <button data-view data-action="theme" aria-pressed="${this.#themeMenu}"
           title="Palettes, and where the tabs go">Theme &amp; layout…</button>
         <button data-view data-action="print-menu" aria-pressed="${this.#printMenu}"
@@ -7273,6 +7279,18 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       case 'palette-tabs':
         this.#tab = 'systabs';
+        this.#render();
+        break;
+      // The campaign rules are the first panel on the ⚙ tab, so opening the
+      // tab is arriving at them.
+      case 'campaign-rules':
+        this.#tab = 'systabs';
+        this.#chromeMenu = false;
+        this.#render();
+        break;
+      case 'campaign-reset':
+        this.#model.markUndo('Put the campaign rules back to the table\'s');
+        this.#model.set('campaign', {});
         this.#render();
         break;
       case 'formulas':

@@ -25,6 +25,7 @@ import {
   formatSpellResistance, parseDr, parseEnergy, parseImmunities, parseSpellResistance, unslug,
 } from './defence-lists.js';
 import { mythicHpPerTier } from '../progression.js';
+import { campaignRules } from '../campaign.js';
 import { trackerFacts } from '../trackers.js';
 import { resolveSaveBonuses } from './saves.js';
 import { resolveBonusBlock, resolveNumberField } from '../util.js';
@@ -56,8 +57,9 @@ export function resolveDefenceBonuses(model) {
   // progression's own ladder; they are read, not typed. A monster is outside
   // the progression -- its natural armour and saves are its own -- unless the
   // GM has said otherwise on its block, which is what `monster.abp` is for.
+  // A campaign without ABP (a campaign rule) gives none to anyone.
   const monster = model.data.monster;
-  const abp = monster && !monster.abp
+  const abp = (monster && !monster.abp) || !campaignRules(model.data).abp
     ? { abpResistance: 0, abpDeflection: 0, abpNatural: 0 }
     : abpDefence(model.data.identity?.level);
   resolveSaveBonuses(model, scope, abp);
