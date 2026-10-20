@@ -18,7 +18,7 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
-  PALETTES, LAYOUTS, WIDTHS, AUTO, THEME_KEY, paletteOf, isPalette, isLayout, isWidth, resolvePalette,
+  PALETTES, LAYOUTS, WIDTHS, DEFAULT_WIDTH, AUTO, THEME_KEY, paletteOf, isPalette, isLayout, isWidth, resolvePalette,
   schemeOf, flipped, normalizePrefs, readThemePrefs, writeThemePrefs,
 } from '../app/js/themes.js';
 import { contrastRatio, normalizeHex } from '../app/js/tracker-style.js';
@@ -147,12 +147,16 @@ for (const p of PALETTES) {
   ok(`${p.id}: has a name and a blurb`, p.name && p.blurb);
 }
 check('two layouts', LAYOUTS.map((l) => l.id), ['top', 'side']);
-check('four widths, full first', WIDTHS.map((w) => w.id), ['100', '90', '80', '70']);
+check('Standard first, then the four shares', WIDTHS.map((w) => w.id), [DEFAULT_WIDTH, '100', '90', '80', '70']);
 ok('a width is known as a number too', isWidth(80) && !isWidth('75'));
-for (const w of WIDTHS.slice(1)) {
+for (const w of WIDTHS.slice(2)) {
   ok(`width ${w.id} has a host rule`, css.includes(`:host([width="${w.id}"]) { width: ${w.id}%;`));
 }
-ok('full width has no rule to undo', !css.includes(':host([width="100"])'));
+// A share is the column: without lifting the 90rem cap, Full width, 90% and
+// 80% all came out 1440px wide on a 1920px monitor.
+const lifted = css.match(/^(:host\(\[width="\d+"\]\)(?:, )?)+ \{ --cs-sheet-max: 100%; \}/m)?.[0] || '';
+check('every share lifts the column cap, Standard does not',
+  WIDTHS.map((w) => lifted.includes(`:host([width="${w.id}"])`)), [false, true, true, true, true]);
 check('paletteOf finds one', paletteOf('slate')?.name, 'Slate');
 check('paletteOf misses gracefully', paletteOf('sepia'), null);
 ok('auto is a palette for the picker', isPalette(AUTO));

@@ -1425,10 +1425,14 @@ select.jumpto[hidden] { display: none; }
 }
 
 /* ---------- width ---------- */
-/* How much of its container the sheet takes. Nothing at "100", which is also
-   the default; a step down is that share of the room, centred. The rail's
-   780px container query reads the sheet's own width, so a narrow sheet on a
-   narrow window falls back to the bar a little sooner, which is right. */
+/* How much of its container the sheet takes. Standard, the default, has no
+   rule here: it is `.wrap`'s 90rem column. A chosen share is that share of
+   the room, centred, and is the column itself -- so the 90rem cap is lifted,
+   or on a wide monitor Full width, 90% and 80% all came out as the same
+   1440px. The rail's 780px container query reads the sheet's own width, so a
+   narrow sheet on a narrow window falls back to the bar a little sooner,
+   which is right. */
+:host([width="100"]), :host([width="90"]), :host([width="80"]), :host([width="70"]) { --cs-sheet-max: 100%; }
 :host([width="90"]) { width: 90%; margin-inline: auto; }
 :host([width="80"]) { width: 80%; margin-inline: auto; }
 :host([width="70"]) { width: 70%; margin-inline: auto; }

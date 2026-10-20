@@ -12,8 +12,9 @@
  * The two are separate attributes on the element (`theme` and `layout`) so an
  * embedding host can set either without the other, and separate choices in
  * the picker for the same reason. A third, `width`, is how much of its
- * container the sheet takes -- all of it, or a step less -- for a wide screen
- * where a sheet edge to edge is a long way for the eye to travel. The presets are the pairings that were
+ * container the sheet takes -- a column on a large monitor, all of it, or a
+ * step less -- for a wide screen where a sheet edge to edge is a long way for
+ * the eye to travel. The presets are the pairings that were
  * designed together; picking one sets both.
  *
  * The choice is a browser preference, like the roll format: it is not part of
@@ -86,11 +87,16 @@ export const LAYOUTS = [
 ];
 
 /**
- * How wide the sheet is, as a share of what it is given: everything, or one
- * of three steps down. The steps are the `width` attribute's values, and the
- * stylesheet has a rule per step.
+ * How wide the sheet is. Standard, the default, keeps its contents to a
+ * 90rem (1440px) column on a large monitor and uses the whole of a smaller
+ * screen. The others are a share of what the sheet is given, on any screen:
+ * all of it, edge to edge, or one of three steps down. The ids are the
+ * `width` attribute's values (no attribute is Standard), and the stylesheet
+ * has a rule per share.
  */
+export const DEFAULT_WIDTH = 'standard';
 export const WIDTHS = [
+  { id: DEFAULT_WIDTH, name: 'Standard (at most 1440px)' },
   { id: '100', name: 'Full width' },
   { id: '90', name: '90%' },
   { id: '80', name: '80%' },
