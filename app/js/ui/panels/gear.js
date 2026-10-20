@@ -811,7 +811,7 @@ export function renderCraftingPanel(model, ctx) {
         ${craftCrafterPanel(model, cr)}
       </div>
       ${craftProjectsPanel(ctx, model, cr)}
-      ${systemExtrasPanel(cr, 'crafting', 'Item Crafting')}
+      ${systemExtrasPanel(model, cr, 'crafting', 'Item Crafting')}
     </div>`;
   }
 

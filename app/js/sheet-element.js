@@ -125,8 +125,6 @@ import {
   workingHtml, browserHtml, myFormulasHtml, forwardedHtml, valueGroups, targetsHtml, targetGroups,
 } from './formula-guide.js';
 import { formulaPlace } from './ui/formula-places.js';
-import { hasTokens } from './inline.js';
-import { hasLink } from './ui/links.js';
 import {
   historyFor, countChanges, requestPersistence, workingKey, SNAPSHOT_EVERY, AUTO_KEEP,
 } from './history.js';
@@ -5543,8 +5541,11 @@ export class CharacterSheetElement extends HTMLElement {
          * that was missing.
          */
         // So does a From lvl box: the row turns planned or reached with it,
-        // and what it counts toward moves.
-        if (AFFECTS_DERIVED.test(list) || input.hasAttribute('list') || field === 'level') this.#rerender(input);
+        // and what it counts toward moves. And a grid cell that now holds a
+        // formula or a web address: it is drawn as a prose field from here on
+        // (rows.gridCell), which shows the value or the link.
+        if (AFFECTS_DERIVED.test(list) || input.hasAttribute('list') || field === 'level'
+          || (input.hasAttribute('data-gridcell') && prose.hasView(value))) this.#rerender(input);
       });
     });
 
@@ -5925,7 +5926,7 @@ export class CharacterSheetElement extends HTMLElement {
       }
       if (!ta.classList.contains('cfeat')) {
         ta.addEventListener('change', () => {
-          if (hasTokens(ta.value) || hasLink(ta.value) || wrap.classList.contains('has-view')) this.#rerender(ta);
+          if (prose.hasView(ta.value) || wrap.classList.contains('has-view')) this.#rerender(ta);
         });
       }
     });

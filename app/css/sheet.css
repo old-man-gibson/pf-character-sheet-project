@@ -3473,6 +3473,10 @@ table.tmpltable.raw td { background: var(--cs-panel-2); }
 /* ---------- raw sheet grids ---------- */
 table.gridtab td { padding: 2px 3px; }
 table.gridtab input[type="text"] { min-width: 6.5rem; font-size: 0.78rem; padding: 3px 5px; }
+/* A grid cell holding a formula or a web address is a prose field
+   (rows.gridCell). Its read view may break between any two letters, so
+   without the box's floor its column shrank to one letter on a phone. */
+.prose.gridcell { min-width: 6.5rem; }
 table.prog select { min-width: 8rem; padding: 3px 5px; }
 table.prog td.derived { min-width: 2.6rem; text-align: right; }
 table.prog th .colname {
@@ -4999,6 +5003,9 @@ code.fx-formeg { display: block; color: var(--cs-muted); }
 }
 .fx-walkstep .hint { margin: 3px 0 0; }
 .fx-walkstep code.fx-code { display: inline-block; background: var(--cs-bg); padding: 1px 5px; border-radius: 3px; }
+/* A link example in the Links panel: what is typed and the link it makes,
+   at the size of the code. */
+.fx-linkeg { margin-top: 2px; font-size: 0.78rem; }
 .fx-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
 .fx-table td { padding: 5px 6px; border-top: 1px solid var(--cs-line); vertical-align: top; }
 .fx-table tr:first-child td { border-top: 0; }
