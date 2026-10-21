@@ -68,7 +68,9 @@ import {
   readThemePrefs, writeThemePrefs, ACTION_MARKS, ACTION_TINTS, DEFAULT_ACTION_MARKS,
   DEFAULT_ACTION_TINT, isActionMarks, isActionTint,
 } from './themes.js';
-import { awardXp, campaignRules, levelUp, tierUp } from './model/campaign.js';
+import {
+  awardXp, campaignPreset, campaignRules, levelUp, presetCampaign, tierUp,
+} from './model/campaign.js';
 import { esc, val, abilityKey, nameDatalist } from './ui/html.js';
 import * as fields from './ui/fields.js';
 
@@ -3344,7 +3346,9 @@ export class CharacterSheetElement extends HTMLElement {
     if (sizeNow === base) return '';
     const ladder = Object.keys(SIZE_MODIFIERS);
     // Only a buff changes size, so it says buffs rather than every source.
-    return `&middot; ${rows.movedValue(esc(sizeNow), ladder.indexOf(sizeNow) > ladder.indexOf(base) ? 1 : -1, {
+    // Past Colossal (a campaign rule) the name is not on the ladder: larger.
+    const larger = !ladder.includes(sizeNow) || ladder.indexOf(sizeNow) > ladder.indexOf(base);
+    return `&middot; ${rows.movedValue(esc(sizeNow), larger ? 1 : -1, {
       base, sources: 'buffs',
     })}`;
   })()}
@@ -5471,6 +5475,25 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('select[data-action="tech-select"]').forEach((sel) => {
       sel.addEventListener('change', () => { this.#model.selectTechnique(sel.value); this.#render(); });
     });
+    // A campaign rules file, or another character's file, offered to the
+    // Campaign rules panel: only the rules are taken, as one undo step.
+    root.querySelectorAll('[data-campaignfile]').forEach((input) => {
+      input.addEventListener('change', async () => {
+        const file = input.files?.[0];
+        input.value = '';
+        if (!file) return;
+        try {
+          const rules = presetCampaign(JSON.parse(await file.text()));
+          if (!rules) throw new Error('it holds no campaign rules');
+          this.#model.markUndo(`Took the campaign rules from ${file.name}`);
+          this.#model.set('campaign', rules);
+          this.#historyNote = `Campaign rules from ${file.name}.`;
+        } catch (err) {
+          this.#historyNote = `Could not read ${file.name} — ${err.message}`;
+        }
+        this.#render();
+      });
+    });
     // A workbook offered to the Technique List: converted in the browser like an
     // import, but only its techniques are taken.
     root.querySelectorAll('[data-techfile]').forEach((input) => {
@@ -7355,6 +7378,13 @@ export class CharacterSheetElement extends HTMLElement {
         this.#model.markUndo('Put the campaign rules back to the table\'s');
         this.#model.set('campaign', {});
         this.#render();
+        break;
+      // One set of rules for a party: saved as a file, loaded into each sheet.
+      case 'campaign-save':
+        downloadFile('campaign-rules.json', JSON.stringify(campaignPreset(this.#model.data), null, 1));
+        break;
+      case 'campaign-load':
+        this.shadowRoot.querySelector('[data-campaignfile]')?.click();
         break;
       case 'formulas':
         this.#tab = 'formulas';

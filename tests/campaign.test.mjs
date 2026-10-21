@@ -59,7 +59,7 @@ for (const id of fixtureIds()) {
   for (const [key, value] of [['abp', false], ['mythic', false], ['heroPoints', false], ['pointBuy', 20], ['mythicTier', 'awarded'],
     ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false], ['antiheroes', true],
     ['maxLevel', 6], ['maxLevel', 25], ['maxTier', 5], ['maxTier', 12], ['gestalt', false], ['hitPoints', 'average'], ['hitPoints', 'rolled'],
-    ['abpLadder', 'core'], ['mythicLadder', 'core']]) {
+    ['abpLadder', 'core'], ['mythicLadder', 'core'], ['pastColossal', true]]) {
     const m = new Character(loadCharacter(id));
     const before = numbers(m);
     m.set(`campaign.${key}`, value);
@@ -420,6 +420,43 @@ console.log('\nthe core mythic ladder: no feat on an even tier');
   check('core: it waits', c.data.saves.fortitude.total, fort);
   const html = renderFeaturesPanel(c, { draft: {} });
   check('the table says so', [html.includes('Mythic feat 1'), html.includes('The core ladder grants no feat at this tier')], [true, true]);
+}
+
+console.log('\none set of rules for the party, as a file');
+{
+  const { campaignPreset, presetCampaign } = await import('../app/js/model/campaign.js');
+  const gm = new Character(blankDocument({ name: 'GM', level: 1 }));
+  gm.set('campaign.abp', false);
+  gm.set('campaign.xpSteps.9', 60000);
+  gm.data.campaign.nonsense = 'kept out';
+  const file = JSON.parse(JSON.stringify(campaignPreset(gm.data)));
+  check('the file is the rules alone', file, { kind: 'campaign-rules', campaign: { abp: false, xpSteps: { 9: 60000 } } });
+  const player = new Character(blankDocument({ name: 'Player', level: 1 }));
+  player.set('campaign', presetCampaign(file));
+  check('loaded, the player plays under them', [campaignRules(player.data).abp, xpThresholds(player.data)[9]], [false, 60000]);
+  check('another character\'s file gives its rules', presetCampaign(gm.toJSON()), { abp: false, xpSteps: { 9: 60000 } });
+  check('a character with none gives the table\'s', presetCampaign(blankDocument({ name: 'Plain', level: 1 })), {});
+  check('a file of neither gives nothing', [presetCampaign({ hello: 1 }), presetCampaign(null)], [null, null]);
+}
+
+console.log('\nsizes past Colossal');
+{
+  const { blankWeapon } = await import('../app/js/model.js');
+  const { weaponMoves, diceString } = await import('../app/js/rules.js');
+  const c = new Character(blankDocument({ name: 'Titan', level: 5 }));
+  c.set('identity.size', 'Gargantuan');
+  c.data.equipment.weapons = [{ ...blankWeapon(), name: 'Greatclub', dice: '1d10' }];
+  c.data.buffs = [{ name: 'Grow', on: true, bonuses: [{ target: 'size', value: 3, valueNum: 3 }] }];
+  c.recompute();
+  const w = () => c.data.equipment.weapons[0];
+  const dice = () => diceString(weaponMoves(c.data, w(), c.conditionState).sized.dice);
+  const atk = c.conditionState.delta?.melee;
+  check('the table\'s: held at Colossal', [c.sizeNow(), c.conditionState.sizePast], ['Colossal', 0]);
+  const atColossal = dice();
+  c.set('campaign.pastColossal', true);
+  check('allowed: two steps past, named so', [c.sizeNow(), c.conditionState.sizePast], ['Colossal+2', 2]);
+  check('modifiers stay at Colossal\'s', c.conditionState.delta?.melee, atk);
+  check('each step past adds 1d6', [dice() !== atColossal, dice().includes('d6')], [true, true]);
 }
 
 console.log('\nthe highest level and tier');

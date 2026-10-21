@@ -2734,10 +2734,13 @@ export function weaponMoves(c, w, cs) {
   const atkDelta = (modeKey && cs?.delta?.[modeKey]) || 0;
   const dmgDelta = (calc && cs?.delta?.damage) || 0;
   const grow = (calc && cs?.sizeSteps) || 0;
-  const sized = grow
+  const stepped = grow
     ? stepDiceMap(calc.baseDmgDice || {}, grow, w.sizeNow || c.identity?.size)
     : { dice: calc?.baseDmgDice || {}, flat: 0 };
-  return { modeKey, atkDelta, dmgDelta, grow, sized };
+  // Each size step past Colossal (a campaign rule) adds 1d6 to the dice.
+  const past = (calc && Object.keys(calc.baseDmgDice || {}).length && cs?.sizePast) || 0;
+  const sized = past ? { ...stepped, dice: addDice(stepped.dice, { 6: past }) } : stepped;
+  return { modeKey, atkDelta, dmgDelta, grow: grow + past, sized };
 }
 
 /** "4d6", "2d8+3", "d6 + 1d4 - 1": a value that is dice text rather than a number. */
@@ -3203,8 +3206,8 @@ export const BUFF_TARGETS = [
   // larger", which reaches the damage dice alone. The stacking kind is for
   // the odd item that makes size effects stack outright -- wraps of
   // suppressed size -- it sums with everything and carries the full true
-  // bundle. The result caps at Colossal whatever the mix. TODO: a campaign
-  // setting for tables that allow colossal+ sizes.
+  // bundle. The result caps at Colossal whatever the mix, unless the
+  // campaign allows sizes past it (see conditionState's `sizePast`).
   ['size', 'True size (+1 = one larger)'],
   ['sizeEffective', 'Effective size (dice only)'],
   ['sizeStacking', 'Size — stacking (wraps & such)'],

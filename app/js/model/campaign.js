@@ -78,6 +78,12 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
   /** Alternate Training techniques are offered: their tab, and what they grant. */
   altTraining: true,
   /**
+   * Size may grow past Colossal: the steps beyond are counted rather than
+   * lost. Colossal's modifiers are the last the rules give, so they hold;
+   * each step past adds 1d6 to a weapon's damage.
+   */
+  pastColossal: false,
+  /**
    * How a character gains levels: `typed` (the level is typed in, as it
    * always was), `xp` (experience points against a table), or `milestones`
    * (a count of milestones against so many a level).
@@ -176,6 +182,7 @@ export function campaignRules(d) {
     abpLadder: LADDERS.includes(c.abpLadder) ? c.abpLadder : CAMPAIGN_DEFAULTS.abpLadder,
     mythicLadder: LADDERS.includes(c.mythicLadder) ? c.mythicLadder : CAMPAIGN_DEFAULTS.mythicLadder,
     altTraining: bool('altTraining'),
+    pastColossal: bool('pastColossal'),
     advancement: ADVANCEMENT_MODES.includes(c.advancement) ? c.advancement : CAMPAIGN_DEFAULTS.advancement,
     xpTrack: Object.hasOwn(XP_TRACKS, c.xpTrack) ? c.xpTrack : CAMPAIGN_DEFAULTS.xpTrack,
     milestoneRate: count(c.milestoneRate, CAMPAIGN_DEFAULTS.milestoneRate),
@@ -205,6 +212,37 @@ export function heroPointsInPlay(d) {
 /** What the money is called, as a heading says it ("Mana", "Gold"). */
 export function currencyName(d) {
   return campaignRules(d).currency;
+}
+
+/* ---------------- one set of rules for the party ---------------- */
+
+/** The per-step maps a rule may carry, kept with the switches in a rules file. */
+const STEP_MAPS = ['mythicLevels', 'mythicTrialSteps', 'xpSteps', 'milestoneSteps'];
+
+/**
+ * The campaign rules as a file a GM can hand round, to be loaded into each
+ * character of the party. Each character keeps its own copy (a published
+ * sheet opens without anything else to read them from).
+ */
+export function campaignPreset(d) {
+  const own = d?.campaign && typeof d.campaign === 'object' ? d.campaign : {};
+  const keys = [...Object.keys(CAMPAIGN_DEFAULTS), ...STEP_MAPS];
+  return {
+    kind: 'campaign-rules',
+    campaign: JSON.parse(JSON.stringify(Object.fromEntries(keys.filter((k) => own[k] !== undefined).map((k) => [k, own[k]])))),
+  };
+}
+
+/**
+ * The campaign rules a file holds, or null: a rules file's, or a whole
+ * character's -- the rules that character is played under, the table's where
+ * it has none. Only the rules are taken; anything else in the file is not.
+ */
+export function presetCampaign(doc) {
+  if (!doc || typeof doc !== 'object') return null;
+  if (doc.kind === 'campaign-rules') return campaignPreset({ campaign: doc.campaign }).campaign;
+  if (doc.identity && typeof doc.identity === 'object') return campaignPreset(doc).campaign;
+  return null;
 }
 
 /* ---------------- core ABP and the core mythic ladder ---------------- */

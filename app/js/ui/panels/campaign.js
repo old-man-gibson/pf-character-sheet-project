@@ -128,7 +128,12 @@ export function campaignPanel(model) {
         ${changed.size ? '<button data-action="campaign-reset" style="margin-left:auto" title="Put every switch back to the table\'s rule">Back to the table\'s rules</button>' : ''}
       </h3>
       <p class="hint">The rules this character is played under. Each switch starts at the table's
-        rule; changing one changes the sheet's numbers at once, and only for this character.</p>
+        rule; changing one changes the sheet's numbers at once, and only for this character.
+        For a party under the same rules, save them as a file and load it into each character, or
+        load another character's file to take its rules.
+        <button data-action="campaign-save" title="Download these rules as campaign-rules.json">Save as a file</button>
+        <button data-action="campaign-load" title="Take the rules from a campaign rules file or a character's file">Load from a file…</button>
+        <input type="file" accept="application/json,.json" data-campaignfile hidden></p>
       <div class="camprows">
         ${row('pointBuy', 'Point buy',
     `<input type="number" min="0" max="99" value="${esc(rules.pointBuy)}" data-set="campaign.pointBuy" data-kind="number"
@@ -185,6 +190,9 @@ export function campaignPanel(model) {
         ${row('altTraining', 'Alternate Training', check('altTraining', 'Offer Alternate Training techniques'),
     `Off, the <strong>Alternate Training</strong> tab goes and its technique grants nothing: no
           talents, feats or bonus ranks from it. What was picked there is kept.`)}
+        ${row('pastColossal', 'Past Colossal', check('pastColossal', 'Sizes may grow past Colossal'),
+    `A size change past Colossal is counted, not lost: the header reads Colossal+1, +2…, and each step
+          past adds 1d6 to a weapon's damage. Attack, AC and maneuver modifiers stay at Colossal's.`)}
         ${row('currency', 'Currency',
     `<input type="text" value="${esc(d.campaign?.currency ?? '')}" placeholder="${esc(rules.currency)}" data-set="campaign.currency"
           data-kind="text" aria-label="What the money is called" style="width:9rem">`,
