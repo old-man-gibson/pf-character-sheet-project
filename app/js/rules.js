@@ -972,6 +972,21 @@ export const MYTHIC_PATH_HP = {
 };
 
 /**
+ * The hit points one level's die gives under the campaign's rule for them:
+ * the whole die at 1st level, always; after that the whole die (`max`, the
+ * table's), its average rounded up (`average`: half the die and 1), or the
+ * roll kept for that level (`rolled`) -- the average until one is kept.
+ */
+export function hitDieGain(die, level, mode = 'max', roll = null) {
+  const hd = Math.max(0, Math.floor(Number(die) || 0));
+  if (!hd || mode === 'max' || level <= 1) return hd;
+  const average = Math.floor(hd / 2) + 1;
+  if (mode !== 'rolled') return average;
+  const r = Math.floor(Number(roll));
+  return r >= 1 && r <= hd ? r : average;
+}
+
+/**
  * The maximum hit points the class table comes to.
  *
  * The workbook worked this out on Character Info and the sheet only kept the
@@ -979,9 +994,10 @@ export const MYTHIC_PATH_HP = {
  * moved when the classes under them did. The parts, in the workbook's own
  * order:
  *
- *   - `perLevel`: the hit die rolled at each character level. Gestalt takes
- *     the best among the classes present, which is what the Planner's
- *     "HP/ Level" column held, and this campaign takes it at maximum.
+ *   - `perLevel`: the hit points each character level gave (see
+ *     `hitDieGain`). Gestalt takes the best die among the classes present,
+ *     which is what the Planner's "HP/ Level" column held, and the table
+ *     takes it at maximum.
  *   - the favoured-class points, whole, not per level.
  *   - the hit-point ability's modifier at every level -- twice over on a
  *     sheet that names a second one.

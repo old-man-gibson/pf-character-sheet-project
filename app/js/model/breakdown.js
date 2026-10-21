@@ -28,6 +28,7 @@ import { forwarded, forwardedSplit } from './scope.js';
 import { abilityMoves, abilitySlots, mythicHp } from './stats/defenses.js';
 import { COMPANION_KINDS, companionBreakdown, companionScopeName } from '../companions.js';
 import { abilityHarm } from './abilities.js';
+import { campaignRules } from './campaign.js';
 
 // The line makers are the recipes' own (rules.js), so a breakdown's lines
 // are the lines its number is summed from.
@@ -67,7 +68,8 @@ function hpBreakdown(model) {
   const tough = Number(c.hp.toughnessResolved ?? c.hp.toughness) || 0;
   const misc = Number(c.hp.miscResolved ?? c.hp.misc) || 0;
   const parts = [
-    plain('hit dice', c.gestalt?.hdTotal ?? 0, `the best die on each of ${level} level${level === 1 ? '' : 's'}`),
+    plain('hit dice', c.gestalt?.hdTotal ?? 0, `${campaignRules(c).gestalt ? 'the best die' : 'the class\'s die'} on each of ${level} level${
+      level === 1 ? '' : 's'}${{ max: '', average: ', averaged after 1st', rolled: ', rolled after 1st' }[campaignRules(c).hitPoints]}`),
     part(`${c.hp.ability || 'ability'}${c.hp.ability2 ? ` + ${c.hp.ability2}` : ''} × ${level}`, abilityMod * level),
     part('favoured class', fcb),
     part(`Toughness × ${level}`, tough * level),

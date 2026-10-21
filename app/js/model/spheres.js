@@ -1017,8 +1017,12 @@ export function applyBudget(model) {
   // rather than folded into it, the same bargain every other forwarded bonus
   // on the sheet is on: the box has to go on saying what was written in it.
   b.forwarded = forwarded(model, 'skill.pointsPerLevel');
-  const perLevel = (c.gestalt?.ranksPerLevel || 0) + b.intPerLevel + bonus + b.forwarded;
-  const available = perLevel * level;
+  const own = b.intPerLevel + bonus + b.forwarded;
+  // The classes' ranks over every level: the best class's a level with
+  // gestalt, each class's for its own levels without (a campaign rule).
+  const classRanks = c.gestalt?.ranksTotal ?? (c.gestalt?.ranksPerLevel || 0) * level;
+  const available = classRanks + own * level;
+  const perLevel = level ? Math.round((available / level) * 10) / 10 : (c.gestalt?.ranksPerLevel || 0) + own;
   const assigned = (c.skills || []).reduce(
     (t, s) => t + (Number(s.boughtResolved) || 0), 0,
   );

@@ -58,7 +58,7 @@ console.log('\na switch flipped in play survives a reload, and flipping it back 
 for (const id of fixtureIds()) {
   for (const [key, value] of [['abp', false], ['mythic', false], ['heroPoints', false], ['pointBuy', 20], ['mythicTier', 'awarded'],
     ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false], ['antiheroes', true],
-    ['maxLevel', 6], ['maxLevel', 25], ['maxTier', 5], ['maxTier', 12]]) {
+    ['maxLevel', 6], ['maxLevel', 25], ['maxTier', 5], ['maxTier', 12], ['gestalt', false], ['hitPoints', 'average'], ['hitPoints', 'rolled']]) {
     const m = new Character(loadCharacter(id));
     const before = numbers(m);
     m.set(`campaign.${key}`, value);
@@ -305,6 +305,60 @@ console.log('\nmythic tiers from trials, and a ladder of the campaign\'s own');
     const same = mythicComputedTier({ identity: { level }, campaign: { mythicLevels: { 4: 14 } } }) === tierAtLevel(level);
     if (!same) check(`the table's ladder written down agrees at ${level}`, false, true);
   }
+}
+
+console.log('\ngestalt off: one class a level, each its own progression');
+{
+  const cls = (name, hd, bab, fort, ref, will, ranks, extra = {}) => ({
+    name, hd, bab, babOverride: null, goodFort: fort, goodRef: ref, goodWill: will, skillRanks: ranks,
+    archetypes: '', levelsOverride: null, systems: [], ...extra,
+  });
+  const c = new Character(blankDocument({ name: 'Multi', level: 1 }));
+  c.data.classes = [cls('Fighter', 10, 1, true, false, false, 2), cls('Rogue', 8, 0.75, false, true, false, 8),
+    cls('Monk', 8, 0.75, true, true, true, 4)];
+  c.data.progression.tracks = 1;
+  ['Fighter', 'Rogue', 'Monk'].forEach((n, i) => { c.data.progression.levels[i].classes = [n]; });
+  c.set('identity.level', 3);
+  const read = () => [c.data.saves.fortitude.base, c.data.saves.reflex.base, c.data.saves.will.base, c.data.attack.babBase,
+    c.data.gestalt.ranksTotal];
+  check('gestalt-style: one +2 a save, BAB rounded down once', read(), [3, 3, 3, 2, 24]);
+  c.set('campaign.gestalt', false);
+  check('core: a +2 for each good save, BAB rounded down per class, each class its ranks', read(), [4, 4, 2, 1, 14]);
+  check('the skill budget counts them', c.data.skillBudget.available - (c.data.skillBudget.intPerLevel + c.data.skillBudget.bonusResolved) * 3, 14);
+  check('one die a level: d10, d8, d8', [c.data.gestalt.dice, c.data.gestalt.hdTotal], [[10, 8, 8], 26]);
+  c.data.progression.levels[1].classes = ['Rogue', 'Fighter'];
+  c.recompute();
+  check('a second track is not read', read(), [4, 4, 2, 1, 14]);
+
+  const p = new Character(blankDocument({ name: 'Pinned', level: 1 }));
+  p.data.classes = [cls('Wizard', 6, 0.5, false, false, true, 2), cls('Fighter', 10, 1, true, false, false, 2, { levelsOverride: 2 }),
+    cls('Rogue', 8, 0.75, false, true, false, 8)];
+  p.set('identity.level', 5);
+  p.set('campaign.gestalt', false);
+  check('an empty Planner: the pinned count, then the first class unnamed', p.data.classes.map((x) => x.gestaltLevels), [3, 2, 0]);
+  const { renderOverviewPanel } = await import('../app/js/ui/panels/overview.js');
+  check('and the class left without levels is named', renderOverviewPanel(p, { draft: {}, buildView: true }).includes('<strong>Rogue</strong>'), true);
+}
+
+console.log('\nhit points: maximum, average or rolled after 1st');
+{
+  const c = new Character(blankDocument({ name: 'Dice', level: 1 }));
+  c.data.classes = [{ name: 'Fighter', hd: 10, bab: 1, goodFort: true, goodRef: false, goodWill: false, skillRanks: 2,
+    archetypes: '', levelsOverride: null, systems: [] }];
+  c.set('identity.level', 3);
+  const dice = () => c.data.gestalt.hdTotal;
+  const total = c.data.hp.total;
+  check('the table\'s: every die whole', dice(), 30);
+  c.set('campaign.hitPoints', 'average');
+  check('average: half the die and 1 after 1st', [dice(), c.data.hp.total], [22, total - 8]);
+  c.set('campaign.hitPoints', 'rolled');
+  check('rolled, none kept: the average', dice(), 22);
+  c.set('hp.rolls.2', 3);
+  c.set('hp.rolls.3', 99);
+  check('a roll counts; one above the die is the average', dice(), 10 + 3 + 6);
+  check('the rolls are kept on reopen', reopen(c).data.gestalt.hdTotal, 19);
+  c.set('campaign.hitPoints', 'max');
+  check('back to the table\'s, the rolls kept', [dice(), c.data.hp.rolls[2]], [30, 3]);
 }
 
 console.log('\nthe highest level and tier');

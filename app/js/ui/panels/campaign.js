@@ -14,7 +14,7 @@
  * otherwise.
  */
 import { esc } from '../html.js';
-import { collapsibleSub } from '../rows.js';
+import { collapsibleSub, stepGrid } from '../rows.js';
 import {
   CAMPAIGN_DEFAULTS, LEVEL_CEILING, MAX_TIER, TIER_CEILING, XP_TRACKS, campaignChanges, campaignRules,
 } from '../../model/campaign.js';
@@ -45,18 +45,11 @@ function mostBox(key, value, ceiling, label, disabled = false) {
 }
 
 /**
- * A ladder, a box per step. Blank follows `auto(step)`, shown as the box's
- * placeholder; a number is the campaign's own, kept under `campaign.<map>`.
+ * A campaign ladder (rows.stepGrid): a box per step, blank following the
+ * rule, a number the campaign's own, kept under `campaign.<map>`.
  */
-function stepGrid(d, map, from, to, auto, label) {
-  const own = d.campaign?.[map] || {};
-  return `<div class="stepgrid">${Array.from({ length: to - from + 1 }, (_, i) => {
-    const step = from + i;
-    const value = own[step] ?? '';
-    return `<label class="stepcell${value !== '' && value !== null ? ' own' : ''}"><span>${step}</span>
-        <input type="number" min="0" value="${esc(value ?? '')}" placeholder="${esc(auto(step))}"
-          data-set="campaign.${map}.${step}" data-kind="number-or-null" aria-label="${esc(label(step))}"></label>`;
-  }).join('')}</div>`;
+function campaignSteps(d, map, from, to, auto, label) {
+  return stepGrid(`campaign.${map}`, d.campaign?.[map], from, to, auto, label);
 }
 
 export function campaignPanel(model) {
@@ -91,12 +84,12 @@ export function campaignPanel(model) {
   }[rules.advancement];
   const levelsMore = rules.advancement === 'xp'
     ? `<div class="pair">Table ${ruleSelect('xpTrack', rules.xpTrack, Object.entries(XP_TRACK_NAMES), 'XP table')}</div>
-      ${collapsibleSub(model, 'campaign-xp-steps', 'XP for each level, in all', `${stepGrid(d, 'xpSteps', 2, rules.maxLevel,
+      ${collapsibleSub(model, 'campaign-xp-steps', 'XP for each level, in all', `${campaignSteps(d, 'xpSteps', 2, rules.maxLevel,
     (l) => xpTable[l] ?? '', (l) => `XP for level ${l}`)}
         <p class="campnote">Blank follows the table. A number is this campaign's own.</p>`, '', true)}`
     : rules.advancement === 'milestones'
       ? `<div class="pair">${ruleCount('milestoneRate', rules.milestoneRate, 'Milestones a level', 'a level')}</div>
-      ${collapsibleSub(model, 'campaign-milestone-steps', 'Milestones for each level, from the one before', `${stepGrid(d, 'milestoneSteps', 2, rules.maxLevel,
+      ${collapsibleSub(model, 'campaign-milestone-steps', 'Milestones for each level, from the one before', `${campaignSteps(d, 'milestoneSteps', 2, rules.maxLevel,
     () => rules.milestoneRate, (l) => `Milestones for level ${l}`)}
         <p class="campnote">Blank takes the rate above. A number is that level's own.</p>`, '', true)}`
       : '';
@@ -115,12 +108,12 @@ export function campaignPanel(model) {
   }[rules.mythicTier];
   const tierMore = !rules.mythic ? ''
     : rules.mythicTier === 'level'
-      ? collapsibleSub(model, 'campaign-tier-levels', 'The level each tier comes at', `${stepGrid(d, 'mythicLevels', 1, rules.maxTier,
+      ? collapsibleSub(model, 'campaign-tier-levels', 'The level each tier comes at', `${campaignSteps(d, 'mythicLevels', 1, rules.maxTier,
         (t) => MYTHIC_TIER_LEVEL[t] ?? '', (t) => `Level for tier ${t}`)}
         <p class="campnote">Blank follows the table's ladder. A number is this campaign's own.</p>`, '', true)
       : rules.mythicTier === 'trials'
         ? `<div class="pair">${ruleCount('mythicTrialRate', rules.mythicTrialRate, 'Trials a tier', 'a tier')}</div>
-        ${collapsibleSub(model, 'campaign-trial-steps', 'Trials for each tier, from the one before', `${stepGrid(d, 'mythicTrialSteps', 1, rules.maxTier,
+        ${collapsibleSub(model, 'campaign-trial-steps', 'Trials for each tier, from the one before', `${campaignSteps(d, 'mythicTrialSteps', 1, rules.maxTier,
     () => rules.mythicTrialRate, (t) => `Trials for tier ${t}`)}
         <p class="campnote">Blank takes the rate above. A number is that tier's own.</p>`, '', true)}`
         : '';
@@ -144,6 +137,20 @@ export function campaignPanel(model) {
           The table's is ${CAMPAIGN_DEFAULTS.maxLevel}.${rules.maxLevel > MAX_LEVEL ? ` Past 20th the <strong>Planner</strong>
           gains a row for each level and class progressions carry on; spell, power point and companion
           tables stay at their 20th-level row, and the Level Up feats stay ten.` : ''}`)}
+        ${row('gestalt', 'Gestalt', check('gestalt', 'Gestalt characters'),
+    `Each level takes the best of the classes on the <strong>Planner</strong>'s tracks: a good save's
+          +2 once, base attack bonus rounded down once. Off, one class a level from the first track,
+          each class with its own +2 and its own base attack bonus rounded down; the other tracks are
+          kept but not read.`)}
+        ${row('hitPoints', 'Hit points', ruleSelect('hitPoints', rules.hitPoints, [
+    ['max', 'Maximum every level'], ['average', 'Average after 1st'], ['rolled', 'Rolled after 1st'],
+  ], 'Hit points each level'),
+    {
+      max: 'The whole hit die at every level, as the table does.',
+      average: `The whole die at 1st level, then half the die and 1 (5 on a d8) at each level after.`,
+      rolled: `The whole die at 1st level, then the roll for each level, kept on the <strong>Hit points</strong>
+          panel; a level not rolled yet counts the average.`,
+    }[rules.hitPoints])}
         ${row('heroPoints', 'Hero points', check('heroPoints', 'Track hero points'),
     `Kept on the <strong>Details</strong> panel and as a Hero Points pool on <strong>Trackers</strong>,
           where a point spent is undone like any play. Off, the counter goes and the pool may be
@@ -174,7 +181,5 @@ export function campaignPanel(model) {
           crafter has not named one. The coin purse on <strong>Gear</strong> keeps its platinum, gold,
           silver and copper. The table's is ${esc(CAMPAIGN_DEFAULTS.currency)}.`)}
       </div>
-      <p class="hint">Not here yet: gestalt off, and hit points rolled or averaged per level. The
-        sheet uses the table's rules for those.</p>
     </section>`;
 }

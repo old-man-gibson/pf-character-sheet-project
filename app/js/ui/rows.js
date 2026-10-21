@@ -494,6 +494,24 @@ export function collapsible(model, key, panelHtml, defaultCollapsed = false) {
 }
 
 /**
+ * A ladder of numbered boxes, one per step from `from` to `to` -- a level,
+ * a tier -- each bound to `<path>.<step>` in a sparse map (`own`). Blank
+ * follows `auto(step)`, shown as the box's placeholder; a number is marked
+ * as the sheet's own. The campaign rules' XP, milestone, tier and trial
+ * ladders and the hit points rolled each level are all this one control.
+ */
+export function stepGrid(path, own, from, to, auto, label) {
+  const map = own && typeof own === 'object' ? own : {};
+  return `<div class="stepgrid">${Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => {
+    const step = from + i;
+    const value = map[step] ?? '';
+    return `<label class="stepcell${value !== '' && value !== null ? ' own' : ''}"><span>${step}</span>
+        <input type="number" min="0" value="${esc(value ?? '')}" placeholder="${esc(auto(step))}"
+          data-set="${path}.${step}" data-kind="number-or-null" aria-label="${esc(label(step))}"></label>`;
+  }).join('')}</div>`;
+}
+
+/**
  * One block inside a panel, folded down to its subhead.
  *
  * The same state and the same button as `collapsible`, a heading level down: a

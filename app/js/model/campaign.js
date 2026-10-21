@@ -48,6 +48,17 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
   mythicTier: 'level',
   /** Trials a tier takes, unless `mythicTrialSteps` names one tier's own. */
   mythicTrialRate: 1,
+  /**
+   * Gestalt: each level takes the best of the classes present on it, on two
+   * or more Planner tracks. Off, one class a level -- the Planner's first
+   * track -- and each class its own saves and base attack bonus.
+   */
+  gestalt: true,
+  /**
+   * Hit points after 1st level: the whole die (`max`), its average rounded up
+   * (`average`), or the roll kept for each level (`rolled`, in `hp.rolls`).
+   */
+  hitPoints: 'max',
   /** Automatic Bonus Progression replaces the big six magic items. */
   abp: true,
   /** Alternate Training techniques are offered: their tab, and what they grant. */
@@ -80,6 +91,7 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
 /** The values a select offers for `mythicTier`. */
 export const MYTHIC_TIER_SOURCES = Object.freeze(['level', 'trials', 'awarded']);
 export const ADVANCEMENT_MODES = Object.freeze(['typed', 'xp', 'milestones']);
+export const HIT_POINT_MODES = Object.freeze(['max', 'average', 'rolled']);
 
 /**
  * The experience a level takes in all, from the core rules' three tables:
@@ -142,6 +154,8 @@ export function campaignRules(d) {
     mythic: bool('mythic'),
     mythicTier: MYTHIC_TIER_SOURCES.includes(c.mythicTier) ? c.mythicTier : CAMPAIGN_DEFAULTS.mythicTier,
     mythicTrialRate: count(c.mythicTrialRate, CAMPAIGN_DEFAULTS.mythicTrialRate),
+    gestalt: bool('gestalt'),
+    hitPoints: HIT_POINT_MODES.includes(c.hitPoints) ? c.hitPoints : CAMPAIGN_DEFAULTS.hitPoints,
     abp: bool('abp'),
     altTraining: bool('altTraining'),
     advancement: ADVANCEMENT_MODES.includes(c.advancement) ? c.advancement : CAMPAIGN_DEFAULTS.advancement,
