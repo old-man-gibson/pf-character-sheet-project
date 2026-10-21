@@ -1492,12 +1492,15 @@ export function proseSources(model) {
     push(`grantedFeat:${key}`, d.grantedFeats?.[key]?.note);
   }
   (d.grantedFeats?.others || []).forEach((f, i) => push(`grantedFeat:${i}`, f?.note, null, planned(rowLevel(f))));
-  // Alternate Training is picked level by level, so a pick for a later one waits.
-  for (const [lvl, text] of Object.entries(d.altTraining?.picks || {})) push(`altTraining:${lvl}`, text, null, planned(Number(lvl) || null));
+  // Alternate Training is picked level by level, so a pick for a later one
+  // waits -- and every one does with Alternate Training off (a campaign rule).
+  const altOff = campaignRules(d).altTraining ? null : { future: true };
+  const altAt = (lvl) => altOff || planned(Number(lvl) || null);
+  for (const [lvl, text] of Object.entries(d.altTraining?.picks || {})) push(`altTraining:${lvl}`, text, null, altAt(lvl));
   for (const [lvl, text] of Object.entries(d.altTraining?.rowNotes || {})) {
-    push(`altTrainingNote:${lvl}`, text, null, planned(Number(lvl) || null));
+    push(`altTrainingNote:${lvl}`, text, null, altAt(lvl));
   }
-  push('altTraining:notes', d.altTraining?.notes);
+  push('altTraining:notes', d.altTraining?.notes, null, altOff);
   // `notes` is the sibling map of one note per slot, not an eighth slot, so it
   // is walked rather than pushed as though it were a name.
   // With mythic off (a campaign rule) a tradition is written down, not in

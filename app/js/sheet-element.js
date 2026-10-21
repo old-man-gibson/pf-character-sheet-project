@@ -2482,10 +2482,13 @@ export class CharacterSheetElement extends HTMLElement {
     const d = this.#model.data;
     const modelled = this.#modelledSystems();
     const out = [];
-    // Without mythic (a campaign rule) the feats tab is the feats alone.
-    const mythic = campaignRules(d).mythic;
+    // Without mythic (a campaign rule) the feats tab is the feats alone, and
+    // without Alternate Training its tab is not there at all -- left out here,
+    // not hidden in the tab order, so it comes back where it was.
+    const { mythic, altTraining } = campaignRules(d);
     for (const [id, base] of TABS) {
       if (FIXED_TABS.has(id)) continue;                // not the player's to arrange (see FIXED_TABS)
+      if (id === 'altTraining' && !altTraining) continue;
       const m = modelled[id];
       const label = id === 'features' && !mythic ? 'Feats' : base;
       out.push({

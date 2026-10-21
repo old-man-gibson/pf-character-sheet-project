@@ -142,6 +142,15 @@ export function campaignPanel(model) {
     `Off, ABP adds nothing: no resistance, deflection or natural armour bonuses and no prowess
           picks, and the <strong>Stats</strong> tab drops their columns. A cloak's resistance or a
           ring's deflection goes in the typed columns there instead.`)}
+        ${row('altTraining', 'Alternate Training', check('altTraining', 'Offer Alternate Training techniques'),
+    `Off, the <strong>Alternate Training</strong> tab goes and its technique grants nothing: no
+          talents, feats or bonus ranks from it. What was picked there is kept.`)}
+        ${row('currency', 'Currency',
+    `<input type="text" value="${esc(d.campaign?.currency ?? '')}" placeholder="${esc(rules.currency)}" data-set="campaign.currency"
+          data-kind="text" aria-label="What the money is called" style="width:9rem">`,
+    `What the money is called: the <strong>Wealth</strong> wallet's name, and crafting's unit where a
+          crafter has not named one. The coin purse on <strong>Gear</strong> keeps its platinum, gold,
+          silver and copper. The table's is ${esc(CAMPAIGN_DEFAULTS.currency)}.`)}
       </div>
       <p class="hint">Not here yet: gestalt off, and hit points rolled or averaged per level. The
         sheet uses the table's rules for those.</p>

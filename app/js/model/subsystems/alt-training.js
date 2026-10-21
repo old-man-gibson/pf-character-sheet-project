@@ -15,6 +15,7 @@
  * Techniques are granted at fixed levels and each has prerequisites that read
  * the rest of the sheet, so the recompute pass runs last of the sub-systems.
  */
+import { campaignRules } from '../campaign.js';
 
 /* ------------------------------------------------------------------ *
  * The catalogue, supplied by whatever packs are switched on.
@@ -67,8 +68,13 @@ export function altTrainingTechnique(name) {
  * document carries its own copy under `altTraining.cited` (written by
  * publish.js), so a reader with no pack sees the same ladder the author did.
  * `cited` says which answered.
+ *
+ * With Alternate Training off in the campaign's rules there is no technique:
+ * every reader comes through here, so nothing it grants counts, and what was
+ * picked stays written down for when it comes back.
  */
 export function altTrainingFor(model) {
+  if (model?.data && !campaignRules(model.data).altTraining) return { ...TABLES, technique: null, cited: false, off: true };
   const p = model?.data?.altTraining || {};
   const name = String(p.technique || '').trim();
   const fromPack = altTrainingTechnique(name);
@@ -265,7 +271,8 @@ export function recomputeAltTraining(model) {
 
   p.calc = {
     technique: technique?.name || null,
-    unknown: !technique && !!String(p.technique || '').trim(),
+    off: !!rules.off,
+    unknown: !technique && !rules.off && !!String(p.technique || '').trim(),
     note: technique?.note || '',
     // Printed once under the ladder, because it lands on seven rows.
     repeat: technique?.repeat || null,

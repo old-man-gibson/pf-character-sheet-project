@@ -7,6 +7,7 @@
  * in step with the first.
  */
 
+import { currencyName } from '../campaign.js';
 import { emit } from '../events.js';
 import { numOrNull } from '../util.js';
 import { markUndo, rowLabel } from '../undo.js';
@@ -142,9 +143,12 @@ export function wealthView(w, today = new Date(), casterLevel = 0) {
   };
 }
 
-/** The wallet today: current mana, the offering owed part by part, and what is left after it. */
+/**
+ * The wallet today: current mana, the offering owed part by part, and what is
+ * left after it -- in the money the campaign's rules name.
+ */
 export function wealthViewOf(model, today = new Date()) {
-  return wealthView(model.data.wealth, today, model.casterLevel);
+  return { ...wealthView(model.data.wealth, today, model.casterLevel), currency: currencyName(model.data) };
 }
 
 /**

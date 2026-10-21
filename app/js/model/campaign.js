@@ -44,6 +44,8 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
   mythicTrialRate: 1,
   /** Automatic Bonus Progression replaces the big six magic items. */
   abp: true,
+  /** Alternate Training techniques are offered: their tab, and what they grant. */
+  altTraining: true,
   /**
    * How a character gains levels: `typed` (the level is typed in, as it
    * always was), `xp` (experience points against a table), or `milestones`
@@ -54,6 +56,11 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
   xpTrack: 'medium',
   /** Milestones a level takes, unless `milestoneSteps` names one level's own. */
   milestoneRate: 1,
+  /**
+   * What the campaign's money is called: the Wealth wallet and crafting's
+   * unit. The coin purse keeps its platinum, gold, silver and copper.
+   */
+  currency: 'Mana',
 });
 
 /** The values a select offers for `mythicTier`. */
@@ -102,6 +109,7 @@ const steps = (map) => {
 export function campaignRules(d) {
   const c = d?.campaign && typeof d.campaign === 'object' ? d.campaign : {};
   const bool = (k) => (typeof c[k] === 'boolean' ? c[k] : CAMPAIGN_DEFAULTS[k]);
+  const words = (v) => (typeof v === 'string' ? v.trim() : '');
   const buy = Number(c.pointBuy);
   return {
     pointBuy: c.pointBuy !== undefined && c.pointBuy !== null && c.pointBuy !== '' && Number.isFinite(buy) && buy >= 0
@@ -111,10 +119,19 @@ export function campaignRules(d) {
     mythicTier: MYTHIC_TIER_SOURCES.includes(c.mythicTier) ? c.mythicTier : CAMPAIGN_DEFAULTS.mythicTier,
     mythicTrialRate: count(c.mythicTrialRate, CAMPAIGN_DEFAULTS.mythicTrialRate),
     abp: bool('abp'),
+    altTraining: bool('altTraining'),
     advancement: ADVANCEMENT_MODES.includes(c.advancement) ? c.advancement : CAMPAIGN_DEFAULTS.advancement,
     xpTrack: Object.hasOwn(XP_TRACKS, c.xpTrack) ? c.xpTrack : CAMPAIGN_DEFAULTS.xpTrack,
     milestoneRate: count(c.milestoneRate, CAMPAIGN_DEFAULTS.milestoneRate),
+    // The wallet's own name, which no control ever set, still counts under a
+    // blank: a sheet that came in calling it something else keeps that.
+    currency: words(c.currency) || words(d?.wealth?.currency) || CAMPAIGN_DEFAULTS.currency,
   };
+}
+
+/** What the money is called, as a heading says it ("Mana", "Gold"). */
+export function currencyName(d) {
+  return campaignRules(d).currency;
 }
 
 /* ---------------- the ladders ---------------- */

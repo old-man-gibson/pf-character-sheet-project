@@ -57,7 +57,7 @@ for (const id of fixtureIds()) {
 console.log('\na switch flipped in play survives a reload, and flipping it back restores everything');
 for (const id of fixtureIds()) {
   for (const [key, value] of [['abp', false], ['mythic', false], ['heroPoints', false], ['pointBuy', 20], ['mythicTier', 'awarded'],
-    ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3]]) {
+    ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false]]) {
     const m = new Character(loadCharacter(id));
     const before = numbers(m);
     m.set(`campaign.${key}`, value);
@@ -78,6 +78,46 @@ console.log('\npoint buy and hero points');
   check('the table\'s budget', c.pointBuySummary().budget, 30);
   c.set('campaign.pointBuy', 15);
   check('a campaign budget', c.pointBuySummary().budget, 15);
+}
+
+console.log('\nwhat the money is called');
+{
+  const { wealthPanel } = await import('../app/js/ui/panels/gear.js');
+  const c = new Character(blankDocument({ name: 'Purse', level: 1 }));
+  const draw = () => wealthPanel(c, { draft: {} });
+  check('the table\'s: mana', [c.wealthView().currency, draw().includes('Current mana')], ['Mana', true]);
+  c.set('campaign.currency', ' Gold ');
+  check('the campaign\'s own', [c.wealthView().currency, draw().includes('Current gold'), draw().includes('Gold / day'), draw().includes('Current mana')],
+    ['Gold', true, true, false]);
+  check('and it counts as a change', campaignChanges(c.data), ['currency']);
+  c.set('campaign.currency', '');
+  check('blank is the table\'s again', [c.wealthView().currency, campaignChanges(c.data)], ['Mana', []]);
+}
+
+console.log('\nAlternate Training off grants nothing, and keeps what was picked');
+{
+  const { setAltTrainingTables } = await import('../app/js/model/subsystems/alt-training.js');
+  setAltTrainingTables({
+    levels: [1, 3, 5, 7],
+    repeatFrom: 7,
+    techniques: [{
+      name: 'Green Thumb',
+      talents: { side: 'magic', sphere: 'Nature' },
+      grants: { 1: [{ text: 'A talent', talent: true }], 3: [{ text: 'A feat', feat: true }] },
+    }],
+  });
+  const c = new Character(blankDocument({ name: 'Gardener', level: 8 }));
+  c.data.altTraining.technique = 'Green Thumb';
+  c.data.altTraining.picks[3] = 'Power Attack';
+  c.recompute();
+  const calc = () => c.data.altTraining.calc;
+  check('on: the grants count', [calc().counts.talent, calc().counts.feat, calc().talents?.count], [1, 1, 1]);
+  c.set('campaign.altTraining', false);
+  check('off: nothing counts', [calc().off, calc().counts.talent, calc().counts.feat, calc().talents, calc().unknown], [true, 0, 0, null, false]);
+  check('off: the picks are kept', c.data.altTraining.picks[3], 'Power Attack');
+  c.set('campaign.altTraining', true);
+  check('back on, the grants again', [calc().off, calc().counts.feat], [false, 1]);
+  setAltTrainingTables({});
 }
 
 console.log('\nABP off takes away the ladder and the prowess picks');
