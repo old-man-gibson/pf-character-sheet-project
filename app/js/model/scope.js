@@ -27,7 +27,7 @@ import {
 } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
-import { campaignRules, isAntihero } from './campaign.js';
+import { campaignRules, coreAbp, isAntihero } from './campaign.js';
 import { sphereTableNames, talentsIn } from './spheres.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
 import { tempHpGrant } from './stats/defenses.js';
@@ -1466,13 +1466,20 @@ export function proseSources(model) {
   // A tier above the one the character has reached is a plan: its text still
   // resolves and still shows, but a bonus written there has not been earned.
   const mythicTier = Number(d.identity?.mythicTier) || 0;
+  // The core ladder (a campaign rule) grants no feat on an even tier, so
+  // whatever is written in that slot waits, as a tier not reached does.
+  const coreLadder = campaignRules(d).mythicLadder === 'core';
   (d.mythic?.abilities || []).forEach((a, i) => {
     const ahead = i + 1 > mythicTier ? { future: true } : null;
+    const noFeat = coreLadder && (i + 1) % 2 === 0 ? { future: true } : ahead;
     push(`mythic:${i}`, a.name, null, ahead);
     push(`mythic:${i}:effect`, a.effect, null, ahead);
-    push(`mythic:${i}:featChoice`, a.featChoice, null, ahead);
-    push(`mythic:${i}:featEffect`, a.featEffect, null, ahead);
+    push(`mythic:${i}:featChoice`, a.featChoice, null, noFeat);
+    push(`mythic:${i}:featEffect`, a.featEffect, null, noFeat);
   });
+  // Core ABP's legendary gifts, written down once they arrive at 19th.
+  push('abp:gifts', d.progressionPicks?.legendaryGifts, null,
+    coreAbp(d) && (Number(d.identity?.level) || 0) >= 19 ? null : { future: true });
   /*
    * Every feat's note, in the groups and among the granted ones alike.
    *

@@ -1497,6 +1497,10 @@ select.jumpto[hidden] { display: none; }
 .stepcell input { width: 100%; box-sizing: border-box; text-align: right; }
 .stepcell.own input { box-shadow: inset 3px 0 0 var(--cs-accent); }
 
+/* Core ABP's attunement (stats.js abpAttunePanel): a tick box per armour,
+   shield or weapon, with the bonus it gets beside it. */
+.attunelist { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 2px 0 4px; }
+
 /* Progress toward the next level (overview.js levelProgressRow), under the
    Details fields when levels are earned by XP or milestones: the count, an
    Add box for XP, and a bar from this level's mark to the next with the

@@ -47,7 +47,7 @@ const COMPUTED_PATHS = [
   'equipment.weights', 'equipment.coinValue',
   'classes.*.gestaltLevels', 'classes.*.gestaltBeaten',
   'gestalt.bab', 'gestalt.babPerLevel', 'gestalt.hdTotal', 'gestalt.hp', 'gestalt.saves.*.base',
-  'gestalt.dice', 'gestalt.ranksTotal',
+  'gestalt.dice', 'gestalt.ranksTotal', 'abpAttune', 'equipment.weapons.*.enhancementNow',
   'equipment.weapons.*.attackTotal', 'equipment.weapons.*.damageBonus',
   'equipment.weapons.*.damageTotal', 'equipment.weapons.*.diceResolved',
   'equipment.weapons.*.sizeNow', 'equipment.weapons.*.sizeSteps',

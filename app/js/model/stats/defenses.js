@@ -25,7 +25,7 @@ import {
   formatSpellResistance, parseDr, parseEnergy, parseImmunities, parseSpellResistance, unslug,
 } from './defence-lists.js';
 import { mythicHpPerTier } from '../progression.js';
-import { campaignRules } from '../campaign.js';
+import { abpAttuneOf, campaignRules } from '../campaign.js';
 import { trackerFacts } from '../trackers.js';
 import { resolveSaveBonuses } from './saves.js';
 import { resolveBonusBlock, resolveNumberField } from '../util.js';
@@ -64,6 +64,11 @@ export function resolveDefenceBonuses(model) {
     : abpDefence(model.data.identity?.level);
   resolveSaveBonuses(model, scope, abp);
   resolveAcBonuses(model, scope, abp);
+  // Core ABP's armour and weapon attunement, read by the armour's parts and
+  // the weapons' attack and damage; nothing under any other rule.
+  const attune = monster ? null : abpAttuneOf(model.data);
+  if (attune) model.data.abpAttune = attune;
+  else delete model.data.abpAttune;
 }
 
 /** The AC's typed bonuses, ABP deflection and natural armour included. */

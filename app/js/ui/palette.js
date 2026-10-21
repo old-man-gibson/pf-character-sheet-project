@@ -44,7 +44,7 @@ import { trackerReading } from './panels/trackers.js';
 import { COMPANION_KINDS, COMPANION_LABELS, companionInUse } from '../companions.js';
 import { fmt, ABILITIES, ABILITY_LABELS, critMultOf, threatText } from '../rules.js';
 import { rollSpec } from '../roll20.js';
-import { campaignRules, levelProgress, trialProgress } from '../model/campaign.js';
+import { campaignRules, levelProgress, mythicTierGrantOf, trialProgress } from '../model/campaign.js';
 
 /* ---------------- kinds ---------------- */
 
@@ -504,7 +504,7 @@ function feats(model, add) {
         clip(a.effect, 60)),
       sel: `[data-item^="mythic.abilities|${i}|"]`, keys: 'mythic path ability',
     });
-    if (text(a.featChoice)) {
+    if (text(a.featChoice) && mythicTierGrantOf(c, i + 1, a.feat)) {
       add({
         kind: 'feat', title: text(a.featChoice), tab: 'features',
         sub: bits('Mythic feat', text(a.path)), keys: 'mythic feat',

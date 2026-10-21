@@ -58,7 +58,8 @@ console.log('\na switch flipped in play survives a reload, and flipping it back 
 for (const id of fixtureIds()) {
   for (const [key, value] of [['abp', false], ['mythic', false], ['heroPoints', false], ['pointBuy', 20], ['mythicTier', 'awarded'],
     ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false], ['antiheroes', true],
-    ['maxLevel', 6], ['maxLevel', 25], ['maxTier', 5], ['maxTier', 12], ['gestalt', false], ['hitPoints', 'average'], ['hitPoints', 'rolled']]) {
+    ['maxLevel', 6], ['maxLevel', 25], ['maxTier', 5], ['maxTier', 12], ['gestalt', false], ['hitPoints', 'average'], ['hitPoints', 'rolled'],
+    ['abpLadder', 'core'], ['mythicLadder', 'core']]) {
     const m = new Character(loadCharacter(id));
     const before = numbers(m);
     m.set(`campaign.${key}`, value);
@@ -359,6 +360,66 @@ console.log('\nhit points: maximum, average or rolled after 1st');
   check('the rolls are kept on reopen', reopen(c).data.gestalt.hdTotal, 19);
   c.set('campaign.hitPoints', 'max');
   check('back to the table\'s, the rolls kept', [dice(), c.data.hp.rolls[2]], [30, 3]);
+}
+
+console.log('\ncore ABP: attunement, prowess to 18th, legendary gifts');
+{
+  const { armorParts } = await import('../app/js/rules.js');
+  const { blankWeapon } = await import('../app/js/model.js');
+  const c = new Character(blankDocument({ name: 'Attuned', level: 1 }));
+  c.set('identity.level', 9);
+  Object.assign(c.data.equipment.armor, { name: 'Breastplate', acBonus: 6, active: true });
+  c.data.equipment.shields = [{ kind: 'Shield', name: 'Heavy shield', acBonus: 2, enhancement: 0, active: true }];
+  c.data.equipment.weapons = [{ ...blankWeapon(), name: 'Longsword' }, { ...blankWeapon(), name: 'Dagger', enhancement: 1 }];
+  c.recompute();
+  const worn = () => [armorParts(c.data).armor, armorParts(c.data).shield];
+  const hits = () => c.data.equipment.weapons.map((w) => w.enhancementNow);
+  const ac = c.data.defenses.ac;
+  const attack = c.data.equipment.weapons[0].attackTotal;
+  check('the table\'s ABP attunes nothing', [worn(), hits(), c.data.abpAttune], [[6, 2], [0, 1], undefined]);
+  c.set('campaign.abpLadder', 'core');
+  check('core: none ticked, the armour takes +2 at 9th', [worn(), hits(), c.data.defenses.ac], [[8, 2], [0, 1], ac + 2]);
+  c.set('equipment.weapons.0.attuned', true);
+  check('a weapon ticked: +2 on attack and damage', [hits(), c.data.equipment.weapons[0].attackTotal - attack, c.data.equipment.weapons[0].damageBonus >= 2], [[2, 1], 2, true]);
+  c.set('equipment.weapons.1.attuned', true);
+  check('two ticked: split +1 and +1, the higher of its own counting', hits(), [1, 1]);
+  c.set('equipment.armor.attuned', true);
+  c.set('equipment.shields.0.attuned', true);
+  check('armour and shield ticked: split too', worn(), [7, 3]);
+  c.set('equipment.armor.active', false);
+  c.set('equipment.shields.0.attuned', false);
+  check('nothing worn: the clothes take it', [armorParts(c.data).armor, c.data.abpAttune.clothing], [2, 2]);
+  c.set('identity.level', 3);
+  check('before 4th, nothing', [armorParts(c.data).armor, hits()], [0, [0, 1]]);
+
+  const p = new Character(blankDocument({ name: 'Prowess', level: 1 }));
+  p.set('identity.level', 20);
+  p.data.progressionPicks = { ...(p.data.progressionPicks || {}), abp: [{ level: 19, mental: 'Int', physical: 'Str' }] };
+  p.recompute();
+  check('the table counts a 19th-level prowess pick', [p.data.statsBuild.int.abp, p.data.statsBuild.str.abp], [2, 2]);
+  p.set('campaign.abpLadder', 'core');
+  check('core stops prowess at 18th', [p.data.statsBuild.int.abp, p.data.statsBuild.str.abp], [0, 0]);
+  const fort = p.data.saves.fortitude.total;
+  p.set('progressionPicks.legendaryGifts', 'Legendary Body {fort += 1}');
+  check('a legendary gift written with a formula counts at 19th and up', p.data.saves.fortitude.total, fort + 1);
+  p.set('campaign.abpLadder', 'table');
+  check('and waits under the table\'s ABP', p.data.saves.fortitude.total, fort);
+}
+
+console.log('\nthe core mythic ladder: no feat on an even tier');
+{
+  const { renderFeaturesPanel } = await import('../app/js/ui/panels/feats.js');
+  const c = new Character(blankDocument({ name: 'Ladder', level: 1 }));
+  c.set('identity.level', 12);
+  const fort = c.data.saves.fortitude.total;
+  c.data.mythic.abilities[1].featChoice = 'Path power';
+  c.data.mythic.abilities[1].featEffect = '{fort += 2}';
+  c.recompute();
+  check('the table\'s: an even tier\'s grant counts', c.data.saves.fortitude.total, fort + 2);
+  c.set('campaign.mythicLadder', 'core');
+  check('core: it waits', c.data.saves.fortitude.total, fort);
+  const html = renderFeaturesPanel(c, { draft: {} });
+  check('the table says so', [html.includes('Mythic feat 1'), html.includes('The core ladder grants no feat at this tier')], [true, true]);
 }
 
 console.log('\nthe highest level and tier');

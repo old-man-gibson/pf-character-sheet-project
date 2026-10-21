@@ -23,7 +23,9 @@
  * live with the rest of the character. The rules say what they are measured
  * against.
  */
-import { MAX_LEVEL, MYTHIC_TIER_LEVEL, tierAtLevel } from '../rules.js';
+import {
+  CORE_PROWESS_LEVELS, MAX_LEVEL, MYTHIC_TIER_LEVEL, attunedBonuses, mythicTierGrant, tierAtLevel,
+} from '../rules.js';
 
 /** The table's rules: what a switch reads as until a player sets it. */
 export const CAMPAIGN_DEFAULTS = Object.freeze({
@@ -61,6 +63,18 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
   hitPoints: 'max',
   /** Automatic Bonus Progression replaces the big six magic items. */
   abp: true,
+  /**
+   * Which ABP: `table` (the defences and prowess to 20th) or `core`
+   * (Pathfinder Unchained: prowess to 18th, armour and weapon attunement,
+   * legendary gifts at 19th and 20th).
+   */
+  abpLadder: 'table',
+  /**
+   * What a mythic tier hands over besides its path ability: `table` (a
+   * mythic feat on odd tiers, a path power and +2 to an ability on even
+   * ones) or `core` (the feat on odd tiers, the +2 alone on even ones).
+   */
+  mythicLadder: 'table',
   /** Alternate Training techniques are offered: their tab, and what they grant. */
   altTraining: true,
   /**
@@ -92,6 +106,8 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
 export const MYTHIC_TIER_SOURCES = Object.freeze(['level', 'trials', 'awarded']);
 export const ADVANCEMENT_MODES = Object.freeze(['typed', 'xp', 'milestones']);
 export const HIT_POINT_MODES = Object.freeze(['max', 'average', 'rolled']);
+/** The two ladders ABP and the mythic tiers may follow. */
+export const LADDERS = Object.freeze(['table', 'core']);
 
 /**
  * The experience a level takes in all, from the core rules' three tables:
@@ -157,6 +173,8 @@ export function campaignRules(d) {
     gestalt: bool('gestalt'),
     hitPoints: HIT_POINT_MODES.includes(c.hitPoints) ? c.hitPoints : CAMPAIGN_DEFAULTS.hitPoints,
     abp: bool('abp'),
+    abpLadder: LADDERS.includes(c.abpLadder) ? c.abpLadder : CAMPAIGN_DEFAULTS.abpLadder,
+    mythicLadder: LADDERS.includes(c.mythicLadder) ? c.mythicLadder : CAMPAIGN_DEFAULTS.mythicLadder,
     altTraining: bool('altTraining'),
     advancement: ADVANCEMENT_MODES.includes(c.advancement) ? c.advancement : CAMPAIGN_DEFAULTS.advancement,
     xpTrack: Object.hasOwn(XP_TRACKS, c.xpTrack) ? c.xpTrack : CAMPAIGN_DEFAULTS.xpTrack,
@@ -187,6 +205,68 @@ export function heroPointsInPlay(d) {
 /** What the money is called, as a heading says it ("Mana", "Gold"). */
 export function currencyName(d) {
   return campaignRules(d).currency;
+}
+
+/* ---------------- core ABP and the core mythic ladder ---------------- */
+
+/** Whether ABP is in play under the core ladder. */
+export function coreAbp(d) {
+  const rules = campaignRules(d);
+  return rules.abp && rules.abpLadder === 'core';
+}
+
+/**
+ * Core ABP's armour and weapon attunement, as each item's enhancement bonus,
+ * or null under any other rule. Armour: the worn armour and the shields in
+ * use that are ticked as attuned, in that order -- none ticked, the worn
+ * armour, or the clothes where there is none (clothing counts as armour with
+ * a +0 bonus). Weapons: those ticked, in row order. Two ticked split the
+ * bonus once the level allows; a third gets nothing.
+ */
+export function abpAttuneOf(d) {
+  if (!coreAbp(d)) return null;
+  const level = Number(d?.identity?.level) || 0;
+  const e = d?.equipment || {};
+  const armor = e.armor?.active ? e.armor : null;
+  const shields = Array.isArray(e.shields) ? e.shields : [];
+  const weapons = Array.isArray(e.weapons) ? e.weapons : [];
+  const out = { armor: 0, clothing: 0, shields: shields.map(() => 0), weapons: weapons.map(() => 0) };
+
+  const ticked = [...(armor?.attuned ? ['armor'] : []),
+    ...shields.flatMap((s, i) => (s?.active && s.attuned ? [i] : []))];
+  const pieces = ticked.length ? ticked : ['armor'];
+  attunedBonuses(level, pieces.length).forEach((bonus, k) => {
+    if (pieces[k] !== 'armor') out.shields[pieces[k]] = bonus;
+    else if (armor) out.armor = bonus;
+    else out.clothing = bonus;
+  });
+  const arms = weapons.flatMap((w, i) => (w?.attuned ? [i] : []));
+  attunedBonuses(level, arms.length).forEach((bonus, k) => { out.weapons[arms[k]] = bonus; });
+  return out;
+}
+
+/** The prowess picks that count: all of them, or under core ABP those of its levels alone. */
+export function prowessPicks(d) {
+  const picks = d?.progressionPicks;
+  if (!picks || !coreAbp(d)) return picks;
+  return {
+    ...picks,
+    abp: (picks.abp || []).map((row) => ({
+      ...row,
+      mental: CORE_PROWESS_LEVELS.mental.includes(row.level) ? row.mental : null,
+      physical: CORE_PROWESS_LEVELS.physical.includes(row.level) ? row.physical : null,
+    })),
+  };
+}
+
+/**
+ * What a mythic tier hands over beside its path ability, as the Mythic Feats
+ * table labels it: the sheet's own label where it kept one, else the
+ * ladder's. Null where the core ladder gives nothing (an even tier).
+ */
+export function mythicTierGrantOf(d, tier, label = '') {
+  if (campaignRules(d).mythicLadder === 'core') return tier % 2 ? `Mythic feat ${Math.ceil(tier / 2)}` : null;
+  return label || mythicTierGrant(tier);
 }
 
 /* ---------------- room for every level and tier ---------------- */

@@ -56,12 +56,15 @@ export function campaignPanel(model) {
   const d = model.data;
   const rules = campaignRules(d);
   const changed = new Set(campaignChanges(d));
-  const mark = (k) => (changed.has(k)
+  // A row may hold more than one switch (ABP and which ABP): it is changed
+  // when any of them is.
+  const differs = (k) => [].concat(k).some((x) => changed.has(x));
+  const mark = (k) => (differs(k)
     ? '<span class="badge player" title="Not the table\'s rule">changed</span>' : '');
   const check = (k, label, disabled = false) => `<label class="chk">
       <input type="checkbox" ${rules[k] ? 'checked' : ''} data-set="campaign.${k}" data-kind="bool"${disabled ? ' disabled' : ''}>
       <span>${esc(label)}</span></label>`;
-  const row = (k, title, control, hint, below = '') => `<div class="camprow${changed.has(k) ? ' changed' : ''}">
+  const row = (k, title, control, hint, below = '') => `<div class="camprow${differs(k) ? ' changed' : ''}">
       <div class="campname">${esc(title)} ${mark(k)}</div>
       <div class="campctl">${control}</div>
       <p class="campnote">${hint}</p>
@@ -164,13 +167,21 @@ export function campaignPanel(model) {
           <strong>Feats &amp; Mythic</strong> becomes <strong>Feats</strong>, with a note in place of
           the mythic panels. What was written there is kept.`)}
         ${row('mythicTier', 'Mythic tier', tierSelect, tierHint, tierMore)}
+        ${row('mythicLadder', 'What a tier grants', ruleSelect('mythicLadder', rules.mythicLadder,
+    [['table', 'The table\'s'], ['core', 'Core (Mythic Adventures)']], 'What a mythic tier grants', !rules.mythic),
+    rules.mythicLadder === 'core'
+      ? 'A path ability every tier, a mythic feat on odd tiers and +2 to an ability on even ones.'
+      : 'A path ability every tier, a mythic feat on odd tiers, and a path power and +2 to an ability on even ones.')}
         ${row('maxTier', 'Highest mythic tier', mostBox('maxTier', rules.maxTier, TIER_CEILING, 'Highest mythic tier', !rules.mythic),
     `Where mythic stops: the ladders, trials and <strong>Tier up</strong> end there, and
           <strong>Feats &amp; Mythic</strong> lists that many tiers. The table's is ${CAMPAIGN_DEFAULTS.maxTier}.`)}
-        ${row('abp', 'Automatic Bonus Progression', check('abp', 'Use ABP'),
+        ${row(['abp', 'abpLadder'], 'Automatic Bonus Progression', `${check('abp', 'Use ABP')} ${ruleSelect('abpLadder', rules.abpLadder,
+    [['table', 'The table\'s'], ['core', 'Core (Unchained)']], 'Which ABP', !rules.abp)}`,
     `Off, ABP adds nothing: no resistance, deflection or natural armour bonuses and no prowess
           picks, and the <strong>Stats</strong> tab drops their columns. A cloak's resistance or a
-          ring's deflection goes in the typed columns there instead.`)}
+          ring's deflection goes in the typed columns there instead.${rules.abpLadder === 'core' ? ` Core adds armour
+          and weapon attunement, ticked on the <strong>Stats</strong> tab, stops prowess at 18th, and
+          gives legendary gifts at 19th and 20th, written down there.` : ''}`)}
         ${row('altTraining', 'Alternate Training', check('altTraining', 'Offer Alternate Training techniques'),
     `Off, the <strong>Alternate Training</strong> tab goes and its technique grants nothing: no
           talents, feats or bonus ranks from it. What was picked there is kept.`)}

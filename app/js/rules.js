@@ -1279,6 +1279,52 @@ export function abpDefence(level) {
   return { abpResistance: row[1], abpDeflection: row[2], abpNatural: row[3] };
 }
 
+/*
+ * Core ABP (Pathfinder Unchained), where it differs from the table's: the
+ * defence ladder and the prowess steps to 18th are the same, but core also
+ * attunes armour and weapons, stops prowess at 18th, and hands out
+ * legendary gifts at 19th and 20th instead.
+ */
+
+/** The levels each prowess track gains a +2 at under core ABP. */
+export const CORE_PROWESS_LEVELS = {
+  mental: [6, 11, 13, 15, 17, 18],
+  physical: [7, 12, 13, 16, 17, 18],
+};
+
+/**
+ * Armour and weapon attunement, `[level, one, two]`: the enhancement bonus
+ * on a single attuned item, and the pair it may be split into across two
+ * (null before 8th, where it cannot). Each holds until the next row.
+ */
+const ABP_ATTUNEMENT_LADDER = [
+  [4, 1, null], [8, 1, [1, 1]], [9, 2, [1, 1]], [14, 3, [2, 2]], [15, 4, [3, 3]], [17, 5, [4, 3]],
+];
+
+/** Core ABP's attunement at a level: `{ one, two }` (0 and null before 4th). */
+export function abpAttunement(level) {
+  const l = Number(level) || 0;
+  let row = [0, 0, null];
+  for (const step of ABP_ATTUNEMENT_LADDER) {
+    if (step[0] <= l) row = step;
+  }
+  return { one: row[1], two: row[2] };
+}
+
+/**
+ * The bonus each attuned item gets, in the order they were ticked: the whole
+ * of it on one item, the split pair across two once the level allows, and
+ * nothing for a third (or for a second before 8th).
+ */
+export function attunedBonuses(level, count) {
+  const { one, two } = abpAttunement(level);
+  if (count >= 2 && two) return [...two, ...Array(count - 2).fill(0)];
+  return Array.from({ length: count }, (_, i) => (i ? 0 : one));
+}
+
+/** Core ABP's legendary gifts: how many a level brings. */
+export const LEGENDARY_GIFTS = { 19: 3, 20: 5 };
+
 /**
  * ABP and its typed counterpart are one bonus, not two: resistance from the
  * progression and a cloak of resistance are both *resistance*, deflection and
@@ -2765,12 +2811,18 @@ export function armorParts(c) {
   // A piece's bonus is what it is made of plus what it is enchanted to: a +1
   // breastplate is a +7 armour bonus, not a +6 with a +1 beside it, so the
   // enhancement goes into the same part and stacks with nothing but itself.
-  const pieceAc = (p) => (Number(p?.acBonus) || 0) + (Number(p?.enhancement) || 0);
-  const shieldAcs = rows.map((s) => (s?.active ? pieceAc(s) : 0));
+  //
+  // Core ABP attunes armour (`c.abpAttune`, see model/campaign.js): an
+  // enhancement bonus too, so the piece takes the higher of the two.
+  const att = c.abpAttune || null;
+  const enhancement = (p, attuned = 0) => Math.max(Number(p?.enhancement) || 0, Number(attuned) || 0);
+  const pieceAc = (p, attuned = 0) => (Number(p?.acBonus) || 0) + enhancement(p, attuned);
+  const shieldAcs = rows.map((s, i) => (s?.active ? pieceAc(s, att?.shields?.[i]) : 0));
   const shields = rows.filter((s) => s?.active);
   const pieces = armor ? [armor, ...shields] : shields;
   const maxDexes = pieces.map((p) => p.maxDex).filter((v) => v !== null && v !== undefined && v !== '');
-  const armorAc = armor ? pieceAc(armor) : 0;
+  // Attuned clothes are armour with a +0 bonus and the attunement on it.
+  const armorAc = armor ? pieceAc(armor, att?.armor) : (Number(att?.clothing) || 0);
   const shieldAc = shieldAcs.reduce((t, n) => t + n, 0);
   const armorMaxDex = maxDexes.length ? Math.min(...maxDexes.map(Number)) : Infinity;
   const armorAcp = pieces.reduce((t, p) => t + (Number(p.acp) || 0), 0);
@@ -2780,8 +2832,8 @@ export function armorParts(c) {
     shield: shieldAc,
     shields: shieldAcs,
     // The enhancement on its own, which the totals above already include.
-    armorEnhancement: armor ? Number(armor.enhancement) || 0 : 0,
-    shieldEnhancement: shields.reduce((t, s) => t + (Number(s.enhancement) || 0), 0),
+    armorEnhancement: armor ? enhancement(armor, att?.armor) : (Number(att?.clothing) || 0),
+    shieldEnhancement: rows.reduce((t, s, i) => t + (s?.active ? enhancement(s, att?.shields?.[i]) : 0), 0),
     armorType: armor ? armorCategory(armor.type) : 0,
     maxDex: Math.min(armorMaxDex, load?.maxDex ?? Infinity),
     acp: Math.min(armorAcp, load?.acp ?? 0),

@@ -13,7 +13,7 @@ import {
 } from '../rules.js';
 import { forwardedSplit } from './scope.js';
 import {
-  campaignRules, fitMythicRows, mythicComputedTier, mythicTierOf, settleTrialTier,
+  campaignRules, fitMythicRows, mythicComputedTier, mythicTierOf, prowessPicks, settleTrialTier,
 } from './campaign.js';
 
 /**
@@ -42,7 +42,8 @@ export function refreshAbilities(model) {
   const applied = new Set();
   if (build) {
     const level = Number(model.data.identity.level) || 0;
-    const folded = foldPicks(model.data.progressionPicks, level);
+    // Under core ABP (a campaign rule) prowess stops at 18th.
+    const folded = foldPicks(prowessPicks(model.data), level);
     // Without ABP (a campaign rule) the prowess picks stay written and add
     // nothing; a belt or headband's enhancement is the gear column's.
     if (!campaignRules(model.data).abp) folded.abp = Object.fromEntries(ABILITIES.map((k) => [k, 0]));

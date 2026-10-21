@@ -18,10 +18,12 @@ import { pickSelect, mythicPickAt } from './stats.js';
 import { featDetails, featCatalogue } from '../../model.js';
 import { featLevel, isAhead, rowLevel } from '../../model/feats.js';
 import { fromLevelField, fromLevelHead, plannedRow } from '../from-level.js';
-import { campaignRules, isAntihero, mythicTierReached, trialProgress } from '../../model/campaign.js';
+import {
+  campaignRules, isAntihero, mythicTierGrantOf, mythicTierReached, trialProgress,
+} from '../../model/campaign.js';
 import {
   MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS,
-  effectiveMythicTier, mythicTierGrant,
+  effectiveMythicTier,
 } from '../../rules.js';
 
 /** The mythic paths a Path cell offers: the six standard ones, and every path this character has listed. */
@@ -393,24 +395,31 @@ export function renderFeaturesPanel(model, ctx) {
             <thead><tr>
               <th class="num">Tier</th>
               <th class="num" title="${esc(reachedHead === 'Trials' ? 'The trials completed in all when this tier is reached' : 'The character level this tier is reached at')}">${reachedHead}</th>
-              <th title="What the tier hands over — a feat on odd tiers, an RP power on even ones">Grants</th>
+              <th title="${esc(rules.mythicLadder === 'core' ? 'What the tier hands over: a mythic feat on odd tiers, none on even ones'
+    : 'What the tier hands over — a feat on odd tiers, an RP power on even ones')}">Grants</th>
               <th>Name</th>
               <th title="What the granted feat does. Formulas work here.">Effect</th>
             </tr></thead>
             <tbody>${tiers.map((t) => {
               const a = (m.abilities || [])[t - 1] || {};
               const i = t - 1;
-              return `<tr class="${t > tier ? 'future' : ''}" data-rowkey="mythfeats">
+              // Nothing to take on an even tier of the core ladder (a campaign
+              // rule): the row stays, greyed, and what is written there waits.
+              const grant = mythicTierGrantOf(c, t, a.feat);
+              return `<tr class="${t > tier || !grant ? 'future' : ''}" data-rowkey="mythfeats"${grant ? ''
+                : ' title="The core ladder grants no feat at this tier"'}>
                 <td class="num" data-stack="head" data-headlabel="Tier">${t}</td>
                 <td class="num derived" data-label="${reachedHead}" title="${esc(reached(t).title)}">${esc(reached(t).value)}</td>
-                <td data-label="Grants"><span class="fsource">${esc(a.feat || mythicTierGrant(t))}</span></td>
+                <td data-label="Grants"><span class="fsource">${esc(grant || '—')}</span></td>
                 <td data-stack="name">${rows.itemText('mythic.abilities', i, 'featChoice', a.featChoice, '', true)}</td>
                 <td data-label="Effect">${foldingNote(model, `data-item="mythic.abilities|${i}|featEffect" placeholder="What it does"`, a.featEffect, `mythic.abilities|${i}|featEffect`, { name: a.featChoice })}</td>
               </tr>`;
             }).join('')}</tbody>
           </table></div>
           <p class="hint">
-            Odd tiers grant a mythic feat. Even tiers grant an RP power.
+            ${rules.mythicLadder === 'core' ? `Odd tiers grant a mythic feat. Even tiers grant none on the core
+            ladder: their +2 to an ability is in the ladder above, and anything written in an even row
+            waits.` : 'Odd tiers grant a mythic feat. Even tiers grant an RP power.'}
             <strong>Grants</strong> is what the tier hands over. <strong>Name</strong> is
             what you took for it. <strong>Effect</strong> says what that does. A long effect
             starts folded to one line, like a talent's note; its ▸ opens it, and the
