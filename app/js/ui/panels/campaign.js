@@ -172,14 +172,14 @@ export function campaignPanel(model) {
           <strong>Feats &amp; Mythic</strong> becomes <strong>Feats</strong>, with a note in place of
           the mythic panels. What was written there is kept.`)}
         ${row('mythicTier', 'Mythic tier', tierSelect, tierHint, tierMore)}
+        ${row('maxTier', 'Highest mythic tier', mostBox('maxTier', rules.maxTier, TIER_CEILING, 'Highest mythic tier', !rules.mythic),
+    `Where mythic stops: the ladders, trials and <strong>Tier up</strong> end there, and
+          <strong>Feats &amp; Mythic</strong> lists that many tiers. The table's is ${CAMPAIGN_DEFAULTS.maxTier}.`)}
         ${row('mythicLadder', 'What a tier grants', ruleSelect('mythicLadder', rules.mythicLadder,
     [['table', 'The table\'s'], ['core', 'Core (Mythic Adventures)']], 'What a mythic tier grants', !rules.mythic),
     rules.mythicLadder === 'core'
       ? 'A path ability every tier, a mythic feat on odd tiers and +2 to an ability on even ones.'
       : 'A path ability every tier, a mythic feat on odd tiers, and a path power and +2 to an ability on even ones.')}
-        ${row('maxTier', 'Highest mythic tier', mostBox('maxTier', rules.maxTier, TIER_CEILING, 'Highest mythic tier', !rules.mythic),
-    `Where mythic stops: the ladders, trials and <strong>Tier up</strong> end there, and
-          <strong>Feats &amp; Mythic</strong> lists that many tiers. The table's is ${CAMPAIGN_DEFAULTS.maxTier}.`)}
         ${row(['abp', 'abpLadder'], 'Automatic Bonus Progression', `${check('abp', 'Use ABP')} ${ruleSelect('abpLadder', rules.abpLadder,
     [['table', 'The table\'s'], ['core', 'Core (Unchained)']], 'Which ABP', !rules.abp)}`,
     `Off, ABP adds nothing: no resistance, deflection or natural armour bonuses and no prowess

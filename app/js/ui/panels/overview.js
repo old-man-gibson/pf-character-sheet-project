@@ -2112,17 +2112,19 @@ function hpBuild(model) {
       </div>
       <div class="fieldgrid" style="margin-top:8px">
         ${field('Misc', hpPart(c, 'misc', 'A number, or a formula — e.g. con.mod * 2', '100%'), 'wide')}
-      </div>
+      </div>`}
       ${/* Rolled hit points (a campaign rule): a box per level after the
-            first, blank counting the average, which the box shows. */''}
-      ${rules.hitPoints === 'rolled' && level > 1 ? `<h4 class="subhead">Rolled each level</h4>
+            first, blank counting the average, which the box shows. A fold of
+            its own, open, so the rolls are there at a level-up whether or
+            not the parts above are. */''}
+      ${rules.hitPoints === 'rolled' && level > 1 ? collapsibleSub(model, 'hp:rolls', 'Rolled each level', `
       ${stepGrid('hp.rolls', c.hp.rolls, 2, level, (l) => hitDieGain(dice[l - 1], l, 'average'),
     (l) => `Hit points rolled at level ${l}, on a d${dice[l - 1] || 0}`)}
       <p class="hint">1st level takes the whole die. A level left blank counts the average, shown in
-        its box; a roll above the die counts the average too.</p>` : ''}
+        its box; a roll above the die counts the average too.</p>`) : ''}
       ${rules.hitPoints !== 'max' && other ? `<p class="hint warn">Other holds ${term(other)}. A sheet imported
         with rolled hit points keeps its shortfall there; now the dice are ${rules.hitPoints === 'rolled' ? 'rolled' : 'averaged'}
-        here as well, clear Other if that is what it was.</p>` : ''}`}`;
+        here as well, clear Other if that is what it was.</p>` : ''}`;
 }
 
 function hitPointsPanel(ctx, model) {
