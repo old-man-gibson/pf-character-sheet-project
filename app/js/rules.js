@@ -2024,7 +2024,9 @@ export const quantityOf = (row) => {
  * and a container that `holds: 'weightless'` -- a bag of holding -- carries
  * what is inside it for nothing; the bag's own weight still counts. An item
  * `inside: 'stored'` is not on the character at all. Coins weigh one pound
- * per fifty.
+ * per fifty, and `coinsInside` puts them where an item can be, or, as
+ * 'untracked', weighs them at nothing for a table that does not count coin.
+ * `coinPounds` is what they would weigh on the character either way.
  */
 export function equipmentWeights(e) {
   const rowWeight = (x) => (Number(x?.weight) || 0) * quantityOf(x);
@@ -2040,7 +2042,11 @@ export function equipmentWeights(e) {
     else carriedOther += rowWeight(x);
   }
   const coins = COIN_KINDS.reduce((t, [k]) => t + Math.max(0, Number(e?.coins?.[k]) || 0), 0);
-  const coinWeight = Math.floor(coins / COINS_PER_POUND);
+  const coinPounds = Math.floor(coins / COINS_PER_POUND);
+  let coinWeight = coinPounds;
+  if (e?.coinsInside === 'untracked') coinWeight = 0;
+  else if (e?.coinsInside === 'stored') { stored += coinPounds; coinWeight = 0; }
+  else if (weightless.has(e?.coinsInside)) { inWeightless += coinPounds; coinWeight = 0; }
   const parts = {
     gear: sum(e?.gear),
     other: carriedOther,
@@ -2049,7 +2055,7 @@ export function equipmentWeights(e) {
     coins: coinWeight,
   };
   const total = parts.gear + parts.other + parts.armor + parts.weapons + parts.coins;
-  return { ...parts, total, inWeightless, stored, coinCount: coins };
+  return { ...parts, total, inWeightless, stored, coinCount: coins, coinPounds };
 }
 
 /** Coins' worth in gold pieces. */

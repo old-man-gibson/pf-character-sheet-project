@@ -21,7 +21,7 @@ import {
 } from '../rows.js';
 import { linkField } from '../fields.js';
 import { same } from '../format.js';
-import { optionCatalogues } from '../../model.js';
+import { columnLetter, optionCatalogues, systemTabWidth } from '../../model.js';
 import { parseLevelRule, levelRuleLevels, summariseLevels } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
 import { rgba } from '../../tracker-style.js';
@@ -693,17 +693,25 @@ export function renderLorePanel(model, ctx) {
    *
    * These hold each character's bespoke machinery -- sphere talents, veils,
    * technique lists -- whose shape differs per character, so they stay a grid
-   * rather than being forced into a schema. Every cell is editable and rows
-   * can be added or removed.
+   * rather than being forced into a schema. Every cell is editable, and rows
+   * and columns can be added or removed. The columns are lettered as a
+   * spreadsheet's are, which gives each column's × something to name.
    */
 export function gridTab(model, index, tab) {
     const list = `sheetTabs.${index}.rows`;
     const rows = tab.rows || [];
-    const width = Math.min(14, Math.max(...rows.map((r) => r.cells.length), 3));
+    const width = systemTabWidth(tab);
     return `<section class="panel span2">
       <h3>${esc(tab.name)} ${tab.hidden ? '<span class="badge">hidden in source</span>' : ''}
         <span class="badge">${rows.length} rows</span></h3>
-      <div class="tablewrap"><table class="gridtab"><tbody>
+      <div class="tablewrap"><table class="gridtab">
+      ${rows.length ? `<thead><tr class="gridcols">
+        ${Array.from({ length: width }, (_, ci) => `<th scope="col"><span class="colhead">${columnLetter(ci)}
+          ${width > 1 ? removeAction('remove-system-column', { index, col: ci },
+    { what: `column ${columnLetter(ci)}`, tiny: true }) : ''}</span></th>`).join('')}
+        <th class="tools"></th>
+      </tr></thead>` : ''}
+      <tbody>
         ${rows.map((r, ri) => `<tr>
           ${Array.from({ length: width }, (_, ci) => `<td>${gridCell(model, list, ri, `cells.${ci}`, r.cells[ci])}</td>`).join('')}
           ${rowTools(list, ri)}

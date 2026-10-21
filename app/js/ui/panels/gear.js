@@ -34,7 +34,7 @@ import { WEAPON_MODE_KEYS } from '../../roll20.js';
 import { check, field, num, autoNum, select, text } from '../fields.js';
 import {
   addButton, addManyButton, bigStat, collapsibleSub, editLine, exprField, itemBox, itemCheck, itemExpr,
-  itemNum, itemSelect, itemText, line, movedValue, removeAction, removeButton, rowRemove,
+  itemNum, itemSelect, itemText, line, lineHtml, movedValue, removeAction, removeButton, rowRemove,
 } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
 import { rollButton } from '../roll.js';
@@ -682,17 +682,25 @@ function gearCard(model, list, i, g, cols) {
   }
 
 /**
+ * The containers among the Other items, as choices of where something is.
+ * `skip` is the row asking, which cannot go inside itself.
+ */
+function containerChoices(model, skip = -1) {
+    return (model.data.equipment?.other || []).filter((x, j) => j !== skip && x?.holds && x.id)
+      .map((x) => [x.id, `In ${String(x.name || '').trim() || 'a container'}${x.holds === 'weightless' ? ' (weightless)' : ''}`]);
+  }
+
+const STORED_CHOICE = ['stored', 'Stored elsewhere (not carried)'];
+
+/**
  * Where an Other item is: on the character, inside one of the containers
  * among the Other items, or stored somewhere it is not carried. And whether
  * it is a container itself -- one that carries its contents for nothing
  * (a bag of holding) or one whose contents weigh as usual.
  */
 function whereCarried(model, i, g) {
-    const others = model.data.equipment?.other || [];
-    const boxes = others.filter((x, j) => j !== i && x?.holds && x.id)
-      .map((x) => [x.id, `In ${String(x.name || '').trim() || 'a container'}${x.holds === 'weightless' ? ' (weightless)' : ''}`]);
     return `${field('Carried', itemSelect('equipment.other', i, 'inside', g.inside,
-    [...boxes, ['stored', 'Stored elsewhere (not carried)']], 'On you'))}
+    [...containerChoices(model, i), STORED_CHOICE], 'On you'))}
           ${field('Container', itemSelect('equipment.other', i, 'holds', g.holds,
     [['counted', 'Holds things'], ['weightless', 'Holds things, weightless inside']], 'Not a container',
     null, { attrs: 'title="A weightless container (a bag of holding) carries what is in it for nothing; its own weight still counts."' }))}`;
@@ -760,7 +768,7 @@ function loadPanel(model, e) {
       ${line('Other items', `${w.other ?? 0} lbs`)}
       ${line('Armor & shields', `${w.armor ?? 0} lbs`)}
       ${line('Weapons', `${w.weapons ?? 0} lbs`)}
-      ${line('Coins', `${w.coins ?? 0} lbs${w.coinCount ? ` (${w.coinCount} coins)` : ''}`)}
+      ${line('Coins', coinWeightText(e, w))}
       ${w.inWeightless ? line('In weightless containers', `${w.inWeightless} lbs, not counted`) : ''}
       ${w.stored ? line('Stored elsewhere', `${w.stored} lbs, not counted`) : ''}
       ${editLine('Adjustment', 'carry.carriedOffset', c.carry?.carriedOffset ?? 0)}
@@ -771,9 +779,29 @@ function loadPanel(model, e) {
       <h4>Coins</h4>
       <div class="coinrow">${COIN_KINDS.map(([k, label]) => `<label class="minifield" title="${esc(label)}">${k}
         ${num(`equipment.coins.${k}`, coins[k], 'min="0" style="width:5.5rem"')}</label>`).join('')}</div>
+      ${lineHtml('Carried', select('equipment.coinsInside', e.coinsInside,
+    [...containerChoices(model), STORED_CHOICE, ['untracked', 'Weight not tracked']], 'On you',
+    { attrs: 'aria-label="Where the coins are carried"' }))}
       ${line('Coins worth', `${round(e.coinValue ?? 0)} gp`)}
       ${line('Items worth', `${e.totalValue ?? 0} gp`)}
     </section>`;
+  }
+
+/**
+ * What the coins weigh, and where they are when that is not on the character.
+ * Coins in a weightless container, stored or untracked count for nothing.
+ */
+function coinWeightText(e, w) {
+    const at = e.coinsInside;
+    const box = (e.other || []).find((x) => x?.holds && x.id && x.id === at);
+    const where = at === 'stored' ? 'stored elsewhere'
+      : box ? `in ${String(box.name || '').trim() || 'a container'}` : '';
+    const counted = w.coins ?? 0;
+    const pounds = w.coinPounds ?? counted;
+    const weight = at === 'untracked' ? 'not tracked'
+      : counted === pounds ? `${counted} lbs` : `${pounds} lbs, not counted`;
+    const notes = [w.coinCount ? `${w.coinCount} coins` : '', where].filter(Boolean).join(', ');
+    return `${weight}${notes ? ` (${notes})` : ''}`;
   }
 
 /** What the load is, and what it does while the penalties are on. */

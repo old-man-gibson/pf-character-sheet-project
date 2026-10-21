@@ -27,7 +27,7 @@ import {
   techniqueStats, emptyTechnique, normalizeTechnique, TECHNIQUE_SLOTS,
   wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_LEVEL,
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
-  gearColumnCount, gearColumnInUse, importAnimalCompanion,
+  gearColumnCount, gearColumnInUse, importAnimalCompanion, systemTabWidth, columnLetter,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
   sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable, maneuverCatalogue,
   hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels, evaluateAmount, appendDiceText, appendListText, CARD_STAT_FIELDS, stepCastingTime, deckOrder, remoteAllowed, remotePlayArg } from '../app/js/model.js';
@@ -4642,6 +4642,21 @@ console.log('load -- the table, the worse of armour and load, quantities, coins,
 
   c.set('equipment.coins', { gp: 500, sp: 120, cp: 5 });
   check('coins weigh a pound per fifty and are worth their gold', [c.data.equipment.weights.coins, c.data.equipment.coinValue], [12, 512.05]);
+  // Coins go where an item can, or their weight is not tracked at all.
+  const withCoins = c.data.carry.carried;
+  c.set('equipment.coinsInside', bag.id);
+  check('coins in the bag of holding weigh nothing',
+    [c.data.equipment.weights.coins, c.data.equipment.weights.coinPounds, c.data.carry.carried], [0, 12, withCoins - 12]);
+  c.set('equipment.coinsInside', 'stored');
+  check('stored coins are not carried', [c.data.equipment.weights.coins, c.data.carry.carried], [0, withCoins - 12]);
+  c.set('equipment.coinsInside', 'untracked');
+  check('untracked coins weigh nothing and are still worth their gold',
+    [c.data.equipment.weights.coins, c.data.equipment.weights.stored, c.data.equipment.coinValue], [0, c.data.equipment.weights.stored, 512.05]);
+  c.setItem('equipment.other', c.list('equipment.other').length - 1, 'holds', 'counted');
+  c.set('equipment.coinsInside', bag.id);
+  check('in an ordinary container they weigh as usual', c.data.carry.carried, withCoins);
+  c.set('equipment.coinsInside', '');
+  check('on the character again', c.data.equipment.weights.coins, 12);
 
   // Carrying by another score: a class feature that carries by Intelligence.
   c.setBuild('int', 'untyped', 10);
@@ -7885,11 +7900,33 @@ console.log('custom system tabs');
   c.recompute();
   check('inline name from a custom tab', c.inlineNames['spell.slots'], 3 + c.data.abilities.int.mod);
 
+  // Columns are added and removed across every row, and lettered A, B, C...
+  check('column letters run on past Z', [0, 1, 25, 26, 27, 51, 52].map(columnLetter), ['A', 'B', 'Z', 'AA', 'AB', 'AZ', 'BA']);
+  const grid = () => c.data.sheetTabs[idx];
+  const w0 = systemTabWidth(grid());
+  grid().rows[1].cells.splice(0, 3, 'a', 'b', 'c');
+  c.addSystemTabColumn(idx);
+  check('a column adds a cell to every row', [systemTabWidth(grid()), grid().rows.every((r) => r.cells.length === w0 + 1)], [w0 + 1, true]);
+  c.removeSystemTabColumn(idx, 1);
+  check('removing one takes its cell out of every row',
+    [systemTabWidth(grid()), grid().rows[1].cells.slice(0, 2), grid().rows.every((r) => r.cells.length === w0)], [w0, ['a', 'c'], true]);
+  check('and undo puts it back', [c.undo(), grid().rows[1].cells.slice(0, 3)], ['Removed column B of Grimoire', ['a', 'b', 'c']]);
+  const one = c.addSystemTab('Narrow', 2, 1);
+  c.removeSystemTabColumn(c.data.sheetTabs.indexOf(one), 0);
+  check('the last column stays', systemTabWidth(one), 1);
+  c.removeSystemTab(c.data.sheetTabs.indexOf(one));
+  const empty = c.addSystemTab('Empty', 0, 3);
+  check('a tab with no rows offers three columns', systemTabWidth(empty), 3);
+  c.addSystemTabColumn(c.data.sheetTabs.indexOf(empty));
+  check('and a column added to it gives it a row of four', [empty.rows.length, systemTabWidth(empty)], [1, 4]);
+  c.removeSystemTab(c.data.sheetTabs.indexOf(empty));
+
   c.removeSystemTab(idx);
   check('deleted', c.data.sheetTabs.some((t) => t.name === 'Grimoire'), false);
   check('pref cleaned', 'Grimoire' in c.data.uiPrefs.hiddenTabs, false);
   check('inline name gone with it', 'spell.slots' in c.inlineNames, false);
-  c.removeSystemTab(c.data.sheetTabs.indexOf(dup));
+  // By name: the undo above put back a copy of the document, not these objects.
+  c.removeSystemTab(c.data.sheetTabs.findIndex((t) => t.name === dup.name));
   check('back to original count', c.data.sheetTabs.length, n0);
 }
 

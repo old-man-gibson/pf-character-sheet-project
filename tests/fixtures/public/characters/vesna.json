@@ -3361,7 +3361,8 @@
    "total": 23,
    "inWeightless": 0,
    "stored": 0,
-   "coinCount": 0
+   "coinCount": 0,
+   "coinPounds": 0
   },
   "totalValue": 3340,
   "coinValue": 0

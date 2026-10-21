@@ -219,6 +219,48 @@ export function addSystemTab(model, name = 'New system', rows = 12, cols = 6) {
   return tab;
 }
 
+/**
+ * How many columns a system tab's grid has: its longest row. A tab with no
+ * rows yet offers three, the shape its first row will take.
+ */
+export function systemTabWidth(tab) {
+  const rows = tab?.rows || [];
+  return rows.length ? Math.max(1, ...rows.map((r) => r.cells?.length || 0)) : 3;
+}
+
+/** A spreadsheet's name for a column: A–Z, then AA, AB… */
+export function columnLetter(index) {
+  let n = index + 1;
+  let out = '';
+  while (n > 0) {
+    out = String.fromCharCode(65 + ((n - 1) % 26)) + out;
+    n = Math.floor((n - 1) / 26);
+  }
+  return out;
+}
+
+/** Add an empty column at the right of a system tab's grid. */
+export function addSystemTabColumn(model, index) {
+  const tab = model.data.sheetTabs?.[index];
+  if (!tab) return model;
+  if (!tab.rows.length) tab.rows.push({ cells: Array.from({ length: systemTabWidth(tab) + 1 }, () => null) });
+  else for (const row of tab.rows) (row.cells ||= []).push(null);
+  model.recompute();
+  emit(model, { type: 'set', path: `sheetTabs.${index}.rows`, value: tab.rows });
+  return model;
+}
+
+/** Remove a column of a system tab's grid and the cell under it in every row. */
+export function removeSystemTabColumn(model, index, col) {
+  const tab = model.data.sheetTabs?.[index];
+  if (!tab || !(col >= 0) || systemTabWidth(tab) < 2) return model;
+  markUndo(model, `Removed column ${columnLetter(col)} of ${rowLabel(tab, 'the tab')}`);
+  for (const row of tab.rows) row.cells?.splice(col, 1);
+  model.recompute();
+  emit(model, { type: 'set', path: `sheetTabs.${index}.rows`, value: tab.rows });
+  return model;
+}
+
 /** Rename a system tab, carrying its hidden/collapsed prefs along. */
 export function renameSystemTab(model, index, name) {
   const tabs = model.data.sheetTabs || [];
