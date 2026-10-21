@@ -2242,7 +2242,9 @@ export function blocksFromCharacter(data, { classes = true, race = true, templat
   }
   if (trackers) {
     for (const t of arr(d.customTrackers)) {
-      if (!str(t.name).trim()) continue;
+      // A built-in pool (spell points, hero points) is the system's, made
+      // again wherever that system is in play, not content to carry.
+      if (!str(t.name).trim() || t.pool) continue;
       out.push(normalizeBlock({
         kind: 'tracker', name: t.name, maxFormula: t.maxFormula ?? t.max, minFormula: t.minFormula,
         refresh: t.refresh, text: t.note, style: t.style,

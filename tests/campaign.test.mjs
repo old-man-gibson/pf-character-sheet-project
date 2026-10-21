@@ -11,9 +11,9 @@ import { blankDocument } from '../app/js/convert.js';
 import { Character } from '../app/js/model.js';
 import {
   CAMPAIGN_DEFAULTS, XP_TRACKS, awardXp, campaignChanges, campaignRules, levelProgress, levelUp, mythicComputedTier,
-  mythicLevels, mythicTierReached, tierUp, trialProgress, xpThresholds,
+  isAntihero, mythicLevels, mythicTierReached, tierUp, trialProgress, xpThresholds,
 } from '../app/js/model/campaign.js';
-import { MYTHIC_POWER_ID } from '../app/js/model/trackers.js';
+import { HERO_POINTS_ID, MYTHIC_POWER_ID } from '../app/js/model/trackers.js';
 import { abpDefence, tierAtLevel } from '../app/js/rules.js';
 import { fixtureIds, loadCharacter } from './fixtures.mjs';
 
@@ -57,7 +57,7 @@ for (const id of fixtureIds()) {
 console.log('\na switch flipped in play survives a reload, and flipping it back restores everything');
 for (const id of fixtureIds()) {
   for (const [key, value] of [['abp', false], ['mythic', false], ['heroPoints', false], ['pointBuy', 20], ['mythicTier', 'awarded'],
-    ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false]]) {
+    ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false], ['antiheroes', true]]) {
     const m = new Character(loadCharacter(id));
     const before = numbers(m);
     m.set(`campaign.${key}`, value);
@@ -78,6 +78,38 @@ console.log('\npoint buy and hero points');
   check('the table\'s budget', c.pointBuySummary().budget, 30);
   c.set('campaign.pointBuy', 15);
   check('a campaign budget', c.pointBuySummary().budget, 15);
+}
+
+console.log('\nhero points are a pool, and an antihero gives them up for a feat');
+{
+  const { featNames } = await import('../app/js/model/feats.js');
+  const { renderOverviewPanel } = await import('../app/js/ui/panels/overview.js');
+  const { renderFeaturesPanel } = await import('../app/js/ui/panels/feats.js');
+  const c = new Character(blankDocument({ name: 'Hero', level: 3 }));
+  const pool = () => c.trackers.find((t) => t.id === HERO_POINTS_ID);
+  c.data.identity.heroPoints = { current: 2, max: 3 };
+  c.recompute();
+  check('a pool on Trackers: 2 of 3 left, so 1 spent', [!!pool(), pool()?.max, pool()?.current, pool()?.refresh], [true, 3, 1, '']);
+  check('kept while hero points are tracked', c.isProtectedTracker(HERO_POINTS_ID), true);
+  c.updateTracker(HERO_POINTS_ID, { current: 2 });
+  check('spending one is play, written back to Details', [c.data.identity.heroPoints.current, c.playActions.length > 0], [1, true]);
+  c.undoPlay();
+  check('and undone', c.data.identity.heroPoints.current, 2);
+
+  const draw = () => renderOverviewPanel(c, { draft: {}, buildView: true });
+  check('no antihero box unless the campaign offers it', draw().includes('identity.antihero'), false);
+  c.set('identity.antihero', true);
+  check('a ticked box with the rule off means nothing', [isAntihero(c.data), pool()?.max], [false, 3]);
+  c.set('campaign.antiheroes', true);
+  c.data.grantedFeats.antihero = { name: 'Toughness', note: '{hp.misc += 3}' };
+  c.recompute();
+  check('an antihero: no points to spend, the feat counts', [isAntihero(c.data), pool()?.max, pool()?.current, featNames(c.data).includes('Toughness')],
+    [true, 0, 0, true]);
+  check('the points written down are kept', c.data.identity.heroPoints.current, 2);
+  check('Details says so, Feats has the row', [draw().includes('none: antihero'), renderFeaturesPanel(c, { draft: {} }).includes('grantedFeats.antihero.name')], [true, true]);
+  check('the pool may go', c.isProtectedTracker(HERO_POINTS_ID), false);
+  c.set('campaign.antiheroes', false);
+  check('the bargain withdrawn: points back, feat gone', [isAntihero(c.data), pool()?.max, featNames(c.data).includes('Toughness')], [false, 3, false]);
 }
 
 console.log('\nwhat the money is called');

@@ -59,8 +59,8 @@ export function campaignPanel(model) {
   const changed = new Set(campaignChanges(d));
   const mark = (k) => (changed.has(k)
     ? '<span class="badge player" title="Not the table\'s rule">changed</span>' : '');
-  const check = (k, label) => `<label class="chk">
-      <input type="checkbox" ${rules[k] ? 'checked' : ''} data-set="campaign.${k}" data-kind="bool">
+  const check = (k, label, disabled = false) => `<label class="chk">
+      <input type="checkbox" ${rules[k] ? 'checked' : ''} data-set="campaign.${k}" data-kind="bool"${disabled ? ' disabled' : ''}>
       <span>${esc(label)}</span></label>`;
   const row = (k, title, control, hint, below = '') => `<div class="camprow${changed.has(k) ? ' changed' : ''}">
       <div class="campname">${esc(title)} ${mark(k)}</div>
@@ -132,7 +132,13 @@ export function campaignPanel(model) {
     `What the ability scores may cost, checked on the <strong>Stats</strong> tab. The table's is ${CAMPAIGN_DEFAULTS.pointBuy}.`)}
         ${row('advancement', 'Levels', levels, levelsHint, levelsMore)}
         ${row('heroPoints', 'Hero points', check('heroPoints', 'Track hero points'),
-    'Off, the Details panel drops its hero point counter. The points written there are kept.')}
+    `Kept on the <strong>Details</strong> panel and as a Hero Points pool on <strong>Trackers</strong>,
+          where a point spent is undone like any play. Off, the counter goes and the pool may be
+          removed. The points written there are kept.`)}
+        ${row('antiheroes', 'Antiheroes', check('antiheroes', 'Allow antiheroes', !rules.heroPoints),
+    `A character may give up hero points for a bonus feat: an <strong>Antihero</strong> box beside
+          the hero points on <strong>Details</strong>. Ticked, the points go and <strong>Feats</strong>
+          gains an Antihero feat row.`)}
         ${row('mythic', 'Mythic', check('mythic', 'Mythic is in play'),
     `Off, the tier is 0: no mythic hit points, Mythic Power, ability increases or tradition.
           <strong>Feats &amp; Mythic</strong> becomes <strong>Feats</strong>, with a note in place of

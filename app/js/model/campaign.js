@@ -29,8 +29,14 @@ import { MAX_LEVEL, MYTHIC_TIER_LEVEL, tierAtLevel } from '../rules.js';
 export const CAMPAIGN_DEFAULTS = Object.freeze({
   /** Points to spend on ability scores. */
   pointBuy: 30,
-  /** Hero points are tracked (the Details panel's counter). */
+  /** Hero points are tracked: the Details panel's counter, and a pool on Trackers. */
   heroPoints: true,
+  /**
+   * A character may choose to be an antihero: no hero points, and a bonus
+   * feat in their place. The choice is the character's (`identity.antihero`);
+   * this says whether the campaign offers it.
+   */
+  antiheroes: false,
   /** Mythic is in play: tiers, mythic hit points, the mythic panels. */
   mythic: true,
   /**
@@ -115,6 +121,7 @@ export function campaignRules(d) {
     pointBuy: c.pointBuy !== undefined && c.pointBuy !== null && c.pointBuy !== '' && Number.isFinite(buy) && buy >= 0
       ? buy : (Number.isFinite(Number(d?.pointBuyBudget)) ? Number(d.pointBuyBudget) : CAMPAIGN_DEFAULTS.pointBuy),
     heroPoints: bool('heroPoints'),
+    antiheroes: bool('antiheroes'),
     mythic: bool('mythic'),
     mythicTier: MYTHIC_TIER_SOURCES.includes(c.mythicTier) ? c.mythicTier : CAMPAIGN_DEFAULTS.mythicTier,
     mythicTrialRate: count(c.mythicTrialRate, CAMPAIGN_DEFAULTS.mythicTrialRate),
@@ -127,6 +134,21 @@ export function campaignRules(d) {
     // blank: a sheet that came in calling it something else keeps that.
     currency: words(c.currency) || words(d?.wealth?.currency) || CAMPAIGN_DEFAULTS.currency,
   };
+}
+
+/**
+ * Whether this character took the antihero's bargain: hero points given up
+ * for a bonus feat. Only where the campaign tracks hero points and offers the
+ * bargain -- with either off, the choice is kept and means nothing.
+ */
+export function isAntihero(d) {
+  const rules = campaignRules(d);
+  return rules.heroPoints && rules.antiheroes && d?.identity?.antihero === true;
+}
+
+/** Whether this character has hero points to spend. */
+export function heroPointsInPlay(d) {
+  return campaignRules(d).heroPoints && !isAntihero(d);
 }
 
 /** What the money is called, as a heading says it ("Mana", "Gold"). */

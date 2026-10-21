@@ -300,13 +300,6 @@ function vitals(model, add) {
       keys: 'mythic trials tier progress',
     });
   }
-  const hero = c.identity?.heroPoints;
-  if (hero && campaignRules(c).heroPoints && (Number(hero.max) || Number(hero.current))) {
-    add({
-      kind: 'tracker', title: 'Hero points', tab: 'overview',
-      value: `${hero.current ?? 0}/${hero.max ?? 0}`, keys: 'hero point',
-    });
-  }
 }
 
 /** Who the character is: the header fields, and the lines under the portrait. */

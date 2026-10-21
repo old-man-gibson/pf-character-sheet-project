@@ -27,7 +27,7 @@ import {
 } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
-import { campaignRules } from './campaign.js';
+import { campaignRules, isAntihero } from './campaign.js';
 import { sphereTableNames, talentsIn } from './spheres.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
 import { tempHpGrant } from './stats/defenses.js';
@@ -1491,6 +1491,8 @@ export function proseSources(model) {
   for (const key of ['drawback', 'specialty']) {
     push(`grantedFeat:${key}`, d.grantedFeats?.[key]?.note);
   }
+  // An antihero's feat waits while the bargain does not stand (a campaign rule).
+  push('grantedFeat:antihero', d.grantedFeats?.antihero?.note, null, isAntihero(d) ? null : { future: true });
   (d.grantedFeats?.others || []).forEach((f, i) => push(`grantedFeat:${i}`, f?.note, null, planned(rowLevel(f))));
   // Alternate Training is picked level by level, so a pick for a later one
   // waits -- and every one does with Alternate Training off (a campaign rule).

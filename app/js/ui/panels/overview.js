@@ -108,7 +108,7 @@ import {
 import { hasTokens } from '../../inline.js';
 import { abilityCollapse, abilityHarm, blankClassRow, maneuverDetails } from '../../model.js';
 import { colorControl } from '../color-control.js';
-import { campaignRules, levelProgress } from '../../model/campaign.js';
+import { campaignRules, isAntihero, levelProgress } from '../../model/campaign.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
@@ -1138,9 +1138,14 @@ function detailsPanel(model, ctx) {
         ${/* Without hero points (a campaign rule) the level pairs with Gender
               instead, so the phone's rows still come out whole. */''}
         ${field('Level', num('identity.level', c.identity.level), rules.heroPoints ? 'col2' : 'col3')}
+        ${/* An antihero (where the campaign offers it) has given the points up
+              for a feat: the box says so in place of the counter. */''}
         ${rules.heroPoints ? field('Hero points', `<span class="pair">
+          ${isAntihero(c) ? '<span class="value" title="Hero points given up for a bonus feat, on Feats">none: antihero</span>' : `
           ${num('identity.heroPoints.current', c.identity.heroPoints?.current ?? 0)}
-          <span>/</span>${num('identity.heroPoints.max', c.identity.heroPoints?.max ?? 3)}</span>`, 'col4') : ''}
+          <span>/</span>${num('identity.heroPoints.max', c.identity.heroPoints?.max ?? 3)}`}
+          ${rules.antiheroes ? check('identity.antihero', c.identity.antihero === true, 'Antihero',
+    'Give up hero points for a bonus feat. The campaign rules offer it.') : ''}</span>`, 'col4') : ''}
         ${field('Gender', text('identity.gender', c.identity.gender), 'col3')}
         ${field('Age', text('identity.age', c.identity.age), 'col3')}
         ${field('Height', text('identity.height', c.identity.height), 'col3')}

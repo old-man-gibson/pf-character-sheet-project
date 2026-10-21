@@ -18,7 +18,7 @@ import { pickSelect, mythicPickAt } from './stats.js';
 import { featDetails, featCatalogue } from '../../model.js';
 import { featLevel, isAhead, rowLevel } from '../../model/feats.js';
 import { fromLevelField, fromLevelHead, plannedRow } from '../from-level.js';
-import { campaignRules, mythicTierReached, trialProgress } from '../../model/campaign.js';
+import { campaignRules, isAntihero, mythicTierReached, trialProgress } from '../../model/campaign.js';
 import {
   MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS, MYTHIC_TIERS,
   effectiveMythicTier, mythicTierGrant,
@@ -62,6 +62,8 @@ function grantedFeatsSection(model, ctx) {
     // (Divination)" -- not what it does to you. Before traits had a name field
     // the effect was all there was to show, and it read as the source.
     const majorName = String(major.name || major.category || major.text || '').trim();
+    // An antihero's feat, bought with the hero points it gave up (a campaign rule).
+    const antihero = isAntihero(c);
 
     const fixed = (key, label, hint) => `<tr>
       ${/* No grip: these two are not in the list and cannot be moved out of
@@ -75,7 +77,7 @@ function grantedFeatsSection(model, ctx) {
     </tr>`;
 
     return `<h4 class="subhead">Granted feats
-        <span class="badge">${(hasMajor ? 2 : 1) + (g.others || []).length}</span>
+        <span class="badge">${(hasMajor ? 2 : 1) + (antihero ? 1 : 0) + (g.others || []).length}</span>
       </h4>
       <div class="tablewrap"><table class="granted stacked${(g.others || []).length ? '' : ' notools'}">
         <thead><tr><th class="grip"></th><th class="src">Source</th><th class="fname">Feat</th>
@@ -84,6 +86,7 @@ function grantedFeatsSection(model, ctx) {
         <tbody>
           ${hasMajor ? fixed('drawback', 'Drawback', majorName.slice(0, 60)) : ''}
           ${fixed('specialty', 'Specialty')}
+          ${antihero ? fixed('antihero', 'Antihero', 'In place of hero points') : ''}
           ${(g.others || []).map((f, i) => `<tr ${rows.rowDrop('grantedFeats.others', i)}${plannedRow(isAhead(rowLevel(f), level), rowLevel(f))}>
             ${rows.rowGrip()}
             <td data-stack="head">${rows.itemText('grantedFeats.others', i, 'source', f.source, 'Oath 2, Attunement…')}</td>

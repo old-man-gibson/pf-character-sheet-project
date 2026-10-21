@@ -8,6 +8,7 @@
  * taken out of it, and the group itself cannot be deleted; edit.js asks
  * `lockedFeatList` before every add, remove and cross-group move.
  */
+import { isAntihero } from './campaign.js';
 
 export const LEVEL_UP_LEVELS = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19];
 
@@ -36,6 +37,8 @@ export function featNames(d, { granted = true, planned = false } = {}) {
   if (granted) {
     const gf = d?.grantedFeats || {};
     for (const f of [gf.drawback, gf.specialty]) if (f) names.push(String(f.name ?? ''));
+    // An antihero's feat counts only while the bargain stands (a campaign rule).
+    if (gf.antihero && isAntihero(d)) names.push(String(gf.antihero.name ?? ''));
     for (const f of gf.others || []) if (f && had(rowLevel(f))) names.push(String(f.name ?? ''));
   }
   return names;
