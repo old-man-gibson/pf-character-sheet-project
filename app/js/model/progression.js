@@ -12,6 +12,7 @@ import {
   statMod,
 } from '../rules.js';
 import { FEATURE_GROUP_COLORS, normalizeHex } from '../tracker-style.js';
+import { campaignRules, fitPlannerRows } from './campaign.js';
 import { orphans } from './reconcile.js';
 import { forwarded, scopeIfFormulas } from './scope.js';
 import { TEMPLATE_TYPES } from './templates.js';
@@ -1193,6 +1194,9 @@ export function saveProgressions(classes, presence, level) {
  */
 export function applyGestalt(model) {
   const c = model.data;
+  // A Planner row for every level the campaign reaches (past 20th, where it
+  // goes that high).
+  fitPlannerRows(c);
   const level = Number(c.identity.level) || 0;
   const classes = (c.classes || []).filter((x) => x.name);
 

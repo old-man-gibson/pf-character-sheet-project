@@ -20,7 +20,7 @@ import { featLevel, isAhead, rowLevel } from '../../model/feats.js';
 import { fromLevelField, fromLevelHead, plannedRow } from '../from-level.js';
 import { campaignRules, isAntihero, mythicTierReached, trialProgress } from '../../model/campaign.js';
 import {
-  MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS, MYTHIC_TIERS,
+  MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS,
   effectiveMythicTier, mythicTierGrant,
 } from '../../rules.js';
 
@@ -221,6 +221,8 @@ export function renderFeaturesPanel(model, ctx) {
     // What each tier is reached at: a level, or trials in all (a campaign rule).
     const reached = (t) => mythicTierReached(c, t);
     const reachedHead = reached(1).head;
+    // One row per tier, to the campaign's highest (the table's is 10).
+    const tiers = Array.from({ length: rules.maxTier }, (_, i) => i + 1);
     // Trials completed, when the tier comes from them (a campaign rule).
     const trials = trialProgress(c);
     const auto = trials ? `from trials: ${trials.tier}` : `auto: ${m.computedTier ?? 0}`;
@@ -356,7 +358,7 @@ export function renderFeaturesPanel(model, ctx) {
               <th title="What the path ability does. Formulas work here.">Effect</th>
               <th title="+2 to one ability, at every even tier">Stat</th>
             </tr></thead>
-            <tbody>${MYTHIC_TIERS.map((t) => {
+            <tbody>${tiers.map((t) => {
               const a = (m.abilities || [])[t - 1] || {};
               const i = t - 1;
               return `<tr class="${t > tier ? 'future' : ''}" data-rowkey="mythladder">
@@ -372,7 +374,7 @@ export function renderFeaturesPanel(model, ctx) {
             }).join('')}</tbody>
           </table></div>
           <p class="hint">
-            Ten tiers, one row each, beside the character level it is reached at. A
+            ${tiers.length === 10 ? 'Ten' : tiers.length} tier${tiers.length === 1 ? '' : 's'}, one row each, beside the ${reachedHead === 'Trials' ? 'trials' : 'character level'} it is reached at. A
             <strong>+2 ability increase</strong> comes at every even tier, so only
             those rows offer a Stat. The same increases are on the
             <strong>Stats</strong> tab. Either place edits the one set. Rows above
@@ -395,7 +397,7 @@ export function renderFeaturesPanel(model, ctx) {
               <th>Name</th>
               <th title="What the granted feat does. Formulas work here.">Effect</th>
             </tr></thead>
-            <tbody>${MYTHIC_TIERS.map((t) => {
+            <tbody>${tiers.map((t) => {
               const a = (m.abilities || [])[t - 1] || {};
               const i = t - 1;
               return `<tr class="${t > tier ? 'future' : ''}" data-rowkey="mythfeats">
@@ -467,7 +469,7 @@ function mythicTierGrantsPanel(model, tier) {
       <p class="mythnow">${esc(now)}</p>
       <table class="mythtiers">
         <thead><tr><th class="num">Tier</th><th class="num" title="${esc(reachedHead === 'Trials' ? 'The trials completed in all when this tier is reached' : 'The character level this tier is reached at')}">${reachedHead === 'Trials' ? 'Trials' : 'Lvl'}</th><th>Base abilities gained or improved</th></tr></thead>
-        <tbody>${MYTHIC_TIERS.map(row).join('')}</tbody>
+        <tbody>${Array.from({ length: campaignRules(model.data).maxTier }, (_, i) => row(i + 1)).join('')}</tbody>
       </table>
       ${rows.collapsibleSub(model, 'mythic-base-text', 'The rules, in brief', `
         <dl class="mythtext">${names.map((name) => `<dt>${esc(name)}</dt><dd>${esc(MYTHIC_BASE_ABILITIES[name]?.text || '')}</dd>`).join('')}</dl>`, 'mythbase')}

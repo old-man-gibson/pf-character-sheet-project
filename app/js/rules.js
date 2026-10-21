@@ -1533,7 +1533,8 @@ export function levelRuleGrants(rule, classLevel, charLevel) {
       return false;
     }
   }
-  return levelRuleLevels(parsed).includes(level);
+  // Read to 20th, or to the level asked about where a campaign goes higher.
+  return levelRuleLevels(parsed, Math.max(MAX_LEVEL, level)).includes(level);
 }
 
 /** The levels a rule grants, within 1..max. */
@@ -1689,7 +1690,7 @@ export function trackCount(rule, classLevel) {
   // would grant every level -- 21 talents a weapon at 20th for one typo.
   const { parsed } = parseLadderRule(rule?.gainsAt);
   if (!parsed) return start;
-  return start + levelRuleLevels(parsed).filter((l) => l <= level).length;
+  return start + levelRuleLevels(parsed, Math.max(MAX_LEVEL, level)).filter((l) => l <= level).length;
 }
 
 /* ----- unarmed practitioner damage (dataSheet!F80:L101) ----- */

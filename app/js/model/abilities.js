@@ -12,7 +12,9 @@ import {
   resolveAbility,
 } from '../rules.js';
 import { forwardedSplit } from './scope.js';
-import { campaignRules, mythicComputedTier, mythicTierOf, settleTrialTier } from './campaign.js';
+import {
+  campaignRules, fitMythicRows, mythicComputedTier, mythicTierOf, settleTrialTier,
+} from './campaign.js';
 
 /**
  * Mythic tier derives from level (with a manual override) -- or, under other
@@ -22,6 +24,7 @@ import { campaignRules, mythicComputedTier, mythicTierOf, settleTrialTier } from
 export function applyMythic(model) {
   const m = model.data.mythic || (model.data.mythic = {});
   settleTrialTier(model.data);
+  fitMythicRows(model.data);
   m.computedTier = mythicComputedTier(model.data);
   model.data.identity.mythicTier = mythicTierOf(model.data);
 }

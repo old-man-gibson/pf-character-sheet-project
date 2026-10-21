@@ -1137,7 +1137,10 @@ function detailsPanel(model, ctx) {
         ${field('Alignment', text('identity.alignment', c.identity.alignment), 'col3')}
         ${/* Without hero points (a campaign rule) the level pairs with Gender
               instead, so the phone's rows still come out whole. */''}
-        ${field('Level', num('identity.level', c.identity.level), rules.heroPoints ? 'col2' : 'col3')}
+        ${/* The campaign's highest level bounds the box; one typed past it is
+              kept and flagged, as the GM may have reasons. */''}
+        ${field('Level', num('identity.level', c.identity.level, `min="0" max="${rules.maxLevel}"${Number(c.identity.level) > rules.maxLevel
+    ? ` class="over" title="Above this campaign's highest level, ${rules.maxLevel}"` : ''}`), rules.heroPoints ? 'col2' : 'col3')}
         ${/* An antihero (where the campaign offers it) has given the points up
               for a feat: the box says so in place of the counter. */''}
         ${rules.heroPoints ? field('Hero points', `<span class="pair">
@@ -1183,8 +1186,9 @@ function levelProgressRow(model, ctx) {
     const xp = p.mode === 'xp';
     const n = (v) => Number(v).toLocaleString('en-US');
     const span = p.need === null ? 0 : p.need - p.from;
-    const done = p.need === null ? 1 : span > 0 ? Math.min(1, Math.max(0, (p.have - p.from) / span)) : (p.ready ? 1 : 0);
-    const said = p.next === null ? `Level ${p.level} is the top of the table.`
+    const done = p.unset ? 0 : p.need === null ? 1 : span > 0 ? Math.min(1, Math.max(0, (p.have - p.from) / span)) : (p.ready ? 1 : 0);
+    const said = p.next === null ? `Level ${p.level} is the highest this campaign goes.`
+      : p.unset ? `Level ${p.next} has no XP figure: give it one in the campaign rules on the ⚙ tab.`
       : p.ready ? `Level ${p.next} is earned.`
         : xp ? `${n(p.short)} XP to level ${p.next} (${n(p.need)} in all).${p.have < p.from
           ? ` Level ${p.level} itself takes ${n(p.from)}: the level was set before the XP was.` : ''}`

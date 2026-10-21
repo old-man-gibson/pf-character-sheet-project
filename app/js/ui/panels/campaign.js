@@ -16,7 +16,7 @@
 import { esc } from '../html.js';
 import { collapsibleSub } from '../rows.js';
 import {
-  CAMPAIGN_DEFAULTS, MAX_TIER, XP_TRACKS, campaignChanges, campaignRules,
+  CAMPAIGN_DEFAULTS, LEVEL_CEILING, MAX_TIER, TIER_CEILING, XP_TRACKS, campaignChanges, campaignRules,
 } from '../../model/campaign.js';
 import { MAX_LEVEL, MYTHIC_TIER_LEVEL } from '../../rules.js';
 
@@ -36,6 +36,12 @@ function ruleSelect(key, value, options, label, disabled = false) {
 function ruleCount(key, value, label, unit) {
   return `<span class="pair"><input type="number" min="0" max="99" value="${esc(value)}" data-set="campaign.${key}"
       data-kind="number" aria-label="${esc(label)}" style="width:4.2rem"> ${esc(unit)}</span>`;
+}
+
+/** A box for the highest level or tier a campaign reaches. */
+function mostBox(key, value, ceiling, label, disabled = false) {
+  return `<input type="number" min="1" max="${ceiling}" value="${esc(value)}" data-set="campaign.${key}" data-kind="number"
+      aria-label="${esc(label)}" style="width:4.2rem"${disabled ? ' disabled' : ''}>`;
 }
 
 /**
@@ -77,19 +83,20 @@ export function campaignPanel(model) {
   const levelsHint = {
     typed: 'The level is typed on the <strong>Overview</strong>, as the table does.',
     xp: `XP is kept on the <strong>Overview</strong> against the ${esc(XP_TRACK_NAMES[rules.xpTrack].toLowerCase())}
-      table (${xpTable[2].toLocaleString('en-US')} for 2nd, ${xpTable[MAX_LEVEL].toLocaleString('en-US')} for 20th).
+      table (${xpTable[2].toLocaleString('en-US')} for 2nd, ${xpTable[MAX_LEVEL].toLocaleString('en-US')} for 20th).${
+  rules.maxLevel > MAX_LEVEL ? ' Past 20th the table has no figures: give each level its own below.' : ''}
       Once the next level is earned, a <strong>Level up</strong> button offers it.`,
     milestones: `Milestones are counted on the <strong>Overview</strong>, ${rules.milestoneRate} a level unless a
       level below says otherwise. Once the next level is earned, a <strong>Level up</strong> button offers it.`,
   }[rules.advancement];
   const levelsMore = rules.advancement === 'xp'
     ? `<div class="pair">Table ${ruleSelect('xpTrack', rules.xpTrack, Object.entries(XP_TRACK_NAMES), 'XP table')}</div>
-      ${collapsibleSub(model, 'campaign-xp-steps', 'XP for each level, in all', `${stepGrid(d, 'xpSteps', 2, MAX_LEVEL,
-    (l) => xpTable[l], (l) => `XP for level ${l}`)}
+      ${collapsibleSub(model, 'campaign-xp-steps', 'XP for each level, in all', `${stepGrid(d, 'xpSteps', 2, rules.maxLevel,
+    (l) => xpTable[l] ?? '', (l) => `XP for level ${l}`)}
         <p class="campnote">Blank follows the table. A number is this campaign's own.</p>`, '', true)}`
     : rules.advancement === 'milestones'
       ? `<div class="pair">${ruleCount('milestoneRate', rules.milestoneRate, 'Milestones a level', 'a level')}</div>
-      ${collapsibleSub(model, 'campaign-milestone-steps', 'Milestones for each level, from the one before', `${stepGrid(d, 'milestoneSteps', 2, MAX_LEVEL,
+      ${collapsibleSub(model, 'campaign-milestone-steps', 'Milestones for each level, from the one before', `${stepGrid(d, 'milestoneSteps', 2, rules.maxLevel,
     () => rules.milestoneRate, (l) => `Milestones for level ${l}`)}
         <p class="campnote">Blank takes the rate above. A number is that level's own.</p>`, '', true)}`
       : '';
@@ -100,19 +107,20 @@ export function campaignPanel(model) {
   ], 'Where the mythic tier comes from', !rules.mythic);
   const tierHint = {
     level: `A tier at each of a ladder of levels. The table's is 1 at 8th level, 2 at 10th, 3 at 12th,
-      4 at 14th, then one a level to 10 at 20th.`,
+      4 at 14th, then one a level to 10 at 20th.${rules.maxTier > MAX_TIER
+    ? ' Past 10th the table\'s ladder has no levels: give each tier its own below.' : ''}`,
     trials: `Trials completed, counted on <strong>Feats &amp; Mythic</strong>: ${rules.mythicTrialRate} a tier
       unless a tier below says otherwise. Once the next tier is earned, a <strong>Tier up</strong> button offers it.`,
     awarded: 'The tier the GM hands out: type it in <strong>Tier</strong> on <strong>Feats &amp; Mythic</strong>. It starts at 0.',
   }[rules.mythicTier];
   const tierMore = !rules.mythic ? ''
     : rules.mythicTier === 'level'
-      ? collapsibleSub(model, 'campaign-tier-levels', 'The level each tier comes at', `${stepGrid(d, 'mythicLevels', 1, MAX_TIER,
-        (t) => MYTHIC_TIER_LEVEL[t], (t) => `Level for tier ${t}`)}
+      ? collapsibleSub(model, 'campaign-tier-levels', 'The level each tier comes at', `${stepGrid(d, 'mythicLevels', 1, rules.maxTier,
+        (t) => MYTHIC_TIER_LEVEL[t] ?? '', (t) => `Level for tier ${t}`)}
         <p class="campnote">Blank follows the table's ladder. A number is this campaign's own.</p>`, '', true)
       : rules.mythicTier === 'trials'
         ? `<div class="pair">${ruleCount('mythicTrialRate', rules.mythicTrialRate, 'Trials a tier', 'a tier')}</div>
-        ${collapsibleSub(model, 'campaign-trial-steps', 'Trials for each tier, from the one before', `${stepGrid(d, 'mythicTrialSteps', 1, MAX_TIER,
+        ${collapsibleSub(model, 'campaign-trial-steps', 'Trials for each tier, from the one before', `${stepGrid(d, 'mythicTrialSteps', 1, rules.maxTier,
     () => rules.mythicTrialRate, (t) => `Trials for tier ${t}`)}
         <p class="campnote">Blank takes the rate above. A number is that tier's own.</p>`, '', true)}`
         : '';
@@ -131,6 +139,11 @@ export function campaignPanel(model) {
           aria-label="Point-buy budget" style="width:4.5rem"> points`,
     `What the ability scores may cost, checked on the <strong>Stats</strong> tab. The table's is ${CAMPAIGN_DEFAULTS.pointBuy}.`)}
         ${row('advancement', 'Levels', levels, levelsHint, levelsMore)}
+        ${row('maxLevel', 'Highest level', mostBox('maxLevel', rules.maxLevel, LEVEL_CEILING, 'Highest level'),
+    `Where a character stops: <strong>Level up</strong> goes no further and the ladders end there.
+          The table's is ${CAMPAIGN_DEFAULTS.maxLevel}.${rules.maxLevel > MAX_LEVEL ? ` Past 20th the <strong>Planner</strong>
+          gains a row for each level and class progressions carry on; spell, power point and companion
+          tables stay at their 20th-level row, and the Level Up feats stay ten.` : ''}`)}
         ${row('heroPoints', 'Hero points', check('heroPoints', 'Track hero points'),
     `Kept on the <strong>Details</strong> panel and as a Hero Points pool on <strong>Trackers</strong>,
           where a point spent is undone like any play. Off, the counter goes and the pool may be
@@ -144,6 +157,9 @@ export function campaignPanel(model) {
           <strong>Feats &amp; Mythic</strong> becomes <strong>Feats</strong>, with a note in place of
           the mythic panels. What was written there is kept.`)}
         ${row('mythicTier', 'Mythic tier', tierSelect, tierHint, tierMore)}
+        ${row('maxTier', 'Highest mythic tier', mostBox('maxTier', rules.maxTier, TIER_CEILING, 'Highest mythic tier', !rules.mythic),
+    `Where mythic stops: the ladders, trials and <strong>Tier up</strong> end there, and
+          <strong>Feats &amp; Mythic</strong> lists that many tiers. The table's is ${CAMPAIGN_DEFAULTS.maxTier}.`)}
         ${row('abp', 'Automatic Bonus Progression', check('abp', 'Use ABP'),
     `Off, ABP adds nothing: no resistance, deflection or natural armour bonuses and no prowess
           picks, and the <strong>Stats</strong> tab drops their columns. A cloak's resistance or a

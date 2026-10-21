@@ -63,6 +63,14 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
   /** Milestones a level takes, unless `milestoneSteps` names one level's own. */
   milestoneRate: 1,
   /**
+   * The highest level a character reaches: Level up stops there, and the
+   * ladders end there. Past 20th the Planner grows rows and class
+   * progressions carry on; tables that stop at 20th hold their last row.
+   */
+  maxLevel: MAX_LEVEL,
+  /** The highest mythic tier: the ladders, trials and Tier up stop there. */
+  maxTier: 10,
+  /**
    * What the campaign's money is called: the Wealth wallet and crafting's
    * unit. The coin purse keeps its platinum, gold, silver and copper.
    */
@@ -86,8 +94,12 @@ export const XP_TRACKS = Object.freeze({
     105000, 145000, 210000, 295000, 425000, 600000, 850000, 1200000, 1700000, 2400000]),
 });
 
-/** The highest mythic tier. */
-export const MAX_TIER = 10;
+/** The table's highest mythic tier, and the core rules'. */
+export const MAX_TIER = CAMPAIGN_DEFAULTS.maxTier;
+
+/** How high a campaign may set the highest level and tier. */
+export const LEVEL_CEILING = 40;
+export const TIER_CEILING = 20;
 
 /** A count read from a field: a whole number 0 or more, or `fallback`. */
 const count = (v, fallback) => {
@@ -116,6 +128,11 @@ export function campaignRules(d) {
   const c = d?.campaign && typeof d.campaign === 'object' ? d.campaign : {};
   const bool = (k) => (typeof c[k] === 'boolean' ? c[k] : CAMPAIGN_DEFAULTS[k]);
   const words = (v) => (typeof v === 'string' ? v.trim() : '');
+  // A highest level or tier: at least 1, at most the ceiling.
+  const most = (k, ceiling) => {
+    const n = count(c[k], null);
+    return n === null || n < 1 ? CAMPAIGN_DEFAULTS[k] : Math.min(ceiling, n);
+  };
   const buy = Number(c.pointBuy);
   return {
     pointBuy: c.pointBuy !== undefined && c.pointBuy !== null && c.pointBuy !== '' && Number.isFinite(buy) && buy >= 0
@@ -130,6 +147,8 @@ export function campaignRules(d) {
     advancement: ADVANCEMENT_MODES.includes(c.advancement) ? c.advancement : CAMPAIGN_DEFAULTS.advancement,
     xpTrack: Object.hasOwn(XP_TRACKS, c.xpTrack) ? c.xpTrack : CAMPAIGN_DEFAULTS.xpTrack,
     milestoneRate: count(c.milestoneRate, CAMPAIGN_DEFAULTS.milestoneRate),
+    maxLevel: most('maxLevel', LEVEL_CEILING),
+    maxTier: most('maxTier', TIER_CEILING),
     // The wallet's own name, which no control ever set, still counts under a
     // blank: a sheet that came in calling it something else keeps that.
     currency: words(c.currency) || words(d?.wealth?.currency) || CAMPAIGN_DEFAULTS.currency,
@@ -156,39 +175,86 @@ export function currencyName(d) {
   return campaignRules(d).currency;
 }
 
+/* ---------------- room for every level and tier ---------------- */
+
+/*
+ * The Planner has a row per level and the mythic ladder one per tier: twenty
+ * and ten, the table's. Where the campaign goes higher they grow to its
+ * highest, so a level past 20th has a row to name its class on; lowered
+ * again, the extra rows go only while nothing is written in them. Rows the
+ * table always had are never taken away -- a campaign that stops at 6th
+ * keeps the rest of its plan.
+ */
+
+/** Give the Planner a row for every level up to the campaign's highest. */
+export function fitPlannerRows(d) {
+  const rows = d?.progression?.levels;
+  if (!Array.isArray(rows)) return;
+  const want = Math.max(MAX_LEVEL, campaignRules(d).maxLevel);
+  while (rows.length < want) rows.push({ level: rows.length + 1, classes: [] });
+  const blank = (r) => !(r?.classes || []).some((n) => String(n ?? '').trim());
+  while (rows.length > want && blank(rows[rows.length - 1])) rows.pop();
+}
+
+const MYTHIC_ROW_KEYS = ['name', 'path', 'featChoice', 'effect', 'featEffect'];
+
+/** Give the mythic ladder a row for every tier up to the campaign's highest. */
+export function fitMythicRows(d) {
+  const rows = d?.mythic?.abilities;
+  if (!Array.isArray(rows)) return;
+  const want = Math.max(MAX_TIER, campaignRules(d).maxTier);
+  while (rows.length < want) rows.push(Object.fromEntries(MYTHIC_ROW_KEYS.map((k) => [k, ''])));
+  const blank = (a) => !MYTHIC_ROW_KEYS.some((k) => String(a?.[k] ?? '').trim());
+  while (rows.length > want && blank(rows[rows.length - 1])) rows.pop();
+}
+
+/** The tiers that raise an ability score: every even one, to the campaign's highest. */
+export function mythicStatTiers(d) {
+  const top = campaignRules(d).maxTier;
+  return Array.from({ length: Math.floor(top / 2) }, (_, i) => (i + 1) * 2);
+}
+
 /* ---------------- the ladders ---------------- */
 
-/** The level each tier is reached at, `[, t1, t2, … t10]`: the table's, with the campaign's own. */
+/*
+ * Each ladder runs to the campaign's highest level or tier. Past the table's
+ * own end (20th level, 10th tier) a step has no figure of the table's -- an
+ * XP total or a tier's level is the campaign's to give -- while a rate
+ * carries on as it is.
+ */
+
+/** The level each tier is reached at, `[, t1, t2, …]`: the table's, with the campaign's own. */
 export function mythicLevels(d) {
   const own = steps(d?.campaign?.mythicLevels);
-  return Array.from({ length: MAX_TIER + 1 }, (_, t) => (t ? own[t] ?? MYTHIC_TIER_LEVEL[t] ?? null : null));
+  return Array.from({ length: campaignRules(d).maxTier + 1 }, (_, t) => (t ? own[t] ?? MYTHIC_TIER_LEVEL[t] ?? null : null));
 }
 
-/** The trials each tier takes from the one before, `[, t1, … t10]`. */
+/** The trials each tier takes from the one before, `[, t1, …]`. */
 export function mythicTrialSteps(d) {
-  const rate = campaignRules(d).mythicTrialRate;
+  const { mythicTrialRate: rate, maxTier } = campaignRules(d);
   const own = steps(d?.campaign?.mythicTrialSteps);
-  return Array.from({ length: MAX_TIER + 1 }, (_, t) => (t ? own[t] ?? rate : null));
+  return Array.from({ length: maxTier + 1 }, (_, t) => (t ? own[t] ?? rate : null));
 }
 
-/** The XP each level takes in all, `[, l1, … l20]`: the chosen table, with the campaign's own. */
+/** The XP each level takes in all, `[, l1, …]`: the chosen table, with the campaign's own. */
 export function xpThresholds(d) {
-  const table = XP_TRACKS[campaignRules(d).xpTrack];
+  const { xpTrack, maxLevel } = campaignRules(d);
+  const table = XP_TRACKS[xpTrack];
   const own = steps(d?.campaign?.xpSteps);
-  return Array.from({ length: MAX_LEVEL + 1 }, (_, l) => (l ? own[l] ?? table[l] : null));
+  return Array.from({ length: maxLevel + 1 }, (_, l) => (l ? own[l] ?? table[l] ?? null : null));
 }
 
-/** The milestones each level takes from the one before, `[, , l2, … l20]`. */
+/** The milestones each level takes from the one before, `[, , l2, …]`. */
 export function milestoneSteps(d) {
-  const rate = campaignRules(d).milestoneRate;
+  const { milestoneRate: rate, maxLevel } = campaignRules(d);
   const own = steps(d?.campaign?.milestoneSteps);
-  return Array.from({ length: MAX_LEVEL + 1 }, (_, l) => (l >= 2 ? own[l] ?? rate : null));
+  return Array.from({ length: maxLevel + 1 }, (_, l) => (l >= 2 ? own[l] ?? rate : null));
 }
 
 /** The tier a ladder of levels gives at `level`: every tier in turn whose level is reached. */
 function tierOnLadder(ladder, level) {
   let tier = 0;
-  while (tier < MAX_TIER && ladder[tier + 1] !== null && ladder[tier + 1] <= level) tier += 1;
+  while (tier < ladder.length - 1 && ladder[tier + 1] !== null && ladder[tier + 1] <= level) tier += 1;
   return tier;
 }
 
@@ -196,7 +262,7 @@ function tierOnLadder(ladder, level) {
 function tierFromTrials(perTier, trials) {
   let tier = 0;
   let spent = 0;
-  while (tier < MAX_TIER && trials >= spent + perTier[tier + 1]) {
+  while (tier < perTier.length - 1 && trials >= spent + perTier[tier + 1]) {
     spent += perTier[tier + 1];
     tier += 1;
   }
@@ -209,7 +275,8 @@ function tierFromTrials(perTier, trials) {
  * the first press is stored, it is what the trials already buy.
  */
 function trialTierNow(d) {
-  return count(d?.mythic?.trialTier, null) ?? tierFromTrials(mythicTrialSteps(d), count(d?.mythic?.trials, 0));
+  return Math.min(campaignRules(d).maxTier,
+    count(d?.mythic?.trialTier, null) ?? tierFromTrials(mythicTrialSteps(d), count(d?.mythic?.trials, 0)));
 }
 
 /**
@@ -235,11 +302,11 @@ export function settleTrialTier(d) {
 export function mythicComputedTier(d) {
   const rules = campaignRules(d);
   if (!rules.mythic) return 0;
-  if (rules.mythicTier === 'trials') return Math.min(MAX_TIER, trialTierNow(d));
+  if (rules.mythicTier === 'trials') return trialTierNow(d);
   if (rules.mythicTier !== 'level') return 0;
   // The table's own ladder goes on through the rules' function, so a sheet
   // that has not changed it works out exactly as it always did.
-  if (!Object.keys(steps(d?.campaign?.mythicLevels)).length) return tierAtLevel(d?.identity?.level);
+  if (!Object.keys(steps(d?.campaign?.mythicLevels)).length) return Math.min(rules.maxTier, tierAtLevel(d?.identity?.level));
   return tierOnLadder(mythicLevels(d), Number(d?.identity?.level) || 0);
 }
 
@@ -284,12 +351,16 @@ export function levelProgress(d) {
   const rules = campaignRules(d);
   if (rules.advancement === 'typed') return null;
   const level = Number(d?.identity?.level) || 0;
-  const next = level < MAX_LEVEL ? level + 1 : null;
+  const next = level < rules.maxLevel ? level + 1 : null;
   if (rules.advancement === 'xp') {
     const table = xpThresholds(d);
     const have = count(d?.identity?.xp, 0);
-    const need = next ? table[next] : null;
-    return { mode: 'xp', level, next, have, need, short: need === null ? 0 : Math.max(0, need - have), ready: need !== null && have >= need, from: table[level] ?? 0 };
+    const need = next ? table[next] ?? null : null;
+    // `unset`: a level past the table's end with no figure of the campaign's.
+    return {
+      mode: 'xp', level, next, have, need, short: need === null ? 0 : Math.max(0, need - have),
+      ready: need !== null && have >= need, from: table[level] ?? 0, unset: next !== null && need === null,
+    };
   }
   const per = milestoneSteps(d);
   const have = count(d?.identity?.milestones, 0);
@@ -309,9 +380,9 @@ export function trialProgress(d) {
   if (!rules.mythic || rules.mythicTier !== 'trials') return null;
   const per = mythicTrialSteps(d);
   const have = count(d?.mythic?.trials, 0);
-  const tier = Math.min(MAX_TIER, trialTierNow(d));
+  const tier = trialTierNow(d);
   const spent = per.slice(1, tier + 1).reduce((a, b) => a + b, 0);
-  const next = tier < MAX_TIER ? tier + 1 : null;
+  const next = tier < rules.maxTier ? tier + 1 : null;
   const need = next ? per[next] : null;
   return {
     tier, next, have, toward: Math.max(0, have - spent), need,

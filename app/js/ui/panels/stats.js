@@ -11,7 +11,7 @@
  * draws the same pickers; everything else here is local.
  */
 import { esc, abAttr, picksAbility, ABILITY_LABELS_LIST } from '../html.js';
-import { campaignRules } from '../../model/campaign.js';
+import { campaignRules, mythicStatTiers } from '../../model/campaign.js';
 import { roField } from '../fields.js';
 import { exprField } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
@@ -22,7 +22,7 @@ import {
   AC_BONUS_TYPES, ARRAY_LEVELS, ARRAY_MAX_SLOTS, ARRAY_SLOTS, arraySourceLevel,
   ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL,
   BUILD_DERIVED_KEYS, BUILD_OPTIONAL_KEYS, BUILD_PERMANENT_GROUPS, BUILD_TEMPORARY,
-  ENHANCEMENT_CAP, LEVEL4_LEVELS, MENTAL_PROWESS_LEVELS, MYTHIC_STAT_TIERS,
+  ENHANCEMENT_CAP, MENTAL_PROWESS_LEVELS,
   PHYSICAL_PROWESS_LEVELS, PROWESS_TRACKS, SAVE_BONUS_TYPES, abpGroupTotal, abpSourceLevel, bonusColumnName,
 } from '../../rules.js';
 
@@ -350,9 +350,13 @@ function milestonePicksPanel(model) {
   const level = Number(c.identity.level) || 0;
   const tier = Number(c.identity.mythicTier) || 0;
   // Without mythic (a campaign rule) the table is the Level/4 half alone.
-  const mythic = campaignRules(c).mythic;
+  // Both halves run to the campaign's highest level and tier: every fourth
+  // level, every even tier.
+  const { mythic, maxLevel } = campaignRules(c);
+  const fourths = Array.from({ length: Math.floor(maxLevel / 4) }, (_, i) => (i + 1) * 4);
+  const evens = mythicStatTiers(c);
   const level4 = (l) => (c.progressionPicks?.level4 || []).find((p) => p.level === l) || {};
-  const rows = mythic ? Math.max(LEVEL4_LEVELS.length, MYTHIC_STAT_TIERS.length) : LEVEL4_LEVELS.length;
+  const rows = mythic ? Math.max(fourths.length, evens.length) : fourths.length;
   return `<section class="panel">
       <h3>${mythic ? 'Level/4 &amp; mythic increases' : 'Level/4 increases'}</h3>
       <div class="tablewrap"><table class="build picks">
@@ -372,8 +376,8 @@ function milestonePicksPanel(model) {
           ? `<td class="noslot ${band}"></td><td class="noslot ${band}"></td>`
           : `<td class="num ${band} ${reached ? '' : 'future'}">${milestone}</td>
                <td class="${band} ${reached ? '' : 'future'}">${control}</td>`);
-        const l = LEVEL4_LEVELS[i];
-        const t = MYTHIC_STAT_TIERS[i];
+        const l = fourths[i];
+        const t = evens[i];
         return `<tr>
             ${pair(l, l <= level, l === undefined ? ''
             : pickSelect('level4', l, 0, level4(l).ability, ABILITY_LABELS_LIST, false), '')}

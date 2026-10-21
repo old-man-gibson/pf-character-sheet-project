@@ -11,7 +11,7 @@ import { blankDocument } from '../app/js/convert.js';
 import { Character } from '../app/js/model.js';
 import {
   CAMPAIGN_DEFAULTS, XP_TRACKS, awardXp, campaignChanges, campaignRules, levelProgress, levelUp, mythicComputedTier,
-  isAntihero, mythicLevels, mythicTierReached, tierUp, trialProgress, xpThresholds,
+  isAntihero, milestoneSteps as milestoneStepsOf, mythicLevels, mythicTierReached, tierUp, trialProgress, xpThresholds,
 } from '../app/js/model/campaign.js';
 import { HERO_POINTS_ID, MYTHIC_POWER_ID } from '../app/js/model/trackers.js';
 import { abpDefence, tierAtLevel } from '../app/js/rules.js';
@@ -57,7 +57,8 @@ for (const id of fixtureIds()) {
 console.log('\na switch flipped in play survives a reload, and flipping it back restores everything');
 for (const id of fixtureIds()) {
   for (const [key, value] of [['abp', false], ['mythic', false], ['heroPoints', false], ['pointBuy', 20], ['mythicTier', 'awarded'],
-    ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false], ['antiheroes', true]]) {
+    ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false], ['antiheroes', true],
+    ['maxLevel', 6], ['maxLevel', 25], ['maxTier', 5], ['maxTier', 12]]) {
     const m = new Character(loadCharacter(id));
     const before = numbers(m);
     m.set(`campaign.${key}`, value);
@@ -304,6 +305,53 @@ console.log('\nmythic tiers from trials, and a ladder of the campaign\'s own');
     const same = mythicComputedTier({ identity: { level }, campaign: { mythicLevels: { 4: 14 } } }) === tierAtLevel(level);
     if (!same) check(`the table's ladder written down agrees at ${level}`, false, true);
   }
+}
+
+console.log('\nthe highest level and tier');
+{
+  const { renderFeaturesPanel } = await import('../app/js/ui/panels/feats.js');
+  const c = new Character(blankDocument({ name: 'Capped', level: 1 }));
+  c.set('identity.level', 6);
+  c.set('campaign.advancement', 'xp');
+  c.set('identity.xp', 999999);
+  c.set('campaign.maxLevel', 6);
+  check('at the highest level: nothing to take', [levelProgress(c.data).next, levelUp(c), xpThresholds(c.data).length], [null, false, 7]);
+  c.set('campaign.maxLevel', 22);
+  c.set('identity.level', 20);
+  c.set('identity.xp', 4000000);
+  const p = levelProgress(c.data);
+  check('past 20th, a level with no XP figure waits for one', [p.next, p.need, p.unset, p.ready], [21, null, true, false]);
+  c.set('campaign.xpSteps.21', 3900000);
+  check('given one, it is offered', [levelProgress(c.data).ready, levelUp(c), c.data.identity.level], [true, true, 21]);
+  check('the Planner has a row for every level', c.data.progression.levels.length, 22);
+  c.data.progression.levels[20].classes = ['Fighter'];
+  c.set('campaign.maxLevel', 20);
+  check('lowered, a row with a class on it stays, the blank one goes', c.data.progression.levels.length, 21);
+  c.data.progression.levels[20].classes = [];
+  c.recompute();
+  check('and once it is blank it goes too', c.data.progression.levels.length, 20);
+  check('the table\'s twenty are never taken away', (c.set('campaign.maxLevel', 6), c.data.progression.levels.length), 20);
+  c.set('campaign.advancement', 'milestones');
+  c.set('campaign.maxLevel', 25);
+  check('milestones carry on at the rate', milestoneStepsOf(c.data)[24], 1);
+
+  const m = new Character(blankDocument({ name: 'Tiers', level: 1 }));
+  m.set('identity.level', 20);
+  check('the table\'s ladder at 20th', m.data.identity.mythicTier, 10);
+  m.set('campaign.maxTier', 5);
+  check('held to the campaign\'s highest', m.data.identity.mythicTier, 5);
+  const panel = renderFeaturesPanel(m, { draft: {} });
+  check('Feats & Mythic lists that many tiers', (panel.match(/data-rowkey="mythladder"/g) || []).length, 5);
+  check('a tier typed in is still the GM\'s word', (m.set('mythic.tierOverride', 7), m.data.identity.mythicTier), 7);
+  m.set('mythic.tierOverride', null);
+  m.set('campaign.maxTier', 12);
+  check('raised: rows for every tier, no level for the new ones yet', [m.data.mythic.abilities.length, m.data.identity.mythicTier, mythicLevels(m.data)[11]], [12, 10, null]);
+  m.set('campaign.mythicLevels.11', 20);
+  check('given a level, the tier comes', m.data.identity.mythicTier, 11);
+  m.set('campaign.mythicTier', 'trials');
+  m.set('mythic.trials', 30);
+  for (let i = 0; i < 20; i++) tierUp(m);
+  check('trials stop at the highest tier', [m.data.identity.mythicTier, trialProgress(m.data).next], [12, null]);
 }
 
 console.log(`${pass} passed, ${fail} failed`);
