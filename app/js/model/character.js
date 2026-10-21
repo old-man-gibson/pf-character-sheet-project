@@ -44,8 +44,8 @@ import { breakdown } from './breakdown.js';
 import { shapeLevelUpFeats } from './feats.js';
 import { normalise, toDocument } from './document.js';
 import {
-  addSystemTab, hideTab, listAdd, listAt, listMove, listMoveInto, listMoveTo, listRemove,
-  moveTab, removeSystemTab, renameSkill, renameSystemTab, resetTabOrder, sessionDefaultTabs,
+  addSystemTab, addSystemTabColumn, hideTab, listAdd, listAt, listMove, listMoveInto, listMoveTo, listRemove,
+  moveTab, removeSystemTab, removeSystemTabColumn, renameSkill, renameSystemTab, resetTabOrder, sessionDefaultTabs,
   setItem, setTabColor, setTabName, setTabOrder, setValue, setViewMode, showTab, systemTabsInUse,
   tabColor, tabName, tabOrder,
   taggedSystemTabs, toggleClassSystem, toggleProficiency, viewMode,
@@ -526,6 +526,8 @@ export class Character {
   addSystemTab(...a) { return addSystemTab(this, ...a); }
   renameSystemTab(...a) { return renameSystemTab(this, ...a); }
   removeSystemTab(...a) { return removeSystemTab(this, ...a); }
+  addSystemTabColumn(...a) { return addSystemTabColumn(this, ...a); }
+  removeSystemTabColumn(...a) { return removeSystemTabColumn(this, ...a); }
   viewMode(...a) { return viewMode(this, ...a); }
   setViewMode(...a) { return setViewMode(this, ...a); }
   systemTabsInUse(...a) { return systemTabsInUse(this, ...a); }

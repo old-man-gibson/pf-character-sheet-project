@@ -3869,7 +3869,7 @@ export class CharacterSheetElement extends HTMLElement {
         </h3>
         <p class="hint">${tab.hidden ? 'This worksheet was hidden in the source workbook. ' : ''}
           ${tab.custom ? 'Custom tab: a free grid for anything the sheet doesn\'t model. '
-    : 'Cell-for-cell from the workbook. '}Every cell is editable. Rows and columns can be added.
+    : 'Cell-for-cell from the workbook. '}Every cell is editable. Rows and columns can be added and removed.
           Cells accept inline formulas like <code>{name = expr}</code>.</p>
       </section>
       ${this.#gridTab(index, tab)}
@@ -8044,16 +8044,14 @@ export class CharacterSheetElement extends HTMLElement {
         this.#model.toggleProficiency(button?.dataset.list, button?.dataset.value);
         this.#render();
         break;
-      case 'add-system-column': {
-        const tab = this.#model.data.sheetTabs?.[Number(button?.dataset.index)];
-        if (tab) {
-          for (const row of tab.rows) row.cells.push(null);
-          if (!tab.rows.length) tab.rows.push({ cells: [null] });
-          this.#model.recompute();
-          this.#render();
-        }
+      case 'add-system-column':
+        this.#model.addSystemTabColumn(Number(button?.dataset.index));
+        this.#render();
         break;
-      }
+      case 'remove-system-column':
+        this.#model.removeSystemTabColumn(Number(button?.dataset.index), Number(button?.dataset.col));
+        this.#render();
+        break;
       case 'add-template-column':
         this.#model.addTemplateTableColumn(button?.dataset.path);
         this.#render();
