@@ -68,7 +68,7 @@ import {
   readThemePrefs, writeThemePrefs, ACTION_MARKS, ACTION_TINTS, DEFAULT_ACTION_MARKS,
   DEFAULT_ACTION_TINT, isActionMarks, isActionTint,
 } from './themes.js';
-import { awardXp, campaignRules, levelUp } from './model/campaign.js';
+import { awardXp, campaignRules, levelUp, tierUp } from './model/campaign.js';
 import { esc, val, abilityKey, nameDatalist } from './ui/html.js';
 import * as fields from './ui/fields.js';
 
@@ -7337,6 +7337,10 @@ export class CharacterSheetElement extends HTMLElement {
       // one, and adding XP at the table. Both are play actions.
       case 'level-up':
         if (levelUp(this.#model)) this.#render();
+        break;
+      // A mythic tier earned from trials is taken the same way.
+      case 'tier-up':
+        if (tierUp(this.#model)) this.#render();
         break;
       case 'xp-award':
         if (awardXp(this.#model, this.#view.draft.xpAward)) {

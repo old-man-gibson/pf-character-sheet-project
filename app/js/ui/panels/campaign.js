@@ -102,7 +102,7 @@ export function campaignPanel(model) {
     level: `A tier at each of a ladder of levels. The table's is 1 at 8th level, 2 at 10th, 3 at 12th,
       4 at 14th, then one a level to 10 at 20th.`,
     trials: `Trials completed, counted on <strong>Feats &amp; Mythic</strong>: ${rules.mythicTrialRate} a tier
-      unless a tier below says otherwise. The tier follows the count.`,
+      unless a tier below says otherwise. Once the next tier is earned, a <strong>Tier up</strong> button offers it.`,
     awarded: 'The tier the GM hands out: type it in <strong>Tier</strong> on <strong>Feats &amp; Mythic</strong>. It starts at 0.',
   }[rules.mythicTier];
   const tierMore = !rules.mythic ? ''

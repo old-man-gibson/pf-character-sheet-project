@@ -18,9 +18,10 @@
  * figure saved after it already agrees with it.
  *
  * Progress is the character's, not the campaign's: the XP and milestones
- * earned (`identity.xp`, `identity.milestones`) and the mythic trials
- * completed (`mythic.trials`) live with the rest of the character. The rules
- * say what they are measured against.
+ * earned (`identity.xp`, `identity.milestones`), the mythic trials completed
+ * (`mythic.trials`) and the tier they have been taken to (`mythic.trialTier`)
+ * live with the rest of the character. The rules say what they are measured
+ * against.
  */
 import { MAX_LEVEL, MYTHIC_TIER_LEVEL, tierAtLevel } from '../rules.js';
 
@@ -164,14 +165,38 @@ function tierFromTrials(perTier, trials) {
 }
 
 /**
+ * The tier the trials have been taken to. Trials only offer a tier, as XP
+ * only offers a level: **Tier up** takes it, and that is what is kept. Until
+ * the first press is stored, it is what the trials already buy.
+ */
+function trialTierNow(d) {
+  return count(d?.mythic?.trialTier, null) ?? tierFromTrials(mythicTrialSteps(d), count(d?.mythic?.trials, 0));
+}
+
+/**
+ * Keep the tier the trials have reached while the tier comes from trials,
+ * and only then. Written the first time a pass sees trials in force -- a
+ * sheet just switched to them, or one saved under them before the tier was
+ * kept -- at what the count already buys, so nothing moves; after that only
+ * Tier up raises it. Under any other rule it goes, so switching back to
+ * trials starts from the count again, and a sheet that never used trials
+ * carries nothing.
+ */
+export function settleTrialTier(d) {
+  const m = d.mythic || (d.mythic = {});
+  if (campaignRules(d).mythicTier !== 'trials') delete m.trialTier;
+  else if (count(m.trialTier, null) === null) m.trialTier = trialTierNow(d);
+}
+
+/**
  * The tier these rules give before anyone types one: the ladder's at the
- * character's level, or the trials' when the tier comes from trials; nothing
- * when it is awarded or mythic is off.
+ * character's level, or the one the trials have been taken to when the tier
+ * comes from trials; nothing when it is awarded or mythic is off.
  */
 export function mythicComputedTier(d) {
   const rules = campaignRules(d);
   if (!rules.mythic) return 0;
-  if (rules.mythicTier === 'trials') return tierFromTrials(mythicTrialSteps(d), count(d?.mythic?.trials, 0));
+  if (rules.mythicTier === 'trials') return Math.min(MAX_TIER, trialTierNow(d));
   if (rules.mythicTier !== 'level') return 0;
   // The table's own ladder goes on through the rules' function, so a sheet
   // that has not changed it works out exactly as it always did.
@@ -233,16 +258,34 @@ export function levelProgress(d) {
   return { mode: 'milestones', level, next, have, need, short: need === null ? 0 : Math.max(0, need - have), ready: need !== null && have >= need, from: 0 };
 }
 
-/** Trials done, and what the next tier takes, when the tier comes from trials; else null. */
+/**
+ * Trials done, and what the next tier takes, when the tier comes from
+ * trials; else null. Trials are counted in all and never spent: `toward` is
+ * how many count toward the next tier past those the tiers taken so far
+ * used. `ready` is true once the next tier is earned -- the sheet offers it,
+ * and taking it is a press, as a level is.
+ */
 export function trialProgress(d) {
   const rules = campaignRules(d);
   if (!rules.mythic || rules.mythicTier !== 'trials') return null;
   const per = mythicTrialSteps(d);
   const have = count(d?.mythic?.trials, 0);
-  const tier = tierFromTrials(per, have);
+  const tier = Math.min(MAX_TIER, trialTierNow(d));
   const spent = per.slice(1, tier + 1).reduce((a, b) => a + b, 0);
   const next = tier < MAX_TIER ? tier + 1 : null;
-  return { tier, next, have, toward: have - spent, need: next ? per[next] : null, short: next ? Math.max(0, spent + per[next] - have) : 0 };
+  const need = next ? per[next] : null;
+  return {
+    tier, next, have, toward: Math.max(0, have - spent), need,
+    short: next ? Math.max(0, spent + need - have) : 0, ready: next !== null && have >= spent + need,
+  };
+}
+
+/** Take the next mythic tier the trials have earned: a play action, logged and undoable. */
+export function tierUp(model) {
+  const p = trialProgress(model.data);
+  if (!p?.ready) return false;
+  model.play(`Reached mythic tier ${p.next}`, () => model.set('mythic.trialTier', p.next));
+  return true;
 }
 
 /**

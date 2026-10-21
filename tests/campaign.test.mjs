@@ -11,7 +11,7 @@ import { blankDocument } from '../app/js/convert.js';
 import { Character } from '../app/js/model.js';
 import {
   CAMPAIGN_DEFAULTS, XP_TRACKS, awardXp, campaignChanges, campaignRules, levelProgress, levelUp, mythicComputedTier,
-  mythicLevels, mythicTierReached, trialProgress, xpThresholds,
+  mythicLevels, mythicTierReached, tierUp, trialProgress, xpThresholds,
 } from '../app/js/model/campaign.js';
 import { MYTHIC_POWER_ID } from '../app/js/model/trackers.js';
 import { abpDefence, tierAtLevel } from '../app/js/rules.js';
@@ -198,15 +198,33 @@ console.log('\nmythic tiers from trials, and a ladder of the campaign\'s own');
   c.set('campaign.mythicTrialRate', 2);
   c.set('campaign.mythicTrialSteps.3', 4);
   c.set('mythic.trials', 7);
-  check('the tier follows the trials, a tier of its own counted', c.data.identity.mythicTier, 2);
+  check('trials only offer the tier', [c.data.identity.mythicTier, trialProgress(c.data).ready, trialProgress(c.data).next], [0, true, 1]);
+  check('taking it is a press', [tierUp(c), c.data.identity.mythicTier, c.playActions[0]?.label], [true, 1, 'Reached mythic tier 1']);
+  c.undoPlay();
+  check('undone like one', c.data.identity.mythicTier, 0);
+  tierUp(c);
+  tierUp(c);
+  check('a tier of its own counted: no third press', [c.data.identity.mythicTier, tierUp(c)], [2, false]);
   const t = trialProgress(c.data);
-  check('and says what the next takes', [t.tier, t.next, t.toward, t.need, t.short], [2, 3, 3, 4, 1]);
+  check('and says what the next takes', [t.tier, t.next, t.toward, t.need, t.short, t.ready], [2, 3, 3, 4, 1, false]);
+  check('the pressed tier is kept on reopen', reopen(c).data.identity.mythicTier, 2);
+  c.set('mythic.trials', 3);
+  check('fewer trials typed do not take a tier back', c.data.identity.mythicTier, 2);
+  c.set('mythic.trials', 7);
+  {
+    // Saved under trials before the press existed: opens at the tier the count bought.
+    const old = JSON.parse(JSON.stringify(c.toJSON()));
+    delete old.mythic.trialTier;
+    old.mythic.trials = 9;
+    const o = new Character(old);
+    check('an older sheet keeps the tier its trials gave', [o.data.identity.mythicTier, o.data.mythic.trialTier], [3, 3]);
+  }
   check('the tables say trials in all', mythicTierReached(c.data, 3), { head: 'Trials', value: 8, title: 'Tier 3 after 8 trials in all (4 for this tier)' });
   check('a typed tier still overrides', (c.set('mythic.tierOverride', 5), c.data.identity.mythicTier), 5);
   c.set('mythic.tierOverride', null);
 
   c.set('campaign.mythicTier', 'level');
-  check('back to the level ladder', c.data.identity.mythicTier, 6);
+  check('back to the level ladder, the trial tier dropped', [c.data.identity.mythicTier, 'trialTier' in c.data.mythic], [6, false]);
   c.set('campaign.mythicLevels.1', 1);
   c.set('campaign.mythicLevels.6', 18);
   check('a ladder of the campaign\'s own', [c.data.identity.mythicTier, mythicLevels(c.data)[1], mythicLevels(c.data)[2]], [5, 1, 10]);

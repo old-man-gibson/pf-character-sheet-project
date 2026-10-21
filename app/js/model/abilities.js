@@ -12,14 +12,16 @@ import {
   resolveAbility,
 } from '../rules.js';
 import { forwardedSplit } from './scope.js';
-import { campaignRules, mythicComputedTier, mythicTierOf } from './campaign.js';
+import { campaignRules, mythicComputedTier, mythicTierOf, settleTrialTier } from './campaign.js';
 
 /**
  * Mythic tier derives from level (with a manual override) -- or, under other
- * campaign rules, from the GM's award alone, or is 0 with mythic off.
+ * campaign rules, from trials taken by a press, from the GM's award alone, or
+ * is 0 with mythic off.
  */
 export function applyMythic(model) {
   const m = model.data.mythic || (model.data.mythic = {});
+  settleTrialTier(model.data);
   m.computedTier = mythicComputedTier(model.data);
   model.data.identity.mythicTier = mythicTierOf(model.data);
 }

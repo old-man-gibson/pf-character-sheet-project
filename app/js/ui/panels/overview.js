@@ -1149,7 +1149,8 @@ function detailsPanel(model, ctx) {
         ${rules.mythic ? `${field('Mythic path', text('identity.mythicPath', c.identity.mythicPath), 'col3')}
         ${rules.mythicTier === 'awarded'
     ? field('Mythic tier (awarded)', `<span class="value" title="The tier the GM has awarded, typed on Feats &amp; Mythic">${esc(c.identity.mythicTier ?? 0)}</span>`, 'col3')
-    : field('Mythic tier (auto)', `<span class="value" title="From level; override on Feats &amp; Mythic">${esc(c.identity.mythicTier ?? 0)}</span>`, 'col3')}` : ''}
+    : field('Mythic tier (auto)', `<span class="value" title="${rules.mythicTier === 'trials'
+      ? 'From trials, taken with Tier up on Feats &amp; Mythic' : 'From level; override on Feats &amp; Mythic'}">${esc(c.identity.mythicTier ?? 0)}</span>`, 'col3')}` : ''}
         ${/* The last row: a nickname in the first column, and the portrait's
               link across the rest -- a URL still wants more than a column. */''}
         <div class="portraitrow">

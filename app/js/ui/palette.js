@@ -1109,6 +1109,12 @@ function commands(model, add) {
   if ((model.data.psionics?.classes || []).length) {
     cmd('New day — power points', 'psionics-new-day', 'Refill the power point pool', 'new day psionics rest');
   }
+  // A level or tier the campaign's rules say is earned, offered where the
+  // buttons on the sheet are.
+  const lp = levelProgress(model.data);
+  if (lp?.ready) cmd(`Level up to ${lp.next}`, 'level-up', 'The next level is earned', 'level up levelling xp experience milestones');
+  const tp = trialProgress(model.data);
+  if (tp?.ready) cmd(`Tier up to ${tp.next}`, 'tier-up', 'The next mythic tier is earned', 'tier up mythic trials');
   cmd('Campaign rules', 'campaign-rules', 'Point buy, levels by XP or milestones, hero points, mythic and ABP for this character',
     'settings options campaign rules house table point buy hero points mythic tier trials rate thresholds abp automatic bonus progression xp experience milestones levelling gestalt');
   cmd('Show, hide and rearrange tabs', 'palette-tabs', 'The ⚙ tab manager', 'tabs manage hide show arrange settings');

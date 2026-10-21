@@ -285,15 +285,17 @@ export function renderFeaturesPanel(model, ctx) {
     placeholder: m.computedTier ?? 0, width: '3.6rem', auto: !awarded, label: 'Mythic tier',
     title: awarded
       ? 'The tier the GM has awarded (for trials, say). Blank is 0. The campaign rules on the ⚙ tab set where the tier comes from.'
-      : trials ? 'From the trials completed; enter a number to override.'
+      : trials ? 'The tier the trials have been taken to with Tier up; enter a number to override.'
         : 'Automatic from level; enter a number to override.',
   })}
             <span class="value">→ ${esc(c.identity.mythicTier ?? 0)}</span></span>`)}
           ${trials ? fields.field('Trials completed', `<span class="pair">
             <input type="number" min="0" value="${esc(trials.have)}" data-set="mythic.trials" data-kind="number"
               aria-label="Trials completed" style="width:4.2rem">
-            <span class="hint">${trials.next === null ? 'tier 10, the last'
-    : `${trials.toward} of ${trials.need} for tier ${trials.next}, ${trials.short} to go`}</span></span>`) : ''}
+            <span class="hint">${trials.next === null ? `tier ${trials.tier}, the last`
+    : trials.ready ? `tier ${trials.next} is earned`
+      : `${trials.toward} of ${trials.need} for tier ${trials.next}, ${trials.short} to go`}</span>
+            ${trials.ready ? `<button class="levelup" data-action="tier-up" title="Take tier ${trials.next}: one step, undone like a play action">Tier up to ${trials.next}</button>` : ''}</span>`) : ''}
           ${fields.field(`Bonus HP / tier (path: ${MYTHIC_PATH_HP[String(m.path || '').trim()] ?? '—'})`,
     fields.autoNum('data-set="mythic.bonusHpPerTier"', m.bonusHpPerTier, {
       placeholder: MYTHIC_PATH_HP[String(m.path || '').trim()] ?? 0, width: '3.6rem', auto: true,
