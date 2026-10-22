@@ -874,10 +874,64 @@ def _armor_row(bk, tab, r, kind):
     }
 
 
+# How far along a weapon block's rows its labels are looked for.
+_WEAPON_LABEL_COLUMNS = 20
+
+
+def _weapon_columns(bk, tab, r_name):
+    """Where each field of a weapon block sits, as 1-indexed columns.
+
+    The template puts them at fixed columns, but a workbook made from another
+    version of it can carry extra ones: one has "Misc Non-Crit Damage" ahead
+    of Total Damage, which moves every field after it one column right. So
+    each column is found by its label -- on the "Weapon Name N" row, on the
+    label row under the first data row, and beside each value on the row
+    under that -- and falls back to the template's own column where the label
+    is not there. app/js/convert.js has the same lookup (weaponColumns)."""
+    def find(row, labels, fallback):
+        want = {label.lower() for label in labels}
+        for c in range(1, _WEAPON_LABEL_COLUMNS + 1):
+            v = bk.cell(tab, row, c)
+            if isinstance(v, str) and v.strip().lower() in want:
+                return c
+        return fallback
+
+    head, labels, inline = r_name, r_name + 2, r_name + 4
+    crit_range = find(head, ["Critical", "Critical Range"], 10)
+    return {
+        "attackType": find(head, ["Attack type"], 3),
+        "attackRoll": find(head, ["Attack Roll"], 4),
+        "dice": find(head, ["Damage Dice"], 5),
+        "damageAbility": find(head, ["Damage Ability"], 6),
+        "abilityMult": find(head, ["Ability Mult"], 7),
+        "miscDamage": find(head, ["Misc Damage"], 8),
+        "totalDamage": find(head, ["Total Damage"], 9),
+        "critRange": crit_range,
+        # "Critical" heads both the range and the multiplier cell; one layout
+        # labels the two apart.
+        "critMult": find(head, ["Critical Multiplier"], crit_range + 1),
+        "bonusCritDamage": find(head, ["Bonus Crit Damage"], 12),
+        "damageType": find(head, ["Damage Type"], 13),
+        "groups": [find(labels, [f"Weapon Group {n}"], n) for n in (1, 2, 3)],
+        "miscAttack": find(labels, ["Misc Attack"], 4),
+        "special": find(labels, ["Special Properties"], 5),
+        "ammunition": find(labels, ["Ammunition"], 9),
+        "size": find(labels, ["Size"], 10),
+        "range": find(labels, ["Range"], 13),
+        # The third row holds each value in the cell right of its label.
+        "enhancement": find(inline, ["Enhancement"], 1) + 1,
+        "familiarity": find(inline, ["Weapon Familiarity"], 3) + 1,
+        "handedness": find(inline, ["Handedness"], 5) + 1,
+        "weight": find(inline, ["Weight"], 7) + 1,
+        "price": find(inline, ["Price"], 9) + 1,
+    }
+
+
 def extract_equipment(bk):
     """Equipment worksheet: slotted gear, other items, armor & shields, and up
     to six weapon blocks. Every section is label-anchored — some characters
-    have extra shield rows that shift everything below them."""
+    have extra shield rows that shift everything below them, and weapon
+    columns are found by their labels too (_weapon_columns)."""
     tab = "Equipment"
     if not bk.has(tab):
         return {"gear": [], "other": [], "armor": None, "shields": [], "weapons": []}
@@ -909,33 +963,34 @@ def extract_equipment(bk):
         if not (isinstance(hdr, str) and re.match(r"^Weapon Name \d+$", hdr)):
             continue
         row1, row2, row3 = r_name + 1, r_name + 3, r_name + 4
+        col = _weapon_columns(bk, tab, r_name)
         name = bk.cell(tab, row1, 1)
-        if not name and not bk.cell(tab, row1, 5):
+        if not name and not bk.cell(tab, row1, col["dice"]):
             continue
         weapons.append({
             "name": name,
-            "attackType": bk.cell(tab, row1, 3),
-            "sheetAttack": num(bk.cell(tab, row1, 4), None),
-            "dice": bk.cell(tab, row1, 5),
-            "damageAbility": bk.cell(tab, row1, 6),
-            "abilityMult": num(bk.cell(tab, row1, 7), 1) or 1,
-            "miscDamage": num(bk.cell(tab, row1, 8)),
-            "sheetTotalDamage": bk.cell(tab, row1, 9),
-            "critRange": num(bk.cell(tab, row1, 10), None),
-            "critMult": bk.cell(tab, row1, 11),
-            "bonusCritDamage": bk.cell(tab, row1, 12),
-            "damageType": bk.cell(tab, row1, 13),
-            "groups": [bk.cell(tab, row2, 1), bk.cell(tab, row2, 2), bk.cell(tab, row2, 3)],
-            "miscAttack": num(bk.cell(tab, row2, 4)),
-            "special": bk.cell(tab, row2, 5),
-            "ammunition": bk.cell(tab, row2, 9),
-            "size": bk.cell(tab, row2, 10),
-            "range": bk.cell(tab, row2, 13),
-            "enhancement": num(bk.cell(tab, row3, 2)),
-            "familiarity": bk.cell(tab, row3, 4),
-            "handedness": bk.cell(tab, row3, 6),
-            "weight": num(bk.cell(tab, row3, 8)),
-            "price": num(bk.cell(tab, row3, 10)),
+            "attackType": bk.cell(tab, row1, col["attackType"]),
+            "sheetAttack": num(bk.cell(tab, row1, col["attackRoll"]), None),
+            "dice": bk.cell(tab, row1, col["dice"]),
+            "damageAbility": bk.cell(tab, row1, col["damageAbility"]),
+            "abilityMult": num(bk.cell(tab, row1, col["abilityMult"]), 1) or 1,
+            "miscDamage": num(bk.cell(tab, row1, col["miscDamage"])),
+            "sheetTotalDamage": bk.cell(tab, row1, col["totalDamage"]),
+            "critRange": num(bk.cell(tab, row1, col["critRange"]), None),
+            "critMult": bk.cell(tab, row1, col["critMult"]),
+            "bonusCritDamage": bk.cell(tab, row1, col["bonusCritDamage"]),
+            "damageType": bk.cell(tab, row1, col["damageType"]),
+            "groups": [bk.cell(tab, row2, c) for c in col["groups"]],
+            "miscAttack": num(bk.cell(tab, row2, col["miscAttack"])),
+            "special": bk.cell(tab, row2, col["special"]),
+            "ammunition": bk.cell(tab, row2, col["ammunition"]),
+            "size": bk.cell(tab, row2, col["size"]),
+            "range": bk.cell(tab, row2, col["range"]),
+            "enhancement": num(bk.cell(tab, row3, col["enhancement"])),
+            "familiarity": bk.cell(tab, row3, col["familiarity"]),
+            "handedness": bk.cell(tab, row3, col["handedness"]),
+            "weight": num(bk.cell(tab, row3, col["weight"])),
+            "price": num(bk.cell(tab, row3, col["price"])),
         })
 
     return {

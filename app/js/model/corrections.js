@@ -89,6 +89,30 @@ FIXES['monster-crit-range'] = (model) => {
 };
 
 /*
+ * A stored figure the importer read from the wrong column. One workbook layout
+ * has an extra "Misc Non-Crit Damage" column ahead of Total Damage, and weapon
+ * columns were read by position, so each field after it came from the column
+ * to its left: the crit range from the total damage ("1d6+16" read as 1), the
+ * multiplier from the crit range (15), the bonus crit damage from the
+ * multiplier (2). No multiplier reaches 10, so a multiplier of 10 or more with
+ * a bonus crit damage of 2 to 6 beside it is that pair, and is put back as a
+ * fresh conversion now reads it. A row put right by hand no longer looks like
+ * this and is left alone. The damage type came from an empty cell and is not
+ * recoverable here.
+ */
+FIXES['weapon-crit-shift'] = (model) => {
+  for (const w of model.data.equipment?.weapons || []) {
+    if (!w) continue;
+    const threat = Number(w.critMult);
+    const mult = String(w.bonusCritDamage ?? '').trim().match(/^x?([2-6])$/i);
+    if (!Number.isInteger(threat) || threat < 10 || threat > 20 || !mult) continue;
+    w.critRange = threat;
+    w.critMult = w.bonusCritDamage;
+    w.bonusCritDamage = null;
+  }
+};
+
+/*
  * The hit-point meter was handed what was left rather than what was spent,
  * so a style saved as Fill -- which any style saved for it carried, Fill
  * being the default then -- showed a draining bar. Hit points are handed
