@@ -5540,6 +5540,39 @@ console.log('a hit-point style saved before the meter was handed the damage keep
   check('a Fill chosen after it stays Fill', again.meterStyle('hp').fill, 'spent');
 }
 
+console.log('a weapon row read one column off by an older import gets its crit back');
+{
+  // The importer read "1d6+16 | 15 | 2" (total damage, crit range,
+  // multiplier) into the crit range, multiplier and bonus crit damage.
+  const shifted = { ...blankWeapon(), name: 'Katana', critRange: 1, critMult: 15, bonusCritDamage: 2 };
+  const doc = blankDocument({ name: 'Shifted', level: 9 });
+  doc.equipment.weapons = [
+    shifted,
+    { ...shifted, name: 'Wakizashi', critRange: 1, critMult: 18, bonusCritDamage: 'x3' },
+    { ...blankWeapon(), name: 'Fixed by hand', critRange: 15, critMult: 2, bonusCritDamage: null },
+    { ...blankWeapon(), name: 'Real bonus', critRange: 19, critMult: 'x3', bonusCritDamage: '1d6' },
+  ];
+  const c = new Character(doc);
+  const crit = (i) => {
+    const w = c.list('equipment.weapons')[i];
+    return [w.critRange, w.critMult, w.bonusCritDamage];
+  };
+  check('the range, multiplier and bonus move back', crit(0), [15, 2, null]);
+  check('the app prints the threat it should', threatText(c.list('equipment.weapons')[0].critRange,
+    critMultOf(c.list('equipment.weapons')[0].critMult)), '15-20/x2');
+  check('a multiplier written x3 moves back as written', crit(1), [18, 'x3', null]);
+  check('a row put right by hand is left alone', crit(2), [15, 2, null]);
+  check('a real bonus crit damage is left alone', crit(3), [19, 'x3', '1d6']);
+  check('once, and the document says so', c.toJSON().corrections.includes('weapon-crit-shift'), true);
+
+  // A document saved after the fix keeps whatever it holds.
+  const later = JSON.parse(JSON.stringify(doc));
+  later.corrections = [...c.toJSON().corrections];
+  const kept = new Character(later);
+  const w = kept.list('equipment.weapons')[0];
+  check('a document already corrected is not touched again', [w.critRange, w.critMult, w.bonusCritDamage], [1, 15, 2]);
+}
+
 console.log('the differences from the source sheet can be cleared');
 {
   // The header counts the totals that moved since the sheet opened; a level

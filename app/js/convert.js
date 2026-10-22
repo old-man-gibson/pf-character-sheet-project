@@ -909,10 +909,67 @@ function armorRow(bk, tab, r, kind) {
   };
 }
 
+/** How far along a weapon block's rows its labels are looked for. */
+const WEAPON_LABEL_COLUMNS = 20;
+
+/**
+ * Where each field of a weapon block sits, as 1-indexed columns.
+ *
+ * The template puts them at fixed columns, but a workbook made from another
+ * version of it can carry extra ones: one has "Misc Non-Crit Damage" ahead of
+ * Total Damage, which moves every field after it one column right. So each
+ * column is found by its label -- on the "Weapon Name N" row, on the label row
+ * under the first data row, and beside each value on the row under that -- and
+ * falls back to the template's own column where the label is not there.
+ * tools/convert.py has the same lookup (_weapon_columns).
+ */
+export function weaponColumns(bk, tab, rName) {
+  const find = (row, labels, fallback) => {
+    const want = new Set(labels.map((l) => l.toLowerCase()));
+    for (let c = 1; c <= WEAPON_LABEL_COLUMNS; c++) {
+      const v = bk.cell(tab, row, c);
+      if (typeof v === 'string' && want.has(v.trim().toLowerCase())) return c;
+    }
+    return fallback;
+  };
+  const head = rName;
+  const labels = rName + 2;
+  const inline = rName + 4;
+  const critRange = find(head, ['Critical', 'Critical Range'], 10);
+  return {
+    attackType: find(head, ['Attack type'], 3),
+    attackRoll: find(head, ['Attack Roll'], 4),
+    dice: find(head, ['Damage Dice'], 5),
+    damageAbility: find(head, ['Damage Ability'], 6),
+    abilityMult: find(head, ['Ability Mult'], 7),
+    miscDamage: find(head, ['Misc Damage'], 8),
+    totalDamage: find(head, ['Total Damage'], 9),
+    critRange,
+    // "Critical" heads both the range and the multiplier cell; one layout
+    // labels the two apart.
+    critMult: find(head, ['Critical Multiplier'], critRange + 1),
+    bonusCritDamage: find(head, ['Bonus Crit Damage'], 12),
+    damageType: find(head, ['Damage Type'], 13),
+    groups: [1, 2, 3].map((n) => find(labels, [`Weapon Group ${n}`], n)),
+    miscAttack: find(labels, ['Misc Attack'], 4),
+    special: find(labels, ['Special Properties'], 5),
+    ammunition: find(labels, ['Ammunition'], 9),
+    size: find(labels, ['Size'], 10),
+    range: find(labels, ['Range'], 13),
+    // The third row holds each value in the cell right of its label.
+    enhancement: find(inline, ['Enhancement'], 1) + 1,
+    familiarity: find(inline, ['Weapon Familiarity'], 3) + 1,
+    handedness: find(inline, ['Handedness'], 5) + 1,
+    weight: find(inline, ['Weight'], 7) + 1,
+    price: find(inline, ['Price'], 9) + 1,
+  };
+}
+
 /**
  * Equipment worksheet: slotted gear, other items, armor & shields, and up to six
  * weapon blocks. Every section is label-anchored — some characters have extra
- * shield rows that shift everything below them.
+ * shield rows that shift everything below them, and weapon columns are found
+ * by their labels too (weaponColumns).
  */
 function extractEquipment(bk) {
   const tab = 'Equipment';
@@ -954,32 +1011,33 @@ function extractEquipment(bk) {
     const row1 = rName + 1;
     const row2 = rName + 3;
     const row3 = rName + 4;
+    const col = weaponColumns(bk, tab, rName);
     const name = bk.cell(tab, row1, 1);
-    if (!name && !bk.cell(tab, row1, 5)) continue;
+    if (!name && !bk.cell(tab, row1, col.dice)) continue;
     weapons.push({
       name,
-      attackType: bk.cell(tab, row1, 3),
-      sheetAttack: num(bk.cell(tab, row1, 4), null),
-      dice: bk.cell(tab, row1, 5),
-      damageAbility: bk.cell(tab, row1, 6),
-      abilityMult: num(bk.cell(tab, row1, 7), 1) || 1,
-      miscDamage: num(bk.cell(tab, row1, 8)),
-      sheetTotalDamage: bk.cell(tab, row1, 9),
-      critRange: num(bk.cell(tab, row1, 10), null),
-      critMult: bk.cell(tab, row1, 11),
-      bonusCritDamage: bk.cell(tab, row1, 12),
-      damageType: bk.cell(tab, row1, 13),
-      groups: [bk.cell(tab, row2, 1), bk.cell(tab, row2, 2), bk.cell(tab, row2, 3)],
-      miscAttack: num(bk.cell(tab, row2, 4)),
-      special: bk.cell(tab, row2, 5),
-      ammunition: bk.cell(tab, row2, 9),
-      size: bk.cell(tab, row2, 10),
-      range: bk.cell(tab, row2, 13),
-      enhancement: num(bk.cell(tab, row3, 2)),
-      familiarity: bk.cell(tab, row3, 4),
-      handedness: bk.cell(tab, row3, 6),
-      weight: num(bk.cell(tab, row3, 8)),
-      price: num(bk.cell(tab, row3, 10)),
+      attackType: bk.cell(tab, row1, col.attackType),
+      sheetAttack: num(bk.cell(tab, row1, col.attackRoll), null),
+      dice: bk.cell(tab, row1, col.dice),
+      damageAbility: bk.cell(tab, row1, col.damageAbility),
+      abilityMult: num(bk.cell(tab, row1, col.abilityMult), 1) || 1,
+      miscDamage: num(bk.cell(tab, row1, col.miscDamage)),
+      sheetTotalDamage: bk.cell(tab, row1, col.totalDamage),
+      critRange: num(bk.cell(tab, row1, col.critRange), null),
+      critMult: bk.cell(tab, row1, col.critMult),
+      bonusCritDamage: bk.cell(tab, row1, col.bonusCritDamage),
+      damageType: bk.cell(tab, row1, col.damageType),
+      groups: col.groups.map((c) => bk.cell(tab, row2, c)),
+      miscAttack: num(bk.cell(tab, row2, col.miscAttack)),
+      special: bk.cell(tab, row2, col.special),
+      ammunition: bk.cell(tab, row2, col.ammunition),
+      size: bk.cell(tab, row2, col.size),
+      range: bk.cell(tab, row2, col.range),
+      enhancement: num(bk.cell(tab, row3, col.enhancement)),
+      familiarity: bk.cell(tab, row3, col.familiarity),
+      handedness: bk.cell(tab, row3, col.handedness),
+      weight: num(bk.cell(tab, row3, col.weight)),
+      price: num(bk.cell(tab, row3, col.price)),
     });
   }
 
