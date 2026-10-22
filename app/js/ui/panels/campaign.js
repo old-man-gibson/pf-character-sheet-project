@@ -12,11 +12,15 @@
  * ladder sits under its row, folded: a box per step, blank where the step
  * follows the rule's rate or table, a number where the campaign says
  * otherwise.
+ *
+ * The first row says whom the rules are for: every character (the rules the
+ * browser shares, see shared-rules.js, passed in as `ctx.sharedRules`) or
+ * this character alone. The panel folds like any other.
  */
 import { esc } from '../html.js';
-import { collapsibleSub, stepGrid } from '../rows.js';
+import { collapsible, collapsibleSub, stepGrid } from '../rows.js';
 import {
-  CAMPAIGN_DEFAULTS, LEVEL_CEILING, MAX_TIER, TIER_CEILING, XP_TRACKS, campaignChanges, campaignRules,
+  CAMPAIGN_DEFAULTS, LEVEL_CEILING, MAX_TIER, TIER_CEILING, XP_TRACKS, campaignChanges, campaignRules, followsShared,
 } from '../../model/campaign.js';
 import { MAX_LEVEL, MYTHIC_TIER_LEVEL } from '../../rules.js';
 
@@ -52,7 +56,37 @@ function campaignSteps(d, map, from, to, auto, label) {
   return stepGrid(`campaign.${map}`, d.campaign?.[map], from, to, auto, label);
 }
 
-export function campaignPanel(model) {
+/**
+ * Whom the rules are for: every character, sharing one set, or this one
+ * alone. Choosing every character where nothing is shared yet shares these
+ * rules with all of them, so it asks twice (`ctx.campaignShareArmed`).
+ */
+function scopeRow(d, ctx) {
+  const shared = ctx.sharedRules || null;
+  const follows = followsShared(d, shared);
+  const button = (scope, label, on, title) => `<button data-action="campaign-scope" data-scope="${scope}"
+      aria-pressed="${on}"${on ? ' class="primary"' : ''} title="${esc(title)}">${esc(label)}</button>`;
+  const note = follows
+    ? `Every character in this browser follows these rules unless it is set to its own, so a change here
+      changes them all. They are also under <strong>Extensions and Rules</strong>.`
+    : shared?.on
+      ? `This character keeps rules of its own. The others follow the rules every character shares, under
+        <strong>Extensions and Rules</strong>.`
+      : ctx.campaignShareArmed
+        ? `Press <strong>Every character</strong> again: every character will follow these rules from the next
+          time it opens, unless it is set to its own.`
+        : `Each character keeps its own rules. <strong>Every character</strong> shares these with all of them.`;
+  return `<div class="camprow campscope">
+      <div class="campname">These rules apply to</div>
+      <div class="campctl pair">
+        ${button('all', 'Every character', follows, shared?.on ? 'Follow the rules every character shares' : 'Share these rules with every character')}
+        ${button('own', 'This character only', !follows, 'Keep rules of this character\'s own')}
+      </div>
+      <p class="campnote">${note}</p>
+    </div>`;
+}
+
+export function campaignPanel(model, ctx = {}) {
   const d = model.data;
   const rules = campaignRules(d);
   const changed = new Set(campaignChanges(d));
@@ -121,20 +155,23 @@ export function campaignPanel(model) {
         <p class="campnote">Blank takes the rate above. A number is that tier's own.</p>`, '', true)}`
         : '';
 
-  return `<section class="panel span2 campaign" id="${CAMPAIGN_PANEL_ID}">
+  return collapsible(model, CAMPAIGN_PANEL_ID, `<section class="panel span2 campaign" id="${CAMPAIGN_PANEL_ID}">
       <h3>Campaign rules
         <span class="badge${changed.size ? ' player' : ' ok'}">${changed.size
     ? `${changed.size} changed from the table's` : 'the table\'s rules'}</span>
-        ${changed.size ? '<button data-action="campaign-reset" style="margin-left:auto" title="Put every switch back to the table\'s rule">Back to the table\'s rules</button>' : ''}
+        <span class="pair" style="margin-left:auto">
+          <button data-action="campaign-save" title="Download these rules as campaign-rules.json">Save as a file</button>
+          <button data-action="campaign-load" title="Take the rules from a campaign rules file or a character's file">Load from a file…</button>
+          ${changed.size ? '<button data-action="campaign-reset" title="Put every switch back to the table\'s rule">Back to the table\'s rules</button>' : ''}
+        </span>
+        <input type="file" accept="application/json,.json" data-campaignfile hidden>
       </h3>
+      ${/* Kept under the 180 characters past which a hint folds into a
+            "Help —" line (#clampHints). */''}
       <p class="hint">The rules this character is played under. Each switch starts at the table's
-        rule; changing one changes the sheet's numbers at once, and only for this character.
-        For a party under the same rules, save them as a file and load it into each character, or
-        load another character's file to take its rules.
-        <button data-action="campaign-save" title="Download these rules as campaign-rules.json">Save as a file</button>
-        <button data-action="campaign-load" title="Take the rules from a campaign rules file or a character's file">Load from a file…</button>
-        <input type="file" accept="application/json,.json" data-campaignfile hidden></p>
+        rule, and changing one changes the sheet's numbers at once.</p>
       <div class="camprows">
+        ${scopeRow(d, ctx)}
         ${row('pointBuy', 'Point buy',
     `<input type="number" min="0" max="99" value="${esc(rules.pointBuy)}" data-set="campaign.pointBuy" data-kind="number"
           aria-label="Point-buy budget" style="width:4.5rem"> points`,
@@ -200,5 +237,5 @@ export function campaignPanel(model) {
           crafter has not named one. The coin purse on <strong>Gear</strong> keeps its platinum, gold,
           silver and copper. The table's is ${esc(CAMPAIGN_DEFAULTS.currency)}.`)}
       </div>
-    </section>`;
+    </section>`);
 }

@@ -245,6 +245,50 @@ export function presetCampaign(doc) {
   return null;
 }
 
+/** Two campaign blocks the same rules: the switches and ladders, in any key order. */
+export function sameCampaign(a, b) {
+  const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x)
+    ? Object.fromEntries(Object.keys(x).sort().map((key) => [key, x[key]])) : x));
+  return canon(campaignPreset({ campaign: a }).campaign) === canon(campaignPreset({ campaign: b }).campaign);
+}
+
+/**
+ * Whether this character follows the rules every character shares (see
+ * shared-rules.js): they are on, and it is not set to its own. `shared` is
+ * what the browser holds, `{ on, rules }`, or null.
+ */
+export function followsShared(d, shared) {
+  return !!shared?.on && d?.campaignOwn !== true;
+}
+
+/** What each switch is called, for a list of the rules that differ from the table's. */
+export const RULE_TITLES = Object.freeze({
+  pointBuy: 'Point buy',
+  advancement: 'Levels',
+  xpTrack: 'XP table',
+  milestoneRate: 'Milestones a level',
+  maxLevel: 'Highest level',
+  gestalt: 'Gestalt',
+  hitPoints: 'Hit points',
+  heroPoints: 'Hero points',
+  antiheroes: 'Antiheroes',
+  mythic: 'Mythic',
+  mythicTier: 'Mythic tier',
+  mythicTrialRate: 'Trials a tier',
+  maxTier: 'Highest mythic tier',
+  mythicLadder: 'What a tier grants',
+  abp: 'Automatic Bonus Progression',
+  abpLadder: 'Which ABP',
+  altTraining: 'Alternate Training',
+  pastColossal: 'Past Colossal',
+  currency: 'Currency',
+});
+
+/** The rules a campaign block changes from the table's, by name. */
+export function changedRuleTitles(rules) {
+  return campaignChanges({ campaign: rules }).map((k) => RULE_TITLES[k] || k);
+}
+
 /* ---------------- core ABP and the core mythic ladder ---------------- */
 
 /** Whether ABP is in play under the core ladder. */

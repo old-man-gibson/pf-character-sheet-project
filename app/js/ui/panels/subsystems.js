@@ -1372,7 +1372,7 @@ function altTrainingChooser() {
         <h3>No techniques on offer</h3>
         <p class="empty">No active content pack supplies Alternate Training techniques.
           The tab still keeps whatever is written on it; switch on a pack that carries a
-          catalogue (Extensions, top right) and the ladder appears.</p>
+          catalogue (Extensions and Rules, top right) and the ladder appears.</p>
       </section>`;
     }
     return `<section class="panel span2">

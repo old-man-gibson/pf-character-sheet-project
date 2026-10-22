@@ -635,8 +635,10 @@ export function looksLikeLibrary(doc) {
  * Build one. `packs` are the local packs' full documents; `enabled` maps
  * every pack id this browser knows, bundled ones included, to whether it is
  * on; `from` says where it was exported (a host name), for the import notice.
+ * `campaignRules` is the campaign rules every character shares, `{ on, rules }`
+ * (see shared-rules.js), carried when this browser has any.
  */
-export function buildLibrary({ packs = [], enabled = {}, from = '' } = {}) {
+export function buildLibrary({ packs = [], enabled = {}, from = '', campaignRules = null } = {}) {
   return {
     format: LIBRARY_FORMAT,
     formatVersion: 1,
@@ -644,6 +646,8 @@ export function buildLibrary({ packs = [], enabled = {}, from = '' } = {}) {
     from: str(from),
     packs: arr(packs).filter(looksLikeExtension).map((p) => normalizeExtension(p)),
     enabled: Object.fromEntries(Object.entries(obj(enabled)).map(([id, on]) => [id, !!on])),
+    ...(campaignRules && typeof campaignRules === 'object'
+      ? { campaignRules: { on: campaignRules.on === true, rules: structuredClone(obj(campaignRules.rules)) } } : {}),
   };
 }
 

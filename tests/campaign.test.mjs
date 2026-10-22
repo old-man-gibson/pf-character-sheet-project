@@ -439,6 +439,49 @@ console.log('\none set of rules for the party, as a file');
   check('a file of neither gives nothing', [presetCampaign({ hello: 1 }), presetCampaign(null)], [null, null]);
 }
 
+console.log('\nrules every character shares, or this one alone');
+{
+  const { changedRuleTitles, followsShared, sameCampaign } = await import('../app/js/model/campaign.js');
+  const { campaignPanel } = await import('../app/js/ui/panels/campaign.js');
+  const { buildLibrary } = await import('../app/js/extensions.js');
+  check('the same block, key order aside', [sameCampaign({ abp: false, gestalt: false }, { gestalt: false, abp: false }), sameCampaign({}, { abp: true }), sameCampaign({}, { abp: false })],
+    [true, false, false]);
+  check('named for a summary', changedRuleTitles({ gestalt: false, abpLadder: 'core' }), ['Gestalt', 'Which ABP']);
+  const c = new Character(blankDocument({ name: 'Scope', level: 1 }));
+  check('nothing shared: own rules', followsShared(c.data, null), false);
+  check('shared and on: followed', followsShared(c.data, { on: true, rules: {} }), true);
+  check('shared but off: own rules', followsShared(c.data, { on: false, rules: {} }), false);
+  c.data.campaignOwn = true;
+  check('set to its own: own rules', followsShared(c.data, { on: true, rules: {} }), false);
+  delete c.data.campaignOwn;
+  const draw = (ctx) => campaignPanel(c, ctx);
+  check('the row says whom they are for', [draw({}).includes('Each character keeps its own rules'),
+    draw({ campaignShareArmed: true }).includes('Press <strong>Every character</strong> again'),
+    draw({ sharedRules: { on: true, rules: {} } }).includes('Every character in this browser follows these rules'),
+    (c.data.campaignOwn = true, draw({ sharedRules: { on: true, rules: {} } }).includes('This character keeps rules of its own'))],
+  [true, true, true, true]);
+  delete c.data.campaignOwn;
+  c.data.uiPrefs.collapsed = { ...(c.data.uiPrefs.collapsed || {}), 'campaign-rules': true };
+  const shut = draw({});
+  check('the panel folds to its heading', [shut.includes('collapsed'), shut.includes('campaign.pointBuy')], [true, false]);
+  check('a library carries the shared rules', buildLibrary({ campaignRules: { on: true, rules: { gestalt: false } } }).campaignRules,
+    { on: true, rules: { gestalt: false } });
+  check('and leaves them out where there are none', 'campaignRules' in buildLibrary({}), false);
+
+  // The browser's store, against a stand-in localStorage.
+  const held = new Map();
+  globalThis.localStorage = { getItem: (k) => held.get(k) ?? null, setItem: (k, v) => held.set(k, String(v)), removeItem: (k) => held.delete(k) };
+  const { readShared, sharedRules, writeShared } = await import('../app/js/shared-rules.js');
+  let heard = 0;
+  sharedRules.addEventListener('change', () => { heard += 1; });
+  check('none until written', readShared(), null);
+  writeShared({ on: true, rules: { gestalt: false, nonsense: 1 } });
+  check('written: on, the rules alone, and said', [readShared().on, readShared().rules, heard], [true, { gestalt: false }, 1]);
+  writeShared({ on: false });
+  check('a part left out keeps what was there', [readShared().on, readShared().rules], [false, { gestalt: false }]);
+  delete globalThis.localStorage;
+}
+
 console.log('\nsizes past Colossal');
 {
   const { blankWeapon } = await import('../app/js/model.js');

@@ -1478,6 +1478,9 @@ select.jumpto[hidden] { display: none; }
   padding: 6px 8px; border-radius: 6px; border-left: 3px solid transparent;
 }
 .camprow.changed { border-left-color: var(--cs-accent); background: var(--cs-accent-soft); }
+/* Whom the rules are for: every character, or this one. Set apart from the
+   switches under it, since it decides where they are kept. */
+.camprow.campscope { border: 1px solid var(--cs-line); margin-bottom: 4px; }
 .camprow .campname { font-weight: 600; }
 /* Styled as a hint, but not one: it is what the switch does, so it stays open
    rather than folding into a Help line the way a long `.hint` does. */

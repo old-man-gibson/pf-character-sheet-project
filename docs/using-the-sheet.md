@@ -374,10 +374,22 @@ table's rules** puts them all back (undoable). Nothing written on the sheet is t
 by a switch: mythic abilities, prowess picks, hit point rolls, Planner tracks and hero points
 stay where they are and count again when the rule comes back.
 
-**A party under one set of rules.** **Save as a file** downloads the rules as
-`campaign-rules.json`; **Load from a file…** takes the rules from such a file, or from
-another character's file, as one undo step. Only the rules are taken. Each character keeps
-its own copy, so a published sheet shows the right numbers with nothing else to read.
+**Every character, or this one.** The panel's first row says whom the rules are for.
+*Every character*: one set of rules, kept for the whole browser under **Extensions and
+Rules** (the button in the page's header), which every character follows unless it is set
+to its own; a change on any following character's panel changes them all, and an open
+sheet in another window takes it at once. The first press where nothing is shared yet
+asks for a second, since every other character takes these rules from the next time it
+opens. *This character only*: the character keeps rules of its own. A character always
+opens under the rules it was saved with and then takes the shared ones as a change in
+play, so its totals and hidden adjustments stay where they were. Each character keeps a
+copy, so a published sheet shows the right numbers with nothing else to read. The
+library file under Extensions and Rules carries the shared rules too.
+
+**Rules files.** **Save as a file** downloads the rules as `campaign-rules.json`; **Load
+from a file…** takes the rules from such a file, or from another character's file, as one
+undo step. Only the rules are taken. Both are on the panel and under Extensions and Rules.
+The panel folds like any other.
 
 **Ladders.** Levels and mythic tiers each carry a ladder, folded under their row: a box
 per step, blank where the step follows the table or the rate (shown in the box), a number

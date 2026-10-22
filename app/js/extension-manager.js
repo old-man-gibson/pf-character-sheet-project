@@ -1,5 +1,5 @@
 /**
- * The Extensions dialog: where a player sees the packs this browser has,
+ * The Extensions and Rules dialog: where a player sees the packs this browser has,
  * switches them on and off, brings one in, writes one, and sends one out.
  *
  *   import { mountExtensionManager } from './extension-manager.js';
@@ -24,6 +24,8 @@
 
 import { downloadFile } from './download.js';
 import { runtime } from './extension-runtime.js';
+import { campaignPreset, changedRuleTitles, presetCampaign } from './model/campaign.js';
+import { readShared, sharedRules, writeShared } from './shared-rules.js';
 import {
   BLOCK_KINDS, TABLE_KINDS, inspectExtension, normalizeExtension, normalizeBlock, blankExtension,
   describeSummary, summarize, slugId, looksLikeExtension, looksLikeLibrary, buildLibrary, planLibrary,
@@ -155,6 +157,8 @@ const CSS = `
 .extmgr button.danger:hover { border-color: #e0635f; color: #e0635f; }
 .extmgr button:disabled { opacity: 0.5; cursor: default; }
 .extmgr label.sw { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; white-space: nowrap; }
+.extmgr .rules { border: 1px solid var(--line, #444); border-radius: 8px; padding: 8px 10px; margin: 6px 0 12px; }
+.extmgr .rules .actions { margin-top: 6px; }
 .extmgr .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
 .extmgr .actions .spacer { flex: 1; }
 .extmgr textarea, .extmgr input[type=text], .extmgr input[type=search], .extmgr input[type=number], .extmgr input[type=url], .extmgr select {
@@ -252,6 +256,9 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
   let paste = null;   // { stage: 'text'|'review', text, result, keep: bool[], tags: [{choice, name}] }
 
   dialog.classList.add('extmgr');
+  // The shared campaign rules can change from a character's panel or another
+  // window while this is open; the section says what they are now.
+  sharedRules.addEventListener('change', () => { if (dialog.open && view === 'list') render(); });
 
   /* ---------------- rendering ---------------- */
 
@@ -321,14 +328,15 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
       </div>` : '';
 
     return `
-      <h2>Extensions</h2>
+      <h2>Extensions and Rules</h2>
       <p class="hint">Content the sheet does not carry on its own — class and discipline
         catalogues, casting tables, and building blocks (a class, a race, a feature, a
-        tracker) you can add to a character. Each pack is one <code>.json</code> file: write
-        your own, export it to share, and drop a friend's onto the page to bring it in.
-        Everything stays in this browser.</p>
+        tracker) you can add to a character — and the campaign rules every character can
+        share. Each pack is one <code>.json</code> file: write your own, export it to share,
+        and drop a friend's onto the page to bring it in. Everything stays in this browser.</p>
       ${notice ? `<p class="ok">${esc(notice)}</p>` : ''}
       ${error ? `<p class="err">${esc(error)}</p>` : ''}
+      ${rulesHtml()}
       ${finder}
 
       <h3>Bundled with this deployment${tally(bundledItems)}</h3>
@@ -357,6 +365,36 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
         <textarea rows="6" data-paste placeholder='{"format": "character-sheet-extension", "name": "…", …}'></textarea>
         <div class="actions" style="margin-top:6px"><button class="primary" data-action="paste-go">Import pasted JSON</button></div>
       </div>` : ''}`;
+  }
+
+  /**
+   * The campaign rules every character follows (shared-rules.js): switched
+   * on here, edited on the Campaign rules panel of any character that follows
+   * them, and saved or loaded as a file. A character set to its own rules
+   * keeps them.
+   */
+  function rulesHtml() {
+    const shared = readShared();
+    const on = !!shared?.on;
+    const changed = on ? changedRuleTitles(shared.rules) : [];
+    const from = shared ? 'the rules shared before' : currentCharacter() ? 'the open character\'s rules' : 'the table\'s rules';
+    return `<h3>Campaign rules</h3>
+      <div class="rules">
+        <label class="sw"><input type="checkbox" data-rules-on ${on ? 'checked' : ''}>
+          <span>Every character follows one set of campaign rules</span></label>
+        <p class="hint">${on
+    ? `${changed.length ? `${changed.length} changed from the table's: ${esc(changed.join(', '))}.` : 'The table\'s rules, nothing changed.'}
+          Edit them on the Campaign rules panel (⚙ tab) of any character that follows them; a character set
+          to <em>This character only</em> keeps its own.`
+    : `Off: each character keeps its own rules, on its ⚙ tab. On, every character follows one set,
+          starting from ${from}, from the next time it opens.`}</p>
+        <div class="actions">
+          <button data-action="rules-save" ${on ? '' : 'disabled'} title="Download the shared rules as campaign-rules.json">Save as a file</button>
+          <button data-action="rules-load" title="Share the rules in a campaign rules file, or a character's file, with every character">Load from a file…</button>
+          ${on && changed.length ? '<button data-action="rules-reset" title="Put the shared rules back to the table\'s">Back to the table\'s rules</button>' : ''}
+          <input type="file" accept="application/json,.json" data-rules-file hidden>
+        </div>
+      </div>`;
   }
 
   /** What this browser holds, in one line: how many, how many on, when the last one changed. */
@@ -1380,6 +1418,45 @@ Hit Die: d12.
       q('[data-action="new"]')?.addEventListener('click', () => startEdit(blankExtension({ name: 'My extension' }), true));
       q('[data-action="import"]')?.addEventListener('click', () => q('[data-file]').click());
       q('[data-action="export-library"]')?.addEventListener('click', () => exportLibrary());
+      // The shared campaign rules. Every open sheet takes a change at once
+      // (sharedRules' change event), so nothing here touches a character.
+      q('[data-rules-on]')?.addEventListener('change', (e) => {
+        const before = readShared();
+        const rules = before ? before.rules : (currentCharacter()?.campaign || {});
+        writeShared({ on: e.target.checked, rules });
+        notice = e.target.checked ? 'Every character now follows one set of campaign rules, unless it is set to its own.'
+          : 'Each character keeps its own campaign rules again, starting from the shared ones.';
+        error = null;
+        render();
+      });
+      q('[data-action="rules-save"]')?.addEventListener('click', () => {
+        const shared = readShared();
+        if (!shared) return;
+        downloadFile('campaign-rules.json', JSON.stringify(campaignPreset({ campaign: shared.rules }), null, 1));
+      });
+      q('[data-action="rules-load"]')?.addEventListener('click', () => q('[data-rules-file]')?.click());
+      q('[data-rules-file]')?.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        try {
+          const rules = presetCampaign(JSON.parse(await file.text()));
+          if (!rules) throw new Error('it holds no campaign rules');
+          writeShared({ on: true, rules });
+          notice = `Every character now follows the campaign rules from ${file.name}, unless it is set to its own.`;
+          error = null;
+        } catch (err) {
+          notice = null;
+          error = `Could not read ${file.name} — ${err.message}`;
+        }
+        render();
+      });
+      q('[data-action="rules-reset"]')?.addEventListener('click', () => {
+        writeShared({ rules: {} });
+        notice = 'The shared campaign rules are the table\'s again.';
+        error = null;
+        render();
+      });
       q('[data-file]')?.addEventListener('change', (e) => {
         // Copied out before the box is cleared: `files` is live, and clearing
         // the box (so that choosing the same files twice still fires) empties it.
@@ -1723,8 +1800,11 @@ Hit Die: d12.
         else if (localIds.has(id)) await store.setEnabled(id, on);
       } catch (err) { failed.push(`${id}: could not switch — ${err.message}`); }
     }
+    // The campaign rules every character shares travel with the library.
+    if (lib.campaignRules) writeShared(lib.campaignRules);
     return {
       rows, failed, added: plan.add.length, updated: plan.update.length, unchanged: plan.unchanged.length,
+      rules: !!lib.campaignRules,
     };
   }
 
@@ -1733,7 +1813,7 @@ Hit Die: d12.
     const origin = [lib.from ? `from ${lib.from}` : '', lib.exportedAt ? `exported ${String(lib.exportedAt).slice(0, 10)}` : '']
       .filter(Boolean).join(', ');
     const parts = [`${r.added} added`, `${r.updated} updated`, `${r.unchanged} already current`];
-    return `Library${origin ? ` (${origin})` : ''}: ${parts.join(', ')}; switches applied.`;
+    return `Library${origin ? ` (${origin})` : ''}: ${parts.join(', ')}; switches${r.rules ? ' and the shared campaign rules' : ''} applied.`;
   }
 
   async function importLibrary(lib, label = 'the library') {
@@ -1863,7 +1943,7 @@ Hit Die: d12.
       const doc = store.read(row.id);
       if (doc) packs.push(doc);
     }
-    const lib = buildLibrary({ packs, enabled, from: globalThis.location?.host || '' });
+    const lib = buildLibrary({ packs, enabled, from: globalThis.location?.host || '', campaignRules: readShared() });
     downloadFile(`extension-library-${lib.exportedAt.slice(0, 10)}.json`, JSON.stringify(lib));
     notice = `Exported ${packs.length} pack${packs.length === 1 ? '' : 's'} and the switches as one library file.`;
     error = null;

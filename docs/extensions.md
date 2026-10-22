@@ -117,7 +117,7 @@ Packs already in localStorage move across on the first load that finds a working
 database, and the room they were holding comes back. A browser with no database — private
 browsing, a blocked frame — carries on in localStorage exactly as before.
 
-**The Extensions dialog** (the button in the host page's header) lists both: switch any
+**The Extensions and Rules dialog** (the button in the host page's header) lists both: switch any
 pack on or off (bundled ones too — the choice is remembered), **Export** one as a
 `.json` to share, **Import** a file, paste JSON, or drop a pack anywhere on the page —
 the page tells a pack from a character by its `format` line, and the sheet's own Import
@@ -479,7 +479,7 @@ catalogue by its plural and keeps its cells' labels.
 
 - **Publish to this sheet** writes everything the Forge holds as one pack — id
   `homebrew-workbench`, revision climbing each time — straight into the sheet's local
-  extension store, the same IndexedDB the Extensions dialog imports into. A sheet tab
+  extension store, the same IndexedDB the Extensions and Rules dialog imports into. A sheet tab
   already open reads its packs at load, so reload it; the pack then shows in the dialog
   as a local pack and can be switched off or exported like any other.
 - **Download extension pack** in the Import / Export menu writes the same pack as a file,
