@@ -25,7 +25,7 @@ import {
   formatSpellResistance, parseDr, parseEnergy, parseImmunities, parseSpellResistance, unslug,
 } from './defence-lists.js';
 import { mythicHpPerTier } from '../progression.js';
-import { campaignRules } from '../campaign.js';
+import { abpAttuneOf, campaignRules } from '../campaign.js';
 import { trackerFacts } from '../trackers.js';
 import { resolveSaveBonuses } from './saves.js';
 import { resolveBonusBlock, resolveNumberField } from '../util.js';
@@ -64,6 +64,11 @@ export function resolveDefenceBonuses(model) {
     : abpDefence(model.data.identity?.level);
   resolveSaveBonuses(model, scope, abp);
   resolveAcBonuses(model, scope, abp);
+  // Core ABP's armour and weapon attunement, read by the armour's parts and
+  // the weapons' attack and damage; nothing under any other rule.
+  const attune = monster ? null : abpAttuneOf(model.data);
+  if (attune) model.data.abpAttune = attune;
+  else delete model.data.abpAttune;
 }
 
 /** The AC's typed bonuses, ABP deflection and natural armour included. */
@@ -179,7 +184,10 @@ export function sizeNow(model) {
   }
   // A bonus sent to `size` from a formula is one more true size change.
   take(Math.trunc(forwarded(model, 'size')) || 0);
-  return ladder[Math.max(0, Math.min(ladder.length - 1, idx + up + down))];
+  const at = Math.max(0, idx + up + down);
+  // Past Colossal, where a campaign allows it, the steps beyond are named.
+  if (at > ladder.length - 1 && campaignRules(model.data).pastColossal) return `Colossal+${at - (ladder.length - 1)}`;
+  return ladder[Math.min(ladder.length - 1, at)];
 }
 
 /**
@@ -359,7 +367,9 @@ export function conditionState(model) {
    * Colossal or shrinks past Fine, effective steps landing after true
    * ones -- and every consequence runs off the capped steps, modifiers and
    * dice alike, so a +500 written on a row still reads as Colossal.
-   * (TODO: a campaign setting for tables that allow colossal+ sizes.)
+   * A campaign that allows sizes past Colossal (a campaign rule) counts the
+   * steps beyond it as `sizePast`: they move no modifier further, and each
+   * adds 1d6 to a weapon's damage (see weaponMoves).
    *
    * True steps change the size itself: −1 attack and AC per step larger
    * (the size modifier) and +1 CMB and CMD (the special size modifier).
@@ -385,6 +395,11 @@ export function conditionState(model) {
   const trueSteps = clampSteps(baseIdx, sizeRows.size.up + sizeRows.size.down + sizeRows.stacking);
   const effSteps = clampSteps(baseIdx + trueSteps, sizeRows.sizeEffective.up + sizeRows.sizeEffective.down);
   const sizeSteps = trueSteps + effSteps;
+  const colossal = ladder.length - 1;
+  const sizePast = campaignRules(c).pastColossal
+    ? Math.max(0, baseIdx + sizeRows.size.up + sizeRows.size.down + sizeRows.stacking
+      + sizeRows.sizeEffective.up + sizeRows.sizeEffective.down - colossal)
+    : 0;
   if (trueSteps) {
     // The move is the size modifier's own change, not one a step: the table
     // doubles past Small and Large (Tiny +2, Diminutive +4; Huge −2), which is
@@ -463,14 +478,14 @@ export function conditionState(model) {
   }
 
   return {
-    active, buffsOn: buffCount, buffStacking, sizeSteps, ...totals, deltas, scores, delta, base, adjusted, speeds, notes,
+    active, buffsOn: buffCount, buffStacking, sizeSteps, sizePast, ...totals, deltas, scores, delta, base, adjusted, speeds, notes,
     // What moved the numbers, for the tooltips: named honestly, so a lone
     // buff never reads as "conditions".
     sources: active.length && buffCount ? 'conditions and buffs'
       : buffCount ? 'buffs' : 'conditions',
     changed: Object.entries(delta).filter(([, v]) => v !== 0).length > 0
       || Object.values(totals.skillsBy).some(Boolean) || Object.values(totals.skillMods).some(Boolean)
-      || totals.speed !== 1 || !!mods.speedFt || !!sizeSteps
+      || totals.speed !== 1 || !!mods.speedFt || !!sizeSteps || !!sizePast
       || !!totals.acVsMelee || !!totals.acVsRanged,
   };
 }

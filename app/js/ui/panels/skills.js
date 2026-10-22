@@ -20,6 +20,7 @@ import {
   ABILITIES, ABILITY_LABELS, BACKGROUND_SKILLS, VARIANT_SKILLS,
 } from '../../rules.js';
 import { skillForwardKey } from '../../model.js';
+import { campaignRules } from '../../model/campaign.js';
 
 /**
  * Which skill rows the table shows, as indices into `model.data.skills`.
@@ -120,7 +121,9 @@ export function renderSkillsPanel(model, ctx) {
             ${b.assigned ?? 0} / ${b.available ?? 0} assigned</span>
         </h3>
         <div class="fieldgrid">
-          ${field('Class ranks / level (gestalt)', `<span class="value">${model.data.gestalt?.ranksPerLevel ?? 0}</span>`)}
+          ${campaignRules(model.data).gestalt
+    ? field('Class ranks / level (gestalt)', `<span class="value">${model.data.gestalt?.ranksPerLevel ?? 0}</span>`)
+    : field('Class ranks (each class)', `<span class="value" title="Each class's ranks a level, for the levels it has">${model.data.gestalt?.ranksTotal ?? 0}</span>`)}
           ${/* Read off the Intelligence score rather than typed beside it, so
                 the two cannot disagree. See `applyBudget`. */''}
           ${field('Int bonus / level', `<span class="value" title="The Intelligence modifier — raise the score and this follows">${

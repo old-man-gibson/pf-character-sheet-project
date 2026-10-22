@@ -68,7 +68,10 @@ import {
   readThemePrefs, writeThemePrefs, ACTION_MARKS, ACTION_TINTS, DEFAULT_ACTION_MARKS,
   DEFAULT_ACTION_TINT, isActionMarks, isActionTint,
 } from './themes.js';
-import { awardXp, campaignRules, levelUp } from './model/campaign.js';
+import {
+  awardXp, campaignPreset, campaignRules, followsShared, levelUp, presetCampaign, sameCampaign, tierUp,
+} from './model/campaign.js';
+import { readShared, sharedRules, writeShared } from './shared-rules.js';
 import { esc, val, abilityKey, nameDatalist } from './ui/html.js';
 import * as fields from './ui/fields.js';
 
@@ -365,7 +368,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(campaign|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|xp|milestones|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(campaign|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|xp|milestones|size|heroPoints|antihero|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /**
  * The input types a caret can be put back into after a re-render.
@@ -580,6 +583,9 @@ export class CharacterSheetElement extends HTMLElement {
   #showHistory = false;
   #snapshots = [];
   #historyNote = null;      // "Saved", "Restored ..." -- clears on the next action
+  // "Every character" pressed once on the Campaign rules panel, where nothing
+  // is shared yet: the second press shares this character's rules with all.
+  #campaignShareArmed = false;
   #publishedLink = null;    // { url, rev, summary, copied } after Publish, until dismissed
   #storageFailed = false;   // the working state is not being written -- see #writeWorking
   #changePending = false;   // an edit has announced itself and its one write is queued
@@ -747,6 +753,46 @@ export class CharacterSheetElement extends HTMLElement {
   };
 
   /**
+   * The shared campaign rules changed, on this page (the Extensions and
+   * Rules dialog, or another sheet) or in another window: take them if this
+   * character follows them, and redraw the ⚙ tab, which says whom they are for.
+   */
+  #onSharedRules = () => {
+    if (this.#followSharedRules() || this.#tab === 'systabs') this.#render();
+  };
+
+  /**
+   * Take the shared campaign rules, where this character follows them and its
+   * copy differs. A change in play, not part of the load: the character opened
+   * under the rules it was saved with, so its totals were measured against
+   * those, and moving the rules now is the same as flipping a switch at the
+   * table. Opening and the shared rules changing pull; only an edit pushes
+   * (#shareCampaignEdit), so a character's older copy never writes over them.
+   */
+  #followSharedRules() {
+    if (!this.#model || this.isPublished) return false;
+    const d = this.#model.data;
+    const shared = readShared();
+    if (!followsShared(d, shared) || sameCampaign(d.campaign, shared.rules)) return false;
+    this.#model.set('campaign', structuredClone(shared.rules));
+    this.#historyNote = 'Campaign rules: now the ones every character shares (Extensions and Rules).';
+    return true;
+  }
+
+  /**
+   * An edit to the campaign rules of a character that follows the shared ones
+   * is an edit to the shared ones: every other character takes it the next
+   * time it opens, and any open in another window at once.
+   */
+  #shareCampaignEdit() {
+    if (!this.#model || this.isPublished) return;
+    const d = this.#model.data;
+    const shared = readShared();
+    if (!followsShared(d, shared) || sameCampaign(d.campaign, shared.rules)) return;
+    writeShared({ rules: d.campaign || {} });
+  }
+
+  /**
    * Ctrl+K from anywhere on the page.
    *
    * Inside the sheet the shadow root's own handler is enough; this is what
@@ -894,6 +940,7 @@ export class CharacterSheetElement extends HTMLElement {
     this.#bindBreakdowns();
     this.#renderShell();
     extensionRuntime.addEventListener('change', this.#onExtensionsChange);
+    sharedRules.addEventListener('change', this.#onSharedRules);
     this.ownerDocument.addEventListener('keydown', this.#onDocumentKey);
     this.shadowRoot.addEventListener('pointerdown', this.#onPointerDownAway, true);
     // On the document, so a press let go of off the sheet still ends.
@@ -935,6 +982,7 @@ export class CharacterSheetElement extends HTMLElement {
     this.#pendingSync = null;
     this.#closeCardWindows();
     extensionRuntime.removeEventListener('change', this.#onExtensionsChange);
+    sharedRules.removeEventListener('change', this.#onSharedRules);
     this.ownerDocument.removeEventListener('keydown', this.#onDocumentKey);
     this.shadowRoot.removeEventListener('pointerdown', this.#onPointerDownAway, true);
     this.ownerDocument.removeEventListener('pointerup', this.#onPointerUp, true);
@@ -1234,6 +1282,11 @@ export class CharacterSheetElement extends HTMLElement {
     if (drifted) this.#writeWorking();
     if (!this.isPublished) await this.#refreshSnapshots();
     this.#render();
+    // The shared campaign rules, once the character has opened under its own
+    // copy -- after this task, and only if it is still the one on screen.
+    this.#campaignShareArmed = false;
+    const adopted = this.#model;
+    setTimeout(() => { if (this.#model === adopted && this.#followSharedRules()) this.#render(); }, 0);
   }
 
   /**
@@ -2199,7 +2252,7 @@ export class CharacterSheetElement extends HTMLElement {
       });
       this.dispatchEvent(event);
       if (event.defaultPrevented) return { ok: true, error: null, summary: null, warnings: [], extension: true };
-      return fail(`${name} is an extension pack, not a character. Open the page's Extensions manager to bring it in.`);
+      return fail(`${name} is an extension pack, not a character. Open the page's Extensions and Rules dialog to bring it in.`);
     }
     return this.importDocument(doc);
   }
@@ -2482,10 +2535,13 @@ export class CharacterSheetElement extends HTMLElement {
     const d = this.#model.data;
     const modelled = this.#modelledSystems();
     const out = [];
-    // Without mythic (a campaign rule) the feats tab is the feats alone.
-    const mythic = campaignRules(d).mythic;
+    // Without mythic (a campaign rule) the feats tab is the feats alone, and
+    // without Alternate Training its tab is not there at all -- left out here,
+    // not hidden in the tab order, so it comes back where it was.
+    const { mythic, altTraining } = campaignRules(d);
     for (const [id, base] of TABS) {
       if (FIXED_TABS.has(id)) continue;                // not the player's to arrange (see FIXED_TABS)
+      if (id === 'altTraining' && !altTraining) continue;
       const m = modelled[id];
       const label = id === 'features' && !mythic ? 'Feats' : base;
       out.push({
@@ -2597,7 +2653,7 @@ export class CharacterSheetElement extends HTMLElement {
   }).join('')}
           <button data-view role="tab" id="tab-systabs" data-tab="systabs" aria-selected="${this.#tab === 'systabs'}"
             aria-controls="sheet-panel" tabindex="${this.#tab === 'systabs' ? '0' : '-1'}"
-            aria-label="Settings" title="Settings: campaign rules (point buy, hero points, mythic, ABP), and which tabs show">⚙</button>
+            aria-label="Settings" title="Settings: campaign rules (levels, gestalt, hit points, mythic, ABP and more), and which tabs show">⚙</button>
         </nav>
         </div>
         <div class="rollslot">${this.#slotHtml()}</div>
@@ -3156,7 +3212,7 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.#formulaButton()}
         ${monster.menuButton(this.#model, this.isAdmin)}
         <button data-view data-action="campaign-rules" aria-pressed="${this.#tab === 'systabs'}"
-          title="Point buy, hero points, mythic and ABP for this character: the first panel on the ⚙ tab">Campaign rules…</button>
+          title="Levels, gestalt, hit points, hero points, mythic, ABP and the rest of this character's rules: the first panel on the ⚙ tab">Campaign rules…</button>
         <button data-view data-action="theme" aria-pressed="${this.#themeMenu}"
           title="Palettes, and where the tabs go">Theme &amp; layout…</button>
         <button data-view data-action="print-menu" aria-pressed="${this.#printMenu}"
@@ -3341,7 +3397,9 @@ export class CharacterSheetElement extends HTMLElement {
     if (sizeNow === base) return '';
     const ladder = Object.keys(SIZE_MODIFIERS);
     // Only a buff changes size, so it says buffs rather than every source.
-    return `&middot; ${rows.movedValue(esc(sizeNow), ladder.indexOf(sizeNow) > ladder.indexOf(base) ? 1 : -1, {
+    // Past Colossal (a campaign rule) the name is not on the ladder: larger.
+    const larger = !ladder.includes(sizeNow) || ladder.indexOf(sizeNow) > ladder.indexOf(base);
+    return `&middot; ${rows.movedValue(esc(sizeNow), larger ? 1 : -1, {
       base, sources: 'buffs',
     })}`;
   })()}
@@ -3881,6 +3939,9 @@ export class CharacterSheetElement extends HTMLElement {
     return manager.renderSystemManagerPanel(this.#model, this.#ctx({
       tabEntries: this.#tabEntries(),
       barEntries: this.#barEntries(),
+      // Whom the campaign rules are for: the rules the browser shares.
+      sharedRules: this.isPublished ? null : readShared(),
+      campaignShareArmed: this.#campaignShareArmed,
     }));
   }
 
@@ -4170,12 +4231,15 @@ export class CharacterSheetElement extends HTMLElement {
   #undo() {
     if (!this.#model) return;
     this.#reportUndo(this.#model.undoLast());
+    // An undone change to shared campaign rules is undone for every character.
+    this.#shareCampaignEdit();
   }
 
   /** Do again what the last undo took back, and say what came back. */
   #redo() {
     if (!this.#model) return;
     const r = this.#model.redoLast();
+    this.#shareCampaignEdit();
     this.#playMenu = false;
     if (!r) { this.#showUndoToast('Nothing to redo', { offer: false }); return; }
     if (!r.ok) { this.#render(); this.#showUndoToast(`Could not redo ${r.label}: ${r.reason}`, { offer: false }); return; }
@@ -5468,6 +5532,26 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('select[data-action="tech-select"]').forEach((sel) => {
       sel.addEventListener('change', () => { this.#model.selectTechnique(sel.value); this.#render(); });
     });
+    // A campaign rules file, or another character's file, offered to the
+    // Campaign rules panel: only the rules are taken, as one undo step.
+    root.querySelectorAll('[data-campaignfile]').forEach((input) => {
+      input.addEventListener('change', async () => {
+        const file = input.files?.[0];
+        input.value = '';
+        if (!file) return;
+        try {
+          const rules = presetCampaign(JSON.parse(await file.text()));
+          if (!rules) throw new Error('it holds no campaign rules');
+          this.#model.markUndo(`Took the campaign rules from ${file.name}`);
+          this.#model.set('campaign', rules);
+          this.#shareCampaignEdit();
+          this.#historyNote = `Campaign rules from ${file.name}.`;
+        } catch (err) {
+          this.#historyNote = `Could not read ${file.name} — ${err.message}`;
+        }
+        this.#render();
+      });
+    });
     // A workbook offered to the Technique List: converted in the browser like an
     // import, but only its techniques are taken.
     root.querySelectorAll('[data-techfile]').forEach((input) => {
@@ -5511,6 +5595,7 @@ export class CharacterSheetElement extends HTMLElement {
         const play = this.#fieldPlayLabel(path, value);
         if (play) this.#model.play(play, () => this.#model.set(path, value));
         else this.#model.set(path, value);
+        if (/^campaign(\.|$)/.test(path)) this.#shareCampaignEdit();
         // A catalogue cell has something to show the moment it holds a name
         // the catalogue knows, and that showing happens at render.
         if (AFFECTS_DERIVED.test(path) || input.hasAttribute('list')) this.#rerender(input);
@@ -7328,15 +7413,54 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       // The campaign rules are the first panel on the ⚙ tab, so opening the
       // tab is arriving at them.
-      case 'campaign-rules':
+      case 'campaign-rules': {
         this.#tab = 'systabs';
         this.#chromeMenu = false;
+        // A folded panel is opened, the same edit its ▸ makes.
+        const collapsed = this.#model.data.uiPrefs?.collapsed;
+        if (collapsed && !isOpen(this.#model, 'campaign-rules')) collapsed['campaign-rules'] = foldValue('campaign-rules', true);
         this.#render();
         break;
+      }
+      // Whom the campaign rules are for. Every character: follow the shared
+      // rules, or where there are none, share these (asking twice, since every
+      // other character takes them). This character only: keep its own.
+      case 'campaign-scope': {
+        const d = this.#model.data;
+        const shared = readShared();
+        if (button.dataset.scope === 'own') {
+          this.#campaignShareArmed = false;
+          if (d.campaignOwn !== true) {
+            this.#model.markUndo('Kept this character\'s own campaign rules');
+            this.#model.set('campaignOwn', true);
+          }
+        } else if (shared?.on) {
+          this.#campaignShareArmed = false;
+          if (d.campaignOwn === true || !sameCampaign(d.campaign, shared.rules)) {
+            this.#model.markUndo('Followed the campaign rules every character shares');
+            delete d.campaignOwn;
+            this.#model.set('campaign', structuredClone(shared.rules));
+          }
+        } else if (!this.#campaignShareArmed) {
+          this.#campaignShareArmed = true;
+        } else {
+          this.#campaignShareArmed = false;
+          delete d.campaignOwn;
+          writeShared({ on: true, rules: d.campaign || {} });
+          this.#model.recompute();
+          this.#historyNote = 'Every character now follows these campaign rules, unless it is set to its own.';
+        }
+        this.#render();
+        break;
+      }
       // Levels earned by XP or milestones (a campaign rule): taking the next
       // one, and adding XP at the table. Both are play actions.
       case 'level-up':
         if (levelUp(this.#model)) this.#render();
+        break;
+      // A mythic tier earned from trials is taken the same way.
+      case 'tier-up':
+        if (tierUp(this.#model)) this.#render();
         break;
       case 'xp-award':
         if (awardXp(this.#model, this.#view.draft.xpAward)) {
@@ -7347,7 +7471,15 @@ export class CharacterSheetElement extends HTMLElement {
       case 'campaign-reset':
         this.#model.markUndo('Put the campaign rules back to the table\'s');
         this.#model.set('campaign', {});
+        this.#shareCampaignEdit();
         this.#render();
+        break;
+      // One set of rules for a party: saved as a file, loaded into each sheet.
+      case 'campaign-save':
+        downloadFile('campaign-rules.json', JSON.stringify(campaignPreset(this.#model.data), null, 1));
+        break;
+      case 'campaign-load':
+        this.shadowRoot.querySelector('[data-campaignfile]')?.click();
         break;
       case 'formulas':
         this.#tab = 'formulas';

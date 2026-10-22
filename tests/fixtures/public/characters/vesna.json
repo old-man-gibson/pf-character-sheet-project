@@ -3137,6 +3137,7 @@
     "sizeSteps": 0,
     "sizeNow": "Medium",
     "diceResolved": "1d6",
+    "enhancementNow": 1,
     "attackOffset": -9,
     "forwardedAttack": 0,
     "attackTotal": 0,
@@ -3262,6 +3263,7 @@
     "sizeSteps": 0,
     "sizeNow": "Medium",
     "diceResolved": "1d8",
+    "enhancementNow": 0,
     "attackOffset": -12,
     "forwardedAttack": 0,
     "attackTotal": 0,
@@ -6038,8 +6040,23 @@
   },
   "hpPerLevel": 6,
   "ranksPerLevel": 2,
+  "ranksTotal": 24,
   "babPerLevel": 6,
   "bab": 6,
+  "dice": [
+   6,
+   6,
+   6,
+   6,
+   6,
+   6,
+   6,
+   6,
+   6,
+   6,
+   6,
+   6
+  ],
   "hdTotal": 72,
   "hp": {
    "abilityMod": 4,
@@ -6062,6 +6079,32 @@
   }
  ],
  "customTrackers": [
+  {
+   "minFormula": null,
+   "min": 0,
+   "style": {
+    "shape": "pips",
+    "fill": "remaining",
+    "color": null,
+    "gradientTo": null,
+    "negativeColor": null,
+    "negativeGradientTo": null,
+    "zones": []
+   },
+   "id": "hero_points",
+   "name": "Hero Points",
+   "pool": "hero",
+   "current": 2,
+   "maxFormula": null,
+   "max": 3,
+   "refresh": "",
+   "note": "",
+   "source": "player",
+   "createdAt": "2026-01-01T00:00:00.000Z",
+   "forwardedMax": 0,
+   "forwardedMin": 0,
+   "error": null
+  },
   {
    "minFormula": null,
    "min": 0,

@@ -1191,6 +1191,16 @@ export function altTrainingPanel(model) {
     const k = p.calc || {};
     const level = Number(c.identity.level) || 0;
     const n = k.counts || {};
+    // The tab is left off the bar with Alternate Training off (a campaign
+    // rule); this is what stands in for it anywhere it is still drawn.
+    if (k.off) {
+      return `<section class="panel span2 mythicoff">
+        <h3>Alternate Training <span class="badge">off</span></h3>
+        <p class="hint">Alternate Training is off for this character in its campaign rules, so its
+          technique grants nothing. What was picked here is kept, and counts again when it is turned
+          on. <button data-view data-action="campaign-rules">Campaign rules…</button></p>
+      </section>`;
+    }
 
     const prereq = k.prereq;
     const prereqBadge = !prereq ? ''
@@ -1362,7 +1372,7 @@ function altTrainingChooser() {
         <h3>No techniques on offer</h3>
         <p class="empty">No active content pack supplies Alternate Training techniques.
           The tab still keeps whatever is written on it; switch on a pack that carries a
-          catalogue (Extensions, top right) and the ladder appears.</p>
+          catalogue (Extensions and Rules, top right) and the ladder appears.</p>
       </section>`;
     }
     return `<section class="panel span2">

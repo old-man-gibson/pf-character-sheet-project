@@ -343,26 +343,53 @@ threshold is `--cs-table-max`.
 ### Campaign rules
 
 The sheet's arithmetic is our table's rules: a 30-point buy, a level typed in by hand,
-hero points, mythic tiers that come with level, and Automatic Bonus Progression. **Campaign rules** lets one
-character be played under other rules, a switch at a time. It is the first panel on the
-**⚙** tab, and **⋯ → Campaign rules…** or the search (*settings*, *mythic*, *ABP*…) goes
-straight there (*xp*, *milestones* and *trials* find it too).
+gestalt, maximum hit points every level, hero points, mythic tiers that come with level,
+Automatic Bonus Progression and Alternate Training. **Campaign rules** lets one character be
+played under other rules, a switch at a time. It is the first panel on the **⚙** tab, and
+**⋯ → Campaign rules…** or the search (*settings*, *mythic*, *ABP*, *gestalt*…) goes
+straight there (*xp*, *milestones*, *trials* and *hit points* find it too).
 
 | Switch | The table's rule | Changed |
 |---|---|---|
 | **Point buy** | 30 points | The budget the Stats tab checks the spend against. |
 | **Levels** | typed in | *Experience points*: XP is kept under the Details panel against the core slow, medium or fast table, any level's figure replaceable. *Milestones*: a count of milestones since the last level, so many a level (the rate), any level its own. Either way a bar shows how far there is to go, and a **Level up** button appears once the next level is earned. |
-| **Hero points** | tracked | Off, the Details panel drops its counter. |
+| **Highest level** | 20 | Level up stops there and the ladders end there. Past 20th the Planner gains a row for each level and class progressions carry on; an XP total past the table waits for the campaign's own figure; spell, power point and companion tables stay at their 20th-level row, and the Level Up feats stay ten. |
+| **Gestalt** | on | Off, one class a level from the Planner's first track: each class's good saves get their own +2 and each class's base attack bonus is rounded down on its own, and skill ranks are each class's for its levels. A level the first track leaves blank goes to a class pinned to so many levels, then to the first class the Planner never names. Other tracks are kept, greyed, and not read. |
+| **Hit points** | maximum every level | *Average after 1st*: half the die and 1 (5 on a d8). *Rolled after 1st*: a box per level on the Hit points panel; a level not rolled yet counts the average. 1st level always takes the whole die. |
+| **Hero points** | tracked | Kept on the Details panel and as a Hero Points pool on the Trackers tab, so spending one is a play action. Off, the counter goes and the pool may be removed. |
+| **Antiheroes** | not offered | An **Antihero** box beside the hero points: ticked, the character has no hero points to spend and Feats gains an Antihero feat row. |
 | **Mythic** | in play | Off, the tier is 0: no mythic hit points, Mythic Power, mythic ability increases or tradition bonuses. *Feats & Mythic* is called *Feats*, with a note in place of the mythic panels, and the Mythic Power tracker can be removed. |
-| **Mythic tier** | from level (1 at 8th, 2 at 10th, 3 at 12th, 4 at 14th, then one a level to 10 at 20th) | *From level* with a ladder of the campaign's own: any tier's level replaceable. *From trials*: trials completed, counted on Feats & Mythic, so many a tier (the rate), any tier its own; the tier follows the count, and the field beside it says how many the next tier still needs. *Awarded by the GM*: the tier is whatever is typed in **Tier**, 0 until then. |
-| **Automatic Bonus Progression** | in play | Off, no resistance, deflection or natural armour from the ladder and no prowess picks; the Stats tab drops those columns and the prowess panel. |
+| **Mythic tier** | from level (1 at 8th, 2 at 10th, 3 at 12th, 4 at 14th, then one a level to 10 at 20th) | *From level* with a ladder of the campaign's own: any tier's level replaceable. *From trials*: trials completed, counted on Feats & Mythic, so many a tier (the rate), any tier its own; a **Tier up** button appears once the next tier is earned. *Awarded by the GM*: the tier is whatever is typed in **Tier**, 0 until then. |
+| **Highest mythic tier** | 10 | The ladders, trials and Tier up end there, and Feats & Mythic lists that many tiers. Past 10th a tier's level is the campaign's to give. |
+| **What a tier grants** | the table's | *Core*: a path ability every tier, a mythic feat on odd tiers and +2 to an ability on even ones, with no path power; an even tier's feat slot is greyed and what is written there waits. |
+| **Automatic Bonus Progression** | the table's | Off, no resistance, deflection or natural armour from the ladder and no prowess picks; the Stats tab drops those columns and the prowess panel. *Core (Unchained)* adds armour and weapon attunement, ticked on the Stats tab (two items split the bonus from 8th; none ticked, the worn armour or the clothes take it, and an attuned item counts the higher of the attunement and its own enhancement), stops prowess at 18th, and gives legendary gifts at 19th and 20th, written down there with formulas allowed. |
+| **Alternate Training** | offered | Off, its tab goes and the technique grants nothing; what was picked is kept and held back from formulas. |
+| **Past Colossal** | not allowed | A size change past Colossal is counted: the header reads Colossal+1, +2…, and each step past adds 1d6 to a weapon's damage. Attack, AC and maneuver modifiers stay at Colossal's. |
+| **Currency** | Mana | What the Wealth wallet calls its money, and crafting's unit where a crafter has not named one. The coin purse keeps platinum, gold, silver and copper. |
 
 A switch nobody has touched is not saved, and reads as the table's rule, so every sheet
 made before the panel existed, and every new one, opens with its numbers where they were.
 A changed switch is marked on its row and counted in the heading, and **Back to the
 table's rules** puts them all back (undoable). Nothing written on the sheet is thrown away
-by a switch: mythic abilities, prowess picks and hero points stay where they are and count
-again when the rule comes back.
+by a switch: mythic abilities, prowess picks, hit point rolls, Planner tracks and hero points
+stay where they are and count again when the rule comes back.
+
+**Every character, or this one.** The panel's first row says whom the rules are for.
+*Every character*: one set of rules, kept for the whole browser under **Extensions and
+Rules** (the button in the page's header), which every character follows unless it is set
+to its own; a change on any following character's panel changes them all, and an open
+sheet in another window takes it at once. The first press where nothing is shared yet
+asks for a second, since every other character takes these rules from the next time it
+opens. *This character only*: the character keeps rules of its own. A character always
+opens under the rules it was saved with and then takes the shared ones as a change in
+play, so its totals and hidden adjustments stay where they were. Each character keeps a
+copy, so a published sheet shows the right numbers with nothing else to read. The
+library file under Extensions and Rules carries the shared rules too.
+
+**Rules files.** **Save as a file** downloads the rules as `campaign-rules.json`; **Load
+from a file…** takes the rules from such a file, or from another character's file, as one
+undo step. Only the rules are taken. Both are on the panel and under Extensions and Rules.
+The panel folds like any other.
 
 **Ladders.** Levels and mythic tiers each carry a ladder, folded under their row: a box
 per step, blank where the step follows the table or the rate (shown in the box), a number
@@ -374,9 +401,8 @@ XP tables are.
 offers **Level up to N**, which takes it as one step, undone like a play action and written
 in the play log. Levelling by milestones spends what the level took, and the rest carries
 over. **Add** beside the XP box adds an award at the table the same way. A mythic tier from
-trials follows the count directly, as the level ladder does.
-
-Gestalt off and rolled hit points are not switches yet.
+trials is taken the same way, with **Tier up to N**; typing fewer trials does not take a
+tier back. Both are offered in the search as well when one is earned.
 
 ### Themes and layout
 

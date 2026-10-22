@@ -8,10 +8,11 @@
  */
 
 import {
-  MYTHIC_PATH_HP, gestaltSaveBase, hitPointBase, levelRuleGrants, parseGroupText, parseLevelRule,
+  MYTHIC_PATH_HP, gestaltSaveBase, hitDieGain, hitPointBase, levelRuleGrants, parseGroupText, parseLevelRule, saveBase,
   statMod,
 } from '../rules.js';
 import { FEATURE_GROUP_COLORS, normalizeHex } from '../tracker-style.js';
+import { campaignRules, fitPlannerRows } from './campaign.js';
 import { orphans } from './reconcile.js';
 import { forwarded, scopeIfFormulas } from './scope.js';
 import { TEMPLATE_TYPES } from './templates.js';
@@ -1139,6 +1140,7 @@ export function removeClassFeatureColumn(model, className, index) {
  * the first N levels where the Classes table pins a count.
  */
 export function classPresence(model, classes, level) {
+  if (!campaignRules(model.data).gestalt) return corePresence(model, classes, level);
   const presence = new Map();
   for (const cls of classes) {
     const override = cls.levelsOverride == null ? null : Number(cls.levelsOverride);
@@ -1154,6 +1156,38 @@ export function classPresence(model, classes, level) {
     presence.set(cls, byLevel);
   }
   return presence;
+}
+
+/**
+ * Per class, the character levels it was taken at with gestalt off (a
+ * campaign rule): one class a level, the core rules' multiclassing.
+ *
+ * The Planner's first track names the class at each level, and is the only
+ * track read. A level it leaves blank goes to a class the Classes table pins
+ * to so many levels, in table order, until each has its count; then to the
+ * first class the Planner never names, which is how a single-class character
+ * with an empty Planner still has every level. Any other class has none, and
+ * the Classes panel says so.
+ */
+function corePresence(model, classes, level) {
+  const rows = model.data.progression?.levels || [];
+  const named = (name) => classes.find((x) => x.name === name)
+    || classes.find((x) => !!closestName(x.name, [name])) || null;
+  const at = Array.from({ length: level }, (_, i) => {
+    const name = String(rows[i]?.classes?.[0] ?? '').trim();
+    return name ? named(name) : null;
+  });
+  const taken = new Map(classes.map((x) => [x, at.filter((a) => a === x).length]));
+  const pinned = classes.filter((x) => x.levelsOverride != null);
+  const rest = classes.find((x) => x.levelsOverride == null && !taken.get(x)) || null;
+  for (let i = 0; i < level; i++) {
+    if (at[i]) continue;
+    const cls = pinned.find((x) => taken.get(x) < Number(x.levelsOverride)) || rest;
+    if (!cls) continue;
+    at[i] = cls;
+    taken.set(cls, taken.get(cls) + 1);
+  }
+  return new Map(classes.map((x) => [x, at.map((a) => a === x)]));
 }
 
 const SAVE_FLAGS = { fortitude: 'goodFort', reflex: 'goodRef', will: 'goodWill' };
@@ -1193,6 +1227,9 @@ export function saveProgressions(classes, presence, level) {
  */
 export function applyGestalt(model) {
   const c = model.data;
+  // A Planner row for every level the campaign reaches (past 20th, where it
+  // goes that high).
+  fitPlannerRows(c);
   const level = Number(c.identity.level) || 0;
   const classes = (c.classes || []).filter((x) => x.name);
 
@@ -1200,9 +1237,13 @@ export function applyGestalt(model) {
   for (const cls of classes) cls.gestaltLevels = presence.get(cls).filter(Boolean).length;
 
   const summary = { saves: {}, hpPerLevel: 0, ranksPerLevel: 0 };
+  // Gestalt off (a campaign rule): one class a level, each class its own
+  // progression -- a good save's +2 per class, BAB rounded down per class.
+  const gestalt = campaignRules(c).gestalt;
 
   for (const [save, { perLevel, anyGood }] of Object.entries(saveProgressions(classes, presence, level))) {
-    const base = gestaltSaveBase(perLevel, anyGood);
+    const base = gestalt ? gestaltSaveBase(perLevel, anyGood)
+      : classes.reduce((t, x) => t + (x.gestaltLevels ? saveBase(x.gestaltLevels, !!x[SAVE_FLAGS[save]]) : 0), 0);
     summary.saves[save] = { base, anyGood };
     if (c.saves?.[save]) c.saves[save].base = base;
   }
@@ -1210,6 +1251,10 @@ export function applyGestalt(model) {
   const active = classes.filter((x) => x.gestaltLevels > 0);
   summary.hpPerLevel = Math.max(0, ...active.map((x) => Number(x.hd) || 0));
   summary.ranksPerLevel = Math.max(0, ...active.map((x) => Number(x.skillRanks) || 0));
+  // The class ranks over every level: the best a level, gestalt-style, or
+  // each class's own for the levels it has.
+  summary.ranksTotal = gestalt ? summary.ranksPerLevel * level
+    : active.reduce((t, x) => t + (Number(x.skillRanks) || 0) * x.gestaltLevels, 0);
 
   /*
    * Base attack bonus, the same way as the saves: each level takes the best
@@ -1260,10 +1305,11 @@ export function applyGestalt(model) {
   }
   for (const cls of classes) cls.gestaltBeaten = beaten.get(cls);
   summary.babPerLevel = rate;
-  summary.bab = Math.floor(rate);
-  // The total rather than the array: the per-level figures are already on the
-  // Planner rows, and the sum is the only one the hit-points readout asks for.
-  summary.hdTotal = hdPerLevel.reduce((n, hd) => n + hd, 0);
+  summary.bab = gestalt ? Math.floor(rate)
+    : classes.reduce((t, x) => t + Math.floor(rateOf(x) * x.gestaltLevels), 0);
+  // The die at each level, for the rolls a campaign may keep (`hp.rolls`);
+  // what they come to is `hdTotal`, worked out with the hit points.
+  summary.dice = hdPerLevel;
   c.gestalt = summary;
 
   /*
@@ -1291,7 +1337,8 @@ export function applyGestalt(model) {
   // tracks actually chosen on each row.
   const byName = new Map(classes.map((x) => [x.name, x]));
   for (const row of c.progression?.levels || []) {
-    const present = (row.classes || []).map((n) => byName.get(n)).filter(Boolean);
+    // With gestalt off only the first track is read.
+    const present = (gestalt ? row.classes || [] : (row.classes || []).slice(0, 1)).map((n) => byName.get(n)).filter(Boolean);
     const inc = (flag) => (present.length
       ? (present.some((x) => !!x[flag]) ? 0.5 : 0.33) : 0);
     row.computed = {
@@ -1363,8 +1410,13 @@ export function applyHitPoints(model, summary, hdPerLevel = []) {
   // applies: write them in terms of abilities and levels.
   const parts = resolveNumberFields(scopeIfFormulas(model, [c.hp.fcb, c.hp.toughness, c.hp.misc]), c.hp,
     ['fcb', 'toughness', 'misc']);
+  // What each level's die gave: the whole die (the table's), or after 1st
+  // level its average or the roll kept for that level (a campaign rule).
+  const mode = campaignRules(c).hitPoints;
+  const gained = hdPerLevel.map((hd, i) => hitDieGain(hd, i + 1, mode, c.hp.rolls?.[i + 1]));
+  summary.hdTotal = gained.slice(0, level).reduce((n, hp) => n + hp, 0);
   const base = hitPointBase({
-    perLevel: hdPerLevel,
+    perLevel: gained,
     level,
     abilityMod,
     fcb: parts.fcb,

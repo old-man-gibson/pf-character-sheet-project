@@ -14,7 +14,7 @@ import { evaluateFormula } from '../formula.js';
 import { isDefaultStyle, normalizeStyle, resolveZones } from '../tracker-style.js';
 import { forwarded, scopeIfFormulas } from './scope.js';
 import { markUndo, rowLabel } from './undo.js';
-import { campaignRules, mythicTierOf } from './campaign.js';
+import { campaignRules, heroPointsInPlay, mythicTierOf } from './campaign.js';
 import { evaluateAmount, slug, trackerForwardKey } from './util.js';
 
 /**
@@ -58,6 +58,14 @@ const drainStyle = () => normalizeStyle({ fill: 'remaining' });
  */
 export const SPELL_POINTS_ID = 'spell_points';
 export const POWER_POINTS_ID = 'power_points';
+export const HERO_POINTS_ID = 'hero_points';
+
+/**
+ * The hero points a character may hold, as the Details panel says (3 unless
+ * it says otherwise) -- none while they are not in play, so the pool reads
+ * empty rather than full of points nobody may spend.
+ */
+const heroMax = (d) => (heroPointsInPlay(d) ? Math.max(0, Math.floor(Number(d.identity?.heroPoints?.max ?? 3) || 0)) : 0);
 
 export const SYSTEM_POOLS = [
   {
@@ -84,6 +92,32 @@ export const SYSTEM_POOLS = [
     spent: {
       get: (d) => Math.max(0, Math.floor(Number(d.psionics?.spent) || 0)),
       set: (d, v) => { if (d.psionics) d.psionics.spent = Math.max(0, Math.floor(Number(v) || 0)); },
+    },
+  },
+  /*
+   * Hero points stay where they always were, current and most on the Details
+   * panel; the tracker reads them as spent of most, so a point spent with −
+   * is a play action, logged and undoable, and the session's Resources card
+   * shows the pool. They are earned, not rested back: no refresh.
+   */
+  {
+    pool: 'hero', id: HERO_POINTS_ID, name: 'Hero Points', match: /^hero\s*points?$/i,
+    what: 'the hero points on the Details panel',
+    held: 'Kept while the campaign rules track hero points',
+    refresh: '',
+    // Not offered on request where hero points are not in play.
+    onlyInPlay: true,
+    has: (d) => !d.monster && heroPointsInPlay(d),
+    max: heroMax,
+    spent: {
+      get: (d) => Math.max(0, heroMax(d) - Math.max(0, Math.floor(Number(d.identity?.heroPoints?.current) || 0))),
+      set: (d, v) => {
+        // Out of play the points on Details are kept as written, not emptied.
+        if (!heroPointsInPlay(d)) return;
+        const id = d.identity || (d.identity = {});
+        const hp = id.heroPoints || (id.heroPoints = { current: 0, max: 3 });
+        hp.current = Math.max(0, heroMax(d) - Math.max(0, Math.floor(Number(v) || 0)));
+      },
     },
   },
 ];
@@ -148,7 +182,7 @@ export function ensureSystemPools(model) {
 
 /** The built-in pools this character has no tracker for, as [{ pool, name, what, max }]. */
 export function missingSystemPools(model) {
-  return SYSTEM_POOLS.filter((def) => !poolTracker(model, def.pool))
+  return SYSTEM_POOLS.filter((def) => !poolTracker(model, def.pool) && (!def.onlyInPlay || def.has(model.data)))
     .map((def) => ({ pool: def.pool, name: def.name, what: def.what, max: def.max(model.data) }));
 }
 
@@ -181,7 +215,7 @@ function addPoolTracker(model, def) {
     max: 0,
     minFormula: null,
     min: 0,
-    refresh: 'Daily',
+    refresh: def.refresh ?? 'Daily',
     note: '',
     style: drainStyle(),
     source: 'player',

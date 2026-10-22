@@ -44,7 +44,7 @@ import { trackerReading } from './panels/trackers.js';
 import { COMPANION_KINDS, COMPANION_LABELS, companionInUse } from '../companions.js';
 import { fmt, ABILITIES, ABILITY_LABELS, critMultOf, threatText } from '../rules.js';
 import { rollSpec } from '../roll20.js';
-import { campaignRules, levelProgress, trialProgress } from '../model/campaign.js';
+import { campaignRules, levelProgress, mythicTierGrantOf, trialProgress } from '../model/campaign.js';
 
 /* ---------------- kinds ---------------- */
 
@@ -300,13 +300,6 @@ function vitals(model, add) {
       keys: 'mythic trials tier progress',
     });
   }
-  const hero = c.identity?.heroPoints;
-  if (hero && campaignRules(c).heroPoints && (Number(hero.max) || Number(hero.current))) {
-    add({
-      kind: 'tracker', title: 'Hero points', tab: 'overview',
-      value: `${hero.current ?? 0}/${hero.max ?? 0}`, keys: 'hero point',
-    });
-  }
 }
 
 /** Who the character is: the header fields, and the lines under the portrait. */
@@ -511,7 +504,7 @@ function feats(model, add) {
         clip(a.effect, 60)),
       sel: `[data-item^="mythic.abilities|${i}|"]`, keys: 'mythic path ability',
     });
-    if (text(a.featChoice)) {
+    if (text(a.featChoice) && mythicTierGrantOf(c, i + 1, a.feat)) {
       add({
         kind: 'feat', title: text(a.featChoice), tab: 'features',
         sub: bits('Mythic feat', text(a.path)), keys: 'mythic feat',
@@ -1109,8 +1102,14 @@ function commands(model, add) {
   if ((model.data.psionics?.classes || []).length) {
     cmd('New day — power points', 'psionics-new-day', 'Refill the power point pool', 'new day psionics rest');
   }
-  cmd('Campaign rules', 'campaign-rules', 'Point buy, levels by XP or milestones, hero points, mythic and ABP for this character',
-    'settings options campaign rules house table point buy hero points mythic tier trials rate thresholds abp automatic bonus progression xp experience milestones levelling gestalt');
+  // A level or tier the campaign's rules say is earned, offered where the
+  // buttons on the sheet are.
+  const lp = levelProgress(model.data);
+  if (lp?.ready) cmd(`Level up to ${lp.next}`, 'level-up', 'The next level is earned', 'level up levelling xp experience milestones');
+  const tp = trialProgress(model.data);
+  if (tp?.ready) cmd(`Tier up to ${tp.next}`, 'tier-up', 'The next mythic tier is earned', 'tier up mythic trials');
+  cmd('Campaign rules', 'campaign-rules', 'Levels, gestalt, hit points, hero points, mythic, ABP, currency and more for this character',
+    'settings options campaign rules house table point buy hero points antihero mythic tier trials rate thresholds abp automatic bonus progression core unchained attunement legendary gifts xp experience milestones levelling highest maximum level gestalt multiclass hit points hp rolled average alternate training currency gold mana colossal size party file');
   cmd('Show, hide and rearrange tabs', 'palette-tabs', 'The ⚙ tab manager', 'tabs manage hide show arrange settings');
   cmd('Reset to the character as imported', 'reset', 'Asks first; named checkpoints are kept', 'reset revert discard');
 }

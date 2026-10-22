@@ -272,8 +272,11 @@ export function recomputeEquipment(model) {
     }
     w.diceResolved = w.useUnarmedDice && unarmedDiceNow ? unarmedDiceNow : diceText;
     const base = modeBase(w.attackType);
+    // Its own enhancement, or core ABP's weapon attunement where that is
+    // higher (enhancement bonuses do not stack).
+    w.enhancementNow = Math.max(Number(w.enhancement) || 0, Number(c.abpAttune?.weapons?.[wi]) || 0);
     const attack = (base ?? (Number(w.baseOverride) || 0))
-      + (Number(w.enhancement) || 0) + (Number(w.miscAttack) || 0) + w.nonproficiency;
+      + w.enhancementNow + (Number(w.miscAttack) || 0) + w.nonproficiency;
     if (w.attackOffset === undefined) {
       w.attackOffset = w.sheetAttack != null ? (Number(w.sheetAttack) || 0) - attack : 0;
     }
@@ -298,7 +301,7 @@ export function recomputeEquipment(model) {
         w.miscDamageError = w.miscDamageError || err.message;
       }
     }
-    const bonus = abilityPart + w.miscDamageNum + (Number(w.enhancement) || 0);
+    const bonus = abilityPart + w.miscDamageNum + w.enhancementNow;
     w.damageBonus = bonus;
     w.damageTotal = `${w.diceResolved || '—'}${bonus ? fmt(bonus) : ''}`;
 

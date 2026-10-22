@@ -89,7 +89,7 @@ export function renderSystemManagerPanel(model, ctx) {
     </div>`;
 
     const mode = model.viewMode();
-    return `<div class="grid">${campaignPanel(model)}<section class="panel span2">
+    return `<div class="grid">${campaignPanel(model, ctx)}<section class="panel span2">
       <h3>Tab bar — ${mode === 'session' ? 'session view' : 'build view'}
         <button data-view data-action="view-mode" style="margin-left:auto" title="${mode === 'session'
     ? 'Switch to the build view and edit its bar' : 'Switch to the session view and edit its bar'}">
@@ -314,7 +314,7 @@ function extensionBlocksPanel(model, ctx) {
     : 'no packs are enabled.'} <strong>+ Add</strong> copies a block onto the sheet: a class into
         the Classes table, a race into the Overview, a feature onto the Template tab, a tracker
         onto Trackers. The copy can be edited like anything typed in. Packs are managed
-        from the page's <em>Extensions</em> button.
+        from the page's <em>Extensions and Rules</em> button.
       </p>
       ${blocks.length ? `<p class="pair extfind" style="margin:0 0 6px">
         ${kinds.length > 1 ? `<button data-view data-action="ext-filter" data-kind="" aria-pressed="${!filter}">All</button>

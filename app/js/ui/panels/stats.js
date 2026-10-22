@@ -11,9 +11,9 @@
  * draws the same pickers; everything else here is local.
  */
 import { esc, abAttr, picksAbility, ABILITY_LABELS_LIST } from '../html.js';
-import { campaignRules } from '../../model/campaign.js';
-import { roField } from '../fields.js';
-import { exprField } from '../rows.js';
+import { campaignRules, coreAbp, mythicStatTiers } from '../../model/campaign.js';
+import { area, check, roField } from '../fields.js';
+import { exprField, itemCheck } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
 import { abilityHarm } from '../../model/abilities.js';
 import { minus } from '../format.js';
@@ -22,7 +22,7 @@ import {
   AC_BONUS_TYPES, ARRAY_LEVELS, ARRAY_MAX_SLOTS, ARRAY_SLOTS, arraySourceLevel,
   ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL,
   BUILD_DERIVED_KEYS, BUILD_OPTIONAL_KEYS, BUILD_PERMANENT_GROUPS, BUILD_TEMPORARY,
-  ENHANCEMENT_CAP, LEVEL4_LEVELS, MENTAL_PROWESS_LEVELS, MYTHIC_STAT_TIERS,
+  CORE_PROWESS_LEVELS, ENHANCEMENT_CAP, LEGENDARY_GIFTS, MENTAL_PROWESS_LEVELS, abpAttunement,
   PHYSICAL_PROWESS_LEVELS, PROWESS_TRACKS, SAVE_BONUS_TYPES, abpGroupTotal, abpSourceLevel, bonusColumnName,
 } from '../../rules.js';
 
@@ -202,6 +202,7 @@ export function renderStatsPanel(model, ctx) {
             which gives each the width its table wants. */''}
       <div class="band">
         ${campaignRules(model.data).abp ? abpPicksPanel(model) : ''}
+        ${coreAbp(model.data) ? abpAttunePanel(model) : ''}
         ${milestonePicksPanel(model)}
         ${arrayPicksPanel(model)}
       </div>
@@ -350,9 +351,13 @@ function milestonePicksPanel(model) {
   const level = Number(c.identity.level) || 0;
   const tier = Number(c.identity.mythicTier) || 0;
   // Without mythic (a campaign rule) the table is the Level/4 half alone.
-  const mythic = campaignRules(c).mythic;
+  // Both halves run to the campaign's highest level and tier: every fourth
+  // level, every even tier.
+  const { mythic, maxLevel } = campaignRules(c);
+  const fourths = Array.from({ length: Math.floor(maxLevel / 4) }, (_, i) => (i + 1) * 4);
+  const evens = mythicStatTiers(c);
   const level4 = (l) => (c.progressionPicks?.level4 || []).find((p) => p.level === l) || {};
-  const rows = mythic ? Math.max(LEVEL4_LEVELS.length, MYTHIC_STAT_TIERS.length) : LEVEL4_LEVELS.length;
+  const rows = mythic ? Math.max(fourths.length, evens.length) : fourths.length;
   return `<section class="panel">
       <h3>${mythic ? 'Level/4 &amp; mythic increases' : 'Level/4 increases'}</h3>
       <div class="tablewrap"><table class="build picks">
@@ -372,8 +377,8 @@ function milestonePicksPanel(model) {
           ? `<td class="noslot ${band}"></td><td class="noslot ${band}"></td>`
           : `<td class="num ${band} ${reached ? '' : 'future'}">${milestone}</td>
                <td class="${band} ${reached ? '' : 'future'}">${control}</td>`);
-        const l = LEVEL4_LEVELS[i];
-        const t = MYTHIC_STAT_TIERS[i];
+        const l = fourths[i];
+        const t = evens[i];
         return `<tr>
             ${pair(l, l <= level, l === undefined ? ''
             : pickSelect('level4', l, 0, level4(l).ability, ABILITY_LABELS_LIST, false), '')}
@@ -438,18 +443,21 @@ function abpPicksPanel(model) {
   const level = Number(c.identity.level) || 0;
   const picks = c.progressionPicks?.abp || [];
   const at = (l) => picks.find((p) => p.level === l) || {};
+  // Core ABP (a campaign rule) stops prowess at 18th: legendary gifts follow.
+  const core = coreAbp(c);
+  const steps = core ? CORE_PROWESS_LEVELS : { mental: MENTAL_PROWESS_LEVELS, physical: PHYSICAL_PROWESS_LEVELS };
   return `<section class="panel">
       <h3>ABP — Mental &amp; Physical Prowess</h3>
       <div class="tablewrap"><table class="build picks">
         <thead><tr><th class="num">Lvl</th><th>Mental</th><th>Physical</th></tr></thead>
-        <tbody>${ABP_LEVELS.map((l) => {
+        <tbody>${ABP_LEVELS.filter((l) => steps.mental.includes(l) || steps.physical.includes(l)).map((l) => {
         const row = at(l);
         const future = l > level;
         // A track that gains nothing at this level has no slot at all, so
         // the cell is left empty rather than showing a dead control.
         // Levels that only raise an earlier pick show it, locked.
         const cell = (track, allowed) => {
-          const levels = track === 'mental' ? MENTAL_PROWESS_LEVELS : PHYSICAL_PROWESS_LEVELS;
+          const levels = steps[track];
           if (!levels.includes(l)) return '<td class="noslot"></td>';
           const src = abpSourceLevel(track, l);
           if (src !== l) {
@@ -469,8 +477,48 @@ function abpPicksPanel(model) {
         +2 each. The two tracks advance on different levels, so most rows offer a
         choice on one side only. Levels 11 and 12 raise the ability chosen at 6 and 7
         instead of offering a new choice. Rows above level ${level} are greyed. They
-        are planned but do not count toward the score yet.
+        are planned but do not count toward the score yet.${core ? ` Core ABP stops at 18th:
+        19th and 20th bring legendary gifts instead, beside this panel.` : ''}
       </p>
+    </section>`;
+}
+
+/**
+ * Core ABP's attunement and legendary gifts (a campaign rule): which armour
+ * and weapons carry the attunement's enhancement bonus, and the gifts 19th
+ * and 20th bring. What each attuned item gets is worked out in
+ * model/campaign.js (`abpAttuneOf`) and shown beside its box.
+ */
+function abpAttunePanel(model) {
+  const c = model.data;
+  const level = Number(c.identity.level) || 0;
+  const { one, two } = abpAttunement(level);
+  const att = c.abpAttune || { shields: [], weapons: [] };
+  const e = c.equipment || {};
+  const plus = (n) => (n ? ` <span class="badge ok">+${n}</span>` : '');
+  const now = one ? `+${one}${two ? `, or +${two[0]} and +${two[1]} split across two` : ''}` : 'none before 4th level';
+  const armour = [
+    e.armor?.active ? `${check('equipment.armor.attuned', e.armor.attuned, e.armor.name || 'Armour')}${plus(att.armor)}` : '',
+    ...(e.shields || []).map((s, i) => (s?.active
+      ? `${itemCheck('equipment.shields', i, 'attuned', s.attuned, s.name || `Shield ${i + 1}`)}${plus(att.shields?.[i])}` : '')),
+  ].filter(Boolean);
+  const weapons = (e.weapons || []).map((w, i) => `${itemCheck('equipment.weapons', i, 'attuned', w.attuned, w.name || `Weapon ${i + 1}`)}${
+    plus(att.weapons?.[i])}`);
+  const gifts = level >= 20 ? LEGENDARY_GIFTS[19] + LEGENDARY_GIFTS[20] : level >= 19 ? LEGENDARY_GIFTS[19] : 0;
+  return `<section class="panel">
+      <h3>ABP — Attunement &amp; legendary gifts</h3>
+      <h4 class="subhead">Armour attunement <span class="badge">${esc(now)}</span></h4>
+      <div class="attunelist">${armour.join(' ') || '<span class="hint">No armour or shield in use.</span>'}</div>
+      <p class="hint">${att.clothing ? `Nothing worn: your clothes take it, +${att.clothing} armour.`
+    : 'None ticked: the armour you wear takes it.'}</p>
+      <h4 class="subhead">Weapon attunement <span class="badge">${esc(now)}</span></h4>
+      <div class="attunelist">${weapons.join(' ') || '<span class="hint">No weapons on the Gear tab.</span>'}</div>
+      <p class="hint">Tick the weapon it is on${two ? ', or two to split it' : ''}. The higher of it and a weapon's own
+        enhancement counts, on attack and damage.</p>
+      <h4 class="subhead">Legendary gifts <span class="badge${gifts ? '' : ' future'}">${gifts ? `${gifts} to choose` : 'at 19th'}</span></h4>
+      ${area('progressionPicks.legendaryGifts', c.progressionPicks?.legendaryGifts, 3)}
+      <p class="hint">Three at 19th and five more at 20th. Written down rather than worked out:
+        a gift that raises a number can say so in a formula, such as {str += 2}.</p>
     </section>`;
 }
 

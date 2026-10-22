@@ -143,7 +143,7 @@ app/js/history.js       saved versions, snapshots and checkpoints (IndexedDB)
 app/js/model/undo.js    one step back from a removed row or an action at the table, and the Ctrl+Z behind it
 app/js/extensions.js    extension packs: format, local store, table merge, attaching blocks
 app/js/extension-runtime.js  the page's one set of active packs, registered with the model
-app/js/extension-manager.js  the Extensions dialog a host page mounts
+app/js/extension-manager.js  the Extensions and Rules dialog a host page mounts
 app/js/paste-import.js  rules text off a page -> extension blocks + leftovers to tag
 app/js/monster/         the GM's monster tool, kept to itself: import.js (a stat block off a page ->
                         a document, numbers reconciled), block.js (its shape), panel.js (the Stat

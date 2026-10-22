@@ -27,7 +27,7 @@ import {
 } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
-import { campaignRules } from './campaign.js';
+import { campaignRules, coreAbp, isAntihero } from './campaign.js';
 import { sphereTableNames, talentsIn } from './spheres.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
 import { tempHpGrant } from './stats/defenses.js';
@@ -1466,13 +1466,20 @@ export function proseSources(model) {
   // A tier above the one the character has reached is a plan: its text still
   // resolves and still shows, but a bonus written there has not been earned.
   const mythicTier = Number(d.identity?.mythicTier) || 0;
+  // The core ladder (a campaign rule) grants no feat on an even tier, so
+  // whatever is written in that slot waits, as a tier not reached does.
+  const coreLadder = campaignRules(d).mythicLadder === 'core';
   (d.mythic?.abilities || []).forEach((a, i) => {
     const ahead = i + 1 > mythicTier ? { future: true } : null;
+    const noFeat = coreLadder && (i + 1) % 2 === 0 ? { future: true } : ahead;
     push(`mythic:${i}`, a.name, null, ahead);
     push(`mythic:${i}:effect`, a.effect, null, ahead);
-    push(`mythic:${i}:featChoice`, a.featChoice, null, ahead);
-    push(`mythic:${i}:featEffect`, a.featEffect, null, ahead);
+    push(`mythic:${i}:featChoice`, a.featChoice, null, noFeat);
+    push(`mythic:${i}:featEffect`, a.featEffect, null, noFeat);
   });
+  // Core ABP's legendary gifts, written down once they arrive at 19th.
+  push('abp:gifts', d.progressionPicks?.legendaryGifts, null,
+    coreAbp(d) && (Number(d.identity?.level) || 0) >= 19 ? null : { future: true });
   /*
    * Every feat's note, in the groups and among the granted ones alike.
    *
@@ -1491,13 +1498,18 @@ export function proseSources(model) {
   for (const key of ['drawback', 'specialty']) {
     push(`grantedFeat:${key}`, d.grantedFeats?.[key]?.note);
   }
+  // An antihero's feat waits while the bargain does not stand (a campaign rule).
+  push('grantedFeat:antihero', d.grantedFeats?.antihero?.note, null, isAntihero(d) ? null : { future: true });
   (d.grantedFeats?.others || []).forEach((f, i) => push(`grantedFeat:${i}`, f?.note, null, planned(rowLevel(f))));
-  // Alternate Training is picked level by level, so a pick for a later one waits.
-  for (const [lvl, text] of Object.entries(d.altTraining?.picks || {})) push(`altTraining:${lvl}`, text, null, planned(Number(lvl) || null));
+  // Alternate Training is picked level by level, so a pick for a later one
+  // waits -- and every one does with Alternate Training off (a campaign rule).
+  const altOff = campaignRules(d).altTraining ? null : { future: true };
+  const altAt = (lvl) => altOff || planned(Number(lvl) || null);
+  for (const [lvl, text] of Object.entries(d.altTraining?.picks || {})) push(`altTraining:${lvl}`, text, null, altAt(lvl));
   for (const [lvl, text] of Object.entries(d.altTraining?.rowNotes || {})) {
-    push(`altTrainingNote:${lvl}`, text, null, planned(Number(lvl) || null));
+    push(`altTrainingNote:${lvl}`, text, null, altAt(lvl));
   }
-  push('altTraining:notes', d.altTraining?.notes);
+  push('altTraining:notes', d.altTraining?.notes, null, altOff);
   // `notes` is the sibling map of one note per slot, not an eighth slot, so it
   // is walked rather than pushed as though it were a name.
   // With mythic off (a campaign rule) a tradition is written down, not in

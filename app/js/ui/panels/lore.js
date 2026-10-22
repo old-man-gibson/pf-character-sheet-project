@@ -26,6 +26,7 @@ import { parseLevelRule, levelRuleLevels, summariseLevels } from '../../rules.js
 import { hasTokens } from '../../inline.js';
 import { rgba } from '../../tracker-style.js';
 import { logDay, logLinesHtml } from '../play-log.js';
+import { campaignRules } from '../../model/campaign.js';
 
 
 export function renderProgressionPanel(model, ctx) {
@@ -35,6 +36,9 @@ export function renderProgressionPanel(model, ctx) {
     const classNames = c.classes.map((x) => x.name).filter(Boolean);
     const level = Number(c.identity.level) || 0;
     const tracks = Array.from({ length: p.tracks }, (_, i) => i);
+    // Gestalt off (a campaign rule): the first track is the class each level;
+    // any others are kept, greyed, and not read.
+    const gestalt = campaignRules(c).gestalt;
 
     const classCell = (row, t) => {
       const value = row.classes?.[t] ?? '';
@@ -50,7 +54,7 @@ export function renderProgressionPanel(model, ctx) {
       ${classActionsPanel(model)}
       ${collapsible(model, 'prog-levels', `<section class="panel span2">
         <h3>Level progression
-          <button data-action="add-track" title="Tristalt and beyond">+ Class track</button>
+          ${gestalt ? '<button data-action="add-track" title="Tristalt and beyond">+ Class track</button>' : ''}
         </h3>
         <div class="tablewrap"><table class="gridtab prog">
           <thead><tr>
@@ -69,7 +73,7 @@ export function renderProgressionPanel(model, ctx) {
           </tr></thead>
           <tbody>${p.levels.map((row) => `<tr class="${row.level > level ? 'future' : ''}">
             <td class="num">${esc(row.level)}</td>
-            ${tracks.map((t) => `<td>${classCell(row, t)}</td>`).join('')}
+            ${tracks.map((t) => `<td${!gestalt && t ? ' class="future" title="Not read with gestalt off"' : ''}>${classCell(row, t)}</td>`).join('')}
             <td class="num derived">${row.computed?.hp ? `d${row.computed.hp}` : ''}</td>
             <td class="num derived">${row.computed?.ranks || ''}</td>
             <td class="num derived">${row.computed?.fort || ''}</td>
@@ -79,7 +83,8 @@ export function renderProgressionPanel(model, ctx) {
         </table></div>
         <p class="hint">
           Class tracks pick from the classes on the Overview. HP, ranks and saves per level
-          are read-only. They are computed gestalt-style from the classes chosen on that row
+          are read-only. ${gestalt ? 'They are computed gestalt-style from the classes chosen on that row'
+    : 'Gestalt is off in the campaign rules, so they come from the first track\'s class alone, and only the first track counts'}
           (good saves ½, poor ⅓). Rows past level ${level} are plans. Class features live
           in the groups below. Ability-boosting choices live on the <strong>Stats</strong> tab.
         </p>

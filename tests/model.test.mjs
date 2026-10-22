@@ -3820,7 +3820,7 @@ console.log('spell points and power points are built-in drain trackers');
 {
   const c = new Character(blankDocument({ name: 'Caster' }));
   c.set('identity.level', 4);
-  check('no casting, no pools', [c.spellPointTracker(), c.trackers.some((t) => t.pool)], [null, false]);
+  check('no casting, no pools', [c.spellPointTracker(), c.trackers.some((t) => t.pool && t.pool !== 'hero')], [null, false]);
 
   c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', mod1: 'Int', classLevelsOverride: 4, levels: [] });
   const sp = () => c.spellPointTracker();
@@ -4312,12 +4312,14 @@ console.log('small ones: an empty row is not a system in use, and a picked curve
 console.log('a caster gets the calculated pool, and anyone can add it');
 {
   const c = new Character(blankDocument({ name: 'Pools', level: 1 }));
-  check('no casting class, no pool', c.trackers.some((t) => t.pool), false);
+  // Hero points are everyone's pool (a campaign rule), not a caster's.
+  const casting = () => c.trackers.filter((t) => t.pool && t.pool !== 'hero').map((t) => t.id);
+  check('no casting class, no pool', casting().length > 0, false);
   check('both offered on the Trackers tab', c.missingSystemPools().map((p) => p.pool), ['sp', 'pp']);
   c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', talentsPerLevel: null, mod1: 'Int', mod2: null, classLevelsOverride: 0, levels: [] });
-  check('a named casting class has its pool even at 0 points', c.trackers.filter((t) => t.pool).map((t) => t.id), ['spell_points']);
+  check('a named casting class has its pool even at 0 points', casting(), ['spell_points']);
   c.addSystemPool('pp');
-  check('the other added on request', c.trackers.filter((t) => t.pool).map((t) => t.id), ['spell_points', 'power_points']);
+  check('the other added on request', casting(), ['spell_points', 'power_points']);
   check('and nothing left to offer', c.missingSystemPools(), []);
 }
 
@@ -9593,7 +9595,7 @@ console.log('sheet-seeded trackers are fully editable and removable');
 {
   const c = new Character(load('bryva'));
   const ids = c.trackers.map((t) => t.id);
-  check('bryva\'s sheet trackers', ids, ['mythic_power', 'spell_points', 'culinary_stamina', 'satiety', 'stuffed_88']);
+  check('bryva\'s sheet trackers', ids, ['mythic_power', 'spell_points', 'culinary_stamina', 'satiety', 'stuffed_88', 'hero_points']);
 
   // Rename and retype Spell Points -- a plain number becomes a live formula.
   const sp = c.updateTracker('spell_points', { name: 'Spell Points (SP)', maxFormula: 'caster.sp', refresh: 'Per rest' });
@@ -9606,7 +9608,7 @@ console.log('sheet-seeded trackers are fully editable and removable');
   // The two hand-kept state rows go away; zones replace them.
   check('delete a sheet tracker', c.removeTracker('satiety'), true);
   check('and another', c.removeTracker('stuffed_88'), true);
-  check('gone', c.trackers.map((t) => t.id), ['mythic_power', 'spell_points', 'culinary_stamina']);
+  check('gone', c.trackers.map((t) => t.id), ['mythic_power', 'spell_points', 'culinary_stamina', 'hero_points']);
 
   // The import itself is untouched, so Reset still restores the sheet.
   check('resources block is pristine', c.data.resources.map((r) => r.name),
@@ -9622,10 +9624,10 @@ console.log('sheet-seeded trackers are fully editable and removable');
   check('edits restored', c2.trackers.find((t) => t.id === 'spell_points').name, 'Spell Points (SP)');
   check('formula restored', c2.trackers.find((t) => t.id === 'spell_points').max, c.data.training.magic.totalSP);
   check('still edited after reload', c2.trackers.find((t) => t.id === 'spell_points').edited, true);
-  check('deleted stay deleted', c2.trackers.map((t) => t.id), ['mythic_power', 'spell_points', 'culinary_stamina']);
+  check('deleted stay deleted', c2.trackers.map((t) => t.id), ['mythic_power', 'spell_points', 'culinary_stamina', 'hero_points']);
   check('and are not resurrected by a second round trip',
     new Character(JSON.parse(JSON.stringify(c2.toJSON()))).trackers.map((t) => t.id),
-    ['mythic_power', 'spell_points', 'culinary_stamina']);
+    ['mythic_power', 'spell_points', 'culinary_stamina', 'hero_points']);
 
   // Editing a field back to the sheet's value clears the override.
   c2.updateTracker('spell_points', { name: 'Spell Points', maxFormula: '23', refresh: 'Daily' });
@@ -9635,7 +9637,7 @@ console.log('sheet-seeded trackers are fully editable and removable');
 
   // A fresh import brings everything back.
   const fresh = new Character(load('bryva'));
-  check('reset restores the sheet\'s trackers', fresh.trackers.length, 5);
+  check('reset restores the sheet\'s trackers, and the hero point pool', fresh.trackers.length, 6);
 }
 
 console.log('feature-column level rules');

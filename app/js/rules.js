@@ -972,6 +972,21 @@ export const MYTHIC_PATH_HP = {
 };
 
 /**
+ * The hit points one level's die gives under the campaign's rule for them:
+ * the whole die at 1st level, always; after that the whole die (`max`, the
+ * table's), its average rounded up (`average`: half the die and 1), or the
+ * roll kept for that level (`rolled`) -- the average until one is kept.
+ */
+export function hitDieGain(die, level, mode = 'max', roll = null) {
+  const hd = Math.max(0, Math.floor(Number(die) || 0));
+  if (!hd || mode === 'max' || level <= 1) return hd;
+  const average = Math.floor(hd / 2) + 1;
+  if (mode !== 'rolled') return average;
+  const r = Math.floor(Number(roll));
+  return r >= 1 && r <= hd ? r : average;
+}
+
+/**
  * The maximum hit points the class table comes to.
  *
  * The workbook worked this out on Character Info and the sheet only kept the
@@ -979,9 +994,10 @@ export const MYTHIC_PATH_HP = {
  * moved when the classes under them did. The parts, in the workbook's own
  * order:
  *
- *   - `perLevel`: the hit die rolled at each character level. Gestalt takes
- *     the best among the classes present, which is what the Planner's
- *     "HP/ Level" column held, and this campaign takes it at maximum.
+ *   - `perLevel`: the hit points each character level gave (see
+ *     `hitDieGain`). Gestalt takes the best die among the classes present,
+ *     which is what the Planner's "HP/ Level" column held, and the table
+ *     takes it at maximum.
  *   - the favoured-class points, whole, not per level.
  *   - the hit-point ability's modifier at every level -- twice over on a
  *     sheet that names a second one.
@@ -1263,6 +1279,52 @@ export function abpDefence(level) {
   return { abpResistance: row[1], abpDeflection: row[2], abpNatural: row[3] };
 }
 
+/*
+ * Core ABP (Pathfinder Unchained), where it differs from the table's: the
+ * defence ladder and the prowess steps to 18th are the same, but core also
+ * attunes armour and weapons, stops prowess at 18th, and hands out
+ * legendary gifts at 19th and 20th instead.
+ */
+
+/** The levels each prowess track gains a +2 at under core ABP. */
+export const CORE_PROWESS_LEVELS = {
+  mental: [6, 11, 13, 15, 17, 18],
+  physical: [7, 12, 13, 16, 17, 18],
+};
+
+/**
+ * Armour and weapon attunement, `[level, one, two]`: the enhancement bonus
+ * on a single attuned item, and the pair it may be split into across two
+ * (null before 8th, where it cannot). Each holds until the next row.
+ */
+const ABP_ATTUNEMENT_LADDER = [
+  [4, 1, null], [8, 1, [1, 1]], [9, 2, [1, 1]], [14, 3, [2, 2]], [15, 4, [3, 3]], [17, 5, [4, 3]],
+];
+
+/** Core ABP's attunement at a level: `{ one, two }` (0 and null before 4th). */
+export function abpAttunement(level) {
+  const l = Number(level) || 0;
+  let row = [0, 0, null];
+  for (const step of ABP_ATTUNEMENT_LADDER) {
+    if (step[0] <= l) row = step;
+  }
+  return { one: row[1], two: row[2] };
+}
+
+/**
+ * The bonus each attuned item gets, in the order they were ticked: the whole
+ * of it on one item, the split pair across two once the level allows, and
+ * nothing for a third (or for a second before 8th).
+ */
+export function attunedBonuses(level, count) {
+  const { one, two } = abpAttunement(level);
+  if (count >= 2 && two) return [...two, ...Array(count - 2).fill(0)];
+  return Array.from({ length: count }, (_, i) => (i ? 0 : one));
+}
+
+/** Core ABP's legendary gifts: how many a level brings. */
+export const LEGENDARY_GIFTS = { 19: 3, 20: 5 };
+
 /**
  * ABP and its typed counterpart are one bonus, not two: resistance from the
  * progression and a cloak of resistance are both *resistance*, deflection and
@@ -1533,7 +1595,8 @@ export function levelRuleGrants(rule, classLevel, charLevel) {
       return false;
     }
   }
-  return levelRuleLevels(parsed).includes(level);
+  // Read to 20th, or to the level asked about where a campaign goes higher.
+  return levelRuleLevels(parsed, Math.max(MAX_LEVEL, level)).includes(level);
 }
 
 /** The levels a rule grants, within 1..max. */
@@ -1689,7 +1752,7 @@ export function trackCount(rule, classLevel) {
   // would grant every level -- 21 talents a weapon at 20th for one typo.
   const { parsed } = parseLadderRule(rule?.gainsAt);
   if (!parsed) return start;
-  return start + levelRuleLevels(parsed).filter((l) => l <= level).length;
+  return start + levelRuleLevels(parsed, Math.max(MAX_LEVEL, level)).filter((l) => l <= level).length;
 }
 
 /* ----- unarmed practitioner damage (dataSheet!F80:L101) ----- */
@@ -2671,10 +2734,13 @@ export function weaponMoves(c, w, cs) {
   const atkDelta = (modeKey && cs?.delta?.[modeKey]) || 0;
   const dmgDelta = (calc && cs?.delta?.damage) || 0;
   const grow = (calc && cs?.sizeSteps) || 0;
-  const sized = grow
+  const stepped = grow
     ? stepDiceMap(calc.baseDmgDice || {}, grow, w.sizeNow || c.identity?.size)
     : { dice: calc?.baseDmgDice || {}, flat: 0 };
-  return { modeKey, atkDelta, dmgDelta, grow, sized };
+  // Each size step past Colossal (a campaign rule) adds 1d6 to the dice.
+  const past = (calc && Object.keys(calc.baseDmgDice || {}).length && cs?.sizePast) || 0;
+  const sized = past ? { ...stepped, dice: addDice(stepped.dice, { 6: past }) } : stepped;
+  return { modeKey, atkDelta, dmgDelta, grow: grow + past, sized };
 }
 
 /** "4d6", "2d8+3", "d6 + 1d4 - 1": a value that is dice text rather than a number. */
@@ -2748,12 +2814,18 @@ export function armorParts(c) {
   // A piece's bonus is what it is made of plus what it is enchanted to: a +1
   // breastplate is a +7 armour bonus, not a +6 with a +1 beside it, so the
   // enhancement goes into the same part and stacks with nothing but itself.
-  const pieceAc = (p) => (Number(p?.acBonus) || 0) + (Number(p?.enhancement) || 0);
-  const shieldAcs = rows.map((s) => (s?.active ? pieceAc(s) : 0));
+  //
+  // Core ABP attunes armour (`c.abpAttune`, see model/campaign.js): an
+  // enhancement bonus too, so the piece takes the higher of the two.
+  const att = c.abpAttune || null;
+  const enhancement = (p, attuned = 0) => Math.max(Number(p?.enhancement) || 0, Number(attuned) || 0);
+  const pieceAc = (p, attuned = 0) => (Number(p?.acBonus) || 0) + enhancement(p, attuned);
+  const shieldAcs = rows.map((s, i) => (s?.active ? pieceAc(s, att?.shields?.[i]) : 0));
   const shields = rows.filter((s) => s?.active);
   const pieces = armor ? [armor, ...shields] : shields;
   const maxDexes = pieces.map((p) => p.maxDex).filter((v) => v !== null && v !== undefined && v !== '');
-  const armorAc = armor ? pieceAc(armor) : 0;
+  // Attuned clothes are armour with a +0 bonus and the attunement on it.
+  const armorAc = armor ? pieceAc(armor, att?.armor) : (Number(att?.clothing) || 0);
   const shieldAc = shieldAcs.reduce((t, n) => t + n, 0);
   const armorMaxDex = maxDexes.length ? Math.min(...maxDexes.map(Number)) : Infinity;
   const armorAcp = pieces.reduce((t, p) => t + (Number(p.acp) || 0), 0);
@@ -2763,8 +2835,8 @@ export function armorParts(c) {
     shield: shieldAc,
     shields: shieldAcs,
     // The enhancement on its own, which the totals above already include.
-    armorEnhancement: armor ? Number(armor.enhancement) || 0 : 0,
-    shieldEnhancement: shields.reduce((t, s) => t + (Number(s.enhancement) || 0), 0),
+    armorEnhancement: armor ? enhancement(armor, att?.armor) : (Number(att?.clothing) || 0),
+    shieldEnhancement: rows.reduce((t, s, i) => t + (s?.active ? enhancement(s, att?.shields?.[i]) : 0), 0),
     armorType: armor ? armorCategory(armor.type) : 0,
     maxDex: Math.min(armorMaxDex, load?.maxDex ?? Infinity),
     acp: Math.min(armorAcp, load?.acp ?? 0),
@@ -3134,8 +3206,8 @@ export const BUFF_TARGETS = [
   // larger", which reaches the damage dice alone. The stacking kind is for
   // the odd item that makes size effects stack outright -- wraps of
   // suppressed size -- it sums with everything and carries the full true
-  // bundle. The result caps at Colossal whatever the mix. TODO: a campaign
-  // setting for tables that allow colossal+ sizes.
+  // bundle. The result caps at Colossal whatever the mix, unless the
+  // campaign allows sizes past it (see conditionState's `sizePast`).
   ['size', 'True size (+1 = one larger)'],
   ['sizeEffective', 'Effective size (dice only)'],
   ['sizeStacking', 'Size — stacking (wraps & such)'],

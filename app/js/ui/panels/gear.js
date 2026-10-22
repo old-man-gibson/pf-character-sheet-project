@@ -37,6 +37,7 @@ import {
   itemNum, itemSelect, itemText, line, lineHtml, movedValue, removeAction, removeButton, rowRemove,
 } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
+import { currencyName } from '../../model/campaign.js';
 import { rollButton } from '../roll.js';
 import { weaponNow } from '../weapon-now.js';
 import { systemExtrasPanel } from './subsystems.js';
@@ -953,7 +954,7 @@ function craftCrafterPanel(model, cr) {
         ${field('Standing discount %', num('crafting.discount', cr.discount))}
         ${field('DC per bypassed req.', num('crafting.dcPerBypass', cr.dcPerBypass))}
         ${field('Days count against', select('crafting.timeBasis', cr.timeBasis || 'value', CRAFT_TIME_BASES, null))}
-        ${field('Currency', text('crafting.currency', cr.currency, 'mana'))}
+        ${field('Currency', text('crafting.currency', cr.currency, currencyName(model.data).toLowerCase()))}
       </div>
       ${field('Name on the marketplace post', text('crafting.sellerName', cr.sellerName, 'Character name'))}
       <p class="hint">
@@ -1053,7 +1054,7 @@ function craftProject(ctx, model, cr, p, i) {
         ${field('Free-text DC note', itemText(list, i, 'dcNotes', p.dcNotes, 'Anything the notes above miss'))}
         ${field('Buyer (character)', itemText(list, i, 'buyerName', p.buyerName))}
         ${field('Buyer (Player#0000)', itemText(list, i, 'buyerTag', p.buyerTag))}
-        ${field(`${cr.currency || 'Gold'} remaining`, itemText(list, i, 'remaining', p.remaining))}
+        ${field(`${cr.currency || currencyName(model.data)} remaining`, itemText(list, i, 'remaining', p.remaining))}
       </div>
       ${craftPost(ctx, `craft-${i}`, 'Crafting post', k.craftPost, 9)}
       ${craftPost(ctx, `market-${i}`, 'Marketplace post', k.marketPost, 6)}
@@ -1098,14 +1099,17 @@ export function wealthPanel(model, ctx) {
     const ledger = [...v.ledger].map((l, i) => ({ ...l, i })).reverse();
     const kindLabel = { session: 'session', reward: 'reward', spend: 'spend', offering: 'offering', adjust: 'adjustment' };
     const plural = (k, word) => `${k} ${word}${k === 1 ? '' : 's'}`;
-    const oathRule = 'Half the mana a day for every day since the last offering, plus half the mana earned in sessions since it.';
+    // The money's name, as the campaign's rules give it, in a heading and in a sentence.
+    const cur = v.currency;
+    const money = cur.toLowerCase();
+    const oathRule = `Half the ${money} a day for every day since the last offering, plus half the ${money} earned in sessions since it.`;
     const castingRule = `${MATERIAL_CASTING_PER_LEVEL} per Spheres caster level for every whole month since the last offering.`;
     // How each part came to what it is, in the order it is worked out, so the
     // figure can be checked against the fields above it.
     const undated = !v.lastOffering ? 'No offering recorded yet, so nothing is counted.'
       : v.future ? `The last offering is dated after today (${esc(v.today)}), so nothing is counted yet.` : '';
     const oathWorking = undated || `${plural(v.days, 'day')} × ${n(v.offeringPerDay)}${
-      v.sessionMana ? ` + half of ${n(v.sessionMana)} session mana` : ''} = ${n(v.expected.oath)}`;
+      v.sessionMana ? ` + half of ${n(v.sessionMana)} session ${esc(money)}` : ''} = ${n(v.expected.oath)}`;
     const castingWorking = undated || (!v.casterLevel ? 'No Spheres caster level, so no components are owed.'
       : `${plural(v.months, 'whole month')} × ${n(v.castingPerMonth)} = ${n(v.expected.casting)}${
         v.nextMonth ? `; the next month is counted on ${esc(v.nextMonth)}` : ''}`);
@@ -1132,8 +1136,8 @@ export function wealthPanel(model, ctx) {
     v.lastOffering && !v.future ? `${plural(v.days, 'day')} since ${v.lastOffering}` : 'no offering counted')}` : ''}
       </div>
       <div class="fieldgrid wealthfields">
-        ${field('Current mana', num('wealth.current', v.current))}
-        ${field('Mana / day', num('wealth.manaPerDay', v.manaPerDay))}
+        ${field(`Current ${money}`, num('wealth.current', v.current))}
+        ${field(`${cur} / day`, num('wealth.manaPerDay', v.manaPerDay))}
       </div>
       <div class="wealthswitches">
         ${check('wealth.oathOfOfferings', v.oathOfOfferings, 'Oath of Offerings', oathRule)}
@@ -1147,8 +1151,8 @@ export function wealthPanel(model, ctx) {
   }))}
       </div>
       ${v.oathOfOfferings ? part('Oath of Offerings', v.expected.oath, `
-        ${field('OoO / day', roField(n(v.offeringPerDay), 'Mana / day ÷ 2'))}
-        ${field('Session mana since', num('wealth.sessionMana', v.sessionMana, 'min="0" title="Mana earned in sessions since the last offering; the oath takes half"'))}`,
+        ${field('OoO / day', roField(n(v.offeringPerDay), `${cur} / day ÷ 2`))}
+        ${field(`Session ${money} since`, num('wealth.sessionMana', v.sessionMana, `min="0" title="${esc(cur)} earned in sessions since the last offering; the oath takes half"`))}`,
   oathWorking, oathRule) : ''}
       ${v.materialCasting ? part('Material casting', v.expected.casting, `
         ${field('Spheres caster level', roField(String(v.casterLevel), 'From the Magic Spheres tab'))}
@@ -1166,7 +1170,7 @@ export function wealthPanel(model, ctx) {
         </span>
         <span class="pair" style="margin-left:auto">
           <button data-action="wealth-offering" ${v.due && v.expected.total > 0 ? '' : 'disabled'}
-            title="Pay ${n(v.expected.total)}: the balance after it becomes the new baseline, today the last offering, session mana back to 0">Make offering (${n(v.expected.total)})</button>
+            title="Pay ${n(v.expected.total)}: the balance after it becomes the new baseline, today the last offering, session ${esc(money)} back to 0">Make offering (${n(v.expected.total)})</button>
         </span>
       </div>
       <p class="hint">

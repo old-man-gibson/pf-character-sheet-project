@@ -18,10 +18,12 @@ import { pickSelect, mythicPickAt } from './stats.js';
 import { featDetails, featCatalogue } from '../../model.js';
 import { featLevel, isAhead, rowLevel } from '../../model/feats.js';
 import { fromLevelField, fromLevelHead, plannedRow } from '../from-level.js';
-import { campaignRules, mythicTierReached, trialProgress } from '../../model/campaign.js';
 import {
-  MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS, MYTHIC_TIERS,
-  effectiveMythicTier, mythicTierGrant,
+  campaignRules, isAntihero, mythicTierGrantOf, mythicTierReached, trialProgress,
+} from '../../model/campaign.js';
+import {
+  MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS,
+  effectiveMythicTier,
 } from '../../rules.js';
 
 /** The mythic paths a Path cell offers: the six standard ones, and every path this character has listed. */
@@ -62,6 +64,8 @@ function grantedFeatsSection(model, ctx) {
     // (Divination)" -- not what it does to you. Before traits had a name field
     // the effect was all there was to show, and it read as the source.
     const majorName = String(major.name || major.category || major.text || '').trim();
+    // An antihero's feat, bought with the hero points it gave up (a campaign rule).
+    const antihero = isAntihero(c);
 
     const fixed = (key, label, hint) => `<tr>
       ${/* No grip: these two are not in the list and cannot be moved out of
@@ -75,7 +79,7 @@ function grantedFeatsSection(model, ctx) {
     </tr>`;
 
     return `<h4 class="subhead">Granted feats
-        <span class="badge">${(hasMajor ? 2 : 1) + (g.others || []).length}</span>
+        <span class="badge">${(hasMajor ? 2 : 1) + (antihero ? 1 : 0) + (g.others || []).length}</span>
       </h4>
       <div class="tablewrap"><table class="granted stacked${(g.others || []).length ? '' : ' notools'}">
         <thead><tr><th class="grip"></th><th class="src">Source</th><th class="fname">Feat</th>
@@ -84,6 +88,7 @@ function grantedFeatsSection(model, ctx) {
         <tbody>
           ${hasMajor ? fixed('drawback', 'Drawback', majorName.slice(0, 60)) : ''}
           ${fixed('specialty', 'Specialty')}
+          ${antihero ? fixed('antihero', 'Antihero', 'In place of hero points') : ''}
           ${(g.others || []).map((f, i) => `<tr ${rows.rowDrop('grantedFeats.others', i)}${plannedRow(isAhead(rowLevel(f), level), rowLevel(f))}>
             ${rows.rowGrip()}
             <td data-stack="head">${rows.itemText('grantedFeats.others', i, 'source', f.source, 'Oath 2, Attunement…')}</td>
@@ -218,6 +223,8 @@ export function renderFeaturesPanel(model, ctx) {
     // What each tier is reached at: a level, or trials in all (a campaign rule).
     const reached = (t) => mythicTierReached(c, t);
     const reachedHead = reached(1).head;
+    // One row per tier, to the campaign's highest (the table's is 10).
+    const tiers = Array.from({ length: rules.maxTier }, (_, i) => i + 1);
     // Trials completed, when the tier comes from them (a campaign rule).
     const trials = trialProgress(c);
     const auto = trials ? `from trials: ${trials.tier}` : `auto: ${m.computedTier ?? 0}`;
@@ -285,15 +292,17 @@ export function renderFeaturesPanel(model, ctx) {
     placeholder: m.computedTier ?? 0, width: '3.6rem', auto: !awarded, label: 'Mythic tier',
     title: awarded
       ? 'The tier the GM has awarded (for trials, say). Blank is 0. The campaign rules on the ⚙ tab set where the tier comes from.'
-      : trials ? 'From the trials completed; enter a number to override.'
+      : trials ? 'The tier the trials have been taken to with Tier up; enter a number to override.'
         : 'Automatic from level; enter a number to override.',
   })}
             <span class="value">→ ${esc(c.identity.mythicTier ?? 0)}</span></span>`)}
           ${trials ? fields.field('Trials completed', `<span class="pair">
             <input type="number" min="0" value="${esc(trials.have)}" data-set="mythic.trials" data-kind="number"
               aria-label="Trials completed" style="width:4.2rem">
-            <span class="hint">${trials.next === null ? 'tier 10, the last'
-    : `${trials.toward} of ${trials.need} for tier ${trials.next}, ${trials.short} to go`}</span></span>`) : ''}
+            <span class="hint">${trials.next === null ? `tier ${trials.tier}, the last`
+    : trials.ready ? `tier ${trials.next} is earned`
+      : `${trials.toward} of ${trials.need} for tier ${trials.next}, ${trials.short} to go`}</span>
+            ${trials.ready ? `<button class="levelup" data-action="tier-up" title="Take tier ${trials.next}: one step, undone like a play action">Tier up to ${trials.next}</button>` : ''}</span>`) : ''}
           ${fields.field(`Bonus HP / tier (path: ${MYTHIC_PATH_HP[String(m.path || '').trim()] ?? '—'})`,
     fields.autoNum('data-set="mythic.bonusHpPerTier"', m.bonusHpPerTier, {
       placeholder: MYTHIC_PATH_HP[String(m.path || '').trim()] ?? 0, width: '3.6rem', auto: true,
@@ -351,7 +360,7 @@ export function renderFeaturesPanel(model, ctx) {
               <th title="What the path ability does. Formulas work here.">Effect</th>
               <th title="+2 to one ability, at every even tier">Stat</th>
             </tr></thead>
-            <tbody>${MYTHIC_TIERS.map((t) => {
+            <tbody>${tiers.map((t) => {
               const a = (m.abilities || [])[t - 1] || {};
               const i = t - 1;
               return `<tr class="${t > tier ? 'future' : ''}" data-rowkey="mythladder">
@@ -367,7 +376,7 @@ export function renderFeaturesPanel(model, ctx) {
             }).join('')}</tbody>
           </table></div>
           <p class="hint">
-            Ten tiers, one row each, beside the character level it is reached at. A
+            ${tiers.length === 10 ? 'Ten' : tiers.length} tier${tiers.length === 1 ? '' : 's'}, one row each, beside the ${reachedHead === 'Trials' ? 'trials' : 'character level'} it is reached at. A
             <strong>+2 ability increase</strong> comes at every even tier, so only
             those rows offer a Stat. The same increases are on the
             <strong>Stats</strong> tab. Either place edits the one set. Rows above
@@ -386,24 +395,31 @@ export function renderFeaturesPanel(model, ctx) {
             <thead><tr>
               <th class="num">Tier</th>
               <th class="num" title="${esc(reachedHead === 'Trials' ? 'The trials completed in all when this tier is reached' : 'The character level this tier is reached at')}">${reachedHead}</th>
-              <th title="What the tier hands over — a feat on odd tiers, an RP power on even ones">Grants</th>
+              <th title="${esc(rules.mythicLadder === 'core' ? 'What the tier hands over: a mythic feat on odd tiers, none on even ones'
+    : 'What the tier hands over — a feat on odd tiers, an RP power on even ones')}">Grants</th>
               <th>Name</th>
               <th title="What the granted feat does. Formulas work here.">Effect</th>
             </tr></thead>
-            <tbody>${MYTHIC_TIERS.map((t) => {
+            <tbody>${tiers.map((t) => {
               const a = (m.abilities || [])[t - 1] || {};
               const i = t - 1;
-              return `<tr class="${t > tier ? 'future' : ''}" data-rowkey="mythfeats">
+              // Nothing to take on an even tier of the core ladder (a campaign
+              // rule): the row stays, greyed, and what is written there waits.
+              const grant = mythicTierGrantOf(c, t, a.feat);
+              return `<tr class="${t > tier || !grant ? 'future' : ''}" data-rowkey="mythfeats"${grant ? ''
+                : ' title="The core ladder grants no feat at this tier"'}>
                 <td class="num" data-stack="head" data-headlabel="Tier">${t}</td>
                 <td class="num derived" data-label="${reachedHead}" title="${esc(reached(t).title)}">${esc(reached(t).value)}</td>
-                <td data-label="Grants"><span class="fsource">${esc(a.feat || mythicTierGrant(t))}</span></td>
+                <td data-label="Grants"><span class="fsource">${esc(grant || '—')}</span></td>
                 <td data-stack="name">${rows.itemText('mythic.abilities', i, 'featChoice', a.featChoice, '', true)}</td>
                 <td data-label="Effect">${foldingNote(model, `data-item="mythic.abilities|${i}|featEffect" placeholder="What it does"`, a.featEffect, `mythic.abilities|${i}|featEffect`, { name: a.featChoice })}</td>
               </tr>`;
             }).join('')}</tbody>
           </table></div>
           <p class="hint">
-            Odd tiers grant a mythic feat. Even tiers grant an RP power.
+            ${rules.mythicLadder === 'core' ? `Odd tiers grant a mythic feat. Even tiers grant none on the core
+            ladder: their +2 to an ability is in the ladder above, and anything written in an even row
+            waits.` : 'Odd tiers grant a mythic feat. Even tiers grant an RP power.'}
             <strong>Grants</strong> is what the tier hands over. <strong>Name</strong> is
             what you took for it. <strong>Effect</strong> says what that does. A long effect
             starts folded to one line, like a talent's note; its ▸ opens it, and the
@@ -462,7 +478,7 @@ function mythicTierGrantsPanel(model, tier) {
       <p class="mythnow">${esc(now)}</p>
       <table class="mythtiers">
         <thead><tr><th class="num">Tier</th><th class="num" title="${esc(reachedHead === 'Trials' ? 'The trials completed in all when this tier is reached' : 'The character level this tier is reached at')}">${reachedHead === 'Trials' ? 'Trials' : 'Lvl'}</th><th>Base abilities gained or improved</th></tr></thead>
-        <tbody>${MYTHIC_TIERS.map(row).join('')}</tbody>
+        <tbody>${Array.from({ length: campaignRules(model.data).maxTier }, (_, i) => row(i + 1)).join('')}</tbody>
       </table>
       ${rows.collapsibleSub(model, 'mythic-base-text', 'The rules, in brief', `
         <dl class="mythtext">${names.map((name) => `<dt>${esc(name)}</dt><dd>${esc(MYTHIC_BASE_ABILITIES[name]?.text || '')}</dd>`).join('')}</dl>`, 'mythbase')}

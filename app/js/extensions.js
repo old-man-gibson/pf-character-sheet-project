@@ -635,8 +635,10 @@ export function looksLikeLibrary(doc) {
  * Build one. `packs` are the local packs' full documents; `enabled` maps
  * every pack id this browser knows, bundled ones included, to whether it is
  * on; `from` says where it was exported (a host name), for the import notice.
+ * `campaignRules` is the campaign rules every character shares, `{ on, rules }`
+ * (see shared-rules.js), carried when this browser has any.
  */
-export function buildLibrary({ packs = [], enabled = {}, from = '' } = {}) {
+export function buildLibrary({ packs = [], enabled = {}, from = '', campaignRules = null } = {}) {
   return {
     format: LIBRARY_FORMAT,
     formatVersion: 1,
@@ -644,6 +646,8 @@ export function buildLibrary({ packs = [], enabled = {}, from = '' } = {}) {
     from: str(from),
     packs: arr(packs).filter(looksLikeExtension).map((p) => normalizeExtension(p)),
     enabled: Object.fromEntries(Object.entries(obj(enabled)).map(([id, on]) => [id, !!on])),
+    ...(campaignRules && typeof campaignRules === 'object'
+      ? { campaignRules: { on: campaignRules.on === true, rules: structuredClone(obj(campaignRules.rules)) } } : {}),
   };
 }
 
@@ -2242,7 +2246,9 @@ export function blocksFromCharacter(data, { classes = true, race = true, templat
   }
   if (trackers) {
     for (const t of arr(d.customTrackers)) {
-      if (!str(t.name).trim()) continue;
+      // A built-in pool (spell points, hero points) is the system's, made
+      // again wherever that system is in play, not content to carry.
+      if (!str(t.name).trim() || t.pool) continue;
       out.push(normalizeBlock({
         kind: 'tracker', name: t.name, maxFormula: t.maxFormula ?? t.max, minFormula: t.minFormula,
         refresh: t.refresh, text: t.note, style: t.style,

@@ -1478,6 +1478,9 @@ select.jumpto[hidden] { display: none; }
   padding: 6px 8px; border-radius: 6px; border-left: 3px solid transparent;
 }
 .camprow.changed { border-left-color: var(--cs-accent); background: var(--cs-accent-soft); }
+/* Whom the rules are for: every character, or this one. Set apart from the
+   switches under it, since it decides where they are kept. */
+.camprow.campscope { border: 1px solid var(--cs-line); margin-bottom: 4px; }
 .camprow .campname { font-weight: 600; }
 /* Styled as a hint, but not one: it is what the switch does, so it stays open
    rather than folding into a Help line the way a long `.hint` does. */
@@ -1496,6 +1499,10 @@ select.jumpto[hidden] { display: none; }
 .stepcell { display: flex; flex-direction: column; gap: 1px; font-size: 0.72rem; color: var(--cs-muted); }
 .stepcell input { width: 100%; box-sizing: border-box; text-align: right; }
 .stepcell.own input { box-shadow: inset 3px 0 0 var(--cs-accent); }
+
+/* Core ABP's attunement (stats.js abpAttunePanel): a tick box per armour,
+   shield or weapon, with the bonus it gets beside it. */
+.attunelist { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 2px 0 4px; }
 
 /* Progress toward the next level (overview.js levelProgressRow), under the
    Details fields when levels are earned by XP or milestones: the count, an

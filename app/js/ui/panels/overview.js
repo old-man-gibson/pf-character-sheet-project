@@ -16,9 +16,9 @@
 import { esc } from '../html.js';
 import { renderSessionBoard } from './session.js';
 import { field } from '../fields.js';
-import { effectiveMythicTier } from '../../rules.js';
+import { effectiveMythicTier, hitDieGain } from '../../rules.js';
 import { minus, signed } from '../format.js';
-import { collapsible, collapsibleSub, foldButton, isCollapsed, isOpen } from '../rows.js';
+import { collapsible, collapsibleSub, foldButton, isCollapsed, isOpen, stepGrid } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
 import { foldingNote } from '../talents.js';
 import { proseText } from '../rows.js';
@@ -108,7 +108,7 @@ import {
 import { hasTokens } from '../../inline.js';
 import { abilityCollapse, abilityHarm, blankClassRow, maneuverDetails } from '../../model.js';
 import { colorControl } from '../color-control.js';
-import { campaignRules, levelProgress } from '../../model/campaign.js';
+import { campaignRules, isAntihero, levelProgress } from '../../model/campaign.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
@@ -1137,10 +1137,18 @@ function detailsPanel(model, ctx) {
         ${field('Alignment', text('identity.alignment', c.identity.alignment), 'col3')}
         ${/* Without hero points (a campaign rule) the level pairs with Gender
               instead, so the phone's rows still come out whole. */''}
-        ${field('Level', num('identity.level', c.identity.level), rules.heroPoints ? 'col2' : 'col3')}
+        ${/* The campaign's highest level bounds the box; one typed past it is
+              kept and flagged, as the GM may have reasons. */''}
+        ${field('Level', num('identity.level', c.identity.level, `min="0" max="${rules.maxLevel}"${Number(c.identity.level) > rules.maxLevel
+    ? ` class="over" title="Above this campaign's highest level, ${rules.maxLevel}"` : ''}`), rules.heroPoints ? 'col2' : 'col3')}
+        ${/* An antihero (where the campaign offers it) has given the points up
+              for a feat: the box says so in place of the counter. */''}
         ${rules.heroPoints ? field('Hero points', `<span class="pair">
+          ${isAntihero(c) ? '<span class="value" title="Hero points given up for a bonus feat, on Feats">none: antihero</span>' : `
           ${num('identity.heroPoints.current', c.identity.heroPoints?.current ?? 0)}
-          <span>/</span>${num('identity.heroPoints.max', c.identity.heroPoints?.max ?? 3)}</span>`, 'col4') : ''}
+          <span>/</span>${num('identity.heroPoints.max', c.identity.heroPoints?.max ?? 3)}`}
+          ${rules.antiheroes ? check('identity.antihero', c.identity.antihero === true, 'Antihero',
+    'Give up hero points for a bonus feat. The campaign rules offer it.') : ''}</span>`, 'col4') : ''}
         ${field('Gender', text('identity.gender', c.identity.gender), 'col3')}
         ${field('Age', text('identity.age', c.identity.age), 'col3')}
         ${field('Height', text('identity.height', c.identity.height), 'col3')}
@@ -1149,7 +1157,8 @@ function detailsPanel(model, ctx) {
         ${rules.mythic ? `${field('Mythic path', text('identity.mythicPath', c.identity.mythicPath), 'col3')}
         ${rules.mythicTier === 'awarded'
     ? field('Mythic tier (awarded)', `<span class="value" title="The tier the GM has awarded, typed on Feats &amp; Mythic">${esc(c.identity.mythicTier ?? 0)}</span>`, 'col3')
-    : field('Mythic tier (auto)', `<span class="value" title="From level; override on Feats &amp; Mythic">${esc(c.identity.mythicTier ?? 0)}</span>`, 'col3')}` : ''}
+    : field('Mythic tier (auto)', `<span class="value" title="${rules.mythicTier === 'trials'
+      ? 'From trials, taken with Tier up on Feats &amp; Mythic' : 'From level; override on Feats &amp; Mythic'}">${esc(c.identity.mythicTier ?? 0)}</span>`, 'col3')}` : ''}
         ${/* The last row: a nickname in the first column, and the portrait's
               link across the rest -- a URL still wants more than a column. */''}
         <div class="portraitrow">
@@ -1177,8 +1186,9 @@ function levelProgressRow(model, ctx) {
     const xp = p.mode === 'xp';
     const n = (v) => Number(v).toLocaleString('en-US');
     const span = p.need === null ? 0 : p.need - p.from;
-    const done = p.need === null ? 1 : span > 0 ? Math.min(1, Math.max(0, (p.have - p.from) / span)) : (p.ready ? 1 : 0);
-    const said = p.next === null ? `Level ${p.level} is the top of the table.`
+    const done = p.unset ? 0 : p.need === null ? 1 : span > 0 ? Math.min(1, Math.max(0, (p.have - p.from) / span)) : (p.ready ? 1 : 0);
+    const said = p.next === null ? `Level ${p.level} is the highest this campaign goes.`
+      : p.unset ? `Level ${p.next} has no XP figure: give it one in the campaign rules on the ⚙ tab.`
       : p.ready ? `Level ${p.next} is earned.`
         : xp ? `${n(p.short)} XP to level ${p.next} (${n(p.need)} in all).${p.have < p.from
           ? ` Level ${p.level} itself takes ${n(p.from)}: the level was set before the XP was.` : ''}`
@@ -1845,7 +1855,11 @@ function classesPanel(model, ctx) {
     const g = c.gestalt || { saves: {} };
     const sv = (k) => g.saves?.[k] || {};
     const level = Number(c.identity.level) || 0;
-    const gestalt = (c.progression?.tracks ?? 1) > 1;
+    // Gestalt off (a campaign rule): one class a level, each its own progression.
+    const core = !campaignRules(c).gestalt;
+    const gestalt = !core && (c.progression?.tracks ?? 1) > 1;
+    // Classes the Planner gives no level to, with gestalt off.
+    const idle = core ? (c.classes || []).filter((x) => x.name && !x.gestaltLevels).map((x) => x.name) : [];
     // The sub-system picker: a row of toggles under the class it belongs to.
     // Marking a system badges its tabs in the ⚙ manager and puts them on the
     // session view's bar before anything is typed into them.
@@ -1942,7 +1956,7 @@ function classesPanel(model, ctx) {
           <span class="value">Fort ${sv('fortitude').base ?? 0} &middot;
             Ref ${sv('reflex').base ?? 0} &middot; Will ${sv('will').base ?? 0}</span></div>
         <div class="statline"><span class="label">Base attack bonus${gestalt ? ' (gestalt)' : ''}</span>
-          <span class="value" title="${esc(`${g.babPerLevel ?? 0} per-level progression, summed and floored once${
+          <span class="value" title="${esc(`${g.babPerLevel ?? 0} per-level progression, ${core ? 'each class rounded down on its own' : 'summed and floored once'}${
     c.attack?.babOverride == null ? '' : `. Pinned at ${c.attack.babOverride} on the Attack panel`}`)}"
             >+${esc(g.bab ?? 0)}${c.attack?.babOverride == null ? '' : ` <span class="badge">pinned +${esc(c.attack.babOverride)}</span>`}</span></div>
         <div class="statline"><span class="label">HP / level${gestalt ? ' (best HD)' : ''}</span>
@@ -1950,13 +1964,19 @@ function classesPanel(model, ctx) {
         <div class="statline"><span class="label">Hit points from these classes</span>
           <span class="value" title="${esc(`${g.hdTotal ?? 0} from the hit dice over ${level} level${level === 1 ? '' : 's'}, before Con, favoured class, Toughness and the mythic tiers`)}"
             >${g.hdTotal ?? 0} &rarr; ${g.hp?.base ?? 0} total</span></div>
-        <div class="statline"><span class="label">Skill ranks / level${gestalt ? ' (best)' : ''}</span>
-          <span class="value">${g.ranksPerLevel || 0}</span></div>
+        ${core ? `<div class="statline"><span class="label">Skill ranks from classes</span>
+          <span class="value" title="Each class's ranks a level, for the levels it has">${g.ranksTotal || 0}</span></div>`
+    : `<div class="statline"><span class="label">Skill ranks / level${gestalt ? ' (best)' : ''}</span>
+          <span class="value">${g.ranksPerLevel || 0}</span></div>`}
       </div>
       <p class="hint">
         ${gestalt ? `Gestalt: each level takes the best progression among the classes present at that
         level (from the Planner). Good saves give +2 once plus &frac12;/level. Poor saves give &#8531;/level.`
-    : `Good saves give +2 once plus &frac12;/level. Poor saves give &#8531;/level.`}
+    : core ? `Gestalt is off in the campaign rules: one class a level, from the Planner's first track.
+        Each class's good saves give their own +2 plus &frac12;/level, poor saves &#8531;/level, and each
+        class's base attack bonus is rounded down on its own.${idle.length ? ` <strong>${esc(idle.join(', '))}</strong>
+        ${idle.length === 1 ? 'has' : 'have'} no levels: name ${idle.length === 1 ? 'it' : 'them'} on the Planner's first track, or pin a count here.` : ''}`
+      : `Good saves give +2 once plus &frac12;/level. Poor saves give &#8531;/level.`}
         These bases drive the Saves, Attack and Hit points panels automatically.${gestalt
     ? ` A hit die or a progression that another class already beats
         changes nothing when you move it. Those dropdowns say so on hover.` : ''}
@@ -2014,6 +2034,10 @@ function hpBuild(model) {
   const other = model.offsetOf('hp.total');
   const abilityMod = Number(g.abilityMod) || 0;
   const shut = !!c.uiPrefs?.collapsed?.['hp:build'];
+  // How the dice count (campaign rules): which die each level, and how much of it.
+  const rules = campaignRules(c);
+  const dice = c.gestalt?.dice || [];
+  const counted = { max: '', average: ', averaged after 1st', rolled: ', rolled after 1st' }[rules.hitPoints];
 
   // Only the parts that are doing something, so a plain character reads as
   // "dice plus Con" rather than as a form with four zeroes in it. A part that
@@ -2024,7 +2048,7 @@ function hpBuild(model) {
   const tough = Number(c.hp.toughnessResolved ?? c.hp.toughness) || 0;
   const misc = Number(c.hp.miscResolved ?? c.hp.misc) || 0;
   const parts = [
-    [term(c.gestalt?.hdTotal ?? 0), `hit dice over ${level} level${level === 1 ? '' : 's'}`],
+    [term(c.gestalt?.hdTotal ?? 0), `hit dice over ${level} level${level === 1 ? '' : 's'}${counted}`],
     abilityMod ? [term(abilityMod * level), `${c.hp.ability || 'ability'}${
       c.hp.ability2 ? ` + ${c.hp.ability2}` : ''} ${fmt(abilityMod)} × ${level}`] : null,
     // The three typed parts as they resolved, since any of them may have been
@@ -2037,7 +2061,8 @@ function hpBuild(model) {
     other ? [term(other), 'other — what the source sheet added and this one cannot see'] : null,
   ].filter(Boolean);
 
-  const why = 'The best hit die on each level from the Classes table, plus every part below —'
+  const why = `${rules.gestalt ? 'The best hit die on each level' : 'The hit die of the class taken at each level'}${
+    counted ? ` (${counted.slice(2)})` : ''} from the Classes table, plus every part below —`
     + ' including Other, which is where a total the parts cannot reach keeps the difference.';
 
   /*
@@ -2087,7 +2112,19 @@ function hpBuild(model) {
       </div>
       <div class="fieldgrid" style="margin-top:8px">
         ${field('Misc', hpPart(c, 'misc', 'A number, or a formula — e.g. con.mod * 2', '100%'), 'wide')}
-      </div>`}`;
+      </div>`}
+      ${/* Rolled hit points (a campaign rule): a box per level after the
+            first, blank counting the average, which the box shows. A fold of
+            its own, open, so the rolls are there at a level-up whether or
+            not the parts above are. */''}
+      ${rules.hitPoints === 'rolled' && level > 1 ? collapsibleSub(model, 'hp:rolls', 'Rolled each level', `
+      ${stepGrid('hp.rolls', c.hp.rolls, 2, level, (l) => hitDieGain(dice[l - 1], l, 'average'),
+    (l) => `Hit points rolled at level ${l}, on a d${dice[l - 1] || 0}`)}
+      <p class="hint">1st level takes the whole die. A level left blank counts the average, shown in
+        its box; a roll above the die counts the average too.</p>`) : ''}
+      ${rules.hitPoints !== 'max' && other ? `<p class="hint warn">Other holds ${term(other)}. A sheet imported
+        with rolled hit points keeps its shortfall there; now the dice are ${rules.hitPoints === 'rolled' ? 'rolled' : 'averaged'}
+        here as well, clear Other if that is what it was.</p>` : ''}`;
 }
 
 function hitPointsPanel(ctx, model) {

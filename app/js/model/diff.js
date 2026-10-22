@@ -291,7 +291,7 @@ function addFeats(out, doc) {
     }
   }
   const granted = doc.grantedFeats || {};
-  for (const kind of ['drawback', 'specialty']) {
+  for (const kind of ['drawback', 'specialty', 'antihero']) {
     const name = granted[kind]?.name;
     if (name) entry(out, `feat:granted:${kind}`, 'Progression', `Granted ${kind}`, name);
   }
