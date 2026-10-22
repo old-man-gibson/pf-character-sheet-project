@@ -94,9 +94,16 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
   /** Milestones a level takes, unless `milestoneSteps` names one level's own. */
   milestoneRate: 1,
   /**
+   * The lowest level a character plays at: the level box goes no lower, and
+   * a new character starts here when every character shares the rules. The
+   * table's characters start at 3rd. Any level from 1 up to the highest.
+   */
+  minLevel: 3,
+  /**
    * The highest level a character reaches: Level up stops there, and the
    * ladders end there. Past 20th the Planner grows rows and class
    * progressions carry on; tables that stop at 20th hold their last row.
+   * Any level from 1 up; there is no ceiling.
    */
   maxLevel: MAX_LEVEL,
   /** The highest mythic tier: the ladders, trials and Tier up stop there. */
@@ -131,8 +138,7 @@ export const XP_TRACKS = Object.freeze({
 /** The table's highest mythic tier, and the core rules'. */
 export const MAX_TIER = CAMPAIGN_DEFAULTS.maxTier;
 
-/** How high a campaign may set the highest level and tier. */
-export const LEVEL_CEILING = 40;
+/** How high a campaign may set the highest tier. Levels have no ceiling. */
 export const TIER_CEILING = 20;
 
 /** A count read from a field: a whole number 0 or more, or `fallback`. */
@@ -162,8 +168,8 @@ export function campaignRules(d) {
   const c = d?.campaign && typeof d.campaign === 'object' ? d.campaign : {};
   const bool = (k) => (typeof c[k] === 'boolean' ? c[k] : CAMPAIGN_DEFAULTS[k]);
   const words = (v) => (typeof v === 'string' ? v.trim() : '');
-  // A highest level or tier: at least 1, at most the ceiling.
-  const most = (k, ceiling) => {
+  // A lowest or highest level, or a highest tier: at least 1, at most the ceiling.
+  const most = (k, ceiling = Infinity) => {
     const n = count(c[k], null);
     return n === null || n < 1 ? CAMPAIGN_DEFAULTS[k] : Math.min(ceiling, n);
   };
@@ -186,7 +192,9 @@ export function campaignRules(d) {
     advancement: ADVANCEMENT_MODES.includes(c.advancement) ? c.advancement : CAMPAIGN_DEFAULTS.advancement,
     xpTrack: Object.hasOwn(XP_TRACKS, c.xpTrack) ? c.xpTrack : CAMPAIGN_DEFAULTS.xpTrack,
     milestoneRate: count(c.milestoneRate, CAMPAIGN_DEFAULTS.milestoneRate),
-    maxLevel: most('maxLevel', LEVEL_CEILING),
+    // No higher than the highest: a lowest above it reads as the highest.
+    minLevel: Math.min(most('minLevel'), most('maxLevel')),
+    maxLevel: most('maxLevel'),
     maxTier: most('maxTier', TIER_CEILING),
     // The wallet's own name, which no control ever set, still counts under a
     // blank: a sheet that came in calling it something else keeps that.
@@ -267,6 +275,7 @@ export const RULE_TITLES = Object.freeze({
   advancement: 'Levels',
   xpTrack: 'XP table',
   milestoneRate: 'Milestones a level',
+  minLevel: 'Lowest level',
   maxLevel: 'Highest level',
   gestalt: 'Gestalt',
   hitPoints: 'Hit points',

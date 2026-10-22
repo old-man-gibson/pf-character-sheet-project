@@ -1137,10 +1137,14 @@ function detailsPanel(model, ctx) {
         ${field('Alignment', text('identity.alignment', c.identity.alignment), 'col3')}
         ${/* Without hero points (a campaign rule) the level pairs with Gender
               instead, so the phone's rows still come out whole. */''}
-        ${/* The campaign's highest level bounds the box; one typed past it is
-              kept and flagged, as the GM may have reasons. */''}
-        ${field('Level', num('identity.level', c.identity.level, `min="0" max="${rules.maxLevel}"${Number(c.identity.level) > rules.maxLevel
-    ? ` class="over" title="Above this campaign's highest level, ${rules.maxLevel}"` : ''}`), rules.heroPoints ? 'col2' : 'col3')}
+        ${/* The campaign's lowest and highest levels bound the box; one typed
+              outside them is kept and flagged, as the GM may have reasons. */''}
+        ${field('Level', num('identity.level', c.identity.level, `min="${rules.minLevel}" max="${rules.maxLevel}"${(() => {
+    const lvl = Number(c.identity.level) || 0;
+    if (lvl > rules.maxLevel) return ` class="over" title="Above this campaign's highest level, ${rules.maxLevel}"`;
+    if (lvl < rules.minLevel) return ` class="over" title="Below this campaign's lowest level, ${rules.minLevel}"`;
+    return '';
+  })()}`), rules.heroPoints ? 'col2' : 'col3')}
         ${/* An antihero (where the campaign offers it) has given the points up
               for a feat: the box says so in place of the counter. */''}
         ${rules.heroPoints ? field('Hero points', `<span class="pair">

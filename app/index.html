@@ -310,10 +310,11 @@
     <h2>New character</h2>
     <p class="hint">A blank sheet: 10 in every score, the standard skill list, 6 hit points a
       level to start, and slots waiting for traits, race traits and perks. Classes, level
-      plan, gear and everything else are yours to enter. Characters start at 3rd or higher.</p>
+      plan, gear and everything else are yours to enter. Any level from 1 up; it starts at the
+      lowest level the shared campaign rules give, 3rd unless they say otherwise.</p>
     <label>Name <input name="name" type="text" required maxlength="80" placeholder="Character name" autocomplete="off"></label>
     <label>Player <input name="player" type="text" maxlength="80" autocomplete="off"></label>
-    <label>Level <input name="level" type="number" min="3" max="20" value="3"></label>
+    <label>Level <input name="level" type="number" min="1" value="3"></label>
     <div class="actions">
       <button type="button" id="newCancel" class="btn">Cancel</button>
       <button type="submit" class="btn primary">Create</button>
@@ -363,6 +364,8 @@
   import { normalizeHex, readableOn } from './js/tracker-style.js';
   import { esc } from './js/html-escape.js';
   import { gmToolsList } from './js/gm-tools.js';
+  import { CAMPAIGN_DEFAULTS, campaignRules } from './js/model/campaign.js';
+  import { readShared } from './js/shared-rules.js';
 
   const sheet = document.getElementById('sheet');
   const picker = document.getElementById('picker');
@@ -374,6 +377,16 @@
   const importDialog = document.getElementById('importDialog');
   const welcome = document.getElementById('welcome');
   document.getElementById('newCancel').addEventListener('click', () => newDialog.close());
+  /**
+   * The New character dialog, at the lowest level the campaign rules every
+   * character shares give (the table's 3rd where nothing is shared). Any
+   * level from 1 may be typed over it.
+   */
+  function openNewDialog() {
+    const shared = readShared();
+    newForm.elements.level.value = shared?.on ? campaignRules({ campaign: shared.rules }).minLevel : CAMPAIGN_DEFAULTS.minLevel;
+    newDialog.showModal();
+  }
   // Cancel closes with no returnValue, which askWhereToPut reads as "not now";
   // Import closes with 'go'. A dialog dismissed with Escape lands on the same
   // empty value, so the two ways of backing out behave alike.
@@ -429,7 +442,7 @@
 
   const removeForm = document.getElementById('removeForm');
   document.getElementById('removeCancel').addEventListener('click', () => removeDialog.close());
-  document.getElementById('welcomeNew').addEventListener('click', () => newDialog.showModal());
+  document.getElementById('welcomeNew').addEventListener('click', () => openNewDialog());
   document.getElementById('welcomeImport').addEventListener('click', () => importFile.click());
 
   /*
@@ -622,7 +635,7 @@
     picker.querySelectorAll('button.drop').forEach((b) => {
       b.addEventListener('click', () => remove(b.dataset.drop));
     });
-    picker.querySelector('#newBtn')?.addEventListener('click', () => newDialog.showModal());
+    picker.querySelector('#newBtn')?.addEventListener('click', () => openNewDialog());
     picker.querySelector('#dupBtn')?.addEventListener('click', duplicateOpen);
     picker.querySelector('#importBtn')?.addEventListener('click', () => importFile.click());
     picker.querySelector('#exportAllBtn')?.addEventListener('click', exportAll);
@@ -694,6 +707,9 @@
       name: newForm.elements.name.value,
       level: newForm.elements.level.value,
       player: newForm.elements.player.value,
+      // Any level from 1 up: the campaign rules say what is usual, not this box.
+      minLevel: 1,
+      maxLevel: Infinity,
     });
     newDialog.close();
     newForm.reset();

@@ -60,6 +60,7 @@ const STRUCTURED_TABS = new Set([
 
 // A filename- and URL-safe id: the app's own slug rule, not a copy of it.
 import { slug } from './model/util.js';
+import { CAMPAIGN_DEFAULTS } from './model/campaign.js';
 
 export { slug };
 
@@ -1424,11 +1425,13 @@ export async function convertWorkbook(bytes, options = {}) {
  * @param {object} [options]
  * @param {string} [options.name]       the character's name (default "New Character")
  * @param {string} [options.id]         document id (default: the name, slugified)
- * @param {number} [options.level]      starting level (default 3, the campaign's floor)
+ * @param {number} [options.level]      starting level (default 3, the table's lowest)
+ * @param {number} [options.minLevel]   the lowest it may be (default 3, the table's)
+ * @param {number} [options.maxLevel]   the highest it may be (default 20; Infinity for none)
  * @param {string} [options.player]     player name
  * @param {string} [options.createdAt]  ISO timestamp; defaults to now
  */
-export const BLANK_MIN_LEVEL = 3;
+export const BLANK_MIN_LEVEL = CAMPAIGN_DEFAULTS.minLevel;
 export const BLANK_HP_PER_LEVEL = 6;
 
 export function blankDocument(options = {}) {
@@ -1447,8 +1450,10 @@ export function blankDocument(options = {}) {
     ...doc.identity,
     name,
     player: String(options.player || ''),
-    // Characters start no lower than 3rd in this campaign.
-    level: Math.max(BLANK_MIN_LEVEL, Math.min(20, Math.floor(Number(options.level) || BLANK_MIN_LEVEL))),
+    // Characters start no lower than 3rd at the table; the New character
+    // dialog asks for any level from 1, with no ceiling.
+    level: Math.max(Math.max(1, Math.floor(Number(options.minLevel ?? BLANK_MIN_LEVEL)) || 1),
+      Math.min(Number(options.maxLevel ?? 20) || 20, Math.floor(Number(options.level) || BLANK_MIN_LEVEL))),
     size: doc.identity.size || 'Medium',
     heroPoints: { current: 1, max: 3 },
     // Two perk slots, to be filled.

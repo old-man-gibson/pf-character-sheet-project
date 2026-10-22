@@ -20,7 +20,7 @@
 import { esc } from '../html.js';
 import { collapsible, collapsibleSub, stepGrid } from '../rows.js';
 import {
-  CAMPAIGN_DEFAULTS, LEVEL_CEILING, MAX_TIER, TIER_CEILING, XP_TRACKS, campaignChanges, campaignRules, followsShared,
+  CAMPAIGN_DEFAULTS, MAX_TIER, TIER_CEILING, XP_TRACKS, campaignChanges, campaignRules, followsShared,
 } from '../../model/campaign.js';
 import { MAX_LEVEL, MYTHIC_TIER_LEVEL } from '../../rules.js';
 
@@ -42,9 +42,9 @@ function ruleCount(key, value, label, unit) {
       data-kind="number" aria-label="${esc(label)}" style="width:4.2rem"> ${esc(unit)}</span>`;
 }
 
-/** A box for the highest level or tier a campaign reaches. */
+/** A box for the lowest or highest level, or the highest tier, a campaign has; no ceiling where it is null. */
 function mostBox(key, value, ceiling, label, disabled = false) {
-  return `<input type="number" min="1" max="${ceiling}" value="${esc(value)}" data-set="campaign.${key}" data-kind="number"
+  return `<input type="number" min="1"${ceiling == null ? '' : ` max="${ceiling}"`} value="${esc(value)}" data-set="campaign.${key}" data-kind="number"
       aria-label="${esc(label)}" style="width:4.2rem"${disabled ? ' disabled' : ''}>`;
 }
 
@@ -177,9 +177,13 @@ export function campaignPanel(model, ctx = {}) {
           aria-label="Point-buy budget" style="width:4.5rem"> points`,
     `What the ability scores may cost, checked on the <strong>Stats</strong> tab. The table's is ${CAMPAIGN_DEFAULTS.pointBuy}.`)}
         ${row('advancement', 'Levels', levels, levelsHint, levelsMore)}
-        ${row('maxLevel', 'Highest level', mostBox('maxLevel', rules.maxLevel, LEVEL_CEILING, 'Highest level'),
+        ${row('minLevel', 'Lowest level', mostBox('minLevel', rules.minLevel, rules.maxLevel, 'Lowest level'),
+    `Where a character starts: the level box on the <strong>Overview</strong> goes no lower, and a new
+          character starts here when every character shares these rules. Any level from 1 up to the highest.
+          The table's is ${CAMPAIGN_DEFAULTS.minLevel}.`)}
+        ${row('maxLevel', 'Highest level', mostBox('maxLevel', rules.maxLevel, null, 'Highest level'),
     `Where a character stops: <strong>Level up</strong> goes no further and the ladders end there.
-          The table's is ${CAMPAIGN_DEFAULTS.maxLevel}.${rules.maxLevel > MAX_LEVEL ? ` Past 20th the <strong>Planner</strong>
+          Any level from 1 up. The table's is ${CAMPAIGN_DEFAULTS.maxLevel}.${rules.maxLevel > MAX_LEVEL ? ` Past 20th the <strong>Planner</strong>
           gains a row for each level and class progressions carry on; spell, power point and companion
           tables stay at their 20th-level row, and the Level Up feats stay ten.` : ''}`)}
         ${row('gestalt', 'Gestalt', check('gestalt', 'Gestalt characters'),

@@ -59,7 +59,7 @@ for (const id of fixtureIds()) {
   for (const [key, value] of [['abp', false], ['mythic', false], ['heroPoints', false], ['pointBuy', 20], ['mythicTier', 'awarded'],
     ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false], ['antiheroes', true],
     ['maxLevel', 6], ['maxLevel', 25], ['maxTier', 5], ['maxTier', 12], ['gestalt', false], ['hitPoints', 'average'], ['hitPoints', 'rolled'],
-    ['abpLadder', 'core'], ['mythicLadder', 'core'], ['pastColossal', true]]) {
+    ['abpLadder', 'core'], ['mythicLadder', 'core'], ['pastColossal', true], ['minLevel', 1], ['minLevel', 8], ['maxLevel', 60]]) {
     const m = new Character(loadCharacter(id));
     const before = numbers(m);
     m.set(`campaign.${key}`, value);
@@ -500,6 +500,27 @@ console.log('\nsizes past Colossal');
   check('allowed: two steps past, named so', [c.sizeNow(), c.conditionState.sizePast], ['Colossal+2', 2]);
   check('modifiers stay at Colossal\'s', c.conditionState.delta?.melee, atk);
   check('each step past adds 1d6', [dice() !== atColossal, dice().includes('d6')], [true, true]);
+}
+
+console.log('\nthe lowest level, and no ceiling on the highest');
+{
+  const { renderOverviewPanel } = await import('../app/js/ui/panels/overview.js');
+  const rule = (campaign) => [campaignRules({ campaign }).minLevel, campaignRules({ campaign }).maxLevel];
+  check('the table\'s: 3rd to 20th', rule({}), [3, 20]);
+  check('any lowest from 1', [rule({ minLevel: 1 }), rule({ minLevel: 0 }), rule({ minLevel: 'x' })], [[1, 20], [3, 20], [3, 20]]);
+  check('a lowest above the highest reads as the highest', rule({ minLevel: 30 }), [20, 20]);
+  check('the highest has no ceiling', rule({ maxLevel: 500, minLevel: 30 }), [30, 500]);
+  check('and counts as a change', campaignChanges({ campaign: { minLevel: 1 } }), ['minLevel']);
+  const c = new Character(blankDocument({ name: 'Low', level: 3 }));
+  const box = () => renderOverviewPanel(c, { draft: {}, buildView: true }).match(/<input[^>]*data-set="identity\.level"[^>]*>/)?.[0] || '';
+  check('the level box starts at the lowest', box().includes('min="3"'), true);
+  c.set('campaign.minLevel', 5);
+  check('a level below it is kept and flagged', [c.data.identity.level, box().includes('min="5"'), box().includes('Below this campaign\'s lowest level, 5')],
+    [3, true, true]);
+  check('a new sheet: the table\'s 3rd to 20th unless asked', [blankDocument({ level: 1 }).identity.level, blankDocument({ level: 25 }).identity.level],
+    [3, 20]);
+  check('the New character dialog asks for any level from 1',
+    [1, 57].map((level) => blankDocument({ level, minLevel: 1, maxLevel: Infinity }).identity.level), [1, 57]);
 }
 
 console.log('\nthe highest level and tier');
