@@ -1478,6 +1478,11 @@ select.jumpto[hidden] { display: none; }
   padding: 6px 8px; border-radius: 6px; border-left: 3px solid transparent;
 }
 .camprow.changed { border-left-color: var(--cs-accent); background: var(--cs-accent-soft); }
+/* Variant multiclassing on Progression: level, feature name, and the notes
+   taking the rest. */
+table.vmc col.lvl { width: 4.5rem; }
+table.vmc col.vname { width: 16rem; }
+table.vmc td { vertical-align: top; }
 /* A character just made opens on its rules first: a note with the way on,
    and the one question it must answer -- the lowest level -- edged in the
    edit colour so it is found first. */

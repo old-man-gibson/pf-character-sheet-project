@@ -8,7 +8,7 @@
  * taken out of it, and the group itself cannot be deleted; edit.js asks
  * `lockedFeatList` before every add, remove and cross-group move.
  */
-import { isAntihero, specialtyInPlay } from './campaign.js';
+import { isAntihero, specialtyInPlay, vmcTakesSlot } from './campaign.js';
 
 export const LEVEL_UP_LEVELS = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19];
 
@@ -30,9 +30,11 @@ export function featNames(d, { granted = true, planned = false } = {}) {
   // `planned` asks for those too.
   const level = Number(d?.identity?.level) || 0;
   const had = (at) => planned || !isAhead(at, level);
+  // A Level Up slot a variant multiclass feature takes (a campaign rule) has no feat.
+  const vmc = (g, f) => g?.levelUp === true && vmcTakesSlot(d, featLevel(g, f));
   const names = Array.isArray(d?.featGroups)
     ? d.featGroups.flatMap((g) => (Array.isArray(g?.entries) ? g.entries : [])
-      .filter((f) => had(featLevel(g, f))).map((f) => String(f?.name ?? '')))
+      .filter((f) => had(featLevel(g, f)) && !vmc(g, f)).map((f) => String(f?.name ?? '')))
     : Object.values(d?.feats || {}).flatMap((rows) => (Array.isArray(rows) ? rows.map((f) => String(f?.name ?? '')) : []));
   if (granted) {
     const gf = d?.grantedFeats || {};

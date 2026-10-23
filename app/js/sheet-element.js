@@ -376,7 +376,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(campaign|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|backgroundSkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|ageCategory|xp|milestones|size|heroPoints|antihero|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(campaign|vmc|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|backgroundSkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|ageCategory|xp|milestones|size|heroPoints|antihero|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /**
  * The input types a caret can be put back into after a re-render.

@@ -300,6 +300,8 @@ function placeOf(model, ref) {
         : { tab: 'features', sel: [set(`grantedFeats.${a}.note`)], ...folded(['feats', `tnote:grantedFeats.${a}.note`]) };
     case 'mythicTradition':
       return { tab: 'features', sel: [set(`mythic.tradition.${a}`)], ...folded(['mythic-tradition']) };
+    case 'vmc':
+      return { tab: 'progression', sel: [set(`vmc.features.${a}.note`)], ...folded(['vmc', `tnote:vmc.features.${a}.note`]) };
     case 'mythicTraditionNote':
       return { tab: 'features', sel: [set(`mythic.tradition.notes.${a}`)], ...folded(['mythic-tradition', `tnote:mythic.tradition.notes.${a}`]) };
     case 'talent': {

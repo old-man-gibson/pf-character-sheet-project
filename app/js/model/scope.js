@@ -27,7 +27,7 @@ import {
 } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
-import { campaignRules, coreAbp, isAntihero, specialtyInPlay } from './campaign.js';
+import { campaignRules, coreAbp, isAntihero, specialtyInPlay, vmcTakesSlot, vmcClass, VMC_LEVELS } from './campaign.js';
 import { sphereTableNames, talentsIn } from './spheres.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
 import { tempHpGrant } from './stats/defenses.js';
@@ -1493,8 +1493,13 @@ export function proseSources(model) {
   // Progression row the character has not reached (see rowLevel in feats.js).
   const planned = (at) => (isAhead(at, level) ? { future: true } : null);
   (d.featGroups || []).forEach((group, gi) => {
-    (group.entries || []).forEach((f, i) => push(`feat:${gi}:${i}`, f?.note, null, planned(featLevel(group, f))));
+    (group.entries || []).forEach((f, i) => push(`feat:${gi}:${i}`, f?.note, null,
+      group.levelUp === true && vmcTakesSlot(d, featLevel(group, f)) ? { future: true } : planned(featLevel(group, f))));
   });
+  // Variant multiclass features (a campaign rule): each from its level.
+  if (vmcClass(d)) {
+    for (const at of VMC_LEVELS) push(`vmc:${at}`, d.vmc?.features?.[at]?.note, null, planned(at));
+  }
   push('grantedFeat:drawback', d.grantedFeats?.drawback?.note);
   // The specialty's feat waits while background skills replace the Specialty.
   push('grantedFeat:specialty', d.grantedFeats?.specialty?.note, null, specialtyInPlay(d) ? null : { future: true });
