@@ -988,7 +988,8 @@ function craftCrafterPanel(model, cr) {
         ${field('Days count against', select('crafting.timeBasis', cr.timeBasis || 'value', CRAFT_TIME_BASES, null))}
         ${field('Currency', text('crafting.currency', cr.currency, currencyName(model.data).toLowerCase()))}
       </div>
-      ${field('Name on the marketplace post', text('crafting.sellerName', cr.sellerName, 'Character name'))}
+      ${crafter.id ? line('Name on the posts', esc(crafter.name))
+    : field('Name on the posts', text('crafting.sellerName', cr.sellerName, crafter.name || 'Character name'))}
       <p class="hint">
         The discount is what buyers pay off market value. 100% sells at cost.
         A project can override it.

@@ -45,8 +45,13 @@ console.log('\na companion crafts with its own skills');
   const own = c.data.eidolon[0].skills.find((s) => s.name === 'Spellcraft');
   check('the companion is the crafter', [craftCrafter(c).id, c.data.crafting.calc.crafter], [id, 'Eidolon: Brute']);
   check('its skill, its bonus', [c.data.crafting.calc.skill, c.data.crafting.calc.skillBonus], ['Spellcraft', Number(own?.total) || 0]);
+  const post = () => c.data.crafting.projects[0].calc;
+  check('both posts name the companion', [post().craftPost.includes('**Crafter**: Brute'), post().marketPost.includes('**Character Name:** Brute')], [true, true]);
   c.set('crafting.crafter', '');
   check('back to the character', [craftCrafter(c).id, 'crafter' in c.data.crafting.calc], ['', false]);
+  check('both posts name the character', [post().craftPost.includes('**Crafter**: Smith'), post().marketPost.includes('**Character Name:** Smith')], [true, true]);
+  c.set('crafting.sellerName', 'Smith the Elder');
+  check('the typed name is the character\'s on both posts', [post().craftPost.includes('**Crafter**: Smith the Elder'), post().marketPost.includes('**Character Name:** Smith the Elder')], [true, true]);
 }
 
 console.log('\nevery character works out the same as before');

@@ -247,11 +247,13 @@ export function importCrafting(tab, identity = {}) {
 export function craftCrafters(model) {
   const d = model.data;
   const chosen = String(d.crafting?.crafter || '');
-  const out = [{ id: '', label: String(d.identity?.name || '').trim() || 'Character' }];
+  const own = String(d.identity?.name || '').trim();
+  const out = [{ id: '', label: own || 'Character', name: own }];
   for (const kind of COMPANION_KINDS) {
     for (const b of d[kind] || []) {
       if (!b?.id || (!companionInUse(kind, b) && b.id !== chosen)) continue;
-      out.push({ id: b.id, label: `${COMPANION_LABELS[kind]}: ${String(b.name || '').trim() || b.id}`, kind, block: b });
+      const name = String(b.name || '').trim() || b.id;
+      out.push({ id: b.id, label: `${COMPANION_LABELS[kind]}: ${name}`, name, kind, block: b });
     }
   }
   return out;
@@ -362,6 +364,9 @@ export function recomputeCrafting(model) {
 
   const unit = String(cr.currency || '').trim();
   const suffix = unit ? ` ${unit}` : '';
+  // Who the posts name: a companion crafting by its own name; the character
+  // by the name typed for the marketplace, or its own.
+  const crafterName = crafter.id ? crafter.name : (String(cr.sellerName ?? '').trim() || crafter.name);
 
   for (const p of cr.projects || []) {
     const where = p.name || 'Project';
@@ -410,6 +415,7 @@ export function recomputeCrafting(model) {
     // The workbook's own two Discord posts, regenerated from live values.
     p.calc.craftPost = [
       `**Crafting**: ${p.name ?? ''}`,
+      `**Crafter**: ${crafterName}`,
       `**Value**: ${value}${suffix}`,
       `**Cost**: ${cost}${suffix}`,
       `**Profit**: ${p.zeroProfit ? 'No Profit' : `${p.calc.net}${suffix}`}`,
@@ -421,7 +427,7 @@ export function recomputeCrafting(model) {
     ].join('\n');
 
     p.calc.marketPost = [
-      `**Character Name:** ${cr.sellerName ?? ''}`,
+      `**Character Name:** ${crafterName}`,
       `**Item:** ${p.name ?? ''}`,
       `**Market Value:** ${value}`,
       `**Price Sold:** ${sale}`,
