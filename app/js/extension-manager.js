@@ -377,21 +377,18 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
     const shared = readShared();
     const on = !!shared?.on;
     const changed = on ? changedRuleTitles(shared.rules) : [];
-    const from = shared ? 'the rules shared before' : currentCharacter() ? 'the open character\'s rules' : 'the table\'s rules';
     return `<h3>Campaign rules</h3>
       <div class="rules">
         <label class="sw"><input type="checkbox" data-rules-on ${on ? 'checked' : ''}>
-          <span>Every character follows one set of campaign rules</span></label>
+          <span>Share one set of rules with every character</span></label>
         <p class="hint">${on
-    ? `${changed.length ? `${changed.length} changed from the table's: ${esc(changed.join(', '))}.` : 'The table\'s rules, nothing changed.'}
-          Edit them on the Campaign rules panel (⚙ tab) of any character that follows them; a character set
-          to <em>This character only</em> keeps its own.`
-    : `Off: each character keeps its own rules, on its ⚙ tab. On, every character follows one set,
-          starting from ${from}, from the next time it opens.`}</p>
+    ? `${changed.length ? `${changed.length} changed: ${esc(changed.join(', '))}.` : 'Defaults.'} Edit them on any character's
+          Campaign rules panel (⚙ tab).`
+    : 'Each character has its own rules (⚙ tab).'}</p>
         <div class="actions">
           <button data-action="rules-save" ${on ? '' : 'disabled'} title="Download the shared rules as campaign-rules.json">Save as a file</button>
-          <button data-action="rules-load" title="Share the rules in a campaign rules file, or a character's file, with every character">Load from a file…</button>
-          ${on && changed.length ? '<button data-action="rules-reset" title="Put the shared rules back to the table\'s">Back to the table\'s rules</button>' : ''}
+          <button data-action="rules-load" title="Load rules from a file and share them">Load from a file…</button>
+          ${on && changed.length ? '<button data-action="rules-reset" title="Reset the shared rules to defaults">Reset to defaults</button>' : ''}
           <input type="file" accept="application/json,.json" data-rules-file hidden>
         </div>
       </div>`;
@@ -1424,8 +1421,8 @@ Hit Die: d12.
         const before = readShared();
         const rules = before ? before.rules : (currentCharacter()?.campaign || {});
         writeShared({ on: e.target.checked, rules });
-        notice = e.target.checked ? 'Every character now follows one set of campaign rules, unless it is set to its own.'
-          : 'Each character keeps its own campaign rules again, starting from the shared ones.';
+        notice = e.target.checked ? 'All characters now use the shared rules.'
+          : 'Each character now uses its own rules.';
         error = null;
         render();
       });

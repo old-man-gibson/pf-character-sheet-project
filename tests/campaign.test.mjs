@@ -456,10 +456,10 @@ console.log('\nrules every character shares, or this one alone');
   check('set to its own: own rules', followsShared(c.data, { on: true, rules: {} }), false);
   delete c.data.campaignOwn;
   const draw = (ctx) => campaignPanel(c, ctx);
-  check('the row says whom they are for', [draw({}).includes('Each character keeps its own rules'),
+  check('the row says whom they are for', [draw({}).includes('This character uses its own rules.'),
     draw({ campaignShareArmed: true }).includes('Press <strong>Every character</strong> again'),
-    draw({ sharedRules: { on: true, rules: {} } }).includes('Every character in this browser follows these rules'),
-    (c.data.campaignOwn = true, draw({ sharedRules: { on: true, rules: {} } }).includes('This character keeps rules of its own'))],
+    draw({ sharedRules: { on: true, rules: {} } }).includes('All characters in this browser use these rules.'),
+    (c.data.campaignOwn = true, draw({ sharedRules: { on: true, rules: {} } }).includes('Other characters use the shared rules.'))],
   [true, true, true, true]);
   delete c.data.campaignOwn;
   c.data.uiPrefs.collapsed = { ...(c.data.uiPrefs.collapsed || {}), 'campaign-rules': true };

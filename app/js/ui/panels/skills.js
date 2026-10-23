@@ -70,7 +70,7 @@ export function renderSkillsPanel(model, ctx) {
     // Under background skills (a campaign rule) the background ones say so:
     // they are what the background ranks buy.
     const bg = background && isBackgroundSkill(s)
-      ? '<span class="badge bgskill" title="A background skill: background ranks may buy it">bg</span>' : '';
+      ? '<span class="badge bgskill" title="Background skill">bg</span>' : '';
     return `<span class="skillcell">${name}${variantSlot(s, i)}${bg}</span>`;
   }
 
@@ -129,12 +129,9 @@ export function renderSkillsPanel(model, ctx) {
         </h3>
         ${allocated ? `<div class="fieldgrid">${Array.from({ length: n }, (_, k) => field(`Background skill ${k + 1}`,
     select(`backgroundSkills.${k}`, picks[k], pickOptions(isBg)))).join('')}</div>
-        <p class="hint">${n} background rank${n === 1 ? '' : 's'} a level, allocated: each pick is a background
-          skill at full ranks for your level, marked ◆ below, with no ranks typed in.</p>`
-    : `<p class="hint">${n} background rank${n === 1 ? '' : 's'} a level, ${bb.pool ?? 0} in all, spent in the
-          <strong>Bought</strong> column on background skills (marked bg). Past those, a background skill
-          takes skill points like any other.</p>`}
-        <p class="hint">Background skills are a campaign rule (⚙ tab), in place of the Specialty.</p>
+        <p class="hint">Each pick gets full ranks (◆). Bought ranks are disabled for picks.</p>`
+    : `<p class="hint">Pool: ${bb.pool ?? 0} ranks for background skills (bg), spent in <strong>Bought</strong>.
+          Ranks above the pool use skill points.</p>`}
       </section>`;
     };
 
@@ -234,7 +231,7 @@ export function renderSkillsPanel(model, ctx) {
                 <td class="num" data-label="Ranks">${esc(s.totalRanks)}</td>
                 <td class="mid" data-label="Class skill">${itemCheck('skills', i, 'classSkill', s.classSkill)}</td>
                 <td class="num bought" data-label="Bought">${s.backgroundFree
-    ? '<span class="dim" title="A free background skill: full ranks for your level, none typed in">—</span>'
+    ? '<span class="dim" title="Background pick: full ranks">—</span>'
     : exprField(`data-item="skills|${i}|rankSources.bought"`,
                   s.rankSources?.bought ?? 0, {
                     kind: 'rank',
@@ -243,7 +240,7 @@ export function renderSkillsPanel(model, ctx) {
                     error: s.boughtError,
                     title: 'Number or formula, e.g. level or floor(level-2)',
                   })}</td>
-                <td class="mid" data-label="${background ? 'Free background skill' : 'Specialty'}">${s.specialtyFlag ? '★' : s.backgroundFree ? '<span title="A free background skill: full ranks">◆</span>' : ''}</td>
+                <td class="mid" data-label="${background ? 'Free background skill' : 'Specialty'}">${s.specialtyFlag ? '★' : s.backgroundFree ? '<span title="Background pick: full ranks">◆</span>' : ''}</td>
                 <td class="mid" data-label="Gear grants ranks">${itemCheck('skills', i, 'rankSources.gear', s.rankSources?.gear)}</td>
                 <td class="mid" data-label="Other grants ranks">${itemCheck('skills', i, 'rankSources.other', s.rankSources?.other)}</td>
                 <td class="num" data-label="From spheres">${s.sphereRanks || ''}${s.competence

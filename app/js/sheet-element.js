@@ -2653,7 +2653,7 @@ export class CharacterSheetElement extends HTMLElement {
   }).join('')}
           <button data-view role="tab" id="tab-systabs" data-tab="systabs" aria-selected="${this.#tab === 'systabs'}"
             aria-controls="sheet-panel" tabindex="${this.#tab === 'systabs' ? '0' : '-1'}"
-            aria-label="Settings" title="Settings: campaign rules (levels, gestalt, hit points, background skills, mythic, ABP and more), and which tabs show">⚙</button>
+            aria-label="Settings" title="Campaign rules and tab settings">⚙</button>
         </nav>
         </div>
         <div class="rollslot">${this.#slotHtml()}</div>
@@ -3212,7 +3212,7 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.#formulaButton()}
         ${monster.menuButton(this.#model, this.isAdmin)}
         <button data-view data-action="campaign-rules" aria-pressed="${this.#tab === 'systabs'}"
-          title="Levels, gestalt, hit points, background skills, hero points, mythic, ABP and the rest of this character's rules: the first panel on the ⚙ tab">Campaign rules…</button>
+          title="Rules for this character (⚙ tab)">Campaign rules…</button>
         <button data-view data-action="theme" aria-pressed="${this.#themeMenu}"
           title="Palettes, and where the tabs go">Theme &amp; layout…</button>
         <button data-view data-action="print-menu" aria-pressed="${this.#printMenu}"

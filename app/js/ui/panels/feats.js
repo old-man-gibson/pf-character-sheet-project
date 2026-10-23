@@ -110,7 +110,7 @@ function grantedFeatsSection(model, ctx) {
           ? 'A Major Drawback buys the Drawback feat.'
           : 'The Drawback row appears once a Major Drawback is taken on the Overview.'}
         ${specialty ? 'The Specialty feat is mandatory, so it is always here.'
-    : 'Background skills replace the Specialty in this campaign, so it has no feat here.'} Oath and
+    : 'No Specialty feat: background skills are in use.'} Oath and
         Attunement feats name their own source.
         ${c.altTraining?.calc?.counts?.feat
     ? `Technique feats (${c.altTraining.calc.counts.feat} from
