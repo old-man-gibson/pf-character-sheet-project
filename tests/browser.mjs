@@ -298,6 +298,48 @@ run.addEventListener('click', async () => {
       assert(help.getAttribute('aria-expanded') !== shut, 'The help button no longer opens the help');
       help.click();
     });
+    // Every gear bonus's To picker carried all two hundred destinations, and
+    // building them was most of each Equipment redraw. It is drawn with its
+    // own choice and given the rest when pressed or focused (#fillSelect).
+    await test('A gear To picker gets its whole list when reached for, and reads the same', async () => {
+      const root = sheet.shadowRoot;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      sheet.model.setItem('equipment.gear', 0, 'name', 'Cloak check');
+      sheet.model.setItem('equipment.gear', 0, 'bonuses.0.target', 'saves.will');
+      root.getElementById('tab-overview').click();
+      root.getElementById('tab-gear').click();
+      const picker = () => root.querySelector('table.gear select[data-item="equipment.gear|0|bonuses.0.target"]');
+      const press = (el) => el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
+      const before = picker();
+      assert(before?.options.length === 2 && before.hasAttribute('data-fill'), `Drawn with ${before?.options.length} options`);
+      const reads = before.selectedOptions[0]?.textContent;
+      const width = before.getBoundingClientRect().width;
+      // A press that ends an edit elsewhere puts that edit's redraw off
+      // until the picker changes, so the list it opened stays the one shown.
+      const weight = root.querySelector('[data-item="equipment.gear|0|weight"]');
+      press(before);
+      weight.value = '3';
+      weight.dispatchEvent(new Event('change', { bubbles: true }));
+      assert(picker() === before, 'The press on the picker redrew it');
+      assert(before.options.length > 100 && !before.hasAttribute('data-fill'), `Filled with ${before.options.length} options`);
+      assert(before.value === 'saves.will' && before.selectedOptions[0]?.textContent === reads, 'Filling changed what the picker reads');
+      assert(before.getBoundingClientRect().width === width, 'Filling changed the picker\'s width');
+      before.value = 'skill.bluff';
+      before.dispatchEvent(new Event('change', { bubbles: true }));
+      await until(() => picker() !== before);
+      assert(sheet.model.data.equipment.gear[0].bonuses[0].target === 'skill.bluff', 'The choice did not reach the model');
+      assert(picker().selectedOptions[0]?.textContent === 'Bluff', 'The redrawn picker does not show the choice');
+      picker().dispatchEvent(new FocusEvent('focus'));
+      assert(picker().options.length > 100, 'Focus did not fill the picker');
+      // The item's card sizes its picker, so the list arriving must not move it.
+      root.querySelector('[data-gearopen="equipment.gear|0"]').click();
+      const inCard = root.querySelector('.gearcard select.target');
+      const cardWidth = inCard.getBoundingClientRect().width;
+      press(inCard);
+      assert(inCard.options.length > 100 && inCard.getBoundingClientRect().width === cardWidth,
+        `The card's picker went from ${cardWidth}px to ${inCard.getBoundingClientRect().width}px`);
+      root.querySelector('[data-gearopen=""]').click();
+    });
     // A worksheet cell is a one-line box until it holds a formula or a web
     // address, and a prose field from then on (rows.gridCell). An edit to a
     // worksheet redraws nothing else, so a box that gains one is drawn again

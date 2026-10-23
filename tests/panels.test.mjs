@@ -635,13 +635,26 @@ console.log('\nthe gear table: three cells a bonus, and the card grows with its 
   ok('the type picker shows the short form and keeps the whole name',
     /<option value="Deflection" title="Deflection"[^>]*selected>Defl</.test(html));
   const to = html.match(/<select class="target"[^>]*bonuses\.0\.target[\s\S]*?<\/select>/)?.[0] || '';
-  ok('the To cell is a grouped picker showing plain names',
-    /<optgroup label="Armour class">/.test(to) && /<option value="ac\.total" selected title="ac\.total">AC</.test(to)
-      && /<optgroup label="Skills">[\s\S]*<option value="skill\.bluff"[^>]*>Bluff</.test(to));
-  ok('the working scores stay off it', !/dex\.temp/.test(to));
+  // What the sheet puts in the picker when it is pressed or focused.
+  const all = gear.targetChoices(c, 'ac.total');
+  ok('the To cell is drawn with only its choice, and asks for the rest',
+    /data-fill="targets"/.test(to) && (to.match(/<option/g) || []).length === 2
+      && /<option value="ac\.total" selected title="ac\.total">AC</.test(to));
+  ok('the rest is a grouped picker showing plain names',
+    /<optgroup label="Armour class">/.test(all) && /<option value="ac\.total" selected title="ac\.total">AC</.test(all)
+      && /<optgroup label="Skills">[\s\S]*<option value="skill\.bluff"[^>]*>Bluff</.test(all));
+  ok('the working scores stay off it', !/dex\.temp/.test(all));
   const bad = html.match(/<select class="target invalid"[^>]*bonuses\.1\.target[\s\S]*?<\/select>/)?.[0] || '';
+  const kept = /<option value="nowhere\.at\.all" selected>nowhere\.at\.all \*</;
   ok('a destination the sheet cannot place is marked on its cell, and kept',
-    /is not something a bonus can be forwarded to/.test(bad) && /<option value="nowhere\.at\.all" selected>nowhere\.at\.all \*</.test(bad));
+    /is not something a bonus can be forwarded to/.test(bad) && kept.test(bad)
+      && kept.test(gear.targetChoices(c, 'nowhere.at.all')));
+  ok('a destination the picker does not list reads the same before and after it is filled',
+    /dex\.temp \*</.test(gear.targetChoices(c, 'dex.temp', { all: false }))
+      && /dex\.temp \*</.test(gear.targetChoices(c, 'dex.temp')));
+  ok('an empty picker reads — either way',
+    gear.targetChoices(c, '', { all: false }) === '<option value="" selected>—</option>'
+      && gear.targetChoices(c, '').startsWith('<option value="" selected>—</option><optgroup'));
 
   const open = gear.renderGearPanel(c, { showAllGear: false, openGear: 'equipment.gear|0' });
   ok('the open card lists the bonuses as rows of amount, type, To', /<table class="gearbonuses">/.test(open)

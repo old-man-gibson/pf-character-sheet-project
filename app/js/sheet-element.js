@@ -81,6 +81,14 @@ import * as fields from './ui/fields.js';
  * these are filled on demand is that carrying 8,912 was 61 ms of every render.
  */
 const DATALIST_MAX = 40;
+/*
+ * Pickers too long to draw whole in every render, by the `data-fill` they
+ * carry: each gives a picker's full choices for the value it holds. The
+ * panel draws only that value; see `#fillSelect`.
+ */
+const SELECT_FILLERS = {
+  targets: targetChoices,
+};
 /** How wide a printed page's text is, in CSS pixels: A4 less 10 mm margins (190 mm). */
 const PRINT_WIDTH = 715;
 /** The same, turned: A4 landscape less the margins (277 mm). */
@@ -112,7 +120,7 @@ import * as monster from './monster/sheet.js';   // the monster tool's hooks; se
 import * as subsystems from './ui/panels/subsystems.js';
 import * as lore from './ui/panels/lore.js';
 import * as admin from './ui/panels/admin.js';
-import { renderGearPanel, renderCraftingPanel } from './ui/panels/gear.js';
+import { renderGearPanel, renderCraftingPanel, targetChoices } from './ui/panels/gear.js';
 import * as trackerUi from './ui/panels/trackers.js';
 import { round, group, same } from './ui/format.js';
 import * as prose from './ui/prose.js';
@@ -3776,6 +3784,20 @@ export class CharacterSheetElement extends HTMLElement {
     }));
   }
 
+  /**
+   * Give a picker drawn short its whole list, once (see SELECT_FILLERS).
+   *
+   * Run on the press, which comes before the list opens, and on focus, which
+   * comes before any key can move the choice. The choices are built for the
+   * value it holds, so what the picker reads does not change.
+   */
+  #fillSelect(select) {
+    const fill = Object.hasOwn(SELECT_FILLERS, select.dataset.fill) ? SELECT_FILLERS[select.dataset.fill] : null;
+    if (!fill || !this.#model) return;
+    select.removeAttribute('data-fill');
+    select.innerHTML = fill(this.#model, select.value);
+  }
+
   /* ---------------- equipment & crafting ---------------- */
 
   /** Both tabs live in ui/panels/gear.js. */
@@ -5642,6 +5664,13 @@ export class CharacterSheetElement extends HTMLElement {
       input.addEventListener('input', () => this.#fillDatalist(input));
       // Focusing an empty cell should offer something rather than nothing.
       input.addEventListener('focus', () => this.#fillDatalist(input));
+    });
+
+    // A picker drawn with only its current choice gets the rest when it is
+    // reached for, for the same reason: see `#fillSelect`.
+    root.querySelectorAll('select[data-fill]').forEach((select) => {
+      select.addEventListener('pointerdown', () => this.#fillSelect(select));
+      select.addEventListener('focus', () => this.#fillSelect(select));
     });
 
     // Generic list-item field -> model path.
