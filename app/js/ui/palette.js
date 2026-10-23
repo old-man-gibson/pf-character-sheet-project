@@ -1086,6 +1086,8 @@ function commands(model, add) {
   });
   cmd('Save this version', 'save', 'Make this the version the sheet opens on', 'save version commit');
   cmd('Export JSON', 'export', 'Download the character as a file', 'export download backup json');
+  cmd('Export for Myth-Weavers (EXPERIMENTAL)', 'export-mw', 'A backup for the Myth-Weavers Pathfinder sheet',
+    'export myth weavers mythweavers mw download backup');
   cmd('Import a character or workbook', 'import', 'Load a JSON or .xlsx', 'import load open file xlsx');
   cmd('History', 'history', 'Earlier states of this sheet', 'history snapshots versions undo');
   cmd(session ? 'Switch to Build view' : 'Switch to Session view', 'view-mode',

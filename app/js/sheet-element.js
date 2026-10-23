@@ -142,6 +142,7 @@ import {
 } from './history.js';
 import { SCHEMA_VERSION } from './model.js';
 import { downloadFile } from './download.js';
+import { mythWeaversBackup } from './myth-weavers.js';
 import { tabId, undoKey, readUndo, writeUndo } from './undo-store.js';
 import {
   TRACKER_PALETTE, normalizeStyle, normalizeHex, isDefaultStyle, rgba, readableOn,
@@ -3230,6 +3231,8 @@ export class CharacterSheetElement extends HTMLElement {
         <button data-action="history" aria-pressed="${this.#showHistory}"
           title="Earlier states of this sheet">History${this.#snapshots.length ? ` (${this.#snapshots.length})` : ''}</button>`}
         <button data-view data-action="export">Export JSON</button>
+        <button data-view data-action="export-mw"
+          title="A backup file for the Myth-Weavers Pathfinder sheet. Load it there with Actions, Restore JSON Backup: it replaces every field on that sheet.">Export for Myth-Weavers (EXPERIMENTAL)</button>
         ${this.isPublished ? '' : `
         <button data-action="publish"
           title="Upload this character and get a read-only link. Publishing again updates the same link.">Publish</button>
@@ -7554,6 +7557,20 @@ export class CharacterSheetElement extends HTMLElement {
       }
       case 'export': {
         downloadFile(`${this.#model.data.id}.json`, JSON.stringify(this.#model.toJSON(), null, 1));
+        break;
+      }
+      case 'export-mw': {
+        // The share link goes in the sheet's notes: this page when it is the
+        // published view, else the link this browser last published.
+        const kept = this.isPublished ? null : this.#readPublishLink();
+        let publishedUrl = this.isPublished ? location.href : null;
+        if (kept?.id) {
+          const url = new URL('../published.html', import.meta.url);
+          url.searchParams.set('s', kept.id);
+          publishedUrl = url.href;
+        }
+        const { fields } = mythWeaversBackup(this.#model, { publishedUrl });
+        downloadFile(`${this.#model.data.id}.mw.json`, JSON.stringify(fields, null, 1));
         break;
       }
       case 'preview-published':
