@@ -69,7 +69,7 @@ import {
   DEFAULT_ACTION_TINT, isActionMarks, isActionTint,
 } from './themes.js';
 import {
-  awardXp, campaignPreset, campaignRules, followsShared, levelUp, presetCampaign, sameCampaign, tierUp,
+  awardXp, campaignPreset, campaignRules, followsShared, levelUp, presetCampaign, sameCampaign, tierUp, specialtyInPlay,
 } from './model/campaign.js';
 import { readShared, sharedRules, writeShared } from './shared-rules.js';
 import { esc, val, abilityKey, nameDatalist } from './ui/html.js';
@@ -376,7 +376,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(campaign|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|xp|milestones|size|heroPoints|antihero|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(campaign|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|backgroundSkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|ageCategory|xp|milestones|size|heroPoints|antihero|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /**
  * The input types a caret can be put back into after a re-render.
@@ -2661,7 +2661,7 @@ export class CharacterSheetElement extends HTMLElement {
   }).join('')}
           <button data-view role="tab" id="tab-systabs" data-tab="systabs" aria-selected="${this.#tab === 'systabs'}"
             aria-controls="sheet-panel" tabindex="${this.#tab === 'systabs' ? '0' : '-1'}"
-            aria-label="Settings" title="Settings: campaign rules (levels, gestalt, hit points, mythic, ABP and more), and which tabs show">⚙</button>
+            aria-label="Settings" title="Campaign rules and tab settings">⚙</button>
         </nav>
         </div>
         <div class="rollslot">${this.#slotHtml()}</div>
@@ -3163,7 +3163,7 @@ export class CharacterSheetElement extends HTMLElement {
           </div>`}
           <div class="subtitle">
             ${i.mythicPath && campaignRules(this.#model.data).mythic ? `${esc(i.mythicPath)} ${val(i.mythicTier)}` : ''}
-            ${i.specialty ? ` &middot; ${esc(i.specialty)}` : ''}
+            ${i.specialty && specialtyInPlay(this.#model.data) ? ` &middot; ${esc(i.specialty)}` : ''}
             ${diff.length ? `<span class="dirty"> &middot; <span title="${esc(diff.map((d) => `${d.label}: ${d.was} → ${d.now}`).join('\n'))}"
               >${diff.length} value${diff.length === 1 ? '' : 's'} changed from source sheet</span>
               <button class="linkish" data-action="accept-source"
@@ -3220,7 +3220,7 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.#formulaButton()}
         ${monster.menuButton(this.#model, this.isAdmin)}
         <button data-view data-action="campaign-rules" aria-pressed="${this.#tab === 'systabs'}"
-          title="Levels, gestalt, hit points, hero points, mythic, ABP and the rest of this character's rules: the first panel on the ⚙ tab">Campaign rules…</button>
+          title="Rules for this character (⚙ tab)">Campaign rules…</button>
         <button data-view data-action="theme" aria-pressed="${this.#themeMenu}"
           title="Palettes, and where the tabs go">Theme &amp; layout…</button>
         <button data-view data-action="print-menu" aria-pressed="${this.#printMenu}"
@@ -5156,6 +5156,13 @@ export class CharacterSheetElement extends HTMLElement {
     if (saved) this.#tab = saved;
     else this.#tab = this.#barEntries()[0]?.id ?? 'overview';
     this.#tabWritten = saved;
+    // A character just made opens on its campaign rules first, unfolded,
+    // until its Continue is pressed (see campaignPanel).
+    if (this.#model?.data?.uiPrefs?.rulesFirst === true) {
+      this.#tab = 'systabs';
+      const collapsed = this.#model.data.uiPrefs.collapsed;
+      if (collapsed && !isOpen(this.#model, 'campaign-rules')) collapsed['campaign-rules'] = foldValue('campaign-rules', true);
+    }
   }
 
   /**
@@ -7496,6 +7503,12 @@ export class CharacterSheetElement extends HTMLElement {
           this.#view.draft.xpAward = '';
           this.#render();
         }
+        break;
+      // A new character's rules are settled: on to the character itself.
+      case 'rules-first-done':
+        this.#model.set('uiPrefs.rulesFirst', undefined);
+        this.#tab = this.#barEntries().find((e) => e.id !== 'systabs')?.id ?? 'overview';
+        this.#render();
         break;
       case 'campaign-reset':
         this.#model.markUndo('Put the campaign rules back to the table\'s');

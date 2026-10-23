@@ -353,9 +353,12 @@ straight there (*xp*, *milestones*, *trials* and *hit points* find it too).
 |---|---|---|
 | **Point buy** | 30 points | The budget the Stats tab checks the spend against. |
 | **Levels** | typed in | *Experience points*: XP is kept under the Details panel against the core slow, medium or fast table, any level's figure replaceable. *Milestones*: a count of milestones since the last level, so many a level (the rate), any level its own. Either way a bar shows how far there is to go, and a **Level up** button appears once the next level is earned. |
-| **Highest level** | 20 | Level up stops there and the ladders end there. Past 20th the Planner gains a row for each level and class progressions carry on; an XP total past the table waits for the campaign's own figure; spell, power point and companion tables stay at their 20th-level row, and the Level Up feats stay ten. |
+| **Lowest level** | 3 | The level box on the Overview goes no lower (a level typed below it is kept and flagged), and a new character starts here when every character shares the rules. The first character made in a browser with none asks for it and shares it with every character. Any level from 1 up to the highest. |
+| **Highest level** | 20 | Any level from 1 up, with no ceiling. Level up stops there and the ladders end there. Past 20th the Planner gains a row for each level and class progressions carry on; an XP total past the table waits for the campaign's own figure; spell, power point and companion tables stay at their 20th-level row, and the Level Up feats stay ten. |
 | **Gestalt** | on | Off, one class a level from the Planner's first track: each class's good saves get their own +2 and each class's base attack bonus is rounded down on its own, and skill ranks are each class's for its levels. A level the first track leaves blank goes to a class pinned to so many levels, then to the first class the Planner never names. Other tracks are kept, greyed, and not read. |
 | **Hit points** | maximum every level | *Average after 1st*: half the die and 1 (5 on a d8). *Rolled after 1st*: a box per level on the Hit points panel; a level not rolled yet counts the average. 1st level always takes the whole die. |
+| **Age effects** | off | On: the Overview's age category changes ability scores, cumulative. Middle-Aged −1 Str/Dex/Con, +1 Int/Wis/Cha; Old −2/+1; Venerable −3/+1. Shown in the Age column on Stats. |
+| **Background** | Specialty | *Background skills* (Unchained) replace the Specialty. Background skills: Appraise, Artistry, Craft, Handle Animal, Knowledge (engineering, geography, history, nobility), Linguistics, Lore, Perform, Profession, Sleight of Hand. Background ranks per level (default 2) can only buy background skills. *Allocated*: each rank gives one picked skill full ranks. *Floating*: the ranks are a pool. |
 | **Hero points** | tracked | Kept on the Details panel and as a Hero Points pool on the Trackers tab, so spending one is a play action. Off, the counter goes and the pool may be removed. |
 | **Antiheroes** | not offered | An **Antihero** box beside the hero points: ticked, the character has no hero points to spend and Feats gains an Antihero feat row. |
 | **Mythic** | in play | Off, the tier is 0: no mythic hit points, Mythic Power, mythic ability increases or tradition bonuses. *Feats & Mythic* is called *Feats*, with a note in place of the mythic panels, and the Mythic Power tracker can be removed. |
@@ -396,6 +399,9 @@ per step, blank where the step follows the table or the rate (shown in the box),
 where the campaign has its own (marked). Milestones and trials are entered **per step**:
 how many a level or tier takes from the one before. XP is entered as the running total, as
 XP tables are.
+
+**New characters open on this panel.** Lowest level is required; the rest are optional.
+**Continue** goes to the character.
 
 **Levelling.** The level never moves on its own: XP or milestones reaching the next mark
 offers **Level up to N**, which takes it as one step, undone like a play action and written

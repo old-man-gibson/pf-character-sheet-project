@@ -155,6 +155,11 @@
   dialog.box label.radio { align-items: flex-start; gap: 8px; margin: 10px 0 2px; }
   dialog.box label.radio input { flex: 0 0 auto; width: auto; padding: 0; }
   dialog#removeDialog { max-width: 30rem; }
+  /* The first character in a browser also sets the campaign's lowest level. */
+  dialog.box fieldset.first { border: 1px solid var(--accent); border-radius: 8px; padding: 4px 12px 6px; margin: 10px 0; }
+  dialog.box fieldset.first legend { color: var(--accent); font-weight: 600; font-size: 13px; padding: 0 4px; }
+  dialog.box fieldset.first p.hint { margin: 4px 0; }
+  dialog.box p.belowlow { margin: 0 0 6px; color: var(--accent); font-size: 12.5px; line-height: 1.45; }
   /* ---------- the roster in the sheet's rail ---------- */
   /* When the sheet runs its tabs down its left (layout="side"), the roster
      goes into the same column: the sheet's rail carries a slot named "rail",
@@ -314,10 +319,19 @@
     <h2>New character</h2>
     <p class="hint">A blank sheet: 10 in every score, the standard skill list, 6 hit points a
       level to start, and slots waiting for traits, race traits and perks. Classes, level
-      plan, gear and everything else are yours to enter. Characters start at 3rd or higher.</p>
+      plan, gear and everything else are yours to enter. Any level from 1 up; it starts at the
+      lowest level the shared campaign rules give, 3rd unless they say otherwise.</p>
     <label>Name <input name="name" type="text" required maxlength="80" placeholder="Character name" autocomplete="off"></label>
     <label>Player <input name="player" type="text" maxlength="80" autocomplete="off"></label>
-    <label>Level <input name="level" type="number" min="3" max="20" value="3"></label>
+    <fieldset id="newFirst" class="first" hidden disabled>
+      <legend>The campaign's lowest level</legend>
+      <p class="hint"><strong>The lowest level a character can have in this campaign.</strong> The first
+        character sets it as the standard for every character in this browser. Change it later under
+        <strong>Campaign rules</strong> (any character's ⚙ tab) or <strong>Extensions and Rules</strong>.</p>
+      <label>Lowest level <input name="lowest" type="number" min="1" value="3"></label>
+    </fieldset>
+    <label>Level <input name="level" type="number" min="1" value="3"></label>
+    <p class="belowlow" id="newBelow" hidden></p>
     <div class="actions">
       <button type="button" id="newCancel" class="btn">Cancel</button>
       <button type="submit" class="btn primary">Create</button>
@@ -367,6 +381,8 @@
   import { normalizeHex, readableOn } from './js/tracker-style.js';
   import { esc } from './js/html-escape.js';
   import { gmToolsList } from './js/gm-tools.js';
+  import { CAMPAIGN_DEFAULTS, campaignRules } from './js/model/campaign.js';
+  import { readShared, writeShared } from './js/shared-rules.js';
 
   const sheet = document.getElementById('sheet');
   const picker = document.getElementById('picker');
@@ -378,6 +394,60 @@
   const importDialog = document.getElementById('importDialog');
   const welcome = document.getElementById('welcome');
   document.getElementById('newCancel').addEventListener('click', () => newDialog.close());
+  /*
+   * The New character dialog, at the campaign's lowest level: the one the
+   * campaign rules every character shares give (shared-rules.js), the table's
+   * 3rd where nothing is shared. The first character in a browser with none
+   * also asks for that level -- the lowest a character can have in this
+   * campaign -- and sets it as the standard every character shares. A level
+   * below it may still be typed, from 1; a note says where the lowest level
+   * is changed.
+   */
+  const newFirst = document.getElementById('newFirst');
+  const newBelow = document.getElementById('newBelow');
+  const standardLowest = () => {
+    const shared = readShared();
+    return shared?.on ? campaignRules({ campaign: shared.rules }).minLevel : CAMPAIGN_DEFAULTS.minLevel;
+  };
+  // What a typed level is measured against: the lowest being set, on a first character.
+  const dialogLowest = () => (newFirst.hidden ? standardLowest()
+    : Math.max(1, Math.floor(Number(newForm.elements.lowest.value)) || 1));
+  function noteBelow() {
+    const lowest = dialogLowest();
+    const level = Math.floor(Number(newForm.elements.level.value));
+    const below = Number.isFinite(level) && level >= 1 && level < lowest;
+    newBelow.hidden = !below;
+    newBelow.textContent = below ? `Below this campaign's lowest level, ${lowest}. The lowest level is a campaign `
+      + 'rule: set it under Campaign rules on any character\'s ⚙ tab, or in Extensions and Rules.' : '';
+  }
+  function openNewDialog() {
+    const first = library.length === 0;
+    newFirst.hidden = !first;
+    newFirst.disabled = !first;
+    const lowest = String(standardLowest());
+    newForm.elements.lowest.value = lowest;
+    newForm.elements.lowest.dataset.was = lowest;
+    newForm.elements.level.value = lowest;
+    noteBelow();
+    newDialog.showModal();
+  }
+  newForm.elements.level.addEventListener('input', noteBelow);
+  // The level follows the lowest being set, until it is typed in itself.
+  newForm.elements.lowest.addEventListener('input', () => {
+    const el = newForm.elements.lowest;
+    if (newForm.elements.level.value === el.dataset.was) newForm.elements.level.value = el.value;
+    el.dataset.was = el.value;
+    noteBelow();
+  });
+  /** Make `value` the campaign's lowest level, shared by every character (a lowest past the highest raises it). */
+  function setCampaignLowest(value) {
+    const lowest = Math.max(1, Math.floor(Number(value)) || CAMPAIGN_DEFAULTS.minLevel);
+    const rules = { ...(readShared()?.rules || {}) };
+    if (lowest === CAMPAIGN_DEFAULTS.minLevel) delete rules.minLevel;
+    else rules.minLevel = lowest;
+    if (lowest > campaignRules({ campaign: rules }).maxLevel) rules.maxLevel = lowest;
+    writeShared({ on: true, rules });
+  }
   // Cancel closes with no returnValue, which askWhereToPut reads as "not now";
   // Import closes with 'go'. A dialog dismissed with Escape lands on the same
   // empty value, so the two ways of backing out behave alike.
@@ -433,7 +503,7 @@
 
   const removeForm = document.getElementById('removeForm');
   document.getElementById('removeCancel').addEventListener('click', () => removeDialog.close());
-  document.getElementById('welcomeNew').addEventListener('click', () => newDialog.showModal());
+  document.getElementById('welcomeNew').addEventListener('click', () => openNewDialog());
   document.getElementById('welcomeImport').addEventListener('click', () => importFile.click());
 
   /*
@@ -626,7 +696,7 @@
     picker.querySelectorAll('button.drop').forEach((b) => {
       b.addEventListener('click', () => remove(b.dataset.drop));
     });
-    picker.querySelector('#newBtn')?.addEventListener('click', () => newDialog.showModal());
+    picker.querySelector('#newBtn')?.addEventListener('click', () => openNewDialog());
     picker.querySelector('#dupBtn')?.addEventListener('click', duplicateOpen);
     picker.querySelector('#importBtn')?.addEventListener('click', () => importFile.click());
     picker.querySelector('#exportAllBtn')?.addEventListener('click', exportAll);
@@ -698,7 +768,17 @@
       name: newForm.elements.name.value,
       level: newForm.elements.level.value,
       player: newForm.elements.player.value,
+      // Any level from 1 up: the campaign rules say what is usual, not this box.
+      minLevel: 1,
+      maxLevel: Infinity,
     });
+    // The first character sets the campaign's lowest level for every character,
+    // before it opens, so it opens under it.
+    if (!newFirst.hidden) setCampaignLowest(newForm.elements.lowest.value);
+    // Every new character opens on its campaign rules first (the sheet's ⚙
+    // tab), to be confirmed or changed before anything else; Continue there
+    // takes the flag off.
+    doc.uiPrefs = { ...(doc.uiPrefs || {}), rulesFirst: true };
     newDialog.close();
     newForm.reset();
     add(doc, [], 'blank');

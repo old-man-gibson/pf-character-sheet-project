@@ -28,6 +28,7 @@ import { proseText } from '../model/scope.js';
 import { dashSystemCards } from '../ui/panels/overview.js';
 import { ABILITIES, ABILITY_LABELS, AC_BONUS_TYPES, acParts as acRecipe, bonusColumnName, critMultOf, fmt } from '../rules.js';
 import { group } from '../ui/format.js';
+import { specialtyInPlay } from '../model/campaign.js';
 
 /** The two-letter alignment a block prints, from the sheet's full words. */
 function alignmentCode(text) {
@@ -187,7 +188,7 @@ export function renderStatBlockPanel(model, ctx = {}) {
     }).join(', ');
     const feats = [
       ...(c.featGroups || []).flatMap((g) => g.entries || []),
-      ...[c.grantedFeats?.drawback, c.grantedFeats?.specialty, ...(c.grantedFeats?.others || [])],
+      ...[c.grantedFeats?.drawback, specialtyInPlay(c) ? c.grantedFeats?.specialty : null, ...(c.grantedFeats?.others || [])],
     ].filter((f) => f && String(f.name || '').trim())
       .map((f) => `${f.name}${f.detail ? ` (${f.detail})` : ''}`);
     // A condition's skill penalty moves every skill alike, so it is one delta.

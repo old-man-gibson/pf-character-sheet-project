@@ -36,6 +36,7 @@ import {
   DERIVED, FORWARD_BY_DERIVED, abilityMod, armorParts,
   flatFootedCmd, iterativeAttacks, skillTotal, statMod,
 } from '../rules.js';
+import { freeBackgroundSkills, specialtyInPlay } from './campaign.js';
 import {
   applyMythic, attunementUnlocked, pointBuySummary, pointBuyTable, refreshAbilities, setBuild,
   setMythicPick, setPick,
@@ -286,7 +287,12 @@ export class Character {
     // Skills: total ranks from their sources, then the bonus.
     // totalRanks = MIN(level, bought + (specialty+gear+other)*level + spheres)
     const level = Number(c.identity.level) || 0;
-    const specialtyKeys = new Set(Object.values(c.specialtySkills || {}).filter(Boolean));
+    // The specialty skills count only with the Specialty in play; background
+    // skills (a campaign rule) replace them with background skills picked
+    // for free ranks, which take no typed ranks of their own.
+    const specialtyKeys = specialtyInPlay(c)
+      ? new Set(Object.values(c.specialtySkills || {}).filter(Boolean)) : new Set();
+    const freeBackground = freeBackgroundSkills(c);
     const sphereRanksBySkill = this.#sphereRanksBySkill();
     // Skill spheres pay into a skill the operative chose rather than one a
     // table named, so their ranks are worked out against the martial side's
@@ -302,6 +308,7 @@ export class Character {
     c.skills.forEach((s, i) => {
       const src = s.rankSources || { bought: 0, gear: false, other: false };
       const specialty = specialtyKeys.has(skillKey(s));
+      const free = freeBackground.has(skillKey(s));
       const spheres = guileRanks.ranks.has(i) ? guileRanks.ranks.get(i)
         : sphereRanksBySkill.has(i) ? sphereRanksBySkill.get(i)
           : (Number(s.importedSphereRanks) || 0);
@@ -311,16 +318,21 @@ export class Character {
       // the trackers.
       const r = evaluateAmount(src.bought, { level });
       // A formula buys no fewer than no ranks; a number stands as typed.
-      const bought = isFormulaText(src.bought) ? Math.max(0, r.value) : r.value;
+      const typed = isFormulaText(src.bought) ? Math.max(0, r.value) : r.value;
+      const bought = free ? 0 : typed;
       s.boughtError = r.error;
       s.boughtResolved = bought;
 
-      const flags = (specialty ? 1 : 0) + (src.gear ? 1 : 0) + (src.other ? 1 : 0);
+      const flags = (specialty || free ? 1 : 0) + (src.gear ? 1 : 0) + (src.other ? 1 : 0);
       const capped = Math.min(level, bought + flags * level + spheres);
       if (s.ranksOffset === undefined) {
         s.ranksOffset = (Number(s.totalRanks) || 0) - capped;
       }
       s.specialtyFlag = specialty;
+      // Written only when true, so a sheet that never uses background skills
+      // saves exactly what it did.
+      if (free) s.backgroundFree = true;
+      else delete s.backgroundFree;
       s.sphereRanks = spheres;
       s.totalRanks = capped + s.ranksOffset;
     });

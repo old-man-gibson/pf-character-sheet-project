@@ -19,7 +19,7 @@ import { featDetails, featCatalogue } from '../../model.js';
 import { featLevel, isAhead, rowLevel } from '../../model/feats.js';
 import { fromLevelField, fromLevelHead, plannedRow } from '../from-level.js';
 import {
-  campaignRules, isAntihero, mythicTierGrantOf, mythicTierReached, trialProgress,
+  campaignRules, isAntihero, mythicTierGrantOf, mythicTierReached, trialProgress, specialtyInPlay,
 } from '../../model/campaign.js';
 import {
   MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS,
@@ -66,6 +66,9 @@ function grantedFeatsSection(model, ctx) {
     const majorName = String(major.name || major.category || major.text || '').trim();
     // An antihero's feat, bought with the hero points it gave up (a campaign rule).
     const antihero = isAntihero(c);
+    // The specialty's feat, while the Specialty is in play (background skills,
+    // a campaign rule, replace it).
+    const specialty = specialtyInPlay(c);
 
     const fixed = (key, label, hint) => `<tr>
       ${/* No grip: these two are not in the list and cannot be moved out of
@@ -79,7 +82,7 @@ function grantedFeatsSection(model, ctx) {
     </tr>`;
 
     return `<h4 class="subhead">Granted feats
-        <span class="badge">${(hasMajor ? 2 : 1) + (antihero ? 1 : 0) + (g.others || []).length}</span>
+        <span class="badge">${(hasMajor ? 1 : 0) + (specialty ? 1 : 0) + (antihero ? 1 : 0) + (g.others || []).length}</span>
       </h4>
       <div class="tablewrap"><table class="granted stacked${(g.others || []).length ? '' : ' notools'}">
         <thead><tr><th class="grip"></th><th class="src">Source</th><th class="fname">Feat</th>
@@ -87,7 +90,7 @@ function grantedFeatsSection(model, ctx) {
           <th class="fnote">Notes</th><th></th></tr></thead>
         <tbody>
           ${hasMajor ? fixed('drawback', 'Drawback', majorName.slice(0, 60)) : ''}
-          ${fixed('specialty', 'Specialty')}
+          ${specialty ? fixed('specialty', 'Specialty') : ''}
           ${antihero ? fixed('antihero', 'Antihero', 'In place of hero points') : ''}
           ${(g.others || []).map((f, i) => `<tr ${rows.rowDrop('grantedFeats.others', i)}${plannedRow(isAhead(rowLevel(f), level), rowLevel(f))}>
             ${rows.rowGrip()}
@@ -106,8 +109,9 @@ function grantedFeatsSection(model, ctx) {
         ${hasMajor
           ? 'A Major Drawback buys the Drawback feat.'
           : 'The Drawback row appears once a Major Drawback is taken on the Overview.'}
-        The Specialty feat is mandatory, so it is always here. Oath and Attunement feats
-        name their own source.
+        ${specialty ? 'The Specialty feat is mandatory, so it is always here.'
+    : 'No Specialty feat: background skills are in use.'} Oath and
+        Attunement feats name their own source.
         ${c.altTraining?.calc?.counts?.feat
     ? `Technique feats (${c.altTraining.calc.counts.feat} from
         <strong>${esc(c.altTraining.calc.technique)}</strong>) are listed on the

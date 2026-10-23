@@ -24,8 +24,9 @@
  * against.
  */
 import {
-  CORE_PROWESS_LEVELS, MAX_LEVEL, MYTHIC_TIER_LEVEL, attunedBonuses, mythicTierGrant, tierAtLevel,
+  CORE_PROWESS_LEVELS, MAX_LEVEL, MYTHIC_TIER_LEVEL, attunedBonuses, isBackgroundSkill, mythicTierGrant, tierAtLevel,
 } from '../rules.js';
+import { skillKey } from './util.js';
 
 /** The table's rules: what a switch reads as until a player sets it. */
 export const CAMPAIGN_DEFAULTS = Object.freeze({
@@ -94,9 +95,16 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
   /** Milestones a level takes, unless `milestoneSteps` names one level's own. */
   milestoneRate: 1,
   /**
+   * The lowest level a character plays at: the level box goes no lower, and
+   * a new character starts here when every character shares the rules. The
+   * table's characters start at 3rd. Any level from 1 up to the highest.
+   */
+  minLevel: 3,
+  /**
    * The highest level a character reaches: Level up stops there, and the
    * ladders end there. Past 20th the Planner grows rows and class
    * progressions carry on; tables that stop at 20th hold their last row.
+   * Any level from 1 up; there is no ceiling.
    */
   maxLevel: MAX_LEVEL,
   /** The highest mythic tier: the ladders, trials and Tier up stop there. */
@@ -106,7 +114,31 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
    * unit. The coin purse keeps its platinum, gold, silver and copper.
    */
   currency: 'Mana',
+  /**
+   * What a character's background gives it: `specialty`, the table's
+   * Specialty (a name, a feat, two perks and three specialty skills at full
+   * ranks), or `background`, the Background Skills system: the skills split
+   * into adventuring and background ones, and ranks each level that only
+   * background skills may take. The two are one or the other.
+   */
+  skillSystem: 'specialty',
+  /** Background ranks a level, under background skills. */
+  backgroundRanks: 2,
+  /**
+   * How background ranks are taken: `allocated`, one background skill at
+   * full ranks for each rank a level, picked on the Skills tab; or
+   * `floating`, a pool of ranks spent by hand on background skills.
+   */
+  backgroundUse: 'allocated',
+  /** Age categories change ability scores (identity.ageCategory). */
+  agingEffects: false,
 });
+
+/** The age categories, youngest first. */
+export const AGE_CATEGORIES = Object.freeze(['Adult', 'Middle-Aged', 'Old', 'Venerable']);
+
+export const SKILL_SYSTEMS = Object.freeze(['specialty', 'background']);
+export const BACKGROUND_USES = Object.freeze(['allocated', 'floating']);
 
 /** The values a select offers for `mythicTier`. */
 export const MYTHIC_TIER_SOURCES = Object.freeze(['level', 'trials', 'awarded']);
@@ -131,8 +163,7 @@ export const XP_TRACKS = Object.freeze({
 /** The table's highest mythic tier, and the core rules'. */
 export const MAX_TIER = CAMPAIGN_DEFAULTS.maxTier;
 
-/** How high a campaign may set the highest level and tier. */
-export const LEVEL_CEILING = 40;
+/** How high a campaign may set the highest tier. Levels have no ceiling. */
 export const TIER_CEILING = 20;
 
 /** A count read from a field: a whole number 0 or more, or `fallback`. */
@@ -162,8 +193,8 @@ export function campaignRules(d) {
   const c = d?.campaign && typeof d.campaign === 'object' ? d.campaign : {};
   const bool = (k) => (typeof c[k] === 'boolean' ? c[k] : CAMPAIGN_DEFAULTS[k]);
   const words = (v) => (typeof v === 'string' ? v.trim() : '');
-  // A highest level or tier: at least 1, at most the ceiling.
-  const most = (k, ceiling) => {
+  // A lowest or highest level, or a highest tier: at least 1, at most the ceiling.
+  const most = (k, ceiling = Infinity) => {
     const n = count(c[k], null);
     return n === null || n < 1 ? CAMPAIGN_DEFAULTS[k] : Math.min(ceiling, n);
   };
@@ -186,12 +217,58 @@ export function campaignRules(d) {
     advancement: ADVANCEMENT_MODES.includes(c.advancement) ? c.advancement : CAMPAIGN_DEFAULTS.advancement,
     xpTrack: Object.hasOwn(XP_TRACKS, c.xpTrack) ? c.xpTrack : CAMPAIGN_DEFAULTS.xpTrack,
     milestoneRate: count(c.milestoneRate, CAMPAIGN_DEFAULTS.milestoneRate),
-    maxLevel: most('maxLevel', LEVEL_CEILING),
+    // No higher than the highest: a lowest above it reads as the highest.
+    minLevel: Math.min(most('minLevel'), most('maxLevel')),
+    maxLevel: most('maxLevel'),
     maxTier: most('maxTier', TIER_CEILING),
     // The wallet's own name, which no control ever set, still counts under a
     // blank: a sheet that came in calling it something else keeps that.
     currency: words(c.currency) || words(d?.wealth?.currency) || CAMPAIGN_DEFAULTS.currency,
+    skillSystem: SKILL_SYSTEMS.includes(c.skillSystem) ? c.skillSystem : CAMPAIGN_DEFAULTS.skillSystem,
+    backgroundRanks: count(c.backgroundRanks, CAMPAIGN_DEFAULTS.backgroundRanks),
+    backgroundUse: BACKGROUND_USES.includes(c.backgroundUse) ? c.backgroundUse : CAMPAIGN_DEFAULTS.backgroundUse,
+    agingEffects: bool('agingEffects'),
   };
+}
+
+/**
+ * Ability changes from the character's age category, or null when there are
+ * none (rule off, Adult, or no category). Cumulative: Middle-Aged -1/+1, Old
+ * -3/+2, Venerable -6/+3 (Str, Dex, Con / Int, Wis, Cha).
+ */
+export function ageAbilityMods(d) {
+  if (!campaignRules(d).agingEffects) return null;
+  const step = AGE_CATEGORIES.indexOf(String(d?.identity?.ageCategory ?? ''));
+  if (step < 1) return null;
+  const physical = -(step * (step + 1)) / 2;
+  return { str: physical, dex: physical, con: physical, int: step, wis: step, cha: step };
+}
+
+/**
+ * Whether the Specialty is in play: its name, feat, perks and specialty
+ * skills. Background skills replace all of it (a campaign rule); what was
+ * written there is kept for if the rule comes back.
+ */
+export function specialtyInPlay(d) {
+  return campaignRules(d).skillSystem === 'specialty';
+}
+
+/**
+ * The background skills that take their ranks for free: under background
+ * skills with the ranks allocated, the skills picked on the Skills tab
+ * (`d.backgroundSkills`, a skill key by slot, `{ 0: 'Craft|Weapons' }`), one
+ * for each background rank a level -- each at full ranks, which is that rank
+ * every level. A slot past the count, or a skill that is not a background
+ * skill, gives nothing.
+ */
+export function freeBackgroundSkills(d) {
+  const rules = campaignRules(d);
+  if (rules.skillSystem !== 'background' || rules.backgroundUse !== 'allocated') return new Set();
+  const byKey = new Map((d?.skills || []).map((s) => [skillKey(s), s]));
+  const map = d?.backgroundSkills && typeof d.backgroundSkills === 'object' ? d.backgroundSkills : {};
+  const picks = Array.from({ length: rules.backgroundRanks }, (_, i) => map[i])
+    .filter((k) => byKey.has(k) && isBackgroundSkill(byKey.get(k)));
+  return new Set(picks);
 }
 
 /**
@@ -267,6 +344,7 @@ export const RULE_TITLES = Object.freeze({
   advancement: 'Levels',
   xpTrack: 'XP table',
   milestoneRate: 'Milestones a level',
+  minLevel: 'Lowest level',
   maxLevel: 'Highest level',
   gestalt: 'Gestalt',
   hitPoints: 'Hit points',

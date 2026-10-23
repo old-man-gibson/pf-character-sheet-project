@@ -148,7 +148,8 @@ export const BUILD_PERMANENT_GROUPS = [
   },
   {
     cols: [['attunement', 'Att', 'Attuned'], ['inherent', 'Inh', 'Inherent'], ['array', 'Arr', 'Array'],
-      ['level4', 'L/4', 'Level/4'], ['mythic', 'Myth', 'Mythic'], ['size', 'Size', 'Size'], ['untyped', 'Unt', 'Untyped']],
+      ['level4', 'L/4', 'Level/4'], ['mythic', 'Myth', 'Mythic'], ['age', 'Age', 'Age category'], ['size', 'Size', 'Size'],
+      ['untyped', 'Unt', 'Untyped']],
   },
 ];
 
@@ -236,7 +237,7 @@ export function resolveAbility(entry = {}) {
 
   const total = n(entry.pointBuy) + n(entry.race) + enhancement + n(entry.attunement)
     + n(entry.inherent) + n(entry.array) + n(entry.level4) + n(entry.mythic)
-    + n(entry.size) + n(entry.untyped);
+    + n(entry.age) + n(entry.size) + n(entry.untyped);
 
   const temporary = n(entry.alchemical) + n(entry.circumstance) + n(entry.morale)
     + n(entry.tempEnhancement) + n(entry.tempSize);
@@ -709,10 +710,20 @@ export function sphereSkillSpheres(def) {
   return [...new Set((def.from || []).map((s) => s.sphere))];
 }
 
-/** Background skills (Pathfinder Unchained), for the specialty picker. */
+/**
+ * Background skills (Pathfinder Unchained): the specialty picker's list, and
+ * under the Background Skills campaign rule the skills background ranks may
+ * buy. Every other skill is an adventuring skill.
+ */
 export const BACKGROUND_SKILLS = ['Appraise', 'Artistry', 'Craft', 'Handle Animal',
   'Kn. (engineering)', 'Kn. (geography)', 'Kn. (history)', 'Kn. (nobility)',
   'Linguistics', 'Lore', 'Perform', 'Profession', 'Sleight of Hand'];
+
+/** Whether a skill row is a background skill: by its name, whatever its variant. */
+export function isBackgroundSkill(skill) {
+  const name = String(skill?.name ?? skill ?? '');
+  return BACKGROUND_SKILLS.some((b) => name === b || name.startsWith(b));
+}
 
 /* ------------------------------------------------------------------ *
  * Alternate Training Techniques

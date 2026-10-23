@@ -65,8 +65,13 @@ way a workbook's are. That one has a page of its own: [Monsters](monsters.md).
 
 ### From nothing — in the app
 
-**+ New** in the picker asks for a name, a player and a level (3rd or higher — the
-campaign's floor), and opens a blank sheet. "Blank" here means the campaign template with
+**+ New** in the picker asks for a name, a player and a level (any level from 1 up; it
+starts at the lowest level the shared campaign rules give, 3rd unless they say otherwise),
+and opens a blank sheet. The first character in a browser with none also asks for the
+campaign's **lowest level** (the lowest level a character can have in the campaign) and
+makes it the standard every character shares (see Campaign rules in
+[Using the sheet](using-the-sheet.md)). A level typed below that standard is still allowed,
+with a note saying where the lowest level is changed. "Blank" here means the campaign template with
 nothing typed into it: 10 in every score (bought at 10 on the standard point-buy table),
 the template's skill list with no ranks, Con behind hit points, Dex behind AC and
 initiative, the usual ability behind each save and attack mode, one hero point, **6 hit

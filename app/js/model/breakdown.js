@@ -116,7 +116,7 @@ function abilityBreakdown(model, key, which) {
       part('enhancement', r.enhancement,
         r.enhancementWasted ? `ABP ${build.abp || 0} + gear ${build.gear || 0}, ${r.enhancementWasted} over the cap` : 'ABP and gear together'),
       ...[['attunement', 'attuned'], ['inherent', 'inherent'], ['array', 'array'],
-        ['level4', 'level/4'], ['mythic', 'mythic'], ['size', 'size'], ['untyped', 'untyped']]
+        ['level4', 'level/4'], ['mythic', 'mythic'], ['age', 'age category'], ['size', 'size'], ['untyped', 'untyped']]
         .map(([k, label]) => part(label, build[k])),
       part('forwarded', a.forwarded?.permanent || 0, 'a rule written elsewhere on the sheet'),
     ];
