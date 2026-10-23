@@ -11,6 +11,7 @@
 import { blankDocument } from '../app/js/convert.js';
 import { Character, blankClassRow } from '../app/js/model.js';
 import { fixtureIds, loadCharacter } from './fixtures.mjs';
+import { hasTokens } from '../app/js/inline.js';
 import { mythWeaversBackup, mwSkillName, textWidth, MW_CELLS, FEAT_COLUMNS } from '../app/js/myth-weavers.js';
 
 let pass = 0;
@@ -30,6 +31,8 @@ function sweep(label, model) {
   const { fields: f, report } = mythWeaversBackup(model);
   const d = model.data;
   check(`${label}: every value is text`, Object.values(f).every((v) => typeof v === 'string'), true);
+  check(`${label}: no unworked formula or stray object in any field`,
+    Object.entries(f).filter(([, v]) => hasTokens(v) || /\[object |\[\[|\{\{/.test(v)).map(([k]) => k), []);
   // legacy_pathfinder's own formulas.
   const ac = 10 + ['ACArmor', 'ACShield', 'ACDex', 'ACSize', 'ACDodge', 'ACNat', 'ACDeflect', 'ACMisc'].reduce((a, k) => a + n(f, k), 0);
   const touch = 10 + ['ACDex', 'ACSize', 'ACDodge', 'ACDeflect', 'ACMisc'].reduce((a, k) => a + n(f, k), 0);
@@ -76,7 +79,12 @@ console.log('\ntext widths follow the sheet\'s 9px Helvetica/Arial');
 console.log('\nan invented character: feat slots, class columns and Spells & Powers codes');
 {
   const doc = blankDocument({ name: 'Coded', level: 6 });
-  doc.classes = [{ ...blankClassRow(), name: 'L. Samurai', archetypes: 'Ronin' }, { ...blankClassRow(), name: 'Kheshig' }];
+  doc.classes = [{ ...blankClassRow(), name: 'L. Samurai', archetypes: 'Ronin' },
+    { ...blankClassRow(), name: 'Kheshig', archetypes: 'Praetorian, Steppe Rider, Banner of the Great Khan, Mounted Guardian' }];
+  // The model reads the tier from identity; the mythic block's copy is stale.
+  doc.identity.mythicTier = 2;
+  doc.mythic = { ...doc.mythic, path: 'Champion', tier: 0,
+    abilities: [{ name: 'Always a Chance' }, { name: 'Fleet Charge' }, { name: 'Not yet' }] };
   doc.feats = {
     'Level Up': [{ name: 'Power Attack', detail: '1' }, { name: 'Cleave', detail: '3' }, { name: 'Planned', detail: '7' }],
     Class: [{ name: 'Quick Draw', detail: 'Legendary Samurai (Sheath Control)' },
@@ -92,20 +100,39 @@ console.log('\nan invented character: feat slots, class columns and Spells & Pow
     { talent: 'Unplaced', sphere: 'Fencing', source: null },
     { talent: 'Guardian Sphere', sphere: 'Guardian', source: 'Ronin (Guardian of the Weak)' },
   ];
-  const c = new Character(doc);
-  // The class features as the model keeps them, which is what the export reads.
-  c.data.progression.classFeatures = {
-    'L. Samurai': { columns: ['Features', 'Feature Selections'], byLevel: {
-      1: { Features: 'Sheath Control, Studied Target (1)', 'Feature Selections': 'Veil: Deathgrip Gauntlets' },
-      3: { Features: 'Studied Target (2)' }, 6: { Features: 'Advanced Blade' }, 7: { Features: 'Too late' } } },
-    Kheshig: { columns: ['Features'], byLevel: { 1: { Features: 'Guardian of the Weak' } } },
+  // Both classes at every level, and their feature ladders as the
+  // Progression tab keeps them (classFeatureRows reads these).
+  doc.progression = {
+    tracks: 2,
+    levels: [1, 2, 3, 4, 5, 6].map((level) => ({ level, classes: ['L. Samurai', 'Kheshig'] })),
+    classFeatures: {
+      // Cells kept per rule group, as a ladder with an archetype keeps them,
+      // with formulas in the text.
+      'L. Samurai': {
+        columns: ['Features', 'Feature Selections'],
+        rules: { Features: [{ name: 'L. Samurai', rule: '' }, { name: 'Ronin', rule: '' }], 'Feature Selections': [{ name: 'Veils', rule: '' }] },
+        byLevel: {
+          1: { Features: { 'L. Samurai': 'Sheath Control, Studied Target ({1 + floor(level / 3)})', Ronin: 'Guard Bonus ({skill.diplomacy += 2})' },
+            'Feature Selections': { Veils: 'Deathgrip Gauntlets' } },
+          3: { Features: { 'L. Samurai': 'Studied Target ({1 + floor(level / 3)})' } },
+          6: { Features: { 'L. Samurai': 'Advanced Blade' } },
+        },
+      },
+      Kheshig: { columns: ['Features'], byLevel: { 1: { Features: 'Guardian of the Weak' } } },
+    },
   };
+  const c = new Character(doc);
   c.data.akashic.slots = [{ slot: 'Hands', bound: true, twinveil: false, veils: [{ name: 'Deathgrip Gauntlets', desc: '', essence: 3, dc: 20 }] }];
   const { fields: f, report } = mythWeaversBackup(c, { publishedUrl: 'https://example.test/published.html?s=abc' });
 
   check('the level-up slots, reached and not', [1, 2, 3, 4, 10].map((i) => f[`Feat${i}`]), ['f01 Power Attack', 'f03 Cleave', 'f05', 'f07', 'f19']);
-  check('a class block: heading, the later step of Studied Target, nothing past level 6, no veil pick',
-    ['Feat22', 'Feat23', 'Feat24'].map((k) => f[k]), ['L. Samurai 6 (Ronin)', '1: Sheath Control, 3: Studied Target (2),', '6: Advanced Blade']);
+  check('a class block from rule-group cells: formulas worked out, a bonus with its sign, the later step only',
+    ['Feat22', 'Feat23', 'Feat24'].map((k) => f[k]), ['L. Samurai 6 (Ronin)', '1: Sheath Control, Guard Bonus (+2),', '3: Studied Target (3), 6: Advanced Blade']);
+  const featCells = FEAT_COLUMNS.flat().map((k) => f[k]).filter(Boolean);
+  check('the veil picked in the class column is listed in Spells & Powers, not there', featCells.some((v) => /Veils?:/.test(v)), false);
+  check('an archetype list too long for the heading keeps its first archetype', featCells.includes('Kheshig 6 (Praetorian)'), true);
+  check('the mythic tier is the one the model uses', [f.Class.endsWith('· Champion 2'), featCells.includes('Mythic: Champion 2')], [true, true]);
+  check('mythic abilities stop at the tier', [featCells.some((v) => v.includes('Fleet Charge')), featCells.some((v) => v.includes('Not yet'))], [true, false]);
   check('Spells & Powers by class and level', spellNames(f), [
     'K00 === Kheshig ===',
     'K01a Fencing Sphere',

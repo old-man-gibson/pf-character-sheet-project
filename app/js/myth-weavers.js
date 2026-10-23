@@ -31,7 +31,9 @@
  * table's way of filling the sheet.
  */
 
-import { critMultOf, threatText } from './rules.js';
+import { critMultOf, threatText, fmt } from './rules.js';
+import { hasTokens, formatValue } from './inline.js';
+import { eachShown } from './ui/prose.js';
 
 /*
  * Helvetica advance widths (1/1000 em) for ASCII 32-126. The sheet's font is
@@ -164,17 +166,34 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
   const c = model.data;
   const report = { dropped: [], moved: [], abbreviated: [], clipped: [], overflow: [], noLevel: [], crit: [] };
   const out = {};
-  const set = (k, v) => { if (v !== null && v !== undefined && v !== '') out[k] = String(v); };
+  // Text as the sheet shows it: formulas worked out by the app's own
+  // renderer, a forwarded bonus with its sign, a broken formula as written.
+  const plain = (text) => {
+    const s = String(text ?? '');
+    if (!hasTokens(s)) return s;
+    return model.renderProse(s).map((seg) => {
+      if (seg.kind === 'text') return seg.text;
+      if (seg.error) return seg.raw;
+      if (seg.kind === 'push') return seg.values ? eachShown(seg) : fmt(seg.value);
+      return formatValue(seg.value);
+    }).join('');
+  };
+  // Every value goes through plain() once more, for text no section below
+  // worked out itself.
+  const set = (k, v) => { if (v !== null && v !== undefined && v !== '') out[k] = plain(v); };
   const notes = [];
   const id = c.identity || {};
   const level = num(id.level);
   const ab = (k) => c.abilities?.[String(k || '').toLowerCase()] || null;
   const abMod = (k) => (ab(k) ? num(ab(k).totalMod) : 0);
-  const mythicTier = num(c.mythic?.tier);
+  // The tier is the identity's, as the model's own scope reads it; the
+  // mythic block's copy can be stale.
+  const mythicTier = num(id.mythicTier) || num(c.mythic?.tier);
+  const mythicPath = c.mythic?.path || id.mythicPath || '';
 
   // Identity.
   let classText = (c.classes || []).map((k) => k.name).filter(Boolean).join(' / ')
-    + (mythicTier ? ` · ${c.mythic.path} ${mythicTier}` : '');
+    + (mythicTier ? ` · ${mythicPath || 'Mythic'} ${mythicTier}` : '');
   if (!fits(classText, MW_CELLS.name)) {
     const short = abbreviate(classText).replace(/ \/ /g, '/');
     report.abbreviated.push(`Class: "${classText}" → "${short}"`);
@@ -203,8 +222,8 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
   set('Speed', (id.speeds || []).filter((s) => num(s.final) > 0)
     .map((s, i) => (i === 0 && /land/i.test(s.type) ? `${s.final} ft` : `${String(s.type).toLowerCase()} ${s.final}`)).join(', '));
   const d = c.defenses || {};
-  set('DamageRed', [d.dr && `DR ${d.dr}`, d.spellResistance && `SR ${d.spellResistance}`, d.resistance && `Resist ${d.resistance}`]
-    .filter(Boolean).join('; '));
+  set('DamageRed', [d.dr && `DR ${plain(d.dr)}`, d.spellResistance && `SR ${plain(d.spellResistance)}`,
+    d.resistance && `Resist ${plain(d.resistance)}`].filter(Boolean).join('; '));
   set('CasterLevel', model.casterLevel ? `CL ${model.casterLevel}` : '');
   const tier = (re) => (c.carry?.tiers || []).find((t) => re.test(t.name))?.limit;
   set('LightLoad', tier(/light/i)); set('MediumLoad', tier(/medium/i)); set('HeavyLoad', tier(/heavy/i));
@@ -261,8 +280,11 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
   set('RABMisc', ranged - bab - num(modes.ranged?.value)); set('RBAB', line(ranged));
   set('CMBBase', bab); set('CMBStr', num(modes.cmb?.value)); set('CMBMisc', cmb - bab - num(modes.cmb?.value)); set('CMB', signed(cmb));
 
-  // Weapons: four rows. A special line too long for its cell is cut there and
-  // written in full in Other Notes.
+  // Weapons: four rows, with the attack and damage the app works out once the
+  // {{…}} and [[…]] tokens in the special text are counted. The tokens leave
+  // the special text, a crit-only rider goes in Other Notes with the crit
+  // line, and a special line too long for its cell is cut there and written
+  // in full in Other Notes.
   const weapons = (c.equipment?.weapons || []).filter((w) => w.name);
   if (weapons.length > 4) report.overflow.push(`weapons past the sheet's four rows: ${weapons.slice(4).map((w) => w.name).join(', ')}`);
   weapons.slice(0, 4).forEach((w, i) => {
@@ -272,19 +294,20 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
     const mult = critMultOf(w.critMult);
     if (mult > 6 || threat < 10) report.crit.push(`${name}: ${threatText(threat, mult)}`);
     set(`Weapon${n}`, name);
-    set(`Weapon${n}AB`, line(num(w.attackTotal)));
-    set(`Weapon${n}Damage`, w.damageTotal);
+    set(`Weapon${n}AB`, line(num(w.calc?.totalAtk ?? w.attackTotal)));
+    set(`Weapon${n}Damage`, w.calc?.totalDmgStr || w.damageTotal);
     set(`Weapon${n}Crit`, threatText(threat, mult));
     set(`Weapon${n}Range`, w.range ? `${w.range} ft` : w.attackType);
     set(`Weapon${n}Type`, w.damageType); set(`Weapon${n}Size`, w.size); set(`Weapon${n}Weight`, num(w.weight) || '');
     set(`Weapon${n}Ammo`, w.ammunition);
-    const special = String(w.special || '').replace(/\s+/g, ' ').trim();
+    if (w.calc?.hasCritTokens && w.calc.critStr) notes.push(`${name} on a crit: ${w.calc.critStr}`);
+    const special = plain(String(w.special || '').replace(/\{\{[\s\S]*?\}\}|\[\[[\s\S]*?\]\]/g, ' ')).replace(/\s+/g, ' ').trim();
     if (!special) return;
     if (fits(special, MW_CELLS.weaponSpecial)) { set(`Weapon${n}Special`, special); return; }
     let cut = special;
     while (cut && !fits(`${cut}… (Notes)`, MW_CELLS.weaponSpecial)) cut = cut.slice(0, -1);
     set(`Weapon${n}Special`, `${cut.trim()}… (Notes)`);
-    notes.push(`${name}: ${String(w.special).trim()}`);
+    notes.push(`${name}: ${special}`);
     report.moved.push(`${name}: special properties → Other Notes`);
   });
 
@@ -348,11 +371,12 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
       featLines.push(code);
       continue;
     }
-    let text = `${code} ${e.name}`;
+    const name = plain(e.name);
+    let text = `${code} ${name}`;
     for (const step of [abbreviate, (s) => abbreviate(trimProse(s))]) {
       if (fits(text, MW_CELLS.feat)) break;
-      text = `${code} ${step(e.name)}`;
-      report.abbreviated.push(`${code}: "${e.name}" → "${text.slice(4)}"`);
+      text = `${code} ${step(name)}`;
+      report.abbreviated.push(`${code}: "${name}" → "${text.slice(4)}"`);
     }
     featLines.push(text);
   }
@@ -370,11 +394,11 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
   for (const g of [granted.drawback?.name && `Drawback: ${granted.drawback.name}`,
     granted.specialty?.name && `Specialty: ${granted.specialty.name}`,
     ...(granted.others || []).filter((o) => o.name && o.name !== '???').map((o) => `${o.source ? `${o.source}: ` : ''}${o.name}`)]) {
-    if (g) featLines.push(...flow([g], MW_CELLS.feat));
+    if (g) featLines.push(...flow([plain(g)], MW_CELLS.feat));
   }
   // Class bonus feats go under their class in Spells & Powers.
   for (const g of groups.filter((x) => !x.levelUp && x.name !== 'Class')) {
-    const names = counted(g.entries.filter((e) => e.name && e.name !== '???').map((e) => e.name.replace(/\s*\((FCB[^)]*|Feat)\)/g, '').trim()));
+    const names = counted(g.entries.filter((e) => e.name && e.name !== '???').map((e) => plain(e.name).replace(/\s*\((FCB[^)]*|Feat)\)/g, '').trim()));
     const label = g.name === 'Other/Flex' ? 'Flex' : g.name;
     if (names.length) featLines.push(...flow(names.map((x, i) => (i === 0 ? `${label}: ` : '') + x), MW_CELLS.feat));
   }
@@ -385,37 +409,66 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
   const veils = (c.akashic?.slots || []).flatMap((s) => (s.veils || []).filter((v) => v.name).map((v) => ({ ...v, slot: s.slot, bound: s.bound })));
   const veilKeys = new Set(veils.map((v) => veilKey(v.name)));
 
-  // A block per class: features up to the current level, the latest step of a
-  // scaling feature only; then each pick column as one list under one label.
-  const blocks = [];
+  // Each class's feature ladder as the Progression tab draws it
+  // (classFeatureRows), with its formulas worked out. The first column is the
+  // class's feature list, whatever it is called, and its rule groups (base
+  // class, archetype, path) are all features; any other column holds picks
+  // named by their group, else by the column. Levels are the class's own;
+  // `reached` is whether the character has that row yet, and `now` is the
+  // class level the character is at.
   const tables = c.progression?.classFeatures || {};
+  const columnName = (col) => String(col).split('\n')[0].replace(/\s*\(.*\)/, '').trim();
+  const ladders = new Map();
   for (const k of c.classes || []) {
-    const table = tables[k.name];
-    if (!table) continue;
+    if (!k.name || ladders.has(k.name)) continue;
+    const columns = tables[k.name]?.columns || [];
+    const listColumn = columns[0];
+    let rows = [];
+    try { rows = model.classFeatureRows(k.name); } catch { rows = []; }
     const entries = [];
-    const picks = new Map();
-    for (const [lv, row] of Object.entries(table.byLevel || {})) {
-      if (num(lv) > level) continue;
-      for (const [col, val] of Object.entries(row)) {
-        if (val == null || val === '') continue;
-        if (col === 'Features') { items(val).forEach((it) => entries.push({ lv: num(lv), it })); continue; }
-        for (const x of String(val).split('\n').map((s) => s.trim())) {
-          if (!x || /:\s*$/.test(x) || /^\d+(\.\d+)?$/.test(x)) continue;
-          // "TIJ: Curved Cut" names its own label; a bare pick takes the column's.
-          const m = x.match(/^([^:()]{1,24}):\s*(.+)$/);
-          const label = m ? m[1].trim() : col.replace(/\s*\(.*\)/, '').trim();
-          // A veil is listed, with its level, under the class in Spells & Powers.
-          const parts = items(m ? m[2] : x);
-          parts.filter((p) => veilKeys.has(veilKey(p))).forEach((p) => report.moved.push(`${k.name} ${lv}: veil ${p} → Spells & Powers`));
-          const rest = parts.filter((p) => !veilKeys.has(veilKey(p)));
-          if (!rest.length) continue;
-          if (!picks.has(label)) picks.set(label, []);
-          picks.get(label).push({ lv: num(lv), it: rest.join(', ') });
+    for (const row of rows) {
+      for (const [col, cell] of Object.entries(row.cells || {})) {
+        for (const f of cell.fields || []) {
+          const text = f.on === false ? '' : plain(f.text).trim();
+          if (!text) continue;
+          const label = col === listColumn ? null : (f.group?.name || columnName(col));
+          entries.push({ lv: row.classLevel, text, label, reached: row.level <= level });
         }
       }
     }
-    // A bare slot ("Utility Wild Talent", "Monk Art") says nothing its pick list does not.
-    const slotNames = [...picks.keys()].map((l) => l.toLowerCase().replace(/s$/, ''));
+    const now = rows.filter((r) => r.level <= level).reduce((m, r) => Math.max(m, r.classLevel), 0);
+    ladders.set(k.name, { now: now || level, entries, pickColumns: columns.slice(1).map(columnName) });
+  }
+
+  // A block per class: features up to the current level, the latest step of a
+  // scaling feature only; then each pick column as one list under one label.
+  const blocks = [];
+  for (const k of c.classes || []) {
+    const ladder = ladders.get(k.name);
+    if (!ladder) continue;
+    const entries = [];
+    const picks = new Map();
+    for (const e of ladder.entries.filter((x) => x.reached)) {
+      // A list written as sentences ("Shield ally.") loses its full stops.
+      if (!e.label) { e.text.split('\n').flatMap(items).forEach((it) => entries.push({ lv: e.lv, it: it.replace(/\.$/, '') })); continue; }
+      for (const x of e.text.split('\n').map((s) => s.trim())) {
+        if (!x || /:\s*$/.test(x) || /^\d+(\.\d+)?$/.test(x)) continue;
+        // "TIJ: Curved Cut" names its own label; otherwise the group's or column's.
+        const m = x.match(/^([^:()]{1,24}):\s*(.+)$/);
+        const label = m ? m[1].trim() : e.label;
+        // A veil is listed, with its level, under the class in Spells & Powers.
+        const parts = items(m ? m[2] : x).map((p) => p.replace(/\.$/, ''));
+        parts.filter((p) => veilKeys.has(veilKey(p))).forEach((p) => report.moved.push(`${k.name} ${e.lv}: veil ${p} → Spells & Powers`));
+        const rest = parts.filter((p) => !veilKeys.has(veilKey(p)));
+        if (!rest.length) continue;
+        if (!picks.has(label)) picks.set(label, []);
+        picks.get(label).push({ lv: e.lv, it: rest.join(', ') });
+      }
+    }
+    // A bare slot ("Utility Wild Talent", "Monk Art") says nothing its pick
+    // list does not: an entry with no detail that ends in a pick's label or a
+    // pick column's name.
+    const slotNames = [...picks.keys(), ...ladder.pickColumns].map((l) => featureKey(l).replace(/s$/, '')).filter(Boolean);
     const isSlot = (it) => !/[(:]/.test(it) && slotNames.some((s) => featureKey(it).replace(/s$/, '').endsWith(s));
     const latest = (list) => {
       const last = new Map();
@@ -428,25 +481,33 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
     };
     const kept = latest(entries.filter((e) => !isSlot(e.it)));
     const marked = kept.map((e, i) => (i === 0 || kept[i - 1].lv !== e.lv ? `${e.lv}: ` : '') + e.it);
-    for (const [label, list] of picks) {
-      const ps = latest(list);
-      const plural = ps.length > 1 && /[a-z]{2}$/.test(label) && !/s$/.test(label);
-      ps.forEach((p, i) => marked.push((i === 0 ? `${label}${plural ? 's' : ''}: ` : '') + p.it));
-    }
+    // Labels stay as the player named the groups.
+    for (const [label, list] of picks) latest(list).forEach((p, i) => marked.push((i === 0 ? `${label}: ` : '') + p.it));
     if (!marked.length) continue;
-    const head = `${k.name} ${level}${k.archetypes ? ` (${k.archetypes})` : ''}`;
-    blocks.push({ title: k.name, head, entries: marked, lines: [head, ...flow(marked, MW_CELLS.feat)] });
+    // The heading names the archetypes when they fit, else the first one;
+    // a list too long for either opens the block instead.
+    const archetypes = String(k.archetypes || '').trim();
+    let head = `${k.name} ${ladder.now}${archetypes ? ` (${archetypes})` : ''}`;
+    let headLines = [head];
+    if (!fits(head, MW_CELLS.feat)) {
+      const first = items(archetypes)[0];
+      head = first && fits(`${k.name} ${ladder.now} (${first})`, MW_CELLS.feat) ? `${k.name} ${ladder.now} (${first})` : `${k.name} ${ladder.now}`;
+      headLines = /\(/.test(head) ? [head] : [head, ...flow([`Archetypes: ${archetypes}`], MW_CELLS.feat)];
+    }
+    blocks.push({ title: k.name, head, headLines, entries: marked, lines: [...headLines, ...flow(marked, MW_CELLS.feat)] });
   }
   // Mythic: the base abilities are the same for every character of a tier,
   // so only those carrying a number are written, in the heading.
   let mythic = null;
   if (mythicTier) {
-    const base = (c.mythic.baseAbilities || []).flatMap(items);
-    let head = `Mythic: ${c.mythic.path} ${mythicTier}`;
+    const base = (c.mythic?.baseAbilities || []).map(plain).flatMap(items);
+    let head = `Mythic: ${mythicPath ? `${mythicPath} ` : ''}${mythicTier}`;
     const rest = [];
     for (const b of base.filter((x) => /\d/.test(x))) { if (fits(`${head}, ${b}`, MW_CELLS.feat)) head += `, ${b}`; else rest.push(b); }
-    const path = counted((c.mythic.abilities || []).filter((a) => a.name).map((a) => a.name));
-    const feats = (c.mythic.abilities || []).map((a) => a.featChoice).filter(Boolean);
+    // One ability slot per tier; a slot past the tier is not reached yet.
+    const reached = (c.mythic?.abilities || []).slice(0, mythicTier);
+    const path = counted(reached.filter((a) => a.name).map((a) => plain(a.name)));
+    const feats = reached.map((a) => a.featChoice).filter(Boolean).map(plain);
     const list = [...rest, ...path.map((p, i) => (i === 0 ? 'Path: ' : '') + p), ...feats.map((f, i) => (i === 0 ? 'M.Feats: ' : '') + f)];
     mythic = { title: 'Mythic', head, entries: list, lines: [head, ...flow(list, MW_CELLS.feat)] };
   }
@@ -455,7 +516,7 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
   const shorten = (b, room) => {
     for (const step of [abbreviate, (s) => abbreviate(trimProse(s))]) {
       if (b.lines.length <= room) return;
-      const lines = [b.head, ...flow(b.entries.map(step), MW_CELLS.feat)];
+      const lines = [...(b.headLines || [b.head]), ...flow(b.entries.map(step), MW_CELLS.feat)];
       if (lines.length < b.lines.length) { report.abbreviated.push(`${b.title}: ${b.lines.length} → ${lines.length} cells`); b.lines = lines; }
     }
   };
@@ -530,12 +591,14 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
     return g;
   };
   for (const k of c.classes || []) {
-    if (!k.name) continue;
-    const features = [];
-    for (const [lv, row] of Object.entries(tables[k.name]?.byLevel || {})) {
-      for (const v of Object.values(row)) if (v) features.push({ lv: num(lv), text: norm(v), raw: String(v) });
-    }
-    newGroup(k.name, { features, arche: String(k.archetypes || '').split(/[,()]/).map(norm).filter((a) => a.trim().length >= 4) });
+    if (!k.name || spGroups.some((g) => g.className === k.name)) continue;
+    const ladder = ladders.get(k.name);
+    newGroup(k.name, {
+      className: k.name,
+      now: ladder?.now ?? level,
+      features: (ladder?.entries || []).map((e) => ({ lv: e.lv, text: norm(e.text), raw: e.text })),
+      arche: String(k.archetypes || '').split(/[,()]/).map(norm).filter((a) => a.trim().length >= 4),
+    });
   }
   const classGroups = spGroups.slice();
   const findClass = (text) => {
@@ -570,12 +633,14 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
   };
   let mythicGroup = null;
   let oathGroup = null;
-  const mythicOf = () => (mythicGroup ||= newGroup(`Mythic ${c.mythic?.path || ''}`.trim()));
+  const mythicOf = () => (mythicGroup ||= newGroup(`Mythic ${mythicPath}`.trim()));
   const oathOf = () => (oathGroup ||= newGroup('Oaths'));
+  // An entry past the level its group has reached -- the class's own level,
+  // the mythic tier, else the character's -- is not written yet.
   const add = (g, lv, text, cast, src) => {
     if (!g || !text || /^\?+$/.test(String(text).trim())) return;
-    if (lv != null && lv > (g === mythicGroup ? mythicTier : level)) return;
-    g.entries.push({ lv, text: String(text).replace(/\s+/g, ' ').trim(), cast: cast || '', src });
+    if (lv != null && lv > (g === mythicGroup ? mythicTier : g.now ?? level)) return;
+    g.entries.push({ lv, text: plain(text).replace(/\s+/g, ' ').trim(), cast: cast || '', src });
   };
   const noLevel = (name, g) => report.noLevel.push(`${g.code}?? ${name}`);
 
@@ -590,10 +655,10 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
     const tradEntries = (trad.entries || []).filter((e) => e.talent);
     const drawbacks = trad.drawbacks || [];
     if (trad.name && (tradEntries.length || drawbacks.length)) add(tOwner, 1, `${side} tradition: ${trad.name}`, '', 'tradition');
-    tradEntries.forEach((e) => items(e.talent).forEach((x) => add(tOwner, 1, x, castTag(e.sphere), 'tradition')));
+    tradEntries.forEach((e) => items(plain(e.talent)).forEach((x) => add(tOwner, 1, x, castTag(e.sphere), 'tradition')));
     if (drawbacks.length && tOwner) {
       const room = [MW_CELLS.spell[0] - textWidth(`${tOwner.code}01z `), MW_CELLS.spell[1]];
-      const lines = flow(drawbacks.map(trimProse), room);
+      const lines = flow(drawbacks.map((x) => trimProse(plain(x))), room);
       if (fits(`Drawbacks: ${lines[0]}`, room)) lines[0] = `Drawbacks: ${lines[0]}`; else lines.unshift('Drawbacks:');
       lines.forEach((l) => add(tOwner, 1, l, '', 'tradition'));
     }
@@ -639,7 +704,8 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
   // under the veilweaving class. The Cast column carries the essence.
   const akashic = (c.akashic?.classes || []).filter((k) => k.name).map((k) => ({ k, g: findClass(k.name) })).filter((x) => x.g);
   for (const { k, g } of akashic) {
-    if (num(k.baseDC) || num(k.totalCap)) add(g, 1, `Veilweaving: DC ${k.baseDC}, essence cap ${k.totalCap}`, '', 'veil');
+    const parts = [num(k.baseDC) && `DC ${k.baseDC}`, num(k.totalCap) && `essence cap ${k.totalCap}`].filter(Boolean);
+    if (parts.length) add(g, 1, `Veilweaving: ${parts.join(', ')}`, '', 'veil');
   }
   for (const v of veils) {
     let g = null;
@@ -652,16 +718,19 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
     if (!g) continue;
     if (lv == null) noLevel(v.name, g);
     const short = `${v.name} (${v.slot}${v.bound ? ', bound' : ''}${v.dc ? `, DC ${v.dc}` : ''})`;
-    const desc = String(v.desc || '').replace(/\s+/g, ' ').trim();
+    const desc = plain(v.desc).replace(/\s+/g, ' ').trim();
     const long = desc ? `${short.slice(0, -1)}; ${desc})` : short;
     add(g, lv, desc && fits(`${g.code}00z ${long}`, MW_CELLS.spell) ? long : short, v.essence ? `${v.essence} ess` : '', 'veil');
   }
-  // Maneuvers: under the initiator class. The app keeps each maneuver's level,
-  // not when it was learned, so NN is the first initiator level that can learn
-  // it (2 x maneuver level - 1).
+  // Maneuvers: under the initiator class -- the one tagged path-of-war, else
+  // one named as an initiator. The app keeps each maneuver's level, not when
+  // it was learned, so NN is the first initiator level that can learn it
+  // (2 x maneuver level - 1).
   const disciplines = (c.maneuvers?.disciplines || []).filter((x) => (x.known || []).length);
   if (disciplines.length) {
-    const g = classGroups.find((x) => /warlord|warder|stalker|mystic|harbinger|zealot/i.test(x.name))
+    const tagged = (c.classes || []).find((k) => (k.systems || []).includes('path-of-war'));
+    const g = (tagged && classGroups.find((x) => x.className === tagged.name))
+      || classGroups.find((x) => /warlord|warder|stalker|mystic|harbinger|zealot/i.test(x.name))
       || classGroups.find((x) => x.features.some((f) => / maneuver| initiat/.test(f.text))) || classGroups[0];
     for (const dsc of disciplines) {
       for (const name of dsc.known) {
