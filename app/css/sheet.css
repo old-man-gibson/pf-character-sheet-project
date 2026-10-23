@@ -3142,7 +3142,11 @@ table.gear tr.gearcardrow > td { padding: 0; }
   text-transform: none; letter-spacing: 0;
 }
 .gearcard table.gearbonuses td.btype select { width: auto; min-width: 7rem; }
-.gearcard table.gearbonuses td.bto select.target { width: auto; min-width: 12rem; max-width: 18rem; }
+/* A set width, not one its options decide: the To picker is drawn with only
+   its own choice and gets the whole list when pressed, and a width that
+   followed the list would jump under the pointer. The whole list always
+   came to the old 18rem cap. */
+.gearcard table.gearbonuses td.bto select.target { width: 18rem; }
 .gearcard table.gearbonuses td.bto input.target-free { display: block; width: 14rem; margin-top: 4px; font-size: 0.78rem; }
 .gearcard textarea { width: 100%; }
 /* The description grows with what is written (see the `.prose.grow` binding

@@ -495,7 +495,10 @@ const TARGET_GROUPS = [
 // only made the picker read every ability twice.
 const TARGET_HIDDEN = (n) => /\.temp$/.test(n);
 
-/** The option groups, built once per target list and kept beside it. */
+/**
+ * The option groups, built once per target list and kept beside it, and
+ * what each listed destination is called on it.
+ */
 const targetOptionCache = new WeakMap();
 
 function targetOptions(model) {
@@ -504,18 +507,49 @@ function targetOptions(model) {
     if (hit) return hit;
     const groups = TARGET_GROUPS.map(([label]) => ({ label, rows: [] }));
     const rest = { label: 'Everything else', rows: [] };
+    const labels = new Map();
     for (const t of targets) {
       if (TARGET_HIDDEN(t.name)) continue;
       const g = groups.find(({ label }, gi) => TARGET_GROUPS[gi][1](t.name)) || rest;
       g.rows.push(t);
+      labels.set(t.name, t.label || t.name);
     }
     const html = [...groups, rest].filter((g) => g.rows.length).map((g) => `<optgroup label="${esc(g.label)}">${
-      g.rows.map((t) => `<option value="${esc(t.name)}" title="${esc(t.name)}">${esc(t.label || t.name)}</option>`).join('')
+      g.rows.map((t) => targetOption(t.name, labels.get(t.name))).join('')
     }</optgroup>`).join('');
-    const names = new Set(targets.map((t) => t.name));
-    const out = { html, names };
+    const out = { html, labels };
     targetOptionCache.set(targets, out);
     return out;
+  }
+
+const targetOption = (name, label, selected = false) =>
+  `<option value="${esc(name)}"${selected ? ' selected' : ''} title="${esc(name)}">${esc(label)}</option>`;
+
+/**
+ * The choices inside a To picker holding `value`: the whole grouped list, or
+ * with `all: false` only the choice it holds.
+ *
+ * The panel draws the short form and the sheet puts the whole list in when
+ * somebody reaches for the picker (`data-fill`, see `#fillSelect`). Every
+ * picker carrying every destination was two hundred options a bonus, over
+ * six thousand on a tab of filled slots, and building and styling them was
+ * most of the time each edit on the Equipment tab took to redraw.
+ *
+ * Both forms show the same choice the same way, so filling a picker never
+ * changes what it reads. A destination the list has not got -- typed into
+ * the card's free box, or a resistance the sheet grants on demand -- is
+ * shown as itself with a mark, the way every picker on the sheet keeps a
+ * value it does not know.
+ */
+export function targetChoices(model, value, { all = true } = {}) {
+    const { html, labels } = targetOptions(model);
+    const v = String(value ?? '').trim();
+    const known = !v || labels.has(v);
+    const list = all
+      ? html.replace(`<option value="${esc(v)}"`, `<option value="${esc(v)}" selected`)
+      : v && known ? targetOption(v, labels.get(v), true) : '';
+    return `<option value=""${v ? '' : ' selected'}>—</option>${list}${
+      known ? '' : `<optgroup label="Not on the list"><option value="${esc(v)}" selected>${esc(v)} *</option></optgroup>`}`;
   }
 
 /**
@@ -523,20 +557,13 @@ function targetOptions(model) {
  * "Bluff", "Flat-footed AC" -- grouped the way the sheet is. The stored
  * value is the destination's own name, the one a `{… += …}` token would
  * use, so the two spellings of one rule can never disagree.
- *
- * A destination the list has not got -- typed into the card's free box, or
- * a resistance the sheet grants on demand -- is shown as itself with a mark,
- * the way every picker on the sheet keeps a value it does not know.
  */
 function targetSelect(model, list, i, bi, value, error) {
-    const { html, names } = targetOptions(model);
     const v = String(value ?? '').trim();
-    const known = !v || names.has(v);
     return `<select class="target${error ? ' invalid' : ''}" data-item="${list}|${i}|bonuses.${bi}.target" data-kind="text"
+        data-fill="targets"
         title="${esc(error || (v ? `Forwarded to ${v}` : 'Where the bonus goes: AC, a save, a skill, an ability score…'))}">
-        <option value=""${v ? '' : ' selected'}>—</option>${
-      html.replace(`<option value="${esc(v)}"`, `<option value="${esc(v)}" selected`)}${
-      known ? '' : `<optgroup label="Not on the list"><option value="${esc(v)}" selected>${esc(v)} *</option></optgroup>`}
+        ${targetChoices(model, v, { all: false })}
       </select>`;
   }
 
