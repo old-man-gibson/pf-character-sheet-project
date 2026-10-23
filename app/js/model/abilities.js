@@ -13,7 +13,7 @@ import {
 } from '../rules.js';
 import { forwardedSplit } from './scope.js';
 import {
-  campaignRules, fitMythicRows, mythicComputedTier, mythicTierOf, prowessPicks, settleTrialTier,
+  ageAbilityMods, campaignRules, fitMythicRows, mythicComputedTier, mythicTierOf, prowessPicks, settleTrialTier,
 } from './campaign.js';
 
 /**
@@ -56,10 +56,15 @@ export function refreshAbilities(model) {
       const k = abilityKey(p.ability);
       if (k in folded.mythic) folded.mythic[k] += MYTHIC_STAT_BONUS;
     }
+    // Age effects (a campaign rule): written only when not zero, so a sheet
+    // without them saves what it did.
+    const age = ageAbilityMods(model.data);
     for (const key of ABILITIES) {
       const entry = build[key];
       if (!entry) continue;
       for (const k of BUILD_DERIVED_KEYS) entry[k] = folded[k][key];
+      if (age?.[key]) entry.age = age[key];
+      else delete entry.age;
       const r = resolveAbility(entry);
       entry.resolved = r;
       const a = model.data.abilities[key];

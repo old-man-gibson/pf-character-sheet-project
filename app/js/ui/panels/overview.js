@@ -108,7 +108,7 @@ import {
 import { hasTokens } from '../../inline.js';
 import { abilityCollapse, abilityHarm, blankClassRow, maneuverDetails } from '../../model.js';
 import { colorControl } from '../color-control.js';
-import { campaignRules, isAntihero, levelProgress, specialtyInPlay } from '../../model/campaign.js';
+import { AGE_CATEGORIES, campaignRules, isAntihero, levelProgress, specialtyInPlay } from '../../model/campaign.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
@@ -1156,6 +1156,7 @@ function detailsPanel(model, ctx) {
     'Give up hero points for a bonus feat. The campaign rules offer it.') : ''}</span>`, 'col4') : ''}
         ${field('Gender', text('identity.gender', c.identity.gender), 'col3')}
         ${field('Age', text('identity.age', c.identity.age), 'col3')}
+        ${field('Age category', select('identity.ageCategory', c.identity.ageCategory, AGE_CATEGORIES), 'col3')}
         ${field('Height', text('identity.height', c.identity.height), 'col3')}
         ${field('Weight', text('identity.weight', c.identity.weight), 'col3')}
         ${/* Mythic off (a campaign rule) takes the whole row with it. */''}

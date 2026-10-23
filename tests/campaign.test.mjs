@@ -60,7 +60,7 @@ for (const id of fixtureIds()) {
     ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false], ['antiheroes', true],
     ['maxLevel', 6], ['maxLevel', 25], ['maxTier', 5], ['maxTier', 12], ['gestalt', false], ['hitPoints', 'average'], ['hitPoints', 'rolled'],
     ['abpLadder', 'core'], ['mythicLadder', 'core'], ['pastColossal', true], ['minLevel', 1], ['minLevel', 8], ['maxLevel', 60],
-    ['skillSystem', 'background'], ['backgroundUse', 'floating'], ['backgroundRanks', 3]]) {
+    ['skillSystem', 'background'], ['backgroundUse', 'floating'], ['backgroundRanks', 3], ['agingEffects', true]]) {
     const m = new Character(loadCharacter(id));
     const before = numbers(m);
     m.set(`campaign.${key}`, value);
@@ -632,6 +632,29 @@ console.log('\nbackground skills in place of the Specialty');
   // Back to the Specialty: everything as it was.
   c.set('campaign.skillSystem', 'specialty');
   check('back to the Specialty', [skill('Perception').totalRanks, featNames(c.data).includes('Skill Focus'), skill('Appraise').backgroundFree], [6, true, undefined]);
+}
+
+console.log('\nage categories and age effects');
+{
+  const { renderStatsPanel } = await import('../app/js/ui/panels/stats.js');
+  const { renderOverviewPanel } = await import('../app/js/ui/panels/overview.js');
+  const c = new Character(blankDocument({ name: 'Age', level: 1 }));
+  const scores = () => ['str', 'dex', 'con', 'int', 'wis', 'cha'].map((k) => c.data.abilities[k].score);
+  const base = scores();
+  check('the category is on Details', renderOverviewPanel(c, { draft: {}, buildView: true }).includes('data-set="identity.ageCategory"'), true);
+  c.set('identity.ageCategory', 'Venerable');
+  check('rule off: the category changes nothing', scores(), base);
+  check('rule off: no Age column', renderStatsPanel(c, {}).includes('title="Age category"'), false);
+  c.set('campaign.agingEffects', true);
+  const moved = (by) => base.map((v, i) => v + by[i]);
+  check('venerable: -6 / +3', scores(), moved([-6, -6, -6, 3, 3, 3]));
+  c.set('identity.ageCategory', 'Old');
+  check('old: -3 / +2', scores(), moved([-3, -3, -3, 2, 2, 2]));
+  c.set('identity.ageCategory', 'Middle-Aged');
+  check('middle-aged: -1 / +1', scores(), moved([-1, -1, -1, 1, 1, 1]));
+  check('rule on: the Age column', renderStatsPanel(c, {}).includes('title="Age category"'), true);
+  c.set('identity.ageCategory', 'Adult');
+  check('adult: nothing, and nothing written', [scores(), 'age' in c.data.statsBuild.str], [base, false]);
 }
 
 console.log('\na new character opens on its rules first');

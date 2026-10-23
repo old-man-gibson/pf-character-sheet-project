@@ -29,7 +29,7 @@ const COMPUTED_PATHS = [
   'abilities.*.score', 'abilities.*.mod', 'abilities.*.tempScore', 'abilities.*.totalMod',
   'abilities.*.checkMod', 'abilities.*.workingScore',
   // ABP, the stat array, level-4 and mythic increases follow the picks.
-  ...BUILD_DERIVED_KEYS.map((k) => `statsBuild.*.${k}`),
+  ...BUILD_DERIVED_KEYS.map((k) => `statsBuild.*.${k}`), 'statsBuild.*.age',
   'identity.mythicTier', 'identity.languageSlots.*', 'mythic.computedTier',
   'hp.base', 'hp.total', 'hp.initiative',
   'attack.bab', 'attack.babBase', 'attack.iterative',

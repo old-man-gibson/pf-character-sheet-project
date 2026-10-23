@@ -148,7 +148,8 @@ export const BUILD_PERMANENT_GROUPS = [
   },
   {
     cols: [['attunement', 'Att', 'Attuned'], ['inherent', 'Inh', 'Inherent'], ['array', 'Arr', 'Array'],
-      ['level4', 'L/4', 'Level/4'], ['mythic', 'Myth', 'Mythic'], ['size', 'Size', 'Size'], ['untyped', 'Unt', 'Untyped']],
+      ['level4', 'L/4', 'Level/4'], ['mythic', 'Myth', 'Mythic'], ['age', 'Age', 'Age category'], ['size', 'Size', 'Size'],
+      ['untyped', 'Unt', 'Untyped']],
   },
 ];
 
@@ -236,7 +237,7 @@ export function resolveAbility(entry = {}) {
 
   const total = n(entry.pointBuy) + n(entry.race) + enhancement + n(entry.attunement)
     + n(entry.inherent) + n(entry.array) + n(entry.level4) + n(entry.mythic)
-    + n(entry.size) + n(entry.untyped);
+    + n(entry.age) + n(entry.size) + n(entry.untyped);
 
   const temporary = n(entry.alchemical) + n(entry.circumstance) + n(entry.morale)
     + n(entry.tempEnhancement) + n(entry.tempSize);

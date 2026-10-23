@@ -169,6 +169,8 @@ export function campaignPanel(model, ctx = {}) {
     `<input type="number" min="0" max="99" value="${esc(rules.pointBuy)}" data-set="campaign.pointBuy" data-kind="number"
           aria-label="Point-buy budget" style="width:4.5rem"> points`,
     'Point budget for ability scores.')}
+        ${row('agingEffects', 'Age effects', check('agingEffects', 'Age effects'),
+    'Age categories change ability scores. Cumulative: Middle-Aged −1 Str/Dex/Con, +1 Int/Wis/Cha; Old −2/+1; Venerable −3/+1.')}
         ${row('advancement', 'Levels', levels, levelsHint, levelsMore)}
         ${row('minLevel', 'Lowest level', mostBox('minLevel', rules.minLevel, rules.maxLevel, 'Lowest level'),
     'This is the minimum legal level for a character. New characters start here.')}

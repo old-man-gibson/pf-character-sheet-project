@@ -130,7 +130,12 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
    * `floating`, a pool of ranks spent by hand on background skills.
    */
   backgroundUse: 'allocated',
+  /** Age categories change ability scores (identity.ageCategory). */
+  agingEffects: false,
 });
+
+/** The age categories, youngest first. */
+export const AGE_CATEGORIES = Object.freeze(['Adult', 'Middle-Aged', 'Old', 'Venerable']);
 
 export const SKILL_SYSTEMS = Object.freeze(['specialty', 'background']);
 export const BACKGROUND_USES = Object.freeze(['allocated', 'floating']);
@@ -222,7 +227,21 @@ export function campaignRules(d) {
     skillSystem: SKILL_SYSTEMS.includes(c.skillSystem) ? c.skillSystem : CAMPAIGN_DEFAULTS.skillSystem,
     backgroundRanks: count(c.backgroundRanks, CAMPAIGN_DEFAULTS.backgroundRanks),
     backgroundUse: BACKGROUND_USES.includes(c.backgroundUse) ? c.backgroundUse : CAMPAIGN_DEFAULTS.backgroundUse,
+    agingEffects: bool('agingEffects'),
   };
+}
+
+/**
+ * Ability changes from the character's age category, or null when there are
+ * none (rule off, Adult, or no category). Cumulative: Middle-Aged -1/+1, Old
+ * -3/+2, Venerable -6/+3 (Str, Dex, Con / Int, Wis, Cha).
+ */
+export function ageAbilityMods(d) {
+  if (!campaignRules(d).agingEffects) return null;
+  const step = AGE_CATEGORIES.indexOf(String(d?.identity?.ageCategory ?? ''));
+  if (step < 1) return null;
+  const physical = -(step * (step + 1)) / 2;
+  return { str: physical, dex: physical, con: physical, int: step, wis: step, cha: step };
 }
 
 /**

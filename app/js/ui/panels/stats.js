@@ -39,8 +39,9 @@ export function renderStatsPanel(model, ctx) {
   const allCols = BUILD_PERMANENT_GROUPS.flatMap((g) => g.cols);
   // A group's columns, minus any retired one the player has not asked to see.
   // A group emptied that way drops out of the header entirely.
+  const aging = campaignRules(c).agingEffects;
   const groups = BUILD_PERMANENT_GROUPS
-    .map((g) => ({ ...g, cols: g.cols.filter(([k]) => showOptional[k] !== false) }))
+    .map((g) => ({ ...g, cols: g.cols.filter(([k]) => showOptional[k] !== false && (k !== 'age' || aging)) }))
     .filter((g) => g.cols.length);
   const permCols = groups.flatMap((g) => g.cols);
 
@@ -52,6 +53,9 @@ export function renderStatsPanel(model, ctx) {
     const v = Number(entry[key]) || 0;
     if (BUILD_DERIVED_KEYS.includes(key)) {
       return `<td class="num derived ${banding}" title="From the picks below">${v || ''}</td>`;
+    }
+    if (key === 'age') {
+      return `<td class="num derived ${banding}" title="From the age category (Overview)">${v ? fmt(v) : ''}</td>`;
     }
     if (key === 'attunement') {
       // On or off, worth +2. An imported value that is neither says so

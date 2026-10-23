@@ -1110,7 +1110,7 @@ function commands(model, add) {
   const tp = trialProgress(model.data);
   if (tp?.ready) cmd(`Tier up to ${tp.next}`, 'tier-up', 'The next mythic tier is earned', 'tier up mythic trials');
   cmd('Campaign rules', 'campaign-rules', 'Rules for this character',
-    'settings options campaign rules house table point buy background skills specialty adventuring hero points antihero mythic tier trials rate thresholds abp automatic bonus progression core unchained attunement legendary gifts xp experience milestones levelling highest maximum level gestalt multiclass hit points hp rolled average alternate training currency gold mana colossal size party file');
+    'settings options campaign rules house table point buy age aging middle-aged old venerable background skills specialty adventuring hero points antihero mythic tier trials rate thresholds abp automatic bonus progression core unchained attunement legendary gifts xp experience milestones levelling highest maximum level gestalt multiclass hit points hp rolled average alternate training currency gold mana colossal size party file');
   cmd('Show, hide and rearrange tabs', 'palette-tabs', 'The ⚙ tab manager', 'tabs manage hide show arrange settings');
   cmd('Reset to the character as imported', 'reset', 'Asks first; named checkpoints are kept', 'reset revert discard');
 }
