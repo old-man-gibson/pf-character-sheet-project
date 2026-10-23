@@ -3752,7 +3752,7 @@
      "succeeds": true,
      "days": 0,
      "daysExact": 0,
-     "craftPost": "**Crafting**: \n**Value**: 0 mana\n**Cost**: 0 mana\n**Profit**: 0 mana\n**DC**: 0\n**Check**: 18\n**Time to Completion**: 0 (0) days\n**Resources used:** \n**Notes/Description**: ",
+     "craftPost": "**Crafting**: \n**Crafter**: Vesna Ashgrove\n**Value**: 0 mana\n**Cost**: 0 mana\n**Profit**: 0 mana\n**DC**: 0\n**Check**: 18\n**Time to Completion**: 0 (0) days\n**Resources used:** \n**Notes/Description**: ",
      "marketPost": "**Character Name:** Vesna Ashgrove\n**Item:** \n**Market Value:** 0\n**Price Sold:** 0\n**Sold To:**  (@)\n**Gold or Mana Remaining:**  mana"
     }
    }

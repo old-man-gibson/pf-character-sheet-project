@@ -10174,6 +10174,7 @@ console.log('item crafting reproduces the workbook, then recalculates');
   // The generated Discord post is the sheet's own format.
   check('crafting post', p.calc.craftPost.split('\n'), [
     '**Crafting**: Ring of Flexibility',
+    `**Crafter**: ${c.data.crafting.sellerName || c.data.identity.name}`,
     '**Value**: 200000 mana',
     '**Cost**: 90000 mana',
     '**Profit**: 0 mana',

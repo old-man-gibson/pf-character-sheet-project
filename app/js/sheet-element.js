@@ -2551,7 +2551,8 @@ export class CharacterSheetElement extends HTMLElement {
       if (FIXED_TABS.has(id)) continue;                // not the player's to arrange (see FIXED_TABS)
       if (id === 'altTraining' && !altTraining) continue;
       const m = modelled[id];
-      const label = id === 'features' && !mythic ? 'Feats' : base;
+      const label = id === 'features' && !mythic ? 'Feats'
+        : id === 'template' && (d.templates || []).length > 1 ? 'Templates' : base;
       out.push({
         key: id, id, label, kind: m ? 'modelled' : 'core',
         inUse: m ? m.has || m.tagged : true, has: m ? m.has : true,

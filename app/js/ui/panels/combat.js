@@ -645,6 +645,8 @@ export function renderTemplatePanel(model, ctx) {
         </div>
       </section>`;
     }).join('')}
+      ${/* A character may have more than one template. */''}
+      <div class="addgroup">${addButton('templates', 'Add template', blankTemplate)}</div>
     </div>`;
   }
 
