@@ -6070,7 +6070,8 @@
   "monster-crit-range",
   "hp-meter-fill",
   "load-penalties",
-  "nonproficiency-penalty"
+  "nonproficiency-penalty",
+  "weapon-crit-shift"
  ],
  "log": [
   {

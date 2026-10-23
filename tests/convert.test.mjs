@@ -13,7 +13,7 @@
  *  Run: node tests/convert.test.mjs */
 import { readFileSync } from 'node:fs';
 import { CHARACTERS_DIR, characterPath, workbookPath, fixtureIds, requireFixtures } from './fixtures.mjs';
-import { convertWorkbook, indexEntry, warningsFor, slug, blankDocument } from '../app/js/convert.js';
+import { convertWorkbook, indexEntry, warningsFor, slug, blankDocument, weaponColumns } from '../app/js/convert.js';
 import { inspectDocument, SCHEMA_VERSION, Character } from '../app/js/model.js';
 import { STANDARD_SKILLS } from '../app/js/rules.js';
 
@@ -26,6 +26,44 @@ const check = (label, actual, expected) => {
     console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
   }
 };
+
+// Needs no fixture, so it runs before the check that stands the rest down.
+console.log('weapon columns are found by their labels, not their places');
+{
+  // A weapon block as rows of cells: the "Weapon Name N" row, the first data
+  // row, the label row, its values, and the row of inline labels.
+  const block = (head, labels, inline) => {
+    const grid = [head, [], labels, [], inline];
+    return { cell: (tab, row, col) => grid[row - 1]?.[col - 1] ?? null };
+  };
+  const pick = (c) => [c.totalDamage, c.critRange, c.critMult, c.bonusCritDamage, c.damageType, c.ammunition, c.range, c.enhancement, c.price];
+  const inline = ['Enhancement', 1, 'Weapon Familiarity', null, 'Handedness', null, 'Weight', null, 'Price'];
+
+  const template = block(
+    ['Weapon Name 1', null, 'Attack type', 'Attack Roll', 'Damage Dice', 'Damage Ability', 'Ability Mult', 'Misc Damage', 'Total Damage', 'Critical', null, 'Bonus Crit Damage', 'Damage Type'],
+    ['Weapon Group 1', 'Weapon Group 2', 'Weapon Group 3', 'Misc Attack', 'Special Properties', null, null, null, 'Ammunition', 'Size', null, null, 'Range'],
+    inline);
+  check('the template layout reads where it always did', pick(weaponColumns(template, 'Equipment', 1)), [9, 10, 11, 12, 13, 9, 13, 2, 10]);
+
+  // One workbook has "Misc Non-Crit Damage" ahead of Total Damage, labels the
+  // crit range and multiplier apart, and carries a second Ammunition label.
+  const extra = block(
+    ['Weapon Name 1', null, 'Attack type', 'Attack Roll', 'Damage Dice', 'Damage Ability', 'Ability Mult', 'Misc Damage', 'Misc Non-Crit Damage', 'Total Damage', 'Critical Range', 'Critical Multiplier', 'Bonus Crit Damage', 'Damage Type'],
+    ['Weapon Group 1', 'Weapon Group 2', 'Weapon Group 3', 'Misc Attack', 'Special Properties', null, null, null, 'Ammunition', 'Size', null, 'Range', 'Ammunition'],
+    inline);
+  check('an extra column moves every field after it', pick(weaponColumns(extra, 'Equipment', 1)), [10, 11, 12, 13, 14, 9, 12, 2, 10]);
+
+  const merged = block(
+    ['Weapon Name 2', null, 'Attack type', 'Attack Roll', 'Damage Dice', 'Damage Ability', 'Ability Mult', 'Misc Damage', 'Misc Non-Crit Damage', 'Total Damage', 'Critical', null, 'Bonus Crit Damage', 'Damage Type'],
+    [], inline);
+  check('a "Critical" heading takes the multiplier from the cell after it', weaponColumns(merged, 'Equipment', 1).critMult, 12);
+
+  check('with no labels at all the template columns stand', pick(weaponColumns(block([], [], []), 'Equipment', 1)), [9, 10, 11, 12, 13, 9, 13, 2, 10]);
+}
+if (fail) {
+  console.log(`\n${pass} passed, ${fail} failed`);
+  process.exit(1);
+}
 
 requireFixtures(['saburo'], 'convert.test');
 const IDS = fixtureIds();

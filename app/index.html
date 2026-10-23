@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pathfinder Character Sheets</title>
+<link rel="icon" href="img/logo.png">
 <!-- The faces the Workbench and Parchment themes are set in: the same link
      forge/index.html carries. A theme that does not use them costs nothing
      here beyond the request; one that does falls back to Georgia and the
@@ -73,6 +74,9 @@
     text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;
   }
   @media (max-width: 768px) { .picker .cname { max-width: 9rem; } }
+  /* On a phone the subtitle goes, so the logo and title leave room for the
+     folded roster on the same row (the Workbench drops it the same way). */
+  @media (max-width: 420px) { header.app .brand small { display: none; } }
   .picker .chip.import { border-style: dashed; }
   .picker .chip:disabled { opacity: 0.5; cursor: default; }
   .picker.dragging .chip.import { border-color: var(--accent); color: var(--accent); }
@@ -231,7 +235,7 @@
 <a class="skiplink" href="#sheet">Skip to the sheet</a>
 
 <header class="app topbar">
-  <h1 class="brand"><a href="./">Character Sheets</a> <small>Pathfinder</small></h1>
+  <h1 class="brand"><img class="logo" src="img/logo.png" alt=""><a href="./">Character Sheets</a> <small>Pathfinder</small></h1>
   <nav class="picker" id="picker"></nav>
   <span class="spacer"></span>
   <div class="tools">

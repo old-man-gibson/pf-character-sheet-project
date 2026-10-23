@@ -1906,7 +1906,7 @@ export function ladderDice(ladder, level) {
  * what it writes is current.
  */
 export const RULE_CORRECTIONS = ['attack-size-sign', 'poor-save-thirds', 'monster-crit-range', 'hp-meter-fill', 'load-penalties',
-  'nonproficiency-penalty'];
+  'nonproficiency-penalty', 'weapon-crit-shift'];
 
 /** Size -> AC/attack modifier and its opposite for CMB/CMD. */
 export const SIZE_MODIFIERS = {
