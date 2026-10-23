@@ -13,6 +13,7 @@ import {
 import { evaluateFormula } from '../../formula.js';
 import { sheetReader } from '../document.js';
 import { lazyScope } from '../scope.js';
+import { COMPANION_KINDS, COMPANION_LABELS, companionInUse } from '../../companions.js';
 
 /** Labels whose value we keep, read from the cell immediately to their right. */
 const CRAFT_LABELS = {
@@ -242,25 +243,53 @@ export function importCrafting(tab, identity = {}) {
   };
 }
 
+/** Who can craft: the character (id ''), and each companion in use (or already chosen) by its id. */
+export function craftCrafters(model) {
+  const d = model.data;
+  const chosen = String(d.crafting?.crafter || '');
+  const out = [{ id: '', label: String(d.identity?.name || '').trim() || 'Character' }];
+  for (const kind of COMPANION_KINDS) {
+    for (const b of d[kind] || []) {
+      if (!b?.id || (!companionInUse(kind, b) && b.id !== chosen)) continue;
+      out.push({ id: b.id, label: `${COMPANION_LABELS[kind]}: ${String(b.name || '').trim() || b.id}`, kind, block: b });
+    }
+  }
+  return out;
+}
+
+/** The crafter `crafting.crafter` names, or the character when it names none that exists. */
+export function craftCrafter(model) {
+  const all = craftCrafters(model);
+  const id = String(model.data.crafting?.crafter || '');
+  return all.find((c) => c.id === id) || all[0];
+}
+
+const isCraft = (name) => /^Craft\b|^Craft\(/i.test(String(name || ''));
+
 /**
- * The Craft skills the crafting check may key off, with the live bonus from
- * the Skills tab. Labels are unique so they can be stored as the choice.
+ * The skills the crafting check may use: the crafter's own, Craft first,
+ * with the live bonus (the Skills tab's, or the companion's). Labels are
+ * unique so they can be stored as the choice; a Craft skill keeps the label
+ * it always had.
  */
-export function craftSkills(model) {
+export function craftSkills(model, crafter = craftCrafter(model)) {
+  const rows = crafter.block
+    ? (crafter.block.skills || []).map((s) => ({ name: s.name, spec: s.spec, bonus: s.total, ranks: s.effectiveRanks ?? s.ranks }))
+    : (model.data.skills || []).map((s) => ({ name: s.name, spec: s.spec, bonus: s.bonus, ranks: s.totalRanks }));
+  const ordered = [...rows.filter((s) => isCraft(s.name)), ...rows.filter((s) => !isCraft(s.name))];
   const seen = new Map();
-  return (model.data.skills || [])
-    .filter((s) => /^Craft\b|^Craft\(/i.test(s.name))
-    .map((s) => {
-      const base = skillLabel(s.name, s.spec);
-      const n = (seen.get(base) || 0) + 1;
-      seen.set(base, n);
-      return {
-        key: n > 1 ? `${base} ${n}` : base,
-        label: n > 1 ? `${base} ${n}` : base,
-        bonus: Number(s.bonus) || 0,
-        ranks: Number(s.totalRanks) || 0,
-      };
-    });
+  return ordered.map((s) => {
+    const base = skillLabel(s.name, s.spec);
+    const n = (seen.get(base) || 0) + 1;
+    seen.set(base, n);
+    return {
+      key: n > 1 ? `${base} ${n}` : base,
+      label: n > 1 ? `${base} ${n}` : base,
+      bonus: Number(s.bonus) || 0,
+      ranks: Number(s.ranks) || 0,
+      craft: isCraft(s.name),
+    };
+  });
 }
 
 /**
@@ -317,13 +346,16 @@ export function recomputeCrafting(model) {
   }
   const ratio = compounding * baseFraction;
 
-  // Crafting check: take 10 by default, off the Craft skill's live total.
-  // An unset choice takes the sheet's own default (the first Craft skill the
-  // character actually has ranks in); "None" is a real choice and stays one.
-  const skills = model.craftSkills();
-  const skill = cr.checkSkill === null || cr.checkSkill === undefined
-    ? skills.find((s) => s.ranks > 0) || skills[0] || null
-    : skills.find((s) => s.key === cr.checkSkill) || null;
+  // Crafting check: take 10 by default, off the crafter's chosen skill. The
+  // crafter is the character or one of its companions. An unset choice, or
+  // one this crafter does not have, takes the first Craft skill with ranks;
+  // "None" ('') is a real choice and stays one.
+  const crafter = craftCrafter(model);
+  const skills = craftSkills(model, crafter);
+  const crafts = skills.filter((s) => s.craft);
+  const chosen = cr.checkSkill === '' ? null : skills.find((s) => s.key === cr.checkSkill);
+  const skill = cr.checkSkill === '' ? null
+    : chosen || crafts.find((s) => s.ranks > 0) || crafts[0] || null;
   const roll = cr.checkMode === 'take20' ? 20
     : cr.checkMode === 'manual' ? (Number(cr.checkRoll) || 0) : 10;
   const checkBase = roll + (skill?.bonus || 0) + (Number(cr.checkMisc) || 0);
@@ -410,4 +442,6 @@ export function recomputeCrafting(model) {
     roll,
     errors,
   };
+  // Only when a companion crafts, so a sheet that never set one saves what it did.
+  if (crafter.id) cr.calc.crafter = crafter.label;
 }

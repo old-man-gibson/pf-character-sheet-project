@@ -1412,5 +1412,17 @@ console.log('\nthe squad on the deck and at the table');
   const table = subsystems.cardTableView(c, ctx, 'table');
   ok('the shared screen sees who is in but has no roster buttons', table.includes('with Lira') && !table.includes('data-table="squad|'));
 }
+
+console.log('\na character may have more than one template');
+{
+  const c = new Character(blankDocument({ name: 'Templated', level: 5 }));
+  const blank = (name) => ({ tab: null, name, link: null, approvalLink: null, features: [] });
+  c.listAdd('templates', blank('Half-Fiend'));
+  check('one template: Add template still offered', combat.renderTemplatePanel(c, CTX).includes('Add template'), true);
+  c.listAdd('templates', blank('Lich'));
+  const html = combat.renderTemplatePanel(c, CTX);
+  check('two templates, each its own panel, and Add template once',
+    [(html.match(/data-tmpl=/g) || []).length, (html.match(/Add template/g) || []).length], [2, 1]);
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

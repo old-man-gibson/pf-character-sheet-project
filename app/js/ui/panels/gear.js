@@ -38,6 +38,7 @@ import {
 } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
 import { currencyName } from '../../model/campaign.js';
+import { craftCrafter, craftCrafters, craftSkills } from '../../model/subsystems/crafting.js';
 import { rollButton } from '../roll.js';
 import { weaponNow } from '../weapon-now.js';
 import { systemExtrasPanel } from './subsystems.js';
@@ -965,12 +966,16 @@ function craftCostPanel(cr) {
 
   /** The crafter: their check, their discount, and how they sign a post. */
 function craftCrafterPanel(model, cr) {
-    const skills = model.craftSkills();
+    const crafters = craftCrafters(model);
+    const crafter = craftCrafter(model);
+    const skills = craftSkills(model, crafter);
     const k = cr.calc || {};
     return `<section class="panel">
       <h3>The crafter</h3>
       <div class="fieldgrid">
-        ${field('Craft skill', select('crafting.checkSkill', cr.checkSkill ?? k.skill,
+        ${crafters.length > 1 ? field('Crafter', select('crafting.crafter', crafter.id,
+    crafters.slice(1).map((c) => [c.id, c.label]), crafters[0].label)) : ''}
+        ${field('Skill', select('crafting.checkSkill', k.skill ?? '',
     skills.map((s) => [s.key, `${s.label} ${fmt(s.bonus)}`]), 'None'))}
         ${field('Check', select('crafting.checkMode', cr.checkMode || 'take10', CRAFT_CHECK_MODES, null))}
         ${cr.checkMode === 'manual' ? field('Roll', num('crafting.checkRoll', cr.checkRoll)) : ''}
