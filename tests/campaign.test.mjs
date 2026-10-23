@@ -684,6 +684,7 @@ console.log('\nvariant multiclassing');
   check('a feature counts from its level, not before', fort(), base + 1);
   const feats = renderFeaturesPanel(c, { openText: new Set() });
   check('the Level Up slot shows the feature', feats.includes('VMC Fighter: Bonus feat'), true);
+  check('the Level Up slot edits the feature notes', [feats.includes('data-set="vmc.features.3.note"'), feats.includes('Toughened')], [true, true]);
   c.set('campaign.vmc', false);
   check('rule off again: the feat is back, the feature gone', [featNames(c.data).includes('Power Attack'), fort()], [true, base]);
 }
