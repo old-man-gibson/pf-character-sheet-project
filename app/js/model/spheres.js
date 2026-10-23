@@ -14,6 +14,8 @@ import {
   expertiseTalents, isGuileSphere, ladderGrants, parseLadderRule, spBoonPoints, sphereSide, sphereSkillLabel, sphereSkillRequirement, sphereSkillSpheres,
   statMod, tempEssenceCost, trackCount, DEFAULT_TALENT_TRACKS,
 } from '../rules.js';
+import { isBackgroundSkill } from '../rules.js';
+import { campaignRules, freeBackgroundSkills } from './campaign.js';
 import { emit } from './events.js';
 import { classHasLevel, ownLevelCount } from './progression.js';
 import { forwarded, lazyScope } from './scope.js';
@@ -1023,9 +1025,26 @@ export function applyBudget(model) {
   const classRanks = c.gestalt?.ranksTotal ?? (c.gestalt?.ranksPerLevel || 0) * level;
   const available = classRanks + own * level;
   const perLevel = level ? Math.round((available / level) * 10) / 10 : (c.gestalt?.ranksPerLevel || 0) + own;
-  const assigned = (c.skills || []).reduce(
+  let assigned = (c.skills || []).reduce(
     (t, s) => t + (Number(s.boughtResolved) || 0), 0,
   );
+  // Background skills (a campaign rule): ranks a level that only background
+  // skills may take. Allocated, they are the free skills picked on the
+  // Skills tab; floating, a pool that pays for ranks bought in background
+  // skills before the skill points do. Written only under the rule.
+  const rules = campaignRules(c);
+  if (rules.skillSystem === 'background') {
+    const floating = rules.backgroundUse === 'floating';
+    const pool = floating ? rules.backgroundRanks * level : 0;
+    const spent = (c.skills || []).filter(isBackgroundSkill)
+      .reduce((t, s) => t + (Number(s.boughtResolved) || 0), 0);
+    const used = Math.min(spent, pool);
+    assigned -= used;
+    b.background = {
+      use: rules.backgroundUse, perLevel: rules.backgroundRanks, pool, spent, used,
+      free: freeBackgroundSkills(c).size, slots: floating ? 0 : rules.backgroundRanks,
+    };
+  } else delete b.background;
   b.perLevel = perLevel;
   b.available = available;
   b.assigned = assigned;

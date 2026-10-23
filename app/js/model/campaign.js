@@ -24,8 +24,9 @@
  * against.
  */
 import {
-  CORE_PROWESS_LEVELS, MAX_LEVEL, MYTHIC_TIER_LEVEL, attunedBonuses, mythicTierGrant, tierAtLevel,
+  CORE_PROWESS_LEVELS, MAX_LEVEL, MYTHIC_TIER_LEVEL, attunedBonuses, isBackgroundSkill, mythicTierGrant, tierAtLevel,
 } from '../rules.js';
+import { skillKey } from './util.js';
 
 /** The table's rules: what a switch reads as until a player sets it. */
 export const CAMPAIGN_DEFAULTS = Object.freeze({
@@ -113,7 +114,26 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
    * unit. The coin purse keeps its platinum, gold, silver and copper.
    */
   currency: 'Mana',
+  /**
+   * What a character's background gives it: `specialty`, the table's
+   * Specialty (a name, a feat, two perks and three specialty skills at full
+   * ranks), or `background`, the Background Skills system: the skills split
+   * into adventuring and background ones, and ranks each level that only
+   * background skills may take. The two are one or the other.
+   */
+  skillSystem: 'specialty',
+  /** Background ranks a level, under background skills. */
+  backgroundRanks: 2,
+  /**
+   * How background ranks are taken: `allocated`, one background skill at
+   * full ranks for each rank a level, picked on the Skills tab; or
+   * `floating`, a pool of ranks spent by hand on background skills.
+   */
+  backgroundUse: 'allocated',
 });
+
+export const SKILL_SYSTEMS = Object.freeze(['specialty', 'background']);
+export const BACKGROUND_USES = Object.freeze(['allocated', 'floating']);
 
 /** The values a select offers for `mythicTier`. */
 export const MYTHIC_TIER_SOURCES = Object.freeze(['level', 'trials', 'awarded']);
@@ -199,7 +219,37 @@ export function campaignRules(d) {
     // The wallet's own name, which no control ever set, still counts under a
     // blank: a sheet that came in calling it something else keeps that.
     currency: words(c.currency) || words(d?.wealth?.currency) || CAMPAIGN_DEFAULTS.currency,
+    skillSystem: SKILL_SYSTEMS.includes(c.skillSystem) ? c.skillSystem : CAMPAIGN_DEFAULTS.skillSystem,
+    backgroundRanks: count(c.backgroundRanks, CAMPAIGN_DEFAULTS.backgroundRanks),
+    backgroundUse: BACKGROUND_USES.includes(c.backgroundUse) ? c.backgroundUse : CAMPAIGN_DEFAULTS.backgroundUse,
   };
+}
+
+/**
+ * Whether the Specialty is in play: its name, feat, perks and specialty
+ * skills. Background skills replace all of it (a campaign rule); what was
+ * written there is kept for if the rule comes back.
+ */
+export function specialtyInPlay(d) {
+  return campaignRules(d).skillSystem === 'specialty';
+}
+
+/**
+ * The background skills that take their ranks for free: under background
+ * skills with the ranks allocated, the skills picked on the Skills tab
+ * (`d.backgroundSkills`, a skill key by slot, `{ 0: 'Craft|Weapons' }`), one
+ * for each background rank a level -- each at full ranks, which is that rank
+ * every level. A slot past the count, or a skill that is not a background
+ * skill, gives nothing.
+ */
+export function freeBackgroundSkills(d) {
+  const rules = campaignRules(d);
+  if (rules.skillSystem !== 'background' || rules.backgroundUse !== 'allocated') return new Set();
+  const byKey = new Map((d?.skills || []).map((s) => [skillKey(s), s]));
+  const map = d?.backgroundSkills && typeof d.backgroundSkills === 'object' ? d.backgroundSkills : {};
+  const picks = Array.from({ length: rules.backgroundRanks }, (_, i) => map[i])
+    .filter((k) => byKey.has(k) && isBackgroundSkill(byKey.get(k)));
+  return new Set(picks);
 }
 
 /**

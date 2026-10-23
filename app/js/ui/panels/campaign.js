@@ -98,8 +98,13 @@ export function campaignPanel(model, ctx = {}) {
   const check = (k, label, disabled = false) => `<label class="chk">
       <input type="checkbox" ${rules[k] ? 'checked' : ''} data-set="campaign.${k}" data-kind="bool"${disabled ? ' disabled' : ''}>
       <span>${esc(label)}</span></label>`;
-  const row = (k, title, control, hint, below = '') => `<div class="camprow${differs(k) ? ' changed' : ''}">
-      <div class="campname">${esc(title)} ${mark(k)}</div>
+  // A character just made opens here first (`uiPrefs.rulesFirst`): its rules
+  // before anything else, the lowest level the one question that must be
+  // answered and the rest the table's or the shared rules until changed.
+  const first = d.uiPrefs?.rulesFirst === true;
+  const required = (k) => first && k === 'minLevel';
+  const row = (k, title, control, hint, below = '') => `<div class="camprow${differs(k) ? ' changed' : ''}${required(k) ? ' required' : ''}">
+      <div class="campname">${esc(title)} ${mark(k)}${required(k) ? ' <span class="badge need">set this</span>' : ''}</div>
       <div class="campctl">${control}</div>
       <p class="campnote">${hint}</p>
       ${below ? `<div class="campmore">${below}</div>` : ''}
@@ -170,6 +175,12 @@ export function campaignPanel(model, ctx = {}) {
             "Help —" line (#clampHints). */''}
       <p class="hint">The rules this character is played under. Each switch starts at the table's
         rule, and changing one changes the sheet's numbers at once.</p>
+      ${first ? `<div class="rulesfirst" role="note">
+        <p><strong>A new character: first, the rules this campaign plays by.</strong> Set the lowest level.
+          Every other switch starts at ${followsShared(d) ? 'the rules every character shares' : 'the table\'s rules'};
+          pick the ones your campaign plays differently, now or later.</p>
+        <button class="btn primary" data-action="rules-first-done">Continue to the character</button>
+      </div>` : ''}
       <div class="camprows">
         ${scopeRow(d, ctx)}
         ${row('pointBuy', 'Point buy',
@@ -200,6 +211,26 @@ export function campaignPanel(model, ctx = {}) {
       rolled: `The whole die at 1st level, then the roll for each level, kept on the <strong>Hit points</strong>
           panel; a level not rolled yet counts the average.`,
     }[rules.hitPoints])}
+        ${row(['skillSystem', 'backgroundRanks', 'backgroundUse'], 'Background', ruleSelect('skillSystem', rules.skillSystem, [
+    ['specialty', 'Specialty'], ['background', 'Background skills'],
+  ], 'What a character\'s background gives'),
+    rules.skillSystem === 'specialty'
+      ? `A <strong>Specialty</strong> on the Overview: its name, a feat and two perks, and three specialty
+          skills at full ranks, picked on <strong>Skills</strong>, as the table does.`
+      : `The skills split into adventuring and background ones, and background ranks each level only
+          background skills may take, on <strong>Skills</strong>. They replace the Specialty, its feat and
+          perks; what was written there is kept.`,
+    rules.skillSystem === 'background'
+      ? `<div class="pair">${ruleCount('backgroundRanks', rules.backgroundRanks, 'Background ranks a level', 'ranks a level')}
+          ${ruleSelect('backgroundUse', rules.backgroundUse, [
+    ['allocated', 'Allocated to picked skills'], ['floating', 'Floating, spent by hand'],
+  ], 'How background ranks are taken')}</div>
+        <p class="campnote">${rules.backgroundUse === 'allocated'
+    ? `Each rank a level is a background skill at full ranks: ${rules.backgroundRanks} picked under
+          <strong>Background skills</strong> on Skills, with no ranks typed in. The official rules give 2.`
+    : `A pool of ${rules.backgroundRanks} ranks a level, bought by hand in background skills only; past the pool
+          they take skill points. The official rules give 2.`}</p>`
+      : '')}
         ${row('heroPoints', 'Hero points', check('heroPoints', 'Track hero points'),
     `Kept on the <strong>Details</strong> panel and as a Hero Points pool on <strong>Trackers</strong>,
           where a point spent is undone like any play. Off, the counter goes and the pool may be

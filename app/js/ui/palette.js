@@ -44,7 +44,7 @@ import { trackerReading } from './panels/trackers.js';
 import { COMPANION_KINDS, COMPANION_LABELS, companionInUse } from '../companions.js';
 import { fmt, ABILITIES, ABILITY_LABELS, critMultOf, threatText } from '../rules.js';
 import { rollSpec } from '../roll20.js';
-import { campaignRules, levelProgress, mythicTierGrantOf, trialProgress } from '../model/campaign.js';
+import { campaignRules, levelProgress, mythicTierGrantOf, specialtyInPlay, trialProgress } from '../model/campaign.js';
 
 /* ---------------- kinds ---------------- */
 
@@ -307,7 +307,7 @@ function identity(model, add) {
   const i = model.data.identity || {};
   const pairs = [
     ['Name', i.name], ['Nickname', i.nickname], ['Player', i.player], ['Race', i.race], ['Size', i.size],
-    ['Alignment', i.alignment], ['Deity', i.deity], ['Specialty', i.specialty],
+    ['Alignment', i.alignment], ['Deity', i.deity], ['Specialty', specialtyInPlay(model.data) ? i.specialty : ''],
     ['Guild', i.guild], ['Age', i.age], ['Height', i.height], ['Weight', i.weight],
     ['Gender', i.gender],
   ];
@@ -448,6 +448,7 @@ function feats(model, add) {
   const granted = c.grantedFeats || {};
   for (const [key, label] of [['drawback', 'From a drawback'], ['specialty', 'From your specialty']]) {
     if (!text(granted[key]?.name)) continue;
+    if (key === 'specialty' && !specialtyInPlay(c)) continue;
     add({
       kind: 'feat', title: text(granted[key].name), tab: 'features',
       sub: bits(label, clip(granted[key].note, 60)), keys: 'granted feat',
@@ -1108,8 +1109,8 @@ function commands(model, add) {
   if (lp?.ready) cmd(`Level up to ${lp.next}`, 'level-up', 'The next level is earned', 'level up levelling xp experience milestones');
   const tp = trialProgress(model.data);
   if (tp?.ready) cmd(`Tier up to ${tp.next}`, 'tier-up', 'The next mythic tier is earned', 'tier up mythic trials');
-  cmd('Campaign rules', 'campaign-rules', 'Levels, gestalt, hit points, hero points, mythic, ABP, currency and more for this character',
-    'settings options campaign rules house table point buy hero points antihero mythic tier trials rate thresholds abp automatic bonus progression core unchained attunement legendary gifts xp experience milestones levelling highest maximum level gestalt multiclass hit points hp rolled average alternate training currency gold mana colossal size party file');
+  cmd('Campaign rules', 'campaign-rules', 'Levels, gestalt, hit points, background skills, hero points, mythic, ABP, currency and more for this character',
+    'settings options campaign rules house table point buy background skills specialty adventuring hero points antihero mythic tier trials rate thresholds abp automatic bonus progression core unchained attunement legendary gifts xp experience milestones levelling highest maximum level gestalt multiclass hit points hp rolled average alternate training currency gold mana colossal size party file');
   cmd('Show, hide and rearrange tabs', 'palette-tabs', 'The ⚙ tab manager', 'tabs manage hide show arrange settings');
   cmd('Reset to the character as imported', 'reset', 'Asks first; named checkpoints are kept', 'reset revert discard');
 }

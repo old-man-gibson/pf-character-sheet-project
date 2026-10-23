@@ -200,6 +200,12 @@ export function renameSkill(model, skill, oldKey) {
   for (const slot of Object.keys(picks)) {
     if (picks[slot] === oldKey) picks[slot] = newKey;
   }
+  const background = model.data.backgroundSkills;
+  if (background && typeof background === 'object') {
+    for (const slot of Object.keys(background)) {
+      if (background[slot] === oldKey) background[slot] = newKey;
+    }
+  }
 }
 
 /** Create a new, empty system tab (a small editable grid). */

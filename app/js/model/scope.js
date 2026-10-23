@@ -27,7 +27,7 @@ import {
 } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
-import { campaignRules, coreAbp, isAntihero } from './campaign.js';
+import { campaignRules, coreAbp, isAntihero, specialtyInPlay } from './campaign.js';
 import { sphereTableNames, talentsIn } from './spheres.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
 import { tempHpGrant } from './stats/defenses.js';
@@ -1495,9 +1495,9 @@ export function proseSources(model) {
   (d.featGroups || []).forEach((group, gi) => {
     (group.entries || []).forEach((f, i) => push(`feat:${gi}:${i}`, f?.note, null, planned(featLevel(group, f))));
   });
-  for (const key of ['drawback', 'specialty']) {
-    push(`grantedFeat:${key}`, d.grantedFeats?.[key]?.note);
-  }
+  push('grantedFeat:drawback', d.grantedFeats?.drawback?.note);
+  // The specialty's feat waits while background skills replace the Specialty.
+  push('grantedFeat:specialty', d.grantedFeats?.specialty?.note, null, specialtyInPlay(d) ? null : { future: true });
   // An antihero's feat waits while the bargain does not stand (a campaign rule).
   push('grantedFeat:antihero', d.grantedFeats?.antihero?.note, null, isAntihero(d) ? null : { future: true });
   (d.grantedFeats?.others || []).forEach((f, i) => push(`grantedFeat:${i}`, f?.note, null, planned(rowLevel(f))));

@@ -771,6 +771,10 @@
     // The first character sets the campaign's lowest level for every character,
     // before it opens, so it opens under it.
     if (!newFirst.hidden) setCampaignLowest(newForm.elements.lowest.value);
+    // Every new character opens on its campaign rules first (the sheet's ⚙
+    // tab), to be confirmed or changed before anything else; Continue there
+    // takes the flag off.
+    doc.uiPrefs = { ...(doc.uiPrefs || {}), rulesFirst: true };
     newDialog.close();
     newForm.reset();
     add(doc, [], 'blank');

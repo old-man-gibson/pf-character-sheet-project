@@ -709,10 +709,20 @@ export function sphereSkillSpheres(def) {
   return [...new Set((def.from || []).map((s) => s.sphere))];
 }
 
-/** Background skills (Pathfinder Unchained), for the specialty picker. */
+/**
+ * Background skills (Pathfinder Unchained): the specialty picker's list, and
+ * under the Background Skills campaign rule the skills background ranks may
+ * buy. Every other skill is an adventuring skill.
+ */
 export const BACKGROUND_SKILLS = ['Appraise', 'Artistry', 'Craft', 'Handle Animal',
   'Kn. (engineering)', 'Kn. (geography)', 'Kn. (history)', 'Kn. (nobility)',
   'Linguistics', 'Lore', 'Perform', 'Profession', 'Sleight of Hand'];
+
+/** Whether a skill row is a background skill: by its name, whatever its variant. */
+export function isBackgroundSkill(skill) {
+  const name = String(skill?.name ?? skill ?? '');
+  return BACKGROUND_SKILLS.some((b) => name === b || name.startsWith(b));
+}
 
 /* ------------------------------------------------------------------ *
  * Alternate Training Techniques

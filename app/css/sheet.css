@@ -1478,6 +1478,19 @@ select.jumpto[hidden] { display: none; }
   padding: 6px 8px; border-radius: 6px; border-left: 3px solid transparent;
 }
 .camprow.changed { border-left-color: var(--cs-accent); background: var(--cs-accent-soft); }
+/* A character just made opens on its rules first: a note with the way on,
+   and the one question it must answer -- the lowest level -- edged in the
+   edit colour so it is found first. */
+.campaign .rulesfirst {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  margin: 6px 0 10px; padding: 10px 12px; border-radius: 6px;
+  border: 1px solid var(--cs-edit); background: color-mix(in srgb, var(--cs-edit) 12%, transparent);
+}
+.campaign .rulesfirst p { flex: 1 1 22rem; margin: 0; }
+.camprow.required { border-left-color: var(--cs-edit); background: color-mix(in srgb, var(--cs-edit) 10%, transparent); }
+.camprow.required .badge.need { color: var(--cs-edit); border-color: var(--cs-edit); }
+/* Under background skills (a campaign rule), a background skill's name says so. */
+.skillcell .badge.bgskill { margin-left: 4px; font-size: 0.6rem; text-transform: none; }
 /* Whom the rules are for: every character, or this one. Set apart from the
    switches under it, since it decides where they are kept. */
 .camprow.campscope { border: 1px solid var(--cs-line); margin-bottom: 4px; }

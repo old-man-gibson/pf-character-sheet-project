@@ -108,7 +108,7 @@ import {
 import { hasTokens } from '../../inline.js';
 import { abilityCollapse, abilityHarm, blankClassRow, maneuverDetails } from '../../model.js';
 import { colorControl } from '../color-control.js';
-import { campaignRules, isAntihero, levelProgress } from '../../model/campaign.js';
+import { campaignRules, isAntihero, levelProgress, specialtyInPlay } from '../../model/campaign.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
@@ -169,7 +169,8 @@ export function renderOverviewPanel(model, ctx) {
         ${abilityScoresPanel(model)}
       </div>
       <div class="band">
-        ${specialtyPanel(model)}
+        ${/* Background skills (a campaign rule) replace the Specialty. */''}
+        ${specialtyInPlay(model.data) ? specialtyPanel(model) : ''}
         ${languagesPanel(model)}
       </div>
 

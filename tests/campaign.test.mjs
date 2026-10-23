@@ -59,7 +59,8 @@ for (const id of fixtureIds()) {
   for (const [key, value] of [['abp', false], ['mythic', false], ['heroPoints', false], ['pointBuy', 20], ['mythicTier', 'awarded'],
     ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false], ['antiheroes', true],
     ['maxLevel', 6], ['maxLevel', 25], ['maxTier', 5], ['maxTier', 12], ['gestalt', false], ['hitPoints', 'average'], ['hitPoints', 'rolled'],
-    ['abpLadder', 'core'], ['mythicLadder', 'core'], ['pastColossal', true], ['minLevel', 1], ['minLevel', 8], ['maxLevel', 60]]) {
+    ['abpLadder', 'core'], ['mythicLadder', 'core'], ['pastColossal', true], ['minLevel', 1], ['minLevel', 8], ['maxLevel', 60],
+    ['skillSystem', 'background'], ['backgroundUse', 'floating'], ['backgroundRanks', 3]]) {
     const m = new Character(loadCharacter(id));
     const before = numbers(m);
     m.set(`campaign.${key}`, value);
@@ -568,6 +569,83 @@ console.log('\nthe highest level and tier');
   m.set('mythic.trials', 30);
   for (let i = 0; i < 20; i++) tierUp(m);
   check('trials stop at the highest tier', [m.data.identity.mythicTier, trialProgress(m.data).next], [12, null]);
+}
+
+console.log('\nbackground skills in place of the Specialty');
+{
+  const { freeBackgroundSkills, specialtyInPlay } = await import('../app/js/model/campaign.js');
+  const { featNames } = await import('../app/js/model/feats.js');
+  const { isBackgroundSkill } = await import('../app/js/rules.js');
+  const { renderSkillsPanel } = await import('../app/js/ui/panels/skills.js');
+  const { renderOverviewPanel } = await import('../app/js/ui/panels/overview.js');
+  const key = (s) => `${s.name}|${s.spec || ''}`;
+  const c = new Character(blankDocument({ name: 'Background', level: 1 }));
+  c.set('identity.level', 6);
+  const skill = (name) => c.data.skills.find((s) => s.name === name);
+  const at = (name) => c.data.skills.findIndex((s) => s.name === name);
+  check('the official split', ['Appraise', 'Kn. (history)', 'Sleight of Hand', 'Perception', 'Kn. (arcana)', 'Stealth'].map((n) => isBackgroundSkill(n)),
+    [true, true, true, false, false, false]);
+
+  // The table's Specialty: its skills at full ranks, its feat counted.
+  c.set('specialtySkills.free', key(skill('Perception')));
+  c.set('grantedFeats.specialty.name', 'Skill Focus');
+  check('specialty: a specialty skill at full ranks, its feat counted',
+    [specialtyInPlay(c.data), skill('Perception').totalRanks, featNames(c.data).includes('Skill Focus')], [true, 6, true]);
+  check('specialty: the Specialty panel and skills', [renderOverviewPanel(c, { draft: {}, buildView: true }).includes('<h3>Specialty</h3>'),
+    renderSkillsPanel(c, { showAllSkills: true }).includes('Specialty skills')], [true, true]);
+
+  c.set('campaign.skillSystem', 'background');
+  check('background: the Specialty goes, all of it', [specialtyInPlay(c.data), skill('Perception').totalRanks,
+    featNames(c.data).includes('Skill Focus'), renderOverviewPanel(c, { draft: {}, buildView: true }).includes('<h3>Specialty</h3>'),
+    renderSkillsPanel(c, { showAllSkills: true }).includes('Background skills')], [false, 0, false, false, true]);
+  check('background: what it held is kept', [c.data.specialtySkills.free, c.data.grantedFeats.specialty.name], [key(skill('Perception')), 'Skill Focus']);
+
+  // Allocated: a pick for each rank a level, each at full ranks, nothing typed.
+  c.setItem('skills', at('Appraise'), 'rankSources.bought', 2);
+  c.set('backgroundSkills.0', key(skill('Appraise')));
+  c.set('backgroundSkills.1', key(skill('Perception')));
+  c.set('backgroundSkills.2', key(skill('Linguistics')));
+  check('allocated: picks up to the ranks a level, background skills only',
+    [...freeBackgroundSkills(c.data)], [key(skill('Appraise'))]);
+  check('allocated: a pick at full ranks, its typed ranks not counted',
+    [skill('Appraise').totalRanks, skill('Appraise').backgroundFree, skill('Appraise').boughtResolved, c.data.skillBudget.assigned], [6, true, 0, 0]);
+  check('allocated: the Bought box closed', renderSkillsPanel(c, { showAllSkills: true }).includes(`data-item="skills|${at('Appraise')}|rankSources.bought"`), false);
+  c.set('campaign.backgroundRanks', 3);
+  check('a third rank a level takes the third pick', [...freeBackgroundSkills(c.data)], [key(skill('Appraise')), key(skill('Linguistics'))]);
+
+  // Floating: a pool that pays for background ranks before the skill points.
+  c.set('campaign.backgroundUse', 'floating');
+  check('floating: no free skills, typed ranks count again', [freeBackgroundSkills(c.data).size, skill('Appraise').totalRanks], [0, 2]);
+  c.setItem('skills', at('Linguistics'), 'rankSources.bought', 20);
+  c.setItem('skills', at('Stealth'), 'rankSources.bought', 3);
+  const b = c.data.skillBudget;
+  check('floating: the pool pays for background skills first, never adventuring ones',
+    [b.background.pool, b.background.spent, b.background.used, b.assigned], [18, 22, 18, 3 + 4]);
+
+  // A renamed skill carries its pick.
+  c.set('campaign.backgroundUse', 'allocated');
+  const craft = at('Craft');
+  c.set('backgroundSkills.0', key(c.data.skills[craft]));
+  c.setItem('skills', craft, 'spec', 'Bows');
+  check('a renamed skill keeps its pick', c.data.backgroundSkills[0], 'Craft|Bows');
+
+  // Back to the Specialty: everything as it was.
+  c.set('campaign.skillSystem', 'specialty');
+  check('back to the Specialty', [skill('Perception').totalRanks, featNames(c.data).includes('Skill Focus'), skill('Appraise').backgroundFree], [6, true, undefined]);
+}
+
+console.log('\na new character opens on its rules first');
+{
+  const { campaignPanel } = await import('../app/js/ui/panels/campaign.js');
+  const doc = blankDocument({ name: 'First', level: 1 });
+  doc.uiPrefs = { ...(doc.uiPrefs || {}), rulesFirst: true };
+  const c = new Character(doc);
+  const h = campaignPanel(c, {});
+  check('the note, the lowest level to set, the way on',
+    [h.includes('class="rulesfirst"'), /camprow[^"]*required[\s\S]*Lowest level/.test(h), h.includes('data-action="rules-first-done"')], [true, true, true]);
+  c.set('uiPrefs.rulesFirst', undefined);
+  check('and gone once continued', campaignPanel(c, {}).includes('rulesfirst'), false);
+  check('the flag is not saved once continued', 'rulesFirst' in JSON.parse(JSON.stringify(c.toJSON())).uiPrefs, false);
 }
 
 console.log(`${pass} passed, ${fail} failed`);
