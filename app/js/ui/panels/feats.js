@@ -19,7 +19,7 @@ import { featDetails, featCatalogue } from '../../model.js';
 import { featLevel, isAhead, rowLevel } from '../../model/feats.js';
 import { fromLevelField, fromLevelHead, plannedRow } from '../from-level.js';
 import {
-  campaignRules, isAntihero, mythicTierGrantOf, mythicTierReached, trialProgress, specialtyInPlay,
+  campaignRules, isAntihero, mythicTierGrantOf, mythicTierReached, trialProgress, specialtyInPlay, vmcTakesSlot, vmcClass,
 } from '../../model/campaign.js';
 import {
   MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS,
@@ -197,12 +197,17 @@ function featGroupTable(model, ctx, group, g) {
           <th class="fnote">Notes</th><th></th></tr></thead>
         <tbody>${group.entries.map((f, i) => `<tr data-featdrop="${g}|${i}"${plannedRow(ahead(f), featLevel(group, f))}>
           <td class="grip"><span class="grip" data-featgrip title="${fixed ? 'Drag to another level' : 'Drag to reorder — or onto another group'}">&#10495;</span></td>
-          <td data-stack="name">${rows.itemText(`featGroups.${g}.entries`, i, 'name', f.name, '', { list: FEAT_LIST_ID })}</td>
+          <td data-stack="name">${fixed && vmcTakesSlot(model.data, featLevel(group, f))
+    ? `<span class="vmcslot" title="Variant multiclass feature, set on Progression">VMC ${esc(vmcClass(model.data))}: ${
+      esc(String(model.data.vmc?.features?.[featLevel(group, f)]?.name ?? '').trim() || 'not set')}</span>`
+    : rows.itemText(`featGroups.${g}.entries`, i, 'name', f.name, '', { list: FEAT_LIST_ID })}</td>
           <td data-label="${fixed ? 'Source / level' : 'Source'}">${fixed
     ? `<span class="dim" title="Set by the slot; move the feat to change its level">Level ${esc(f.detail)}</span>`
     : rows.itemText(list, i, 'detail', f.detail)}</td>
           ${fixed ? '' : `<td class="num" data-label="From lvl">${fromLevelField(list, i, f)}</td>`}
-          <td class="fnote" data-label="Notes">${featNote(model, ctx, `data-item="${list}|${i}|note"`, f, `${list}|${i}`)}</td>
+          <td class="fnote" data-label="Notes">${fixed && vmcTakesSlot(model.data, featLevel(group, f))
+    ? '<span class="dim">Notes on Progression</span>'
+    : featNote(model, ctx, `data-item="${list}|${i}|note"`, f, `${list}|${i}`)}</td>
           ${/* The arrows move a feat within its group only: taking one to
                another group stays a drag, on a desktop. The granted feats
                above are the same bargain and write the same cell. */''}

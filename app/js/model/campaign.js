@@ -132,7 +132,12 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
   backgroundUse: 'allocated',
   /** Age categories change ability scores (identity.ageCategory). */
   agingEffects: false,
+  /** Variant multiclassing: a secondary class picked on Progression (`d.vmc`). */
+  vmc: false,
 });
+
+/** The levels a variant multiclass grants a secondary class feature at, in place of a feat. */
+export const VMC_LEVELS = Object.freeze([3, 7, 11, 15, 19]);
 
 /** The age categories, youngest first. */
 export const AGE_CATEGORIES = Object.freeze(['Adult', 'Middle-Aged', 'Old', 'Venerable']);
@@ -228,7 +233,19 @@ export function campaignRules(d) {
     backgroundRanks: count(c.backgroundRanks, CAMPAIGN_DEFAULTS.backgroundRanks),
     backgroundUse: BACKGROUND_USES.includes(c.backgroundUse) ? c.backgroundUse : CAMPAIGN_DEFAULTS.backgroundUse,
     agingEffects: bool('agingEffects'),
+    vmc: bool('vmc'),
   };
+}
+
+/** The secondary class, while the rule is on and one is picked; else ''. */
+export function vmcClass(d) {
+  if (!campaignRules(d).vmc) return '';
+  return String(d?.vmc?.class ?? '').trim();
+}
+
+/** Whether a Level Up feat slot at `level` is taken by a variant multiclass feature. */
+export function vmcTakesSlot(d, level) {
+  return !!vmcClass(d) && VMC_LEVELS.includes(Number(level));
 }
 
 /**

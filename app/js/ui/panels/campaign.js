@@ -200,6 +200,8 @@ export function campaignPanel(model, ctx = {}) {
     ? 'Each background rank per level gives one picked skill full ranks (picked on <strong>Skills</strong>).'
     : 'Background ranks form a pool for background skills only.'}</p>`
       : '')}
+        ${row('vmc', 'Variant multiclassing', check('vmc', 'Variant multiclassing'),
+    'Characters may pick a secondary class on <strong>Progression</strong>. Its features replace the feats at 3rd, 7th, 11th, 15th and 19th.')}
         ${row('heroPoints', 'Hero points', check('heroPoints', 'Hero points'),
     'Hero points are tracked on <strong>Details</strong> and as a <strong>Trackers</strong> pool.')}
         ${row('antiheroes', 'Antiheroes', check('antiheroes', 'Antiheroes', !rules.heroPoints),

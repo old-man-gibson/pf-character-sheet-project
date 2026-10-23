@@ -118,6 +118,7 @@ export function describeSource(path) {
     case 'mythicTraditionNote': return 'a mythic tradition note';
     case 'feat': return `a feat’s note, group ${nth(a)}`;
     case 'grantedFeat': return 'a granted feat’s note';
+    case 'vmc': return `the variant multiclass feature at level ${a}`;
     case 'altTraining': return a === 'notes' ? 'Alternate Training notes' : `Alternate Training, level ${a}`;
     case 'altTrainingNote': return `Alternate Training notes, level ${a}`;
     case 'crafting': return `crafting project ${nth(a)}`;

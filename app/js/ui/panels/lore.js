@@ -26,8 +26,42 @@ import { parseLevelRule, levelRuleLevels, summariseLevels } from '../../rules.js
 import { hasTokens } from '../../inline.js';
 import { rgba } from '../../tracker-style.js';
 import { logDay, logLinesHtml } from '../play-log.js';
-import { campaignRules } from '../../model/campaign.js';
+import { VMC_LEVELS, campaignRules } from '../../model/campaign.js';
+import { foldingNote } from '../talents.js';
+import { field, text } from '../fields.js';
 
+
+/**
+ * Variant multiclassing (a campaign rule): the secondary class, and the
+ * feature it grants at 3rd, 7th, 11th, 15th and 19th level in place of a
+ * feat. Each feature's notes take formulas and count from its level.
+ */
+function vmcPanel(model) {
+  const c = model.data;
+  if (!campaignRules(c).vmc) return '';
+  const v = c.vmc || {};
+  const cls = String(v.class ?? '').trim();
+  const level = Number(c.identity?.level) || 0;
+  const taken = cls && (c.classes || []).some((x) => String(x.name || '').trim().toLowerCase() === cls.toLowerCase());
+  return collapsible(model, 'vmc', `<section class="panel span2 vmcpanel">
+      <h3>Variant multiclassing${cls ? ` <span class="badge">${esc(cls)}</span>` : ''}</h3>
+      <div class="fieldgrid">${field('Secondary class', text('vmc.class', cls, 'Fighter'))}</div>
+      ${taken ? `<p class="hint warn">${esc(cls)} is also one of this character's classes.</p>` : ''}
+      <div class="tablewrap"><table class="vmc stacked">
+        <colgroup><col class="lvl"><col class="vname"><col></colgroup>
+        <thead><tr><th class="num">Level</th><th>Feature</th><th>Notes</th></tr></thead>
+        <tbody>${VMC_LEVELS.map((at) => {
+    const f = v.features?.[at] || {};
+    return `<tr class="${at > level ? 'future' : ''}">
+            <td class="num" data-stack="head">${at}</td>
+            <td data-stack="name">${text(`vmc.features.${at}.name`, f.name, 'Feature')}</td>
+            <td data-label="Notes">${foldingNote(model, `data-set="vmc.features.${at}.note"`, f.note, `vmc.features.${at}.note`, { name: f.name })}</td>
+          </tr>`;
+  }).join('')}</tbody>
+      </table></div>
+      <p class="hint">These replace the feats at 3rd, 7th, 11th, 15th and 19th.</p>
+    </section>`);
+}
 
 export function renderProgressionPanel(model, ctx) {
     const c = model.data;
@@ -112,6 +146,7 @@ export function renderProgressionPanel(model, ctx) {
           marked.
         </p>
       </section>`)}
+      ${vmcPanel(model)}
     </div>
     <div class="featgroups">
       ${classFeatureGroups(model, ctx, model, ctx)}

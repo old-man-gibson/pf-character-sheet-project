@@ -60,7 +60,7 @@ for (const id of fixtureIds()) {
     ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false], ['antiheroes', true],
     ['maxLevel', 6], ['maxLevel', 25], ['maxTier', 5], ['maxTier', 12], ['gestalt', false], ['hitPoints', 'average'], ['hitPoints', 'rolled'],
     ['abpLadder', 'core'], ['mythicLadder', 'core'], ['pastColossal', true], ['minLevel', 1], ['minLevel', 8], ['maxLevel', 60],
-    ['skillSystem', 'background'], ['backgroundUse', 'floating'], ['backgroundRanks', 3], ['agingEffects', true]]) {
+    ['skillSystem', 'background'], ['backgroundUse', 'floating'], ['backgroundRanks', 3], ['agingEffects', true], ['vmc', true]]) {
     const m = new Character(loadCharacter(id));
     const before = numbers(m);
     m.set(`campaign.${key}`, value);
@@ -655,6 +655,37 @@ console.log('\nage categories and age effects');
   check('rule on: the Age column', renderStatsPanel(c, {}).includes('title="Age category"'), true);
   c.set('identity.ageCategory', 'Adult');
   check('adult: nothing, and nothing written', [scores(), 'age' in c.data.statsBuild.str], [base, false]);
+}
+
+console.log('\nvariant multiclassing');
+{
+  const { featNames } = await import('../app/js/model/feats.js');
+  const { renderProgressionPanel } = await import('../app/js/ui/panels/lore.js');
+  const { renderFeaturesPanel } = await import('../app/js/ui/panels/feats.js');
+  const c = new Character(blankDocument({ name: 'Multi', level: 1 }));
+  c.set('identity.level', 8);
+  const slots = c.data.featGroups[0].entries;
+  const at = (lvl) => slots.findIndex((f) => String(f.detail) === String(lvl));
+  c.setItem('featGroups.0.entries', at(3), 'name', 'Power Attack');
+  c.setItem('featGroups.0.entries', at(5), 'name', 'Dodge');
+  const fort = () => c.data.saves.fortitude.total;
+  const base = fort();
+  check('rule off: every Level Up feat counts', ['Power Attack', 'Dodge'].map((n) => featNames(c.data).includes(n)), [true, true]);
+  check('rule off: no panel', renderProgressionPanel(c, { draft: {} }).includes('Variant multiclassing'), false);
+  c.set('campaign.vmc', true);
+  check('rule on, no class picked: feats still count', featNames(c.data).includes('Power Attack'), true);
+  check('rule on: the panel', renderProgressionPanel(c, { draft: {} }).includes('data-set="vmc.class"'), true);
+  c.set('vmc.class', 'Fighter');
+  c.set('vmc.features.3.name', 'Bonus feat');
+  c.set('vmc.features.3.note', 'Toughened {fort += 1}');
+  c.set('vmc.features.11.note', 'Later {fort += 5}');
+  check('a class picked: the 3rd-level feat no longer counts, the 5th still does',
+    ['Power Attack', 'Dodge'].map((n) => featNames(c.data).includes(n)), [false, true]);
+  check('a feature counts from its level, not before', fort(), base + 1);
+  const feats = renderFeaturesPanel(c, { openText: new Set() });
+  check('the Level Up slot shows the feature', feats.includes('VMC Fighter: Bonus feat'), true);
+  c.set('campaign.vmc', false);
+  check('rule off again: the feat is back, the feature gone', [featNames(c.data).includes('Power Attack'), fort()], [true, base]);
 }
 
 console.log('\na new character opens on its rules first');
