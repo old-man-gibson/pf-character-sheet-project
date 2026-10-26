@@ -381,8 +381,13 @@
 }
 .portrait {
   width: 84px; height: 84px; flex: none; border-radius: var(--cs-radius);
-  object-fit: cover; background: var(--cs-panel-2); border: 1px solid var(--cs-line);
+  background: var(--cs-panel-2); border: 1px solid var(--cs-line); overflow: hidden;
 }
+/* The picture fills the square; its framing (ui/html.js portraitCss) moves
+   and scales it inside. */
+.portrait > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.portraitframe label { font-size: 0.72rem; color: var(--cs-muted); gap: 6px; }
+.portraitframe input[type="range"] { width: 7rem; accent-color: var(--cs-accent); }
 .head-main { flex: 1 1 20rem; min-width: min(18rem, 60vw); }
 /* A companion's picture beside its identity fields, the character's size. */
 .cportrait { display: flex; gap: 12px; align-items: flex-start; }
@@ -1375,9 +1380,17 @@ select.jumpto[hidden] { display: none; }
        at once and is never pushed, and does not move as the sheet scrolls.
        The column beside it keeps the space instead. */
     padding-block: 0;
+    /* The rail keeps to the window's left edge. The sheet's column cap (the
+       90rem, or a chosen share) applies to the header and panels beside it,
+       centred in the rest of the width. */
+    padding-inline: var(--cs-wrap-pad);
   }
   :host([layout="side"]) .head { margin-top: var(--cs-wrap-pad); }
   :host([layout="side"]) .main { padding-bottom: var(--cs-wrap-pad); }
+  :host([layout="side"]) .head,
+  :host([layout="side"]) .main {
+    width: 100%; max-width: var(--cs-sheet-max, 90rem); justify-self: center; box-sizing: border-box;
+  }
   :host([layout="side"]) .head { grid-area: head; }
   :host([layout="side"]) .main { grid-area: main; min-width: 0; }
   /* The rail runs the whole height of the window, from the top of the sheet,
@@ -1465,6 +1478,15 @@ select.jumpto[hidden] { display: none; }
 :host([width="90"]) { width: 90%; margin-inline: auto; }
 :host([width="80"]) { width: 80%; margin-inline: auto; }
 :host([width="70"]) { width: 70%; margin-inline: auto; }
+/* With the side rail the sheet takes the whole window and the share narrows
+   the column beside the rail instead (see the side rail above). 820px of
+   window is where the app page moves its roster into the rail. */
+@media (min-width: 820px) {
+  :host([layout="side"][width]) { width: auto; margin-inline: 0; }
+  :host([layout="side"][width="90"]) { --cs-sheet-max: 90%; }
+  :host([layout="side"][width="80"]) { --cs-sheet-max: 80%; }
+  :host([layout="side"][width="70"]) { --cs-sheet-max: 70%; }
+}
 
 /* ---------- campaign rules ----------
    The first panel on the ⚙ tab (ui/panels/campaign.js). A row per switch: its

@@ -93,11 +93,25 @@ const DEFENCE_BOX_LABELS = {
  * A prose source path (`note:1`, `feature:Monk:5:Special`) as something a
  * player can go and look at. The paths are internal, stable and meaningless
  * to a reader; this is the one place that translates them.
+ *
+ * With the document `d`, a gear row or a feat is called by its name.
  */
-export function describeSource(path) {
+export function describeSource(path, d = null) {
   const parts = String(path || '').split(':');
   const [head, a, b] = parts;
   const nth = (i) => Number(i) + 1;
+  const named = (name, rest = '') => {
+    const n = String(name ?? '').trim();
+    return n ? `${n}${rest}` : '';
+  };
+  if (d) {
+    const item = head?.startsWith('other') ? d.equipment?.other?.[a] : d.equipment?.gear?.[a];
+    const said = ['gear', 'other', 'gearBonus', 'otherBonus'].includes(head) ? named(item?.name)
+      : ['gearNote', 'otherNote'].includes(head) ? named(item?.name, ', description')
+        : head === 'feat' ? named(d.featGroups?.[a]?.entries?.[b]?.name, ', its note')
+          : head === 'note' ? named(d.notes?.[a]?.title, ', on Lore') : '';
+    if (said) return said;
+  }
   switch (head) {
     case 'feature': return `${a} class feature, level ${b}`;
     case 'featureNote': return `${parts.slice(2).join(':') || 'a feature'}, under ${a} features`;

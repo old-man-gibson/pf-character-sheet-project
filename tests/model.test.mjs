@@ -938,6 +938,20 @@ for (const id of IDS) {
   check(`${id} and the parts still add up`, will.sum, will.total);
 }
 
+console.log('the working -- an ability score names each forwarded bonus, once');
+{
+  const c = new Character(blankDocument({ name: 'Working', level: 5 }));
+  c.data.notes = [{ body: '{con.score += 4} {con.temp += 2 as morale}' }];
+  c.recompute();
+  const lines = (b) => b.parts.filter((p) => p.label === 'forwarded').map((p) => [p.value, p.note]);
+  const score = c.breakdown('con');
+  const temp = c.breakdown('con.temp');
+  check('the permanent bonus is a line of the score, named by where it was written', lines(score), [[4, 'bonus from note 1 on Lore']]);
+  check('the working score starts from the score and adds only the temporary one', lines(temp), [[2, 'morale bonus from note 1 on Lore']]);
+  check('so the permanent one is not counted twice', [temp.parts[0].value, temp.total], [c.data.abilities.con.score, c.data.abilities.con.score + 2]);
+  check('and both add up with nothing left over', [score.sum - score.total, temp.sum - temp.total], [0, 0]);
+}
+
 console.log('the working -- a companion\'s numbers carry theirs too');
 {
   const STATS = ['hp', 'ac', 'touch', 'ff', 'cmd', 'ffCmd', 'cmb', 'init', 'attack', 'fort', 'ref', 'will', 'level', ...ABILITIES];
@@ -7395,6 +7409,45 @@ console.log('gear -- the table is as wide as it needs to be, and every item open
   check('and so does the description', saved.scope().circlet.cha, 3);
 }
 
+console.log('gear bonuses -- an item\'s enhancement bonus to an ability fills the Gear column');
+{
+  const c = new Character(blankDocument({ name: 'Belted', level: 10 }));
+  const str = () => c.data.abilities.str.score;
+  const fwd = () => c.contributions.totals['str.score'] || 0;
+  const s0 = str();
+  c.setItem('equipment.gear', 0, 'name', 'Belt of Giant Strength');
+  c.setItem('equipment.gear', 0, 'bonuses.0.value', 4);
+  c.setItem('equipment.gear', 0, 'bonuses.0.type', 'Enhancement');
+  c.setItem('equipment.gear', 0, 'bonuses.0.target', 'str.score');
+  check('the score gains it', str(), s0 + 4);
+  check('through the Gear column, not as a forwarded bonus', [c.data.statsBuild.str.resolved.gearItems, fwd()], [4, 0]);
+  check('the Stats tab can name the item', c.gearItemBonuses('str'), [{ where: 'Belt of Giant Strength', value: 4 }]);
+  check('and so does the working', c.breakdown('str').parts.find((p) => p.label === 'enhancement')?.note, 'gear 4 (Belt of Giant Strength)');
+  c.setBuild('str', 'gear', 4);
+  check('a typed Gear value of the same size does not stack with it', c.data.statsBuild.str.resolved.enhancement, 4);
+  c.setBuild('str', 'gear', 6);
+  check('a larger typed value is the one that counts', [str(), c.breakdown('str').parts.find((p) => p.label === 'enhancement')?.note],
+    [s0 + 6, 'gear 6']);
+  c.setBuild('str', 'gear', 0);
+  check('it survives a save', new Character(JSON.parse(JSON.stringify(c.toJSON()))).data.abilities.str.score, s0 + 4);
+  c.setItem('equipment.gear', 0, 'bonuses.0.type', 'Morale');
+  check('another type is still forwarded', [str(), fwd(), c.data.statsBuild.str.resolved.gearItems], [s0 + 4, 4, undefined]);
+  c.setItem('equipment.gear', 0, 'bonuses.0.type', 'Enhancement');
+  c.setItem('equipment.gear', 0, 'bonuses.0.target', '');
+  check('aimed nowhere, it is gone again', [str(), c.data.statsBuild.str.resolved.gearItems], [s0, undefined]);
+
+  // A headband of +6 to the three mental scores, as one bonus aimed at all three.
+  const mental = ['int', 'wis', 'cha'];
+  const m0 = mental.map((k) => c.data.abilities[k].score);
+  c.setItem('equipment.gear', 1, 'name', 'Headband of Mental Prowess');
+  c.setItem('equipment.gear', 1, 'bonuses.0.value', 6);
+  c.setItem('equipment.gear', 1, 'bonuses.0.type', 'Enhancement');
+  c.setItem('equipment.gear', 1, 'bonuses.0.target', 'int.score, wis.score, cha.score');
+  check('a bonus aimed at three scores fills each one\'s Gear column',
+    mental.map((k) => [c.data.abilities[k].score, c.data.statsBuild[k].resolved.gearItems, c.contributions.totals[`${k}.score`] || 0]),
+    m0.map((s) => [s + 6, 6, 0]));
+}
+
 console.log('gear bonuses -- amount, type and destination, read as a forwarded bonus');
 {
   /*
@@ -13467,8 +13520,8 @@ console.log('\nthe sphere tables -- a place to send a bonus');
   check('and carries half of itself into the DC, with the DC bonus on top',
     [magic().dcForwarded, magic().dc], [1, before.mdc + 1 + 1]);
   check('the column still says what was typed in it', c.data.training.magic.sphereBonuses[1].clBonus, 1);
-  check('and the badge knows where it came from',
-    c.forwardedInto('sphere.dark.cl')?.from?.[0]?.where, 'note 1 on Lore');
+  check('and the badge knows where it came from, by the note\'s title',
+    c.forwardedInto('sphere.dark.cl')?.from?.[0]?.where, 'Test, on Lore');
   drop();
   check('gone when the note goes', [magic().cl, magic().dc], [before.cl, before.mdc]);
 

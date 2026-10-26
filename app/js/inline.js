@@ -591,7 +591,9 @@ export function resolveDefinitions(defs, baseScope) {
  *                       destination into the concrete places it lands (so
  *                       `skill` becomes every skill) and returns null for
  *                       anything unforwardable; `targetOf` returns what
- *                       `target` reads for one of those keys.
+ *                       `target` reads for one of those keys; `absorbs(key,
+ *                       entry)` is true for a bonus the destination's own
+ *                       column takes instead (listed in `absorbed`).
  * @param keep           optional `(contribution, index)` -> the entry an
  *                       earlier resolution made of that same bonus, when its
  *                       amount is to stand rather than be worked out again;
@@ -608,6 +610,8 @@ export function resolveContributions(contributions, names, baseScope, targets, k
   const errors = [];
   const by = {};              // destination -> every bonus aimed at it, in order
   const countedAt = {};       // destination -> the subset of those that stack
+  const absorbed = {};        // destination -> the bonuses its own column takes
+  const absorbs = targets?.absorbs || (() => false);
 
   for (const [i, c] of contributions.entries()) {
     const lands = [];
@@ -676,7 +680,11 @@ export function resolveContributions(contributions, names, baseScope, targets, k
     entries.push(entry);
     if (!error) {
       for (const key of entry.lands) {
-        (by[key] ||= []).push(each ? { ...entry, value: each.values[key] } : entry);
+        const landed = each ? { ...entry, value: each.values[key] } : entry;
+        // A bonus the destination's own column takes (an item's enhancement
+        // bonus to an ability score fills the Gear column) is not forwarded.
+        if (absorbs(key, landed)) (absorbed[key] ||= []).push(landed);
+        else (by[key] ||= []).push(landed);
       }
     }
   }
@@ -722,7 +730,7 @@ export function resolveContributions(contributions, names, baseScope, targets, k
   // bonuses has to work it out against the same places, and what `target` read
   // at each is remembered there (see forwardTargets), so it shows the amount
   // that arrived rather than one worked out against the sheet a pass later.
-  return { totals, entries, errors, by, countedAt, overlapAt, targets: targets || null };
+  return { totals, entries, errors, by, countedAt, overlapAt, absorbed, targets: targets || null };
 }
 
 // Which bonus types stack is a rule about bonuses, kept with the bonus

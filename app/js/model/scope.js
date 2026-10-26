@@ -1125,7 +1125,26 @@ export function forwardTargets(model) {
       return facts.get(key);
     },
     columnsOf: (key) => typedColumns(model, key),
+    absorbs: (key, e) => gearColumnTakes(model, key, e),
   };
+}
+
+/**
+ * Whether an item's bonus goes into the Stats tab's Gear column rather than
+ * being forwarded: an enhancement bonus above 0 from a gear or Other row,
+ * aimed at the permanent score of an ability that has a build entry.
+ */
+export function gearColumnTakes(model, key, e) {
+  const ability = /^(str|dex|con|int|wis|cha)\.score$/.exec(key);
+  return !!ability && !!model.data.statsBuild?.[ability[1]] && /^(gear|other)Bonus:/.test(e.path)
+    && e.type === 'enhancement' && !e.temporary && e.value > 0;
+}
+
+/** The enhancement bonuses items give an ability score, for its Gear column. */
+export function gearItemBonuses(model, key) {
+  return (model.contributions?.absorbed?.[`${key}.score`] || []).map((e) => ({
+    where: describeSource(e.path, model.data), value: e.value,
+  }));
 }
 
 /** A save's bonus columns, by the bonus type each one is. */
@@ -1180,7 +1199,7 @@ export function typedColumns(model, key) {
     const b = c.statsBuild?.[ability[1]] || {};
     const out = {};
     for (const [type, col] of Object.entries(ABILITY_COLUMN_TYPES)) {
-      out[type] = col ? Number(b[col]) || 0 : resolveAbility(b).enhancement;
+      out[type] = col ? Number(b[col]) || 0 : (b.resolved || resolveAbility(b)).enhancement;
     }
     return out;
   }
@@ -1239,7 +1258,7 @@ export function forwardedInto(model, name, only = '') {
     .map((e) => {
       const o = overlaps?.get(e);
       return {
-        where: describeSource(e.path),
+        where: describeSource(e.path, model.data),
         value: e.value,
         expr: e.expr,
         sign: e.sign,
@@ -1817,9 +1836,16 @@ export function forwardsEarly(model) {
   // Character#recomputeReadable) -- and a name reading one that a bonus
   // raises has to see it raised, which takes the second pass.
   const companion = companionNameTest(model.data);
-  return Object.entries(model.contributions?.totals || {})
+  return absorbsEarly(model) || Object.entries(model.contributions?.totals || {})
     .some(([name, value]) => value && (totalledEarly(name) || companion(name)));
 }
+
+/**
+ * Does an item's bonus fill a Gear column (gearColumnTakes)? The ability
+ * scores are worked out before the prose, so it takes the second pass, as an
+ * early forwarded bonus does.
+ */
+const absorbsEarly = (model) => Object.values(model.contributions?.absorbed || {}).some((list) => list.length);
 
 /**
  * Is this destination totalled before the prose is read? A bonus aimed at one
@@ -1841,7 +1867,7 @@ const totalledEarly = (name) => FORWARD_EARLY.has(name) || inEarlyFamily(name);
  *   out again once it has its bonuses back.
  */
 export function secondPass(model) {
-  const late = Object.entries(model.contributions?.totals || {})
+  const late = absorbsEarly(model) || Object.entries(model.contributions?.totals || {})
     .some(([name, value]) => value && totalledEarly(name));
   const companionOf = companionNameTest(model.data);
   const companions = late && (model.contributions?.entries || [])

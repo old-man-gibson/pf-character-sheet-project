@@ -226,10 +226,15 @@ export function foldPicks(picks, level) {
  *
  * ABP and gear are both enhancement bonuses: they stack with each other but
  * the combined total is capped at +6. Everything else simply adds.
+ *
+ * `gearItems` is the largest enhancement bonus the Equipment tab's items give
+ * (gearItemBonuses in model/scope.js). Gear is the larger of it and the typed
+ * Gear column: two enhancement bonuses do not stack.
  */
-export function resolveAbility(entry = {}) {
+export function resolveAbility(entry = {}, gearItems = 0) {
   const abp = n(entry.abp);
-  const gear = n(entry.gear);
+  const items = n(gearItems);
+  const gear = Math.max(n(entry.gear), items);
   const rawEnhancement = abp + gear;
   // ABP and gear are one enhancement bonus, capped together as the defence
   // pairs are (abpPairTotal).
@@ -246,6 +251,8 @@ export function resolveAbility(entry = {}) {
     enhancement,
     rawEnhancement,
     enhancementWasted: Math.max(0, rawEnhancement - enhancement),
+    // Only when there is some, so a sheet without item bonuses saves as before.
+    ...(items ? { gearItems: items } : {}),
     total,
     temporary,
     tempTotal: total + temporary,

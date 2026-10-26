@@ -13,7 +13,7 @@
  * Bodies keep the indentation they had as methods, because the markup they
  * return is whitespace-sensitive; see ui/panels/gear.js for the reasoning.
  */
-import { esc } from '../html.js';
+import { esc, portraitFrame } from '../html.js';
 import { renderSessionBoard } from './session.js';
 import { field } from '../fields.js';
 import { effectiveMythicTier, hitDieGain } from '../../rules.js';
@@ -1172,9 +1172,30 @@ function detailsPanel(model, ctx) {
           ${field('Portrait URL', text('identity.image', c.identity.image, 'https://…'), 'portraiturl')}
         </div>
       </div>
+      ${portraitFrameRow(c.identity)}
       ${levelProgressRow(model, ctx)}
       ${characterColorRow(c.identity.color)}
     </section>`;
+  }
+
+/**
+ * Which part of the portrait shows in its square, once there is a picture:
+ * the point kept in view and how far in. The header's picture follows the
+ * sliders as they move (sheet-element, `data-frame`).
+ */
+function portraitFrameRow(i) {
+    if (!String(i.image ?? '').trim()) return '';
+    const f = portraitFrame(i.imageFrame);
+    const slider = (key, label, min, max, step) => `<label class="pair">${label}
+        <input type="range" min="${min}" max="${max}" step="${step}" value="${f[key]}" data-set="identity.imageFrame.${key}"
+          data-kind="number" data-frame="${key}" aria-label="Portrait ${label.toLowerCase()}"></label>`;
+    return `<div class="tstyle-row portraitframe">
+      <span class="tlabel">Portrait framing</span>
+      ${slider('x', 'Horizontal', 0, 100, 1)}
+      ${slider('y', 'Vertical', 0, 100, 1)}
+      ${slider('zoom', 'Zoom', 100, 400, 5)}
+      <span class="hint">Sets which part of the picture fills the square.</span>
+    </div>`;
   }
 
   /**

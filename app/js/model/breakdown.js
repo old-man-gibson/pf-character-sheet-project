@@ -20,11 +20,11 @@
  */
 
 import {
-  ABILITIES, ABILITY_LABELS, AC_PENALTY_KEYS, ATTACK_MODE_KEY, BUILD_TEMPORARY, CONDITION_CHANNELS,
+  ABILITIES, ABILITY_LABELS, AC_PENALTY_KEYS, ATTACK_MODE_KEY, BUILD_TEMPORARY, CONDITION_CHANNELS, ENHANCEMENT_CAP,
   abilityOf, acParts, acPenaltyToCmd, attackParts, cmdParts, conditionTotals, initiativeParts, recipePart,
   recipePlain, saveParts,
 } from '../rules.js';
-import { forwarded, forwardedSplit } from './scope.js';
+import { forwardedInto, gearItemBonuses } from './scope.js';
 import { abilityMoves, abilitySlots, mythicHp } from './stats/defenses.js';
 import { COMPANION_KINDS, companionBreakdown, companionScopeName } from '../companions.js';
 import { abilityHarm } from './abilities.js';
@@ -35,16 +35,24 @@ import { campaignRules } from './campaign.js';
 const part = recipePart;
 const plain = recipePlain;
 
-/** The reconciliation offset and the forwarded bonus, where either is doing anything. */
+/**
+ * The bonuses forwarded to `name`, one line each, named by where they were
+ * written. `only` is 'permanent' or 'temporary'. A bonus that adds nothing --
+ * a bigger one of its type is there, or its column already gives it -- has no
+ * line; one its column partly covers counts for what it adds.
+ */
+function forwardedParts(model, name, only = '') {
+  const f = forwardedInto(model, name, only);
+  return (f?.from || []).filter((x) => x.counts).map((x) => part('forwarded', x.column ? x.adds : x.value,
+    `${x.temporary ? 'temporary ' : ''}${x.type ? `${x.type} ` : ''}${x.value < 0 ? 'penalty' : 'bonus'} from ${x.where}`));
+}
+
+/** The reconciliation offset and the forwarded bonuses, where either is doing anything. */
 function extras(model, derivedKey, forwardKey) {
   const out = [];
   const offset = derivedKey ? model.offsetOf(derivedKey) : 0;
-  if (offset) {
-    out.push(part('Other', offset,
-      'what the source workbook added through formulas the export could not show — the “Other” column'));
-  }
-  const fwd = forwardKey ? forwarded(model, forwardKey) : 0;
-  if (fwd) out.push(part('forwarded', fwd, 'a rule written elsewhere on the sheet — see the gold badge'));
+  if (offset) out.push(part('Other', offset, 'the Other column'));
+  if (forwardKey) out.push(...forwardedParts(model, forwardKey));
   return out;
 }
 
@@ -83,50 +91,46 @@ function hpBreakdown(model) {
 function abilityBreakdown(model, key, which) {
   const build = model.data.statsBuild?.[key];
   const a = model.data.abilities[key] || {};
+  const drain = part('drain', -abilityHarm(a).drain, 'ability drain, set on the Overview');
   if (!build) {
-    // No build tab: the score is a plain typed number with whatever a rule
-    // has forwarded at it beside.
-    const fwd = forwardedSplit(model, `${key}.score`);
-    const tempFwd = forwardedSplit(model, `${key}.temp`);
+    // No build tab: the score is a plain typed number, and a forwarded bonus
+    // moves only the working score.
     return which === 'temp'
-      ? [plain('Score', a.score), part('typed temporary', (Number(a.tempScore) || 0) - (Number(a.score) || 0)),
-        part('forwarded', fwd.total + tempFwd.total), part('drain', -abilityHarm(a).drain, 'ability drain, on the Overview')]
-      : [plain('Score', a.score), part('forwarded', fwd.permanent)];
+      ? [plain('Score', a.score, 'permanent score'),
+        part('temporary', (Number(a.tempScore) || 0) - (Number(a.score) || 0), 'typed temporary score'),
+        ...forwardedParts(model, `${key}.score`), ...forwardedParts(model, `${key}.temp`), drain]
+      : [plain('Score', a.score)];
   }
   const r = build.resolved || {};
-  let parts;
   if (which === 'temp') {
-    // The working score is the permanent one plus the temporary columns:
-    // saying so is more use than repeating all ten permanent columns under a
-    // heading that is about the other five.
-    parts = [
-      plain('Score', a.score, 'everything the permanent columns come to'),
-      ...BUILD_TEMPORARY.map(([k, , full]) => part(full, build[k])),
-      part('forwarded', (a.forwarded?.total || 0) + (a.forwardedTemp?.total || 0),
-        'a rule written elsewhere on the sheet'),
-      part('drain', -abilityHarm(a).drain, 'ability drain, on the Overview'),
-    ];
-  } else {
-    // The permanent columns as `resolveAbility` sums them: ABP and gear are
-    // one enhancement bonus and stop at the cap, so they are shown as the one
-    // line the sum treats them as, with what the cap wasted on the note.
-    parts = [
-      part('point buy', build.pointBuy),
-      part('race', build.race),
-      part('enhancement', r.enhancement,
-        r.enhancementWasted ? `ABP ${build.abp || 0} + gear ${build.gear || 0}, ${r.enhancementWasted} over the cap` : 'ABP and gear together'),
-      ...[['attunement', 'attuned'], ['inherent', 'inherent'], ['array', 'array'],
-        ['level4', 'level/4'], ['mythic', 'mythic'], ['age', 'age category'], ['size', 'size'], ['untyped', 'untyped']]
-        .map(([k, label]) => part(label, build[k])),
-      part('forwarded', a.forwarded?.permanent || 0, 'a rule written elsewhere on the sheet'),
+    // The working score is the permanent one plus the temporary columns and
+    // the temporary bonuses forwarded here; the permanent ones are in the score.
+    return [
+      plain('Score', a.score, 'permanent score'),
+      ...BUILD_TEMPORARY.map(([k, , full]) => part(full, build[k], 'Stats tab, temporary bonuses')),
+      ...forwardedParts(model, `${key}.score`, 'temporary'), ...forwardedParts(model, `${key}.temp`),
+      drain,
     ];
   }
-  // The build's own resolver may cap or floor a column; where it does, the
-  // difference is named rather than left to make the sum wrong.
-  const shown = parts.reduce((t, p) => t + p.value, 0);
-  const total = which === 'temp' ? (Number(a.workingScore ?? a.tempScore) || 0) : (Number(a.score) || 0);
-  if (shown !== total) parts.push(part('the build’s own rules', total - shown, 'caps and floors on the Stats tab'));
-  return parts;
+  // The permanent columns as `resolveAbility` sums them: ABP and gear are
+  // one enhancement bonus and stop at the cap, so they are shown as the one
+  // line the sum treats them as, with what the cap wasted on the note.
+  // Gear is the typed column or the best item's bonus, whichever is larger.
+  const best = gearItemBonuses(model, key).reduce((a, g) => (!a || g.value > a.value ? g : a), null);
+  const typed = Number(build.gear) || 0;
+  const gear = Math.max(typed, best?.value || 0);
+  const sources = [Number(build.abp) ? `ABP ${build.abp}` : '',
+    gear ? `gear ${gear}${best && best.value >= typed ? ` (${best.where})` : ''}` : ''].filter(Boolean).join(' + ');
+  return [
+    part('point buy', build.pointBuy),
+    part('race', build.race),
+    part('enhancement', r.enhancement, r.enhancementWasted
+      ? `${sources}, ${r.enhancementWasted} over the +${ENHANCEMENT_CAP} cap` : sources),
+    ...[['attunement', 'attuned'], ['inherent', 'inherent'], ['array', 'array'],
+      ['level4', 'level/4'], ['mythic', 'mythic'], ['age', 'age category'], ['size', 'size'], ['untyped', 'untyped']]
+      .map(([k, label]) => part(label, build[k])),
+    ...forwardedParts(model, `${key}.score`, 'permanent'),
+  ];
 }
 
 /* ------------------------------------------------------------------ *

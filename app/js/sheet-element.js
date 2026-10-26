@@ -72,7 +72,7 @@ import {
   awardXp, campaignPreset, campaignRules, followsShared, levelUp, presetCampaign, sameCampaign, tierUp, specialtyInPlay,
 } from './model/campaign.js';
 import { readShared, sharedRules, writeShared } from './shared-rules.js';
-import { esc, val, abilityKey, nameDatalist } from './ui/html.js';
+import { esc, val, abilityKey, nameDatalist, portraitCss, portraitHtml } from './ui/html.js';
 import * as fields from './ui/fields.js';
 
 /*
@@ -3155,7 +3155,7 @@ export class CharacterSheetElement extends HTMLElement {
     const diff = this.#model.diffFromSource();
     return `
       <header class="head">
-        ${i.image ? `<img class="portrait" src="${esc(i.image)}" alt="" loading="lazy">` : '<div class="portrait"></div>'}
+        ${portraitHtml(i.image, i.imageFrame)}
         <div class="head-main">
           <div class="name">${val(i.name)}</div>
           ${monster.headerSubtitle(this.#model) || `<div class="subtitle">
@@ -5617,6 +5617,18 @@ export class CharacterSheetElement extends HTMLElement {
       input.addEventListener('change', () => {
         this.#model.setAltTrainingPick(input.dataset.altpick, readControl(input));
         this.#rerender(input);
+      });
+    });
+
+    // Portrait framing: the header's picture follows the sliders while they
+    // move. The change event below writes the frame when one is let go.
+    root.querySelectorAll('input[data-frame]').forEach((input) => {
+      input.addEventListener('input', () => {
+        const row = input.closest('.portraitframe');
+        const frame = Object.fromEntries([...row.querySelectorAll('input[data-frame]')]
+          .map((el) => [el.dataset.frame, Number(el.value)]));
+        const img = root.querySelector('.head .portrait img');
+        if (img) img.style.cssText = portraitCss(frame);
       });
     });
 

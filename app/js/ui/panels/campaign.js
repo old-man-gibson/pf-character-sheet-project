@@ -220,6 +220,8 @@ export function campaignPanel(model, ctx = {}) {
     [['table', 'Table'], ['core', 'Core (Unchained)']], 'Which ABP', !rules.abp)}`,
     `Enables Automatic Bonus Progression (saves, AC, prowess).${rules.abpLadder === 'core'
       ? ' Core adds armor and weapon attunement and legendary gifts; prowess stops at 18th.' : ''}`)}
+        ${row('optionalArray', 'Optional array', check('optionalArray', 'Optional array'),
+    'Enables the optional array\'s +2 ability picks at 8th, 12th and 16th.')}
         ${row('altTraining', 'Alternate Training', check('altTraining', 'Alternate Training'),
     'Enables Alternate Training techniques.')}
         ${row('pastColossal', 'Past Colossal', check('pastColossal', 'Past Colossal'),
