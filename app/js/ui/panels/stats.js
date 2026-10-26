@@ -22,8 +22,9 @@ import {
   AC_BONUS_TYPES, ARRAY_LEVELS, ARRAY_MAX_SLOTS, ARRAY_SLOTS, arraySourceLevel,
   ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL,
   BUILD_DERIVED_KEYS, BUILD_OPTIONAL_KEYS, BUILD_PERMANENT_GROUPS, BUILD_TEMPORARY,
-  CORE_PROWESS_LEVELS, ENHANCEMENT_CAP, LEGENDARY_GIFTS, MENTAL_PROWESS_LEVELS, abpAttunement,
+  CORE_PROWESS_LEVELS, LEGENDARY_GIFTS, MENTAL_PROWESS_LEVELS, abpAttunement,
   PHYSICAL_PROWESS_LEVELS, PROWESS_TRACKS, SAVE_BONUS_TYPES, abpGroupTotal, abpSourceLevel, bonusColumnName,
+  enhancementCapNote,
 } from '../../rules.js';
 
 
@@ -123,8 +124,7 @@ export function renderStatsPanel(model, ctx) {
                   <th scope="row"><span class="abmark" data-ab="${ab}">${ABILITY_LABELS[ab]}</span></th>
                   ${groups.map((g) => `${g.cols.map(([k], i) => cell(ab, k, band(g, i))).join('')}${
                   g.sum ? `<td class="num grouped groupend total ${r.enhancementWasted ? 'over' : ''}"
-                      title="${esc(r.enhancementWasted
-    ? `${r.rawEnhancement} bought, capped at +${g.cap} — ${r.enhancementWasted} wasted`
+                      title="${esc(r.enhancementWasted ? enhancementCapNote(r)
     : `${g.cols.map(([k]) => (k === 'gear' ? Math.max(Number(build[ab][k]) || 0, r.gearItems || 0)
       : Number(build[ab][k]) || 0)).join(' + ')} = ${r[g.sum] ?? 0}`)}">${esc(r[g.sum] ?? 0)}</td>` : ''}`).join('')}
                   <td class="num">${forwardedBadge(model, `${ab}.score`, { only: 'permanent' }) || '—'}</td>
@@ -159,9 +159,7 @@ export function renderStatsPanel(model, ctx) {
           level ${ATTUNEMENT_MIN_LEVEL}${unlocked ? '' : ' (locked)'}.
         </p>
         ${over.length ? `<p class="hint warn">
-          Over the enhancement cap on ${over.map((a) => `<strong>${ABILITY_LABELS[a]}</strong>
-          (${build[a].resolved.rawEnhancement} → ${ENHANCEMENT_CAP},
-          ${build[a].resolved.enhancementWasted} wasted)`).join(', ')}.
+          ${over.map((a) => `<strong>${ABILITY_LABELS[a]}</strong>: ${esc(enhancementCapNote(build[a].resolved))}`).join(' ')}
         </p>` : ''}
       </section>
 

@@ -70,6 +70,7 @@ import {
 } from '../app/js/companions.js';
 import { namedTextFrom } from '../app/js/extensions.js';
 import { parseDiceExpr as readDice, stepDamageDice, stepDiceMap } from '../app/js/rules.js';
+import { enhancementCapNote, resolveAbility } from '../app/js/rules.js';
 import {
   GUILE_SPHERES, expertiseTalents, guilePackages, guileRanges, guileSkillHint,
   leveragePool, carryTiers, reducedSpeed,
@@ -7429,6 +7430,16 @@ console.log('gear bonuses -- an item\'s enhancement bonus to an ability fills th
   check('a larger typed value is the one that counts', [str(), c.breakdown('str').parts.find((p) => p.label === 'enhancement')?.note],
     [s0 + 6, 'gear 6']);
   c.setBuild('str', 'gear', 0);
+  c.setItem('equipment.gear', 0, 'bonuses.0.value', 8);
+  check('an item above +6 counts in full', [str(), c.data.statsBuild.str.resolved.enhancement], [s0 + 8, 8]);
+  // The +6 cap is on ABP and gear added together; gear above it stands alone.
+  check('with ABP beside it, gear above +6 still counts in full and ABP adds nothing',
+    [resolveAbility({ abp: 6 }, 8).enhancement, enhancementCapNote(resolveAbility({ abp: 6 }, 8))],
+    [8, 'Gear above +6 counts on its own. ABP adds nothing to it.']);
+  check('below +6 the two stack up to the cap',
+    [resolveAbility({ abp: 4 }, 4).enhancement, enhancementCapNote(resolveAbility({ abp: 4 }, 4))],
+    [6, 'ABP and gear stack up to +6. 2 is wasted.']);
+  c.setItem('equipment.gear', 0, 'bonuses.0.value', 4);
   check('it survives a save', new Character(JSON.parse(JSON.stringify(c.toJSON()))).data.abilities.str.score, s0 + 4);
   c.setItem('equipment.gear', 0, 'bonuses.0.type', 'Morale');
   check('another type is still forwarded', [str(), fwd(), c.data.statsBuild.str.resolved.gearItems], [s0 + 4, 4, undefined]);

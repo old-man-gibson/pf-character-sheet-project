@@ -20,8 +20,8 @@
  */
 
 import {
-  ABILITIES, ABILITY_LABELS, AC_PENALTY_KEYS, ATTACK_MODE_KEY, BUILD_TEMPORARY, CONDITION_CHANNELS, ENHANCEMENT_CAP,
-  abilityOf, acParts, acPenaltyToCmd, attackParts, cmdParts, conditionTotals, initiativeParts, recipePart,
+  ABILITIES, ABILITY_LABELS, AC_PENALTY_KEYS, ATTACK_MODE_KEY, BUILD_TEMPORARY, CONDITION_CHANNELS,
+  abilityOf, enhancementCapNote, acParts, acPenaltyToCmd, attackParts, cmdParts, conditionTotals, initiativeParts, recipePart,
   recipePlain, saveParts,
 } from '../rules.js';
 import { forwardedInto, gearItemBonuses } from './scope.js';
@@ -124,8 +124,7 @@ function abilityBreakdown(model, key, which) {
   return [
     part('point buy', build.pointBuy),
     part('race', build.race),
-    part('enhancement', r.enhancement, r.enhancementWasted
-      ? `${sources}, ${r.enhancementWasted} over the +${ENHANCEMENT_CAP} cap` : sources),
+    part('enhancement', r.enhancement, [sources, enhancementCapNote(r)].filter(Boolean).join('. ')),
     ...[['attunement', 'attuned'], ['inherent', 'inherent'], ['array', 'array'],
       ['level4', 'level/4'], ['mythic', 'mythic'], ['age', 'age category'], ['size', 'size'], ['untyped', 'untyped']]
       .map(([k, label]) => part(label, build[k])),

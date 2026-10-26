@@ -141,7 +141,7 @@ export const BUILD_PERMANENT_GROUPS = [
   { cols: [['pointBuy', 'PB', 'Point buy'], ['race', 'Race', 'Race']] },
   {
     label: 'Enhancement',
-    hint: `ABP and gear are the same kind of bonus: they stack with each other, then stop at +${ENHANCEMENT_CAP}`,
+    hint: `ABP and gear stack up to +${ENHANCEMENT_CAP}. Gear above +${ENHANCEMENT_CAP} counts on its own.`,
     cols: [['abp', 'ABP', 'Automatic Bonus Progression'], ['gear', 'Gear', 'Gear']],
     sum: 'enhancement',
     cap: ENHANCEMENT_CAP,
@@ -225,7 +225,9 @@ export function foldPicks(picks, level) {
  * Resolve one ability's build into its scores.
  *
  * ABP and gear are both enhancement bonuses: they stack with each other but
- * the combined total is capped at +6. Everything else simply adds.
+ * the combined total is capped at +6. The cap is on the two together: gear
+ * above +6 counts in full on its own, and ABP adds nothing to it. Everything
+ * else simply adds.
  *
  * `gearItems` is the largest enhancement bonus the Equipment tab's items give
  * (gearItemBonuses in model/scope.js). Gear is the larger of it and the typed
@@ -257,6 +259,17 @@ export function resolveAbility(entry = {}, gearItems = 0) {
     temporary,
     tempTotal: total + temporary,
   };
+}
+
+/**
+ * What the +6 cap did to an ability's ABP and gear (`resolveAbility`'s
+ * answer), as one sentence, or '' where it did nothing.
+ */
+export function enhancementCapNote(r) {
+  if (!r?.enhancementWasted) return '';
+  return r.enhancement > ENHANCEMENT_CAP
+    ? `Gear above +${ENHANCEMENT_CAP} counts on its own. ABP adds nothing to it.`
+    : `ABP and gear stack up to +${ENHANCEMENT_CAP}. ${r.enhancementWasted} is wasted.`;
 }
 
 /* ------------------------------------------------------------------ *
