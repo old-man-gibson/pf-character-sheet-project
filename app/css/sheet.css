@@ -1406,9 +1406,11 @@ select.jumpto[hidden] { display: none; }
     margin: 0; padding: 0 12px 0 0;
     border-bottom: 0; border-right: 1px solid var(--cs-line);
   }
+  /* The column starts the header's own gap below the top of the pane, so the
+     first thing in it does not touch the app bar above. */
   :host([layout="side"]) .railbody {
     flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin;
-    display: flex; flex-direction: column; padding-bottom: 6px;
+    display: flex; flex-direction: column; padding: var(--cs-wrap-pad) 0 6px;
   }
   /* One line: a wrapping flex column makes each line as wide as its widest
      item, so a long Undo label pushed the actions past the column's edge. */
