@@ -4144,13 +4144,17 @@ button.badge:hover { background: color-mix(in srgb, currentColor 10%, transparen
    explanation is in the way. Which are open is element state (#clampHints). */
 .body .hint.longhint { display: none; }
 .body .hint.longhint.is-open { display: block; margin-top: 2px; }
-button.helpopen {
+/* The framed, labelled toggle: a help's "▸ Help — …" and a fold that names
+   what it opens (`foldButton` with cls 'foldchip'), drawn by one rule. */
+button.helpopen, button.foldchip {
   display: inline-block; text-align: left; margin: 4px 0 0;
   padding: 2px 7px; font-size: 0.72rem; font-weight: 600;
   color: var(--cs-muted); background: var(--cs-panel-2);
   border-color: var(--cs-line); border-radius: 5px;
 }
-button.helpopen:hover, button.helpopen[aria-expanded="true"] { color: var(--cs-accent); }
+button.helpopen:hover, button.helpopen[aria-expanded="true"],
+button.foldchip:hover, button.foldchip[aria-expanded="true"] { color: var(--cs-accent); }
+button.foldchip .badge { margin-left: 4px; }
 
 @container (max-width: 620px) {
   /* The help line takes the row on a phone, where there is no room beside it. */

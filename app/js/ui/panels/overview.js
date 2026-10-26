@@ -1809,9 +1809,11 @@ function proficienciesPanel(model) {
            race's list runs to a dozen, and a dozen chips in a half-width
            column is a dozen rows. -->
       <div class="profrow profwide">
-        <span class="tlabel" title="Weapons named one by one — a race's or a class's list">
-          ${foldButton(model, wkey, { open: !wshut, cls: 'disclose', title: wshut ? 'Expand' : 'Collapse' })}
-          Specific weapons ${named.length ? `<span class="badge">${named.length}</span>` : ''}
+        <span class="tlabel">
+          ${foldButton(model, wkey, {
+    open: !wshut, cls: 'foldchip', title: 'Weapons named one by one, such as a race\'s or a class\'s list',
+    text: `${wshut ? '▸' : '▾'} Specific weapons${named.length ? `<span class="badge">${named.length}</span>` : ''}`,
+  })}
         </span>
         <div class="profweaponbody">
           ${wshut
@@ -2117,7 +2119,8 @@ function hpBuild(model) {
       <p class="hint">${parts.map(([n, label]) => `<span title="${esc(label)}">${n}</span>`).join(' + ')}
         = <strong>${base + other}</strong>
         ${foldButton(null, 'hp:build', {
-    open: !shut, cls: 'disclose', title: shut ? 'Open the parts to edit them' : 'Fold the parts away',
+    open: !shut, cls: 'foldchip', title: shut ? 'Open the parts to edit them' : 'Fold the parts away',
+    text: shut ? '▸ More options' : '▾ Close',
   })}</p>
       ${shut ? '' : `${/* Three short figures across, then Misc on a row of its
             own: the first two hold a number or a small rule, while Misc is
