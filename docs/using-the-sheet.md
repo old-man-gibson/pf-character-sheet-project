@@ -426,6 +426,12 @@ its four colours on it:
 | **Slate** | cool grey-blue with a teal edge | side |
 | **Ink** | black on white, hard lines, square corners, no washes | top |
 
+**Custom** is a palette made from four colours you pick: background, panels, text and
+accent. It starts from the palette on screen, and the four pickers show under the cards
+while it is selected. The other colours are worked out from those four. Surfaces are kept
+dark or pale enough to carry text, and text colours are made lighter or darker until they
+reach 4.5:1 contrast. Changing to another palette keeps the custom colours for next time.
+
 Pressing a card sets both halves of the look: the palette, and where the tabs go. The
 selects under the cards change one thing at a time, so any palette can be put with either
 rail; a third, **Width**, takes the sheet down from the whole window to 90, 80 or 70% of

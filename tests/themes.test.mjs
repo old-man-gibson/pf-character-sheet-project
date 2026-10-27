@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import {
   PALETTES, LAYOUTS, WIDTHS, DEFAULT_WIDTH, AUTO, THEME_KEY, paletteOf, isPalette, isLayout, isWidth, resolvePalette,
   schemeOf, flipped, normalizePrefs, readThemePrefs, writeThemePrefs,
+  CUSTOM, CUSTOM_COLORS, SCHEME_BASE, normalizeCustom, customFromPalette, customPalette, customPaletteCss,
 } from '../app/js/themes.js';
 import { contrastRatio, normalizeHex } from '../app/js/tracker-style.js';
 import { paletteRules } from '../app/js/theme-css.js';
@@ -109,6 +110,65 @@ for (const p of PALETTES) {
     ['--cs-bg', '--cs-panel', '--cs-accent', '--cs-text'].map((k) => normalizeHex(b[k])));
 }
 
+/* ----- the custom palette ----- */
+// It starts its state and formula inks from Midnight's and Daylight's.
+for (const [scheme, id] of [['dark', 'dark'], ['light', 'light']]) {
+  const b = blocks[id];
+  const base = SCHEME_BASE[scheme];
+  check(`custom ${scheme}: starts from ${id}'s inks`,
+    [base.edit, base.good, base.bad, base.even, base.number, base.string, base.nest0, base.nest1],
+    ['--cs-edit', '--cs-good', '--cs-bad', '--cs-even', '--fx-number', '--fx-string', '--fx-nest-0', '--fx-nest-1']
+      .map((k) => normalizeHex(b[k])));
+  check(`custom ${scheme}: ${id}'s ability knobs`, [base.wash, base.edge, base.ink],
+    [b['--ab-wash'], b['--ab-edge'], b['--ab-ink']]);
+}
+// Started from a built-in palette, it is that palette's four colours unchanged.
+for (const p of PALETTES) {
+  const made = customPalette(customFromPalette(p.id));
+  check(`custom from ${p.id}: same swatch`, made.swatch, p.swatch.map((c) => normalizeHex(c)));
+  check(`custom from ${p.id}: same scheme`, made.scheme, p.scheme);
+}
+// Any four picks give the full set, and every text pairing clears 4.5:1.
+let seed = 11;
+const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+const randomHex = () => `#${[0, 1, 2].map(() => Math.floor(rnd() * 256).toString(16).padStart(2, '0')).join('')}`;
+const picksToTry = [
+  { bg: '#808080', panel: '#808080', text: '#808080', accent: '#808080' },
+  { bg: '#000000', panel: '#ffffff', text: '#000000', accent: '#000000' },
+  { bg: '#ffffff', panel: '#000000', text: '#ffffff', accent: '#ffff00' },
+  { bg: '#767676', panel: '#777777', text: '#ff0000', accent: '#00ff00' },
+  ...Array.from({ length: 400 }, () => ({ bg: randomHex(), panel: randomHex(), text: randomHex(), accent: randomHex() })),
+];
+const customFails = [];
+let customMissing = 0;
+for (const picks of picksToTry) {
+  const made = customPalette(picks);
+  if (REQUIRED.some((k) => !(k in made.vars))) customMissing++;
+  for (const [fg, bg] of PAIRS) {
+    const ratio = contrastRatio(made.vars[fg], made.vars[bg]);
+    if (!(ratio >= 4.5)) customFails.push(`${JSON.stringify(picks)} ${fg} on ${bg} ${ratio.toFixed(2)}`);
+  }
+  if (made.vars['color-scheme'] !== made.scheme) customFails.push(`${JSON.stringify(picks)} color-scheme`);
+}
+check('custom: every set of picks declares the full set', customMissing, 0);
+check('custom: every text pairing clears 4.5:1 for any picks', customFails.slice(0, 5), []);
+check('custom: the four picks in picker order', CUSTOM_COLORS.map((c) => c.id), ['bg', 'panel', 'text', 'accent']);
+check('custom: picks are normalised', normalizeCustom({ bg: '#ABC', panel: '112233', text: '#ffffff', accent: '#D4A24A' }),
+  { bg: '#aabbcc', panel: '#112233', text: '#ffffff', accent: '#d4a24a' });
+check('custom: a missing pick is no palette', normalizeCustom({ bg: '#000000', panel: '#111111', text: '#ffffff' }), null);
+check('custom: a bad pick is no palette', customPalette({ bg: 'red', panel: '#111111', text: '#ffffff', accent: '#d4a24a' }), null);
+const paleCustom = { bg: '#f0e8d8', panel: '#fffaf0', text: '#202020', accent: '#ff8800' };
+const darkCustom = customFromPalette('slate');
+check('custom: scheme follows the background', [schemeOf(CUSTOM, paleCustom), schemeOf(CUSTOM, darkCustom)], ['light', 'dark']);
+check('custom: no colours counts as dark', schemeOf(CUSTOM), 'dark');
+check('custom: flips by its scheme', [flipped(CUSTOM, paleCustom), flipped(CUSTOM, darkCustom)], ['dark', 'light']);
+ok('custom: is a palette', isPalette(CUSTOM));
+check('custom: resolves to itself', resolvePalette(CUSTOM), CUSTOM);
+ok('custom: its rule is for theme="custom"', customPaletteCss(paleCustom).startsWith(':host([theme="custom"]) {'));
+ok('custom: its rule carries the scheme', customPaletteCss(paleCustom).includes('color-scheme: light;'));
+check('custom: no rule without colours', customPaletteCss(null), '');
+ok('custom: no built-in palette is called custom', !paletteOf(CUSTOM) && !css.includes(':host([theme="custom"])'));
+
 /* ----- nothing still keys on theme="light" for lightness ----- */
 check('lightness rules key on scheme, not on the light palette',
   (css.match(/:host\(\[theme="light"\]\) \./g) || []).length, 0);
@@ -178,6 +238,14 @@ check('normalizePrefs drops unknown marks and tints',
   normalizePrefs({ actionMarks: 'loud', actionTint: 'neon', width: 90 }), { width: '90' });
 check('normalizePrefs drops an odd width', normalizePrefs({ width: '75' }), null);
 check('normalizePrefs on nothing usable', normalizePrefs({ palette: 'sepia' }), null);
+check('normalizePrefs keeps the custom palette and its colours',
+  normalizePrefs({ palette: CUSTOM, custom: { ...paleCustom, extra: '#000000' } }), { palette: CUSTOM, custom: paleCustom });
+check('normalizePrefs keeps custom colours under another palette',
+  normalizePrefs({ palette: 'slate', custom: paleCustom }), { palette: 'slate', custom: paleCustom });
+check('normalizePrefs drops the custom palette with no colours', normalizePrefs({ palette: CUSTOM, layout: 'side' }),
+  { layout: 'side' });
+check('normalizePrefs drops custom colours that are not four colours',
+  normalizePrefs({ palette: CUSTOM, custom: { bg: '#000000' } }), null);
 check('normalizePrefs on garbage', normalizePrefs('slate'), null);
 
 const store = new Map();

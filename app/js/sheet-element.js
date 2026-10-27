@@ -65,7 +65,8 @@ import { describePublish, publishDocument } from './publish.js';
 import { SHEET_LINK, adoptSheetStyles } from './styles.js';
 import {
   PALETTES, LAYOUTS, WIDTHS, DEFAULT_WIDTH, AUTO, isPalette, isLayout, isWidth, resolvePalette, schemeOf, flipped,
-  readThemePrefs, writeThemePrefs, ACTION_MARKS, ACTION_TINTS, DEFAULT_ACTION_MARKS,
+  readThemePrefs, writeThemePrefs, CUSTOM, CUSTOM_COLORS, customPalette, customPaletteCss, customFromPalette,
+  normalizeCustom, ACTION_MARKS, ACTION_TINTS, DEFAULT_ACTION_MARKS,
   DEFAULT_ACTION_TINT, isActionMarks, isActionTint,
 } from './themes.js';
 import {
@@ -659,6 +660,8 @@ export class CharacterSheetElement extends HTMLElement {
    * the element resolves it to a palette and writes that.
    */
   #themePref = null;
+  /** The custom palette's rule, adopted after the shared stylesheet; null until a custom palette is first put on. */
+  #customSheet = null;
   /** The system's light/dark setting, watched while the preference is `auto`. */
   #schemeQuery = null;
   /* Which of the narrow-screen help disclosures are open; see `#clampHints`. */
@@ -1011,7 +1014,7 @@ export class CharacterSheetElement extends HTMLElement {
     if (oldValue === newValue) return;
     // The scheme rides beside the theme, always: a host that writes
     // theme="parchment" gets scheme="light" without knowing the word.
-    if (name === 'theme') this.setAttribute('scheme', schemeOf(newValue));
+    if (name === 'theme') this.setAttribute('scheme', this.#schemeOf(newValue));
     if (name === 'src' && newValue) this.load(newValue);
     else if (this.#model) this.#render();
   }
@@ -1030,6 +1033,7 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #applyThemePrefs() {
     this.#themePref = readThemePrefs();
+    this.#putCustomPalette(this.#themePref?.custom);
     if (!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
     if (!this.hasAttribute('layout')) this.setAttribute('layout', 'top');
     if (this.#themePref?.palette) this.setAttribute('theme', this.#resolvedPalette());
@@ -1038,7 +1042,7 @@ export class CharacterSheetElement extends HTMLElement {
     this.setAttribute('action-marks', this.#themePref?.actionMarks || DEFAULT_ACTION_MARKS);
     this.setAttribute('action-tint', this.#themePref?.actionTint || DEFAULT_ACTION_TINT);
     // Whatever the theme came from, the scheme has to match it.
-    this.setAttribute('scheme', schemeOf(this.getAttribute('theme')));
+    this.setAttribute('scheme', this.#schemeOf(this.getAttribute('theme')));
     if (typeof matchMedia === 'function' && !this.#schemeQuery) {
       this.#schemeQuery = matchMedia('(prefers-color-scheme: dark)');
       this.#schemeQuery.addEventListener('change', this.#onSchemeChange);
@@ -1048,6 +1052,34 @@ export class CharacterSheetElement extends HTMLElement {
   /** The palette the preference stands for right now (`auto` asks the system). */
   #resolvedPalette() {
     return resolvePalette(this.#themePref?.palette, !!this.#schemeQuery?.matches);
+  }
+
+  /** `light` or `dark` for a theme; the custom one's comes from its colours. */
+  #schemeOf(theme) {
+    return schemeOf(theme, this.#themePref?.custom);
+  }
+
+  /**
+   * Put the custom palette's rule in the element's own stylesheet, adopted
+   * after the shared one so it is there for `theme="custom"`. Replaced whole on
+   * each change. The surface player colours are measured against is read again.
+   */
+  #putCustomPalette(colors) {
+    const css = customPaletteCss(colors);
+    if (!this.#customSheet) {
+      if (!css || typeof CSSStyleSheet === 'undefined') return;
+      this.#customSheet = new CSSStyleSheet();
+      this.shadowRoot.adoptedStyleSheets = [...this.shadowRoot.adoptedStyleSheets, this.#customSheet];
+    }
+    this.#customSheet.replaceSync(css);
+    this.#surfaceCache = null;
+  }
+
+  /** The custom colours as the picker holds them, for a preview while one is dragged. */
+  #previewCustom(colors) {
+    if (!customPalette(colors)) return;
+    this.#putCustomPalette(colors);
+    this.setAttribute('scheme', schemeOf(CUSTOM, colors));
   }
 
   /** The system flipped its setting; only a sheet on `auto` follows it. */
@@ -1063,15 +1095,25 @@ export class CharacterSheetElement extends HTMLElement {
    * the host page as a `theme-change` event so the page's own chrome can
    * follow the sheet.
    */
-  #setTheme({ palette, layout, width, actionMarks, actionTint } = {}) {
+  #setTheme({ palette, layout, width, actionMarks, actionTint, custom } = {}) {
     const next = { ...(this.#themePref || {}) };
+    const before = this.getAttribute('theme');
     if (isPalette(palette)) next.palette = palette;
     if (isLayout(layout)) next.layout = layout;
     if (isWidth(width)) next.width = String(width);
     if (isActionMarks(actionMarks)) next.actionMarks = actionMarks;
     if (isActionTint(actionTint)) next.actionTint = actionTint;
+    if (normalizeCustom(custom)) next.custom = normalizeCustom(custom);
+    // The first custom palette starts from the palette on screen.
+    if (next.palette === CUSTOM && !next.custom) next.custom = customFromPalette(before) || customFromPalette('dark');
     this.#themePref = writeThemePrefs(next) || next;
+    this.#putCustomPalette(this.#themePref.custom);
     if (next.palette) this.setAttribute('theme', this.#resolvedPalette());
+    // New custom colours can change the scheme without changing the theme.
+    this.setAttribute('scheme', this.#schemeOf(this.getAttribute('theme')));
+    // A theme change re-renders; new custom colours on the same theme have to
+    // ask, so player colours are measured against the new surfaces.
+    if (custom && before === CUSTOM && this.getAttribute('theme') === CUSTOM && this.#model) this.#render();
     if (next.layout) this.setAttribute('layout', next.layout);
     if (next.width) this.setAttribute('width', next.width);
     if (next.actionMarks) this.setAttribute('action-marks', next.actionMarks);
@@ -1119,14 +1161,32 @@ export class CharacterSheetElement extends HTMLElement {
           <span class="pblurb">${esc(p.blurb)}</span>
         </button>`;
     const opt = (id, name, on) => `<option value="${id}"${on ? ' selected' : ''}>${esc(name)}</option>`;
+    // The custom card shows the saved custom colours, or the palette on
+    // screen when there are none yet, since that is where a first one starts.
+    const custom = this.#themePref?.custom || customFromPalette(theme) || customFromPalette('dark');
+    const customCard = `
+        <button type="button" class="preset" data-action="set-theme" data-palette="${CUSTOM}"
+          aria-pressed="${pref === CUSTOM}" title="Custom: your own colours">
+          <span class="swatches" aria-hidden="true">${customPalette(custom).swatch.map((c) => `<i style="background:${c}"></i>`).join('')}</span>
+          <span class="pname">Custom</span>
+          <span class="pblurb">Pick your own background, panel, text and accent colours.</span>
+        </button>`;
+    const picks = pref !== CUSTOM ? '' : `
+        <div class="mix custompicks" role="group" aria-label="Custom colours">
+          ${CUSTOM_COLORS.map((c) => `<label>${esc(c.name)}
+            <input type="color" data-customcolor="${c.id}" value="${custom[c.id]}"></label>`).join('')}
+          <p class="hint">Colours are made lighter or darker where needed so text stays readable.</p>
+        </div>`;
     return `<section class="panel thememenu" aria-label="Theme and layout">
         <h3>Theme &amp; layout</h3>
-        <div class="presets">${PALETTES.map(card).join('')}</div>
+        <div class="presets">${PALETTES.map(card).join('')}${customCard}</div>
+        ${picks}
         <div class="mix">
           <label>Palette
             <select data-themepick="palette" aria-label="Palette">
               ${opt(AUTO, 'Follow the system (light / dark)', pref === AUTO)}
               ${PALETTES.map((p) => opt(p.id, p.name, pref === p.id)).join('')}
+              ${opt(CUSTOM, 'Custom', pref === CUSTOM)}
             </select>
           </label>
           <label>Tabs
@@ -4693,6 +4753,15 @@ export class CharacterSheetElement extends HTMLElement {
       box.addEventListener('change', () => this.#setTheme({ [box.dataset.themepick]: box.value }));
     });
 
+    // Custom colours show on the sheet while a picker is dragged, and are
+    // saved when it closes.
+    const customPicks = () => Object.fromEntries([...scope.querySelectorAll('input[data-customcolor]')]
+      .map((b) => [b.dataset.customcolor, b.value]));
+    scope.querySelectorAll('input[data-customcolor]').forEach((box) => {
+      box.addEventListener('input', () => this.#previewCustom(customPicks()));
+      box.addEventListener('change', () => this.#setTheme({ custom: customPicks() }));
+    });
+
     scope.querySelectorAll('select.jumpto').forEach((box) => {
       box.addEventListener('change', () => {
         const to = box.value;
@@ -7451,7 +7520,7 @@ export class CharacterSheetElement extends HTMLElement {
       // The one-press switch: the same look on the other scheme. A sheet on
       // `auto` leaves auto behind, since a press is a choice.
       case 'theme-flip':
-        this.#setTheme({ palette: flipped(this.getAttribute('theme')) });
+        this.#setTheme({ palette: flipped(this.getAttribute('theme'), this.#themePref?.custom) });
         break;
       case 'set-theme':
         this.#setTheme({ palette: button?.dataset.palette, layout: button?.dataset.layout });
