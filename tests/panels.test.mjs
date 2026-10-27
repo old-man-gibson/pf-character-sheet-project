@@ -49,6 +49,7 @@ import { blankDraft, blankTrackerDraft, blankView } from '../app/js/ui/view-stat
 import { foldValue } from '../app/js/ui/folds.js';
 import { hasTokens } from '../app/js/inline.js';
 import { hasLink } from '../app/js/ui/links.js';
+import { portraitCss, portraitFrame, portraitHtml } from '../app/js/ui/html.js';
 
 let pass = 0;
 let fail = 0;
@@ -317,6 +318,21 @@ const sweep = (who, model) => {
 
 console.log('a blank sheet draws every panel');
 sweep('a blank sheet', new Character(blankDocument('panels-test')));
+
+console.log('a portrait is framed by its sliders');
+{
+  check('a frame out of range is held to it', portraitFrame({ x: 150, y: -3, zoom: 50 }), { x: 100, y: 0, zoom: 100 });
+  check('the default frame writes no style', portraitHtml('p.png', { x: 50 }), '<div class="portrait"><img src="p.png" alt="" loading="lazy"></div>');
+  check('a frame moves and scales the picture', portraitCss({ x: 20, y: 30, zoom: 150 }),
+    'object-position: 20% 30%; transform-origin: 20% 30%; transform: scale(1.5);');
+  const c = new Character(blankDocument('portrait-test'));
+  const details = () => overview.renderOverviewPanel(c, blankView());
+  check('no picture, no sliders', details().includes('data-frame'), false);
+  c.set('identity.image', 'https://example.com/p.png');
+  c.set('identity.imageFrame.y', 20);
+  check('with a picture, three sliders holding the frame', [(details().match(/data-frame="/g) || []).length,
+    /data-frame="y"/.test(details()) && /value="20"[^>]*data-set="identity\.imageFrame\.y"/.test(details())], [3, true]);
+}
 
 console.log('a casting companion draws its pool and its tradition');
 {

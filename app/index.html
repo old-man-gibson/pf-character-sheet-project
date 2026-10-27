@@ -125,6 +125,12 @@
   @media (min-width: 92rem) {
     :root:not([data-width]) character-sheet, :root[data-width="standard"] character-sheet { scrollbar-gutter: stable both-edges; }
   }
+  /* With the side rail the rail sits at the window's left edge and the header
+     spans the window, at any width setting. */
+  @media (min-width: 820px) {
+    :root[data-layout="side"] header.app, :root[data-layout="side"][data-width] header.app { padding-inline: 14px; }
+    :root[data-layout="side"][data-width] character-sheet { scrollbar-gutter: auto; }
+  }
   character-sheet[hidden], .welcome[hidden] { display: none; }
   .welcome {
     max-width: 40rem; margin: 8vh auto 0; padding: 28px 30px; text-align: center;

@@ -70,6 +70,8 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
    * legendary gifts at 19th and 20th).
    */
   abpLadder: 'table',
+  /** The optional array: +2 ability picks at 8th, 12th and 16th, on the Stats tab. */
+  optionalArray: true,
   /**
    * What a mythic tier hands over besides its path ability: `table` (a
    * mythic feat on odd tiers, a path power and +2 to an ability on even
@@ -216,6 +218,7 @@ export function campaignRules(d) {
     hitPoints: HIT_POINT_MODES.includes(c.hitPoints) ? c.hitPoints : CAMPAIGN_DEFAULTS.hitPoints,
     abp: bool('abp'),
     abpLadder: LADDERS.includes(c.abpLadder) ? c.abpLadder : CAMPAIGN_DEFAULTS.abpLadder,
+    optionalArray: bool('optionalArray'),
     mythicLadder: LADDERS.includes(c.mythicLadder) ? c.mythicLadder : CAMPAIGN_DEFAULTS.mythicLadder,
     altTraining: bool('altTraining'),
     pastColossal: bool('pastColossal'),
@@ -374,6 +377,7 @@ export const RULE_TITLES = Object.freeze({
   mythicLadder: 'What a tier grants',
   abp: 'Automatic Bonus Progression',
   abpLadder: 'Which ABP',
+  optionalArray: 'Optional array',
   altTraining: 'Alternate Training',
   pastColossal: 'Past Colossal',
   currency: 'Currency',

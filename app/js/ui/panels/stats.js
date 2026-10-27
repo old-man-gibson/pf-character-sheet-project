@@ -22,8 +22,9 @@ import {
   AC_BONUS_TYPES, ARRAY_LEVELS, ARRAY_MAX_SLOTS, ARRAY_SLOTS, arraySourceLevel,
   ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL,
   BUILD_DERIVED_KEYS, BUILD_OPTIONAL_KEYS, BUILD_PERMANENT_GROUPS, BUILD_TEMPORARY,
-  CORE_PROWESS_LEVELS, ENHANCEMENT_CAP, LEGENDARY_GIFTS, MENTAL_PROWESS_LEVELS, abpAttunement,
+  CORE_PROWESS_LEVELS, LEGENDARY_GIFTS, MENTAL_PROWESS_LEVELS, abpAttunement,
   PHYSICAL_PROWESS_LEVELS, PROWESS_TRACKS, SAVE_BONUS_TYPES, abpGroupTotal, abpSourceLevel, bonusColumnName,
+  enhancementCapNote,
 } from '../../rules.js';
 
 
@@ -39,9 +40,10 @@ export function renderStatsPanel(model, ctx) {
   const allCols = BUILD_PERMANENT_GROUPS.flatMap((g) => g.cols);
   // A group's columns, minus any retired one the player has not asked to see.
   // A group emptied that way drops out of the header entirely.
-  const aging = campaignRules(c).agingEffects;
+  const { agingEffects: aging, optionalArray } = campaignRules(c);
   const groups = BUILD_PERMANENT_GROUPS
-    .map((g) => ({ ...g, cols: g.cols.filter(([k]) => showOptional[k] !== false && (k !== 'age' || aging)) }))
+    .map((g) => ({ ...g, cols: g.cols.filter(([k]) => showOptional[k] !== false && (k !== 'age' || aging)
+      && (k !== 'array' || optionalArray)) }))
     .filter((g) => g.cols.length);
   const permCols = groups.flatMap((g) => g.cols);
 
@@ -67,6 +69,18 @@ export function renderStatsPanel(model, ctx) {
   : `disabled title="Attunement unlocks at level ${ATTUNEMENT_MIN_LEVEL}"`}></label>
           ${v && v !== ATTUNEMENT_BONUS ? `<span class="hint">${fmt(v)}</span>` : ''}
         </td>`;
+    }
+    if (key === 'gear') {
+      // The best enhancement bonus the Equipment tab's items give, read-only,
+      // while nothing is typed; a typed value keeps its box, and the larger
+      // of the two counts.
+      const items = model.gearItemBonuses(ab);
+      const said = items.map((g) => `${fmt(g.value)} from ${g.where}`).join('\n');
+      if (items.length && !v) {
+        return `<td class="num derived ${banding}" title="${esc(said)}">${Math.max(0, ...items.map((g) => g.value))}</td>`;
+      }
+      return `<td class="num ${banding}"${items.length ? ` title="${esc(`The larger of this and the items' bonus counts.\n${said}`)}"` : ''}>
+          <input type="number" value="${esc(v ?? '')}" data-build="${ab}|${key}"></td>`;
     }
     return `<td class="num ${banding}"><input type="number" value="${esc(v ?? '')}" data-build="${ab}|${key}"></td>`;
   };
@@ -110,9 +124,9 @@ export function renderStatsPanel(model, ctx) {
                   <th scope="row"><span class="abmark" data-ab="${ab}">${ABILITY_LABELS[ab]}</span></th>
                   ${groups.map((g) => `${g.cols.map(([k], i) => cell(ab, k, band(g, i))).join('')}${
                   g.sum ? `<td class="num grouped groupend total ${r.enhancementWasted ? 'over' : ''}"
-                      title="${esc(r.enhancementWasted
-    ? `${r.rawEnhancement} bought, capped at +${g.cap} — ${r.enhancementWasted} wasted`
-    : `${g.cols.map(([k]) => build[ab][k] || 0).join(' + ')} = ${r[g.sum] ?? 0}`)}">${esc(r[g.sum] ?? 0)}</td>` : ''}`).join('')}
+                      title="${esc(r.enhancementWasted ? enhancementCapNote(r)
+    : `${g.cols.map(([k]) => (k === 'gear' ? Math.max(Number(build[ab][k]) || 0, r.gearItems || 0)
+      : Number(build[ab][k]) || 0)).join(' + ')} = ${r[g.sum] ?? 0}`)}">${esc(r[g.sum] ?? 0)}</td>` : ''}`).join('')}
                   <td class="num">${forwardedBadge(model, `${ab}.score`, { only: 'permanent' }) || '—'}</td>
                   <td class="num total">${c.abilities[ab]?.score ?? r.total ?? 0}</td>
                 </tr>`;
@@ -138,15 +152,14 @@ export function renderStatsPanel(model, ctx) {
           Per ability: ${ABILITIES.map((a) => `${ABILITY_LABELS[a]} ${pb.per[a] >= 0 ? '' : ''}${pb.per[a]}`).join(' &middot; ')}
         </p>
         <p class="hint">
-          <strong>ABP</strong>, <strong>Array</strong> and <strong>Level/4</strong> are
+          <strong>ABP</strong>${optionalArray ? ', <strong>Array</strong>' : ''} and <strong>Level/4</strong> are
           filled in from the picks below and cannot be typed over.
+          <strong>Gear</strong> uses the typed value or the best item enhancement bonus on the Equipment tab, whichever is larger.
           <strong>Attuned</strong> is a single +${ATTUNEMENT_BONUS}. It unlocks at
           level ${ATTUNEMENT_MIN_LEVEL}${unlocked ? '' : ' (locked)'}.
         </p>
         ${over.length ? `<p class="hint warn">
-          Over the enhancement cap on ${over.map((a) => `<strong>${ABILITY_LABELS[a]}</strong>
-          (${build[a].resolved.rawEnhancement} → ${ENHANCEMENT_CAP},
-          ${build[a].resolved.enhancementWasted} wasted)`).join(', ')}.
+          ${over.map((a) => `<strong>${ABILITY_LABELS[a]}</strong>: ${esc(enhancementCapNote(build[a].resolved))}`).join(' ')}
         </p>` : ''}
       </section>
 
@@ -208,7 +221,7 @@ export function renderStatsPanel(model, ctx) {
         ${campaignRules(model.data).abp ? abpPicksPanel(model) : ''}
         ${coreAbp(model.data) ? abpAttunePanel(model) : ''}
         ${milestonePicksPanel(model)}
-        ${arrayPicksPanel(model)}
+        ${optionalArray ? arrayPicksPanel(model) : ''}
       </div>
     </div>`;
 }

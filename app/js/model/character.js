@@ -75,7 +75,7 @@ import {
   offsetSource, orphans, reconcile, resolveOffsets, setOffset,
 } from './reconcile.js';
 import {
-  characterScope, forwardTargets, forwarded, forwardedInto, forwardedSplit, forwardsEarly,
+  characterScope, forwardTargets, forwarded, forwardedInto, forwardedSplit, forwardsEarly, gearItemBonuses,
   proseSources, renderProse, resolveInlineNames, scopeNames, secondPass, trackerScope,
 } from './scope.js';
 import {
@@ -620,6 +620,7 @@ export class Character {
   #forwarded(...a) { return forwarded(this, ...a); }
   #forwardedSplit(...a) { return forwardedSplit(this, ...a); }
   forwardedInto(...a) { return forwardedInto(this, ...a); }
+  gearItemBonuses(...a) { return gearItemBonuses(this, ...a); }
   #resolveInlineNames(...a) { return resolveInlineNames(this, ...a); }
   proseSources(...a) { return proseSources(this, ...a); }
   renderProse(...a) { return renderProse(this, ...a); }

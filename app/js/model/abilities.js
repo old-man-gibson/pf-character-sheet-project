@@ -11,7 +11,7 @@ import {
   POINT_BUY_COST, abilityKey, abilityMod, abpFollowers, arrayFollowers, foldPicks, pointBuyCost,
   resolveAbility,
 } from '../rules.js';
-import { forwardedSplit } from './scope.js';
+import { forwardedSplit, gearItemBonuses } from './scope.js';
 import {
   ageAbilityMods, campaignRules, fitMythicRows, mythicComputedTier, mythicTierOf, prowessPicks, settleTrialTier,
 } from './campaign.js';
@@ -47,6 +47,8 @@ export function refreshAbilities(model) {
     // Without ABP (a campaign rule) the prowess picks stay written and add
     // nothing; a belt or headband's enhancement is the gear column's.
     if (!campaignRules(model.data).abp) folded.abp = Object.fromEntries(ABILITIES.map((k) => [k, 0]));
+    // Without the optional array (a campaign rule) its picks stay written and add nothing.
+    if (!campaignRules(model.data).optionalArray) folded.array = Object.fromEntries(ABILITIES.map((k) => [k, 0]));
 
     // Mythic ability picks: +2 at each even tier reached.
     const tier = Number(model.data.identity.mythicTier) || 0;
@@ -65,7 +67,9 @@ export function refreshAbilities(model) {
       for (const k of BUILD_DERIVED_KEYS) entry[k] = folded[k][key];
       if (age?.[key]) entry.age = age[key];
       else delete entry.age;
-      const r = resolveAbility(entry);
+      // An item's enhancement bonus to the score fills the Gear column
+      // (gearColumnTakes), beside whatever is typed there.
+      const r = resolveAbility(entry, Math.max(0, ...gearItemBonuses(model, key).map((g) => g.value)));
       entry.resolved = r;
       const a = model.data.abilities[key];
       if (a) {

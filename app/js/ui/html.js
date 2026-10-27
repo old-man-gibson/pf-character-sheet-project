@@ -53,6 +53,31 @@ export const abAttr = (on, value) => (on ? ` data-ab="${abilityKey(value)}"` : '
 export const abKeyAttr = (key) => ` data-ab="${abilityKey(key)}"`;
 
 /**
+ * A portrait's framing as numbers: `x` and `y`, the point of the picture kept
+ * in view (percent, 50 is the centre), and `zoom` (percent, 100 fills the
+ * square). Anything missing or out of range reads as the default.
+ */
+export function portraitFrame(frame) {
+  const f = frame && typeof frame === 'object' ? frame : {};
+  const num = (v, lo, hi, d) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Math.min(hi, Math.max(lo, Number(v))) : d);
+  return { x: num(f.x, 0, 100, 50), y: num(f.y, 0, 100, 50), zoom: num(f.zoom, 100, 400, 100) };
+}
+
+/** The picture's inline style for a framing, or '' for the default. */
+export function portraitCss(frame) {
+  const { x, y, zoom } = portraitFrame(frame);
+  if (x === 50 && y === 50 && zoom === 100) return '';
+  return `object-position: ${x}% ${y}%; transform-origin: ${x}% ${y}%;${zoom !== 100 ? ` transform: scale(${zoom / 100});` : ''}`;
+}
+
+/** A portrait in its square box, framed by `frame` (see portraitFrame); an empty box without a picture. */
+export function portraitHtml(src, frame = null) {
+  if (!src) return '<div class="portrait"></div>';
+  const css = portraitCss(frame);
+  return `<div class="portrait"><img src="${esc(src)}" alt="" loading="lazy"${css ? ` style="${esc(css)}"` : ''}></div>`;
+}
+
+/**
  * What the gold left edge on a field means, in the two flavours it comes in:
  * prose that may carry {…} tokens anywhere in the text, and a field whose
  * whole value may be written as an expression.

@@ -57,7 +57,7 @@ import {
   spellCatalogue, spellDetails, powerCatalogue, powerDetails, veilsAvailable, veilDetails, veilOwn,
   slug, manifesterForwardKey, vancianForwardKey, poolTracker,
 } from '../../model.js';
-import { ABILITY_LABELS_LIST, nameDatalist, noteCell, packText } from '../html.js';
+import { ABILITY_LABELS_LIST, nameDatalist, noteCell, packText, portraitHtml } from '../html.js';
 import {
   CARD_CASTING_TIMES, CARD_DAMAGE_TYPES, CARD_DURATIONS, CARD_RANGES, CARD_SAVES, CARD_STAT_FIELDS, CARD_TARGETS,
   TERRAIN_CHOICES, stepCastingTime,
@@ -1699,7 +1699,7 @@ function companionHeadPanel(model, cc) {
         ${!k.level ? '<span class="badge">no level yet</span>' : ''}
       </h3>
       <div class="cportrait">
-        ${b.image ? `<img class="portrait" src="${esc(b.image)}" alt="" loading="lazy">` : ''}
+        ${b.image ? portraitHtml(b.image) : ''}
         <div class="fieldgrid">
           ${field('Name', text(`${p}.name`, b.name, `${label} name`))}
           ${identity}

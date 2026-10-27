@@ -16,6 +16,7 @@ import {
 import { HERO_POINTS_ID, MYTHIC_POWER_ID } from '../app/js/model/trackers.js';
 import { abpDefence, tierAtLevel } from '../app/js/rules.js';
 import { fixtureIds, loadCharacter } from './fixtures.mjs';
+import { renderStatsPanel } from '../app/js/ui/panels/stats.js';
 
 let pass = 0;
 let fail = 0;
@@ -169,6 +170,22 @@ console.log('\nABP off takes away the ladder and the prowess picks');
   check('off: none of it', read(), [0, 0, 0, 0, 0]);
   check('off: the ability score loses the pick', c.data.abilities.int.score, intOn - 2);
   check('off: the picks are kept', c.data.progressionPicks.abp.length, 1);
+}
+
+console.log('\nthe optional array off takes away its picks and its panel');
+{
+  const c = new Character(blankDocument({ name: 'Array', level: 10 }));
+  c.setPick('array', 8, 0, 'Con');
+  const conOn = c.data.abilities.con.score;
+  check('on: the pick counts', c.data.statsBuild.con.array, 2);
+  check('on: the Stats tab shows the panel', renderStatsPanel(c, {}).includes('<h3>Optional array</h3>'), true);
+  c.set('campaign.optionalArray', false);
+  check('off: the column is 0 and the score loses it', [c.data.statsBuild.con.array, c.data.abilities.con.score], [0, conOn - 2]);
+  check('off: the panel and the column are gone', [renderStatsPanel(c, {}).includes('<h3>Optional array</h3>'),
+    renderStatsPanel(c, {}).includes('title="Array"')], [false, false]);
+  check('off: the pick is kept', c.data.progressionPicks.array.find((r) => r.level === 8).slots[0], 'Con');
+  c.set('campaign.optionalArray', true);
+  check('back on, it counts again', c.data.abilities.con.score, conOn);
 }
 
 console.log('\nmythic off, and a tier the GM awards');
