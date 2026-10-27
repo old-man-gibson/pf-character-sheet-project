@@ -21,7 +21,7 @@ _Part of the [Pathfinder Character Sheet Program](../README.md) docs. The `<char
 |---|---|
 | `src` | URL of a character JSON document |
 | `role` | `player` (default) or `admin` — admin reveals the Formula Audit tab |
-| `theme` | a palette: `dark` (default), `light`, `workbench`, `workbench-dark`, `parchment`, `slate` or `ink` |
+| `theme` | a palette: `dark` (default), `light`, `workbench`, `workbench-dark`, `parchment`, `slate` or `ink`; `custom` is set by the picker and needs the person's saved custom colours |
 | `width` | how much of its container the sheet takes: `standard` (default; contents keep to a column of at most `--cs-sheet-max`, 90rem, centred), or a share, `100`, `90`, `80` or `70`, centred when less than all of it and with no column of its own |
 | `layout` | `top` (default) runs the tab bar across the sheet; `side` runs it down the left where there is room (780px of sheet), and falls back to the bar below that. The rail has a `<slot name="rail">` at its top for the host's own furniture — the app page puts its character picker there |
 | `storage-key` | localStorage key for edits; omit for the per-character default |

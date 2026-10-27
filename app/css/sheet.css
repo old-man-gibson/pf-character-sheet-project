@@ -1588,6 +1588,8 @@ table.vmc td { vertical-align: top; }
 .thememenu .mix select { width: auto; max-width: 14rem; }
 .thememenu .mix .close { margin-left: auto; }
 .thememenu p.hint { margin: 8px 0 0; }
+/* The custom palette's four pickers, shown while it is the palette. */
+.thememenu .custompicks p.hint { flex-basis: 100%; margin: 0; }
 
 /* ---------- layout ---------- */
 /* Panels now hold editable controls rather than plain text, so they need more

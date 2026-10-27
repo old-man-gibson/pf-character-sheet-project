@@ -180,7 +180,7 @@ export function mixHex(a, b, t) {
 }
 
 /** Relative luminance, per WCAG 2.x. `rgb` is the triple `hexToRgb` returns. */
-function luminance(rgb) {
+export function luminance(rgb) {
   const channel = (v) => {
     const c = v / 255;
     return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
