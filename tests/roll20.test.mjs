@@ -13,7 +13,7 @@ import { hasFixtures, fixtureIds, loadCharacter } from './fixtures.mjs';
 import { attackModeTotal } from '../app/js/rules.js';
 import {
   ROLL_FORMATS, DEFAULT_ROLL_FORMAT, escapeRoll20, d20, damageFormula,
-  rollText, rollSpec, roll20Text,
+  rollText, rollSpec, roll20Text, chatButton, branchesText,
   abilityRollSpec, saveRollSpec, attackRollSpec, skillRollSpec, weaponRollSpec,
   initiativeRollSpec, concentrationRollSpec, companionRollSpec, vitalStrikeTiers, weaponStrikes, hasMythicVitalStrike,
 } from '../app/js/roll20.js';
@@ -685,6 +685,33 @@ console.log('a spec with notes and no rolls is still a message -- a card with no
   check('nothing at all is still nothing', [rollText({ name: 'x', rolls: [], notes: [] }), rollText(null)], ['', '']);
   const rolled = { ...spec, rolls: [{ label: 'damage', formula: '8d6+13' }] };
   check('with a roll the Pathfinder template is the generic card', rollText(rolled, 'pf'), '&{template:pf_generic} {{name=Betrayal — Corpse Bomb}} {{check=[[8d6+13]]}} {{description=Cost: 1 SP (Black); Sphere: Death}}');
+}
+
+console.log('a chat button posts its roll when clicked, and nothing of it resolves before');
+{
+  // A click makes each %NEWLINE% a line break and reads the command's entities
+  // once, so one pass of this is what it posts.
+  const click = (button) => button.match(/^\[[^\]]*\]\(!%NEWLINE%(.*)\)$/)[1].split('%NEWLINE%').join('\n')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+  const command = (button) => button.slice(button.indexOf('](') + 2, -1).split('%NEWLINE%').join('');
+  const spec = { name: 'Claw {left} [rend]', rolls: [{ label: 'Damage', formula: '2d6+?{Power Attack|No, 0|Yes, 4}' }], notes: [{ label: 'On', text: 'a hit = both claws (1/round)' }] };
+  for (const format of ['template', 'plain', 'pf']) {
+    const text = rollText(spec, format);
+    const button = chatButton('On hit: Rend', text);
+    check(`the click posts the ${format} roll as written`, click(button), text);
+    check(`and the ${format} button hides every bracket, brace, bar, equals and paren from the message around it`, /[[\]{}|=()?@%]/.test(command(button)), false);
+  }
+  check('a name entity survives a level deeper', chatButton('x', '{{name=a &#123;b&#125;}}'), '[x](!%NEWLINE%&#123;&#123;name&#61;a &#38;#123;b&#38;#125;&#125;&#125;)');
+  // A second %NEWLINE% in one command turns the button into a link that posts nothing.
+  check('several lines are a button each', chatButton('Rend', 'a\nb'), '[Rend 1/2](!%NEWLINE%a) [Rend 2/2](!%NEWLINE%b)');
+  check('a percent of the roll is not a line break', click(chatButton('x', '%NEWLINE%')), '%NEWLINE%');
+  check('a label keeps its brackets and parens out of the button', chatButton('Trip (free) [AoO]', 'x'), '[Trip &#40;free&#41; &#91;AoO&#93;](!%NEWLINE%x)');
+  check('no roll, no button', chatButton('x', ''), '');
+  const rows = [{ label: 'On hit', buttons: [{ label: 'Rend', text: 'r' }, { label: 'Trip', text: 't' }] }, { label: 'On crit', buttons: [{ label: 'Bleed', text: '' }] }];
+  check('branches ride one default card, a row per kind', branchesText('Blender', rows), '&{template:default} {{name=Blender}} {{On hit=[Rend](!%NEWLINE%r) [Trip](!%NEWLINE%t)}}');
+  check('the Pathfinder format uses the same card', branchesText('Blender', rows, 'pf'), branchesText('Blender', rows));
+  check('plain is one line', branchesText('Blender', rows, 'plain'), 'Blender: On hit [Rend](!%NEWLINE%r) [Trip](!%NEWLINE%t)');
+  check('no buttons, no message', branchesText('Blender', [{ label: 'On hit', buttons: [] }]), '');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

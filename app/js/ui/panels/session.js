@@ -8,8 +8,8 @@ import { evaluateFormula } from '../../formula.js';
 import { editableSession, choiceParent, moveSessionCard, removeSessionCard } from '../../model/session-layout.js';
 import { bindSessionDrag } from '../session-drag.js';
 import { actionFeatures, linkedFeature, effectiveAction } from '../../model/action-features.js';
-import { previewChainUse } from '../../model/session-chains.js';
-import { linkEditor, pendingChains } from '../session-chains.js';
+import { previewChainUse, stepsOf, unfold, routineBranches } from '../../model/session-chains.js';
+import { routineEditor, pendingChains } from '../session-chains.js';
 import { ACTION_TYPES, ACTION_POOLS, sessionState, actionBudget, useSessionAction,
   advanceTurn, sessionShortcuts } from '../../model/session.js';
 
@@ -20,10 +20,10 @@ export function renderSessionBoard(model) {
   const state = sessionState(model), budget = actionBudget(model, state), shortcuts = sessionShortcuts(model);
   const types = (selected) => ACTION_TYPES.map(([key, label]) => `<option value="${key}" ${selected === key ? 'selected' : ''}>${label}</option>`).join('');
   const handle = (index, title) => `<button class="session-drag" data-session-drag="${index}" aria-label="Drag ${esc(title)}" title="Drag to reorder or move to another action type">⠿</button>`;
-  // Automatic width: one column, two for a choice group, a linked ability or a
-  // routine of more than four attacks (so the attack line does not wrap into a
-  // paragraph), three for several links.
-  const width = (card, attackCount = 0) => Math.max(1,Math.min(3,Number(card.width) || (card.links?.length>1?3:(card.links?.length || card.kind==='choice' || attackCount>4)?2:1)));
+  // Automatic width: one column, two for a choice group, a routine step or
+  // more than four attacks (so the attack line does not wrap into a
+  // paragraph), three for several steps.
+  const width = (card, attackCount = 0) => { const steps = stepsOf(card).length; return Math.max(1,Math.min(3,Number(card.width) || (steps>1?3:(steps || card.kind==='choice' || attackCount>4)?2:1))); };
   const typeLabel = { standard: 'Standard', move: 'Move', swift: 'Swift', immediate: 'Immediate', aoo: 'AoO', full: 'Full round', free: 'Free' };
   const typeTag = card => `<span class="session-type-tag" data-type="${esc(card.type || '')}" title="${esc(ACTION_TYPES.find(([k]) => k === card.type)?.[1] || card.type || '')}">${esc(typeLabel[card.type] || card.type || '')}</span>`;
   // "Attack: …" errors belong under the field they name as well as at the foot of the card.
@@ -32,6 +32,18 @@ export function renderSessionBoard(model) {
     const prefix = FIELD_ERRORS.find(([k]) => k === key)?.[1];
     const message = prefix && values.errors.find(e => e.startsWith(`${prefix}:`));
     return message ? `<small class="session-field-error" role="alert">${esc(message.slice(prefix.length + 1).trim())}</small>` : '';
+  };
+  // A routine reads on the closed card: what runs with it, what it offers
+  // after, and one copy of the lot.
+  const routineLine = (card, index, title) => {
+    if (!stepsOf(card).length) return '';
+    const run = unfold(model, card), rows = routineBranches(model, card);
+    if (run.parts.length < 2 && !rows.length && !run.error) return '';
+    const then = run.parts.slice(1).map(p => esc(p.title || 'Untitled step')).join(' → ');
+    const after = rows.map(r => `${esc(r.label)}: ${esc(r.buttons.map(b => b.label).join(', '))}`).join(' · ');
+    return `<div class="session-routine-line">${then ? `<span><small>Then</small> ${then}</span>` : ''}${after ? `<span>${after}</span>` : ''}
+      ${run.error ? `<p class="session-roll-error" role="alert">${esc(run.error)}</p>` : ''}
+      <button class="d20 session-copy-all" data-roll="session|${index}:routine" data-rollwhat="${esc(title)}" aria-label="Copy the routine for ${esc(title)}" title="Copy every step of this routine for Roll20, with its branches as buttons" ${run.error ? 'disabled' : ''}>${D20_ICON} Routine</button></div>`;
   };
   const widthPicker = (card,index) => `<label>Card width<select data-session-field="cards.${index}.width"><option value="">Automatic</option>${[1,2,3].map(n=>`<option value="${n}" ${Number(card.width)===n?'selected':''}>${n} column${n===1?'':'s'}</option>`).join('')}</select></label>`;
   const cardHtml = (card, index) => {
@@ -46,7 +58,7 @@ export function renderSessionBoard(model) {
         <details class="session-editor" data-session-fold="editor:${index}" ${state.folded[`editor:${index}`] === false ? 'open' : ''}><summary>Edit choice group</summary>
           <label>Group title ${input(`cards.${index}.title`, card.title)}</label>
           <label>Action <select data-session-field="cards.${index}.type">${types(card.type)}</select></label>
-          ${widthPicker(card,index)}${linkEditor(model,card,`card:${index}`)}
+          ${widthPicker(card,index)}${routineEditor(model,card,`card:${index}`)}
           ${button('up','Move earlier',`data-index="${index}"`)} ${button('down','Move later',`data-index="${index}"`)}
           ${button('group-add','+ Custom choice',`data-index="${index}"`)}
           ${button('remove','Ungroup (keep options)',`data-index="${index}"`)}
@@ -95,7 +107,7 @@ export function renderSessionBoard(model) {
         ${card.note ? `<div class="session-description">${renderedProse(model, card.note)}</div>` : ''}
         <details class="session-editor" data-session-fold="editor:${index}" ${state.folded[`editor:${index}`] === false ? 'open' : ''}><summary>Edit option</summary>
           <label>Title ${input(`${edit}.title`, card.title, 'aria-label="Option title"')}</label>
-          ${linkedFeature(model,card)?'<p class="hint">Rolls, costs, notes and links below edit the linked class feature in Progression.</p>':''}
+          ${linkedFeature(model,card)?'<p class="hint">Rolls, costs, notes and the routine below edit the linked class feature in Progression.</p>':''}
           <details class="session-placement"><summary>Placement <small>${esc(ACTION_TYPES.find(([k]) => k === card.type)?.[1] || 'Standard')} · ${Number(card.width) ? `${card.width} column${Number(card.width) === 1 ? '' : 's'}` : 'automatic width'} · ${esc(choiceParent(state,card)?.title || 'standalone')}</small></summary>
             <div class="session-settings-grid">
               <label>Action <select data-session-field="${edit}.type">${types(card.type)}</select></label>
@@ -132,7 +144,7 @@ export function renderSessionBoard(model) {
             </div>
             <p class="hint">Using adds this cost to the resource’s spent / accumulated amount.</p>
           </fieldset>
-          ${linkEditor(model,card,linkedFeature(model,card)?`feature:${actionFeatures(model).indexOf(linkedFeature(model,card))}`:`card:${index}`)}
+          ${routineEditor(model,card,linkedFeature(model,card)?`feature:${actionFeatures(model).indexOf(linkedFeature(model,card))}`:`card:${index}`)}
           ${button('up', 'Move earlier', `data-index="${index}"`)}
           ${button('down', 'Move later', `data-index="${index}"`)}
           ${card.source ? button('unlink', 'Make custom', `data-index="${index}"`) : ''}
@@ -140,6 +152,7 @@ export function renderSessionBoard(model) {
         </details>
       </details>
       ${values.attack || values.damage ? rollSummary : ''}
+      ${routineLine(card, index, title)}
       ${values.errors.map(error => `<p class="session-roll-error" role="alert">${esc(error)}</p>`).join('')}
       <div class="session-option-use">${button('use', 'Use', `data-index="${index}" ${reason ? 'disabled' : ''}`)}
         <small>${esc(reason || (card.type === 'move' && !budget.move.remaining ? 'Uses a standard action' : card.type === 'full' ? 'Standard + movement' : card.type === 'immediate' && !state.onTurn ? 'Reserves next turn’s swift' : 'Ready'))}</small></div>

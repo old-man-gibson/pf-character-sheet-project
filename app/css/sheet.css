@@ -453,6 +453,19 @@
 .session-links select, .session-links input:not([type=checkbox]) { width: 100%; }
 .session-links input[type=checkbox] { width: auto; }
 .session-links label:has(input[type=checkbox]) { display: flex; align-items: center; gap: 8px; }
+/* A routine is an outline: a step's own steps sit indented under it, on a rule. */
+.session-routine, .session-routine ol { list-style: none; margin: 8px 0; padding: 0; }
+.session-routine ol { padding-left: 14px; border-left: 2px solid var(--cs-line); }
+.session-step { padding: 6px 0; }
+/* On a phone the step's picker wraps under its kind rather than shrinking to nothing. */
+.session-step-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.session-step-head select:first-child { flex: 0 0 auto; width: auto; }
+.session-step-head select + select { flex: 1 1 9rem; min-width: 0; }
+.session-step[data-when="then"] > .session-step-head select:first-child { font-weight: 600; }
+.session-step-more { margin: 4px 0 0; }
+.session-step-add { flex: 0 0 auto; font-size: .8rem; white-space: nowrap; }
+.session-routine-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 0 14px 12px; font-size: .85rem; }
+.session-routine-line small { color: var(--cs-muted); text-transform: uppercase; font-size: .66rem; letter-spacing: .04em; }
 .class-actions > details > summary { font-weight: 650; padding: 12px 0; cursor: pointer; }
 .class-actions > details { border-top: 1px solid var(--cs-line); padding-bottom: 12px; }
 .session-option { background: var(--cs-panel); border: 1px solid var(--cs-line); border-radius: 8px; overflow: hidden; }

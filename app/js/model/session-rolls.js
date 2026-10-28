@@ -3,6 +3,7 @@ import { DICE_TEXT, diceString, minusSign, spliceDiceNames } from '../rules.js';
 import { d20, weaponRollSpec, queryText, shiftD20 as shiftAttack } from '../roll20.js';
 import { sessionShortcuts, sessionState } from './session.js';
 import { effectiveAction } from './action-features.js';
+import { unfold, routineBranches } from './session-chains.js';
 
 /** Split on commas that are not inside parentheses, so "max(0, 4 - x)" stays whole. */
 function splitTopLevel(text) {
@@ -39,9 +40,12 @@ export function sessionRolls(model, card, answers = null) {
   const source = card.source ? sessionShortcuts(model).find(s => s.key === card.source) : null;
   // "Highest bonus only" is a flurry's rule: no attacks at a reduced base
   // attack bonus, so a full-round card starts from the single attack too.
+  // A routine's step can ask for one attack or the iteratives whatever the
+  // card's own action is ("one", "full").
   const topOnly = card.attackSet === 'top';
+  const single = card.attackSet === 'one' || topOnly || (card.attackSet !== 'full' && card.type !== 'full');
   const inherited = source?.kind === 'attack'
-    ? weaponRollSpec(model.data, source.index, model.conditionState, answers, card.type !== 'full' || topOnly) : null;
+    ? weaponRollSpec(model.data, source.index, model.conditionState, answers, single) : null;
   const scope = model.scope();
   const adjusted = model.conditionState?.adjusted;
   if (adjusted) scope.attack = { ...scope.attack, melee: adjusted.melee, ranged: adjusted.ranged, cmb: adjusted.cmb };
@@ -153,8 +157,31 @@ export function sessionRollSpec(model, ref, answers = null) {
   const [index, part = 'all'] = String(ref).split(':');
   const card = sessionState(model).cards[Number(index)];
   if (!card) return null;
+  return part === 'routine' ? routineRollSpec(model, card) : cardRollSpec(model, card, part, answers);
+}
+
+/**
+ * A routine's copy: a message per card its Use runs, then one card of buttons
+ * for the branches. Any `?{…}` a weapon asks stays in its roll for Roll20 to
+ * ask, since each step's questions are its own.
+ */
+function routineRollSpec(model, card) {
+  card = effectiveAction(model, card);
+  const run = unfold(model, card);
+  if (run.error) return null;
+  const parts = run.parts.map(part => cardRollSpec(model, part, 'all', null));
+  if (parts.some(p => p === undefined)) return null;
+  const branches = routineBranches(model, card).map(row => ({ label: row.label,
+    buttons: row.buttons.map(b => ({ label: b.label, spec: cardRollSpec(model, b.card, 'all', null) })).filter(b => b.spec) }));
+  return { name: `${model.data.identity.name} — ${card.title || 'Routine'}`, rolls: [], notes: [], queries: [],
+    parts: parts.filter(Boolean), branches };
+}
+
+// One card's rolls, or the part of them asked for; null when it has none,
+// undefined when a formula on it does not work.
+function cardRollSpec(model, card, part, answers) {
   const result = sessionRolls(model, card, answers);
-  if (result.errors.length) return null;
+  if (result.errors.length) return undefined;
   const spec = result.spec;
   if (part === 'attack') spec.rolls = spec.rolls.filter(r => r.label.startsWith('Attack'));
   if (part === 'damage') spec.rolls = spec.rolls.filter(r => r.label === 'Damage');
