@@ -40,9 +40,23 @@ export function actionBudget(model, state = sessionState(model)) {
   return out;
 }
 
+// What one card takes from its resource, in whole points; null for none.
+function resourceCost(model, card) {
+  if (!card.resource) return null;
+  const tracker = model.trackers.find(t => t.id === card.resource);
+  if (!tracker) throw new Error('The linked resource no longer exists');
+  // A resource is spent in whole points, rounded down like every formula
+  // field: a cost of 1.5 is 1.
+  const amount = Math.floor(Number(evaluateFormula(String(card.cost ?? '1'), model.scope())));
+  if (!Number.isFinite(amount) || amount < 0) throw new Error('Resource cost must be zero or a positive number');
+  return { tracker, amount };
+}
+
 // Build a transaction before touching either actions or resources. A failed Use
-// must never charge just one of its costs.
-export function planAction(model, card, state = sessionState(model), budget = actionBudget(model, state)) {
+// must never charge just one of its costs. `steps` are the cards a routine
+// runs in the same Use: the card's action covers them, and their resources
+// are paid with its own.
+export function planAction(model, card, state = sessionState(model), budget = actionBudget(model, state), steps = []) {
   const next = { ...state, spent: { ...state.spent } };
   const type = card.type;
   const take = key => {
@@ -62,19 +76,24 @@ export function planAction(model, card, state = sessionState(model), budget = ac
       if (state.onTurn) take('swift');
       else next.pendingSwift = count(state.pendingSwift) + 1;
     } else if (type !== 'free') take(type);
-    let tracker = null, amount = 0;
-    if (card.resource) {
-      tracker = model.trackers.find(t => t.id === card.resource);
-      if (!tracker) throw new Error('The linked resource no longer exists');
-      // A resource is spent in whole points, rounded down like every formula
-      // field: a cost of 1.5 is 1.
-      amount = Math.floor(Number(evaluateFormula(String(card.cost ?? '1'), model.scope())));
-      if (!Number.isFinite(amount) || amount < 0) throw new Error('Resource cost must be zero or a positive number');
+    const shortcuts = steps.length ? sessionShortcuts(model) : [];
+    for (const step of steps) {
+      if (step.source && !shortcuts.some(s => s.key === step.source)) throw new Error(`${step.title || 'A step'}: the linked source is missing or renamed`);
+    }
+    // One sum per resource, so two steps that each fit cannot overdraw it together.
+    const costs = [];
+    for (const one of [card, ...steps]) {
+      const cost = resourceCost(model, one);
+      if (!cost) continue;
+      const same = costs.find(c => c.tracker === cost.tracker);
+      if (same) same.amount += cost.amount; else costs.push(cost);
+    }
+    for (const { tracker, amount } of costs) {
       // Only a range that does not work blocks a spend; a zone that does not is
       // a matter of how the tracker looks, and + and − spend through it too.
       if (tracker.rangeError || Number(tracker.current) + amount > Number(tracker.max)) throw new Error(`Not enough ${tracker.name}`);
     }
-    return { next, tracker, amount, error: '' };
+    return { next, costs, error: '' };
   } catch (e) { return { error: e.message }; }
 }
 

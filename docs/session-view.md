@@ -129,29 +129,61 @@ attack type, and rows of the same name and type by their order among themselves
 ## Class features and ability chains
 
 Progression has a **Class features · abilities & actions** area for each class.
-Define an ability's description, rolls, resource cost and follow-ups there, then
+Define an ability's description, rolls, resource cost and routine there, then
 **Pin to session**. The session shortcut uses the same definition, so edits stay
 connected. Its placement and card width remain independent.
 
-In an ability or choice group's editor, **Link ability or group** selects what
-becomes available after **Use**. A link can point to a class feature, a session
-card, or a choice group. Selecting one option in a linked group uses only that
-option; its own links (and the group's links) can continue the chain.
+## Routines
 
-For example, link Infernal Musician to a Totems choice group, set the follow-up's
-action cost to **Free**, and record the feat granting it in the reminder.
-Free changes only the action cost. **Waive resource cost too** is a separate,
-explicit setting. Neither override permanently changes the target ability.
+Every ability and choice group has a **Routine** in its editor: an outline of
+steps. **+ Step** adds one at the top; a step's **+ Under** adds one that
+follows it, indented under it. Each step names a class feature, a session
+card, a choice group, or an attack or ability straight from the sheet, and says
+when it happens:
+
+- **Then, same Use** runs with the card. Its rolls copy with the card's, and its
+  resource is paid with the card's. The card's own action covers it.
+- **On a hit**, **On a crit** and **Afterwards** are offered once the Use is
+  done. Each can change the action cost (for example to **Free**), waive the
+  resource cost, be required, and carry a reminder of the feat that grants it.
+
+A step can also change the rolls for that step only: **Attacks** (one attack,
+the iteratives, or the highest bonus only), an attack modifier, extra attacks
+and extra damage. A blender's full attack is then one card: a Full round card
+with no rolls of its own and `then` steps for the weapon's iteratives, a bite,
+two claws (the second at −5) and a kinetic blast, with Rend **On a hit** under
+a claw.
+
+**Use** checks every `then` step before it spends anything. If one cannot run
+(a missing target, a cycle, or not enough of a resource once all the steps'
+costs are added up), nothing is spent. A step pointing at a choice group runs
+the group's selected option; as a follow-up it offers each option.
+
+The closed card lists its `then` steps and its branches. **Routine** copies the
+whole Use for Roll20: one message per step, then one card of buttons for the
+branches, a row for each kind and the step it follows (`On a hit after Claw`).
+Clicking a button posts that step's roll, and Roll20 asks any question in it at
+that point. A button posts one message, so a step with more than nine attacks in
+the Pathfinder format gets a numbered button for each card. Paste the copy into
+the chat as it is. Roll20 rewrites the button text when a saved macro is edited,
+and the buttons stop working.
+
+For example, give Infernal Musician an **Afterwards** step to a Totems choice
+group, set its action cost to **Free**, and put the feat granting it in the
+reminder. Free changes only the action cost. **Waive resource cost too** is a
+separate setting. Neither changes the target ability itself.
 
 Pending follow-ups appear above the action board with their details and values.
-Optional steps can be skipped. Resolve or cancel the chain before other actions
+Using one offers the steps under it in turn, and the target's own routine with
+them. Optional steps can be skipped. Resolve or cancel the chain before other actions
 or a new turn. Cancel keeps costs already paid; Undo reverses the last activation.
 Pending steps survive saving and reloading. Missing targets and cycles cannot
 spend costs, and can be recovered through editing, Undo, or cancellation.
-These links record player-configured rules; they do not interpret feat text.
+Routines record player-configured rules; they do not interpret feat text. Links
+saved before routines load as **Afterwards** steps.
 
-Cards use one column by default, two for choice groups, linked abilities or a
-routine of more than four attacks, and three for multiple links. The card editor can override this with **1, 2, or 3
+Cards use one column by default, two for choice groups, a card with one step or
+more than four attacks, and three for several steps. The card editor can override this with **1, 2, or 3
 columns**. Spans shrink automatically when the available screen space is narrow.
 
 ## Chain checks

@@ -21,6 +21,7 @@ import { FEATURE_GROUP_COLORS, normalizeHex } from '../tracker-style.js';
 import { Character } from './character.js';
 import { mythicComputedTier } from './campaign.js';
 import { normalizeWealth } from './stats/wealth.js';
+import { linksToSteps } from './session-chains.js';
 import { importAkashic, splitVeilName } from './subsystems/akashic.js';
 import {
   deckFeatNames, importCardcasting,
@@ -1306,6 +1307,9 @@ export function normalise(model) {
     };
   }
   if (!d.progression.classFeatures) d.progression.classFeatures = {};
+  // A card's or class feature's links are the first steps of its routine now.
+  for (const f of Array.isArray(d.progression.actionFeatures) ? d.progression.actionFeatures : []) linksToSteps(f);
+  for (const c of Array.isArray(d.session?.cards) ? d.session.cards : []) linksToSteps(c);
   // Column level rules arrived after the first saves; a column without them
   // grants at every level, as before. A rule started life as a bare string
   // and is now a list of named, coloured groups sharing the column, so a

@@ -266,6 +266,11 @@ function subDice(a, b) {
  * here and nothing else.
  */
 export function rollText(spec, format = DEFAULT_ROLL_FORMAT) {
+  // A routine is a message per step, then its branches as buttons on one more.
+  if (spec?.parts) {
+    const rows = (spec.branches || []).map((r) => ({ label: r.label, buttons: r.buttons.map((b) => ({ label: b.label, text: rollText(b.spec, format) })) }));
+    return [...spec.parts.map((p) => rollText(p, format)), branchesText(spec.name, rows, format)].filter(Boolean).join('\n');
+  }
   // A spec with notes and no rolls -- a card whose effect has no dice -- is
   // still a message: the name and what it does, with nothing to roll.
   if (!spec || !((spec.rolls || []).length || (spec.notes || []).length)) return '';
@@ -293,6 +298,63 @@ export function rollText(spec, format = DEFAULT_ROLL_FORMAT) {
     ...rolls.map((r) => `{{${escapeRoll20(r.label)}=[[${r.formula}]]}}`),
     ...notes.map((n) => `{{${escapeRoll20(n.label)}=${escapeRoll20(n.text)}}}`),
   ].join(' ');
+}
+
+/**
+ * What a button's command must not show the message it sits in.
+ *
+ * A button's command is posted as a message of its own when it is clicked,
+ * with its entities read once on the way. So everything the outer message
+ * would act on is written as its entity: the inline-roll brackets, the field
+ * braces, a query, the `=` that splits a field and the `)` that ends the
+ * button. The ampersand goes first, as in the table above, so the entities a
+ * roll already carries for its names become entities of entities and are still
+ * entities when the click posts them.
+ *
+ * The break after the `!` is `%NEWLINE%`, which Roll20 turns into one only on
+ * the click. `&#13;` is read as the message is drawn, and a second `%NEWLINE%`
+ * later in the command does the same: either way the button comes out as a
+ * plain link that posts nothing (tested in a game, 2026-10-27). So a button
+ * posts one message, and a roll of several is several buttons.
+ */
+const BUTTON_ENTITIES = [...ROLL20_ENTITIES, ['(', '&#40;'], [')', '&#41;'], ['=', '&#61;']];
+
+/**
+ * A chat button that posts a whole roll when clicked:
+ *
+ *   [On hit: Rend](!%NEWLINE%&#38;&#123;template:default&#125; …)
+ *
+ * The `!` line is a command no script answers, so Roll20 sends nothing for it;
+ * the line after it is the roll. This is how a routine's branches reach the
+ * table: Roll20 cannot tell a hit from a miss without the API, so the player
+ * clicks the branch that happened. A button never holds another button.
+ *
+ * A roll that is several messages (a Pathfinder routine past nine attacks)
+ * comes back as a button for each, numbered: "Rend 1/2", "Rend 2/2".
+ */
+export function chatButton(label, text) {
+  const lines = String(text ?? '').split('\n').filter((l) => l.trim());
+  const name = escapeRoll20(label).replace(/\(/g, '&#40;').replace(/\)/g, '&#41;');
+  return lines.map((line, i) => {
+    for (const [ch, ent] of BUTTON_ENTITIES) line = line.split(ch).join(ent);
+    return `[${name}${lines.length > 1 ? ` ${i + 1}/${lines.length}` : ''}](!%NEWLINE%${line})`;
+  }).join(' ');
+}
+
+/**
+ * The buttons a routine offers after its first card, as one more message.
+ *
+ * `rows` are `{ label, buttons: [{ label, text }] }`, one row per kind of
+ * branch ("On hit", "Choose"). The default template ships with every game, so
+ * it carries the buttons in the Pathfinder format too.
+ */
+export function branchesText(name, rows, format = DEFAULT_ROLL_FORMAT) {
+  const filled = (rows || []).map((r) => ({ label: r.label, buttons: (r.buttons || []).map((b) => chatButton(b.label, b.text)).filter(Boolean) }))
+    .filter((r) => r.buttons.length);
+  if (!filled.length) return '';
+  if (format === 'plain') return `${escapeRoll20(name)}: ${filled.map((r) => `${escapeRoll20(r.label)} ${r.buttons.join(' ')}`).join('; ')}`;
+  return ['&{template:default}', `{{name=${escapeRoll20(name)}}}`,
+    ...filled.map((r) => `{{${escapeRoll20(r.label)}=${r.buttons.join(' ')}}}`)].join(' ');
 }
 
 /** Shift the flat bonus of a "1d20cs>19+40+…" formula, folding it into the number. */

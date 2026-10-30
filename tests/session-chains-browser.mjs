@@ -19,14 +19,25 @@ document.querySelector('#run').onclick=async()=>{
   const change=async(s,v)=>{assert(find(s),`Missing ${s}`);find(s).value=v;find(s).dispatchEvent(new Event('change'));await pause();};
   const test=async(name,fn)=>{await fn();const li=document.createElement('li');li.textContent=`PASS: ${name}`;document.querySelector('#results').append(li);};
   try {
+    await test('A link saved before routines loads as a step',async()=>{
+      const fire=sheet.model.data.session.cards.find(c=>c.id==='fire');
+      assert(!('links' in fire)&&fire.steps?.[0]?.target==='card:finish'&&fire.steps[0].when==='after','Links not migrated');
+    });
     await test('Class feature editor creates, links and pins an ability',async()=>{
       await click('[data-tabkey="progression"]');
+      // The panel, the class and each feature start folded: they are setup.
+      await click('[data-collapse="classactions"]');
+      await click('[data-collapse="classactions-Warlord"]');
       await click('[data-feature-add="Warlord"]');
+      await click('[data-collapse^="classactions-feature-"]');
       await change('[data-feature-field="title"]','Infernal Musician');
       await change('[data-feature-field="damageFormula"]','3d6');
-      await click('[data-link-add="feature:0"]');
-      await change('[data-link-field="target"]','card:totems');
-      await change('[data-link-field="action"]','free');
+      await click('[data-step-add="feature:0"]');
+      // A step at the top runs with the feature; an Afterwards step is offered after it.
+      await change('[data-step-field="when"]','after');
+      await change('[data-step-field="target"]','card:totems');
+      await change('[data-step-field="action"]','free');
+      assert(sheet.model.data.progression.actionFeatures[0].steps[0].when==='after','Step kind not saved');
       await click('[data-feature-pin="0"]');
       assert(sheet.model.data.session.cards.at(-1).source.startsWith('class-feature:'),'Not linked');
     });
