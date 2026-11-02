@@ -508,6 +508,13 @@ pick"*, and one row's pickers cannot name the same class twice. A Lowest row wit
 2 takes the lowest class, then the lowest of the rest. A tie goes to the first
 tied class in the list until another is picked.
 
+The Class level column counts every level the class has at that point: levels
+taken on the Planner and aligned levels from any prestige class. Hovering or
+tapping it shows the parts ("1 level taken, 4 from Legendary Samurai, 1 from
+Kheshig"), and a block says when another prestige class also adds levels to its
+classes. Within one character level, prestige classes are read in Classes table
+order.
+
 What changes:
 
 - `classLevelCount` (caster and manifester level, `class.<name>.level`, companion

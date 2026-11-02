@@ -201,6 +201,30 @@ console.log('\na block with the two rule boxes reads as two rows');
     [[{ levels: '1, +1' }, { levels: '3', lowest: true }], { 1: ['Bard'], 2: ['Cleric'] }, false]);
 }
 
+console.log('\ntwo prestige classes adding to one class: the level says where it came from');
+{
+  // Track 2 has Wizard at level 2; Kheshig has its own aligned block on Wizard.
+  const plan = ['Kheshig', 'Wizard', ...Array(6).fill('Kheshig')];
+  const c = build('Shared', plan, [classRow('Samurai'), classRow('Kheshig'), classRow('Wizard')]);
+  c.addProgressionTrack();
+  for (let lv = 1; lv <= 8; lv++) c.setProgressionClass(lv, 1, 'Samurai');
+  const s = indexOf(c, 'Samurai');
+  const k = indexOf(c, 'Kheshig');
+  c.addAligned(s);
+  c.setAligned(s, { classes: ['Wizard'] });
+  c.setAlignedGain(s, 0, { levels: '1, +1' });
+  c.addAligned(k);
+  c.setAligned(k, { classes: ['Wizard'] });
+  c.setAlignedGain(k, 0, { levels: 'even' });
+  // Kheshig levels at 1, 3, 4, 5…: Kheshig 2 is level 3, Kheshig 4 is level 5.
+  const at4 = c.alignedSteps().find((x) => x.prestige === 'Samurai' && x.level === 4);
+  check('Wizard 6 at level 4: 1 taken, 4 from Samurai, 1 from Kheshig',
+    [at4.reaches, at4.parts], [6, { taken: 1, from: [['Samurai', 4], ['Kheshig', 1]] }]);
+  const h = renderProgressionPanel(c, { draft: {} });
+  check('the cell carries the breakdown', h.includes('data-tip="1 level taken, 4 from Samurai, 1 from Kheshig."'), true);
+  check('each block names the other', [h.includes('Kheshig also adds levels to Wizard.'), h.includes('Samurai also adds levels to Wizard.')], [true, true]);
+}
+
 console.log('\nthe panel');
 {
   const one = new Character(blankDocument({ name: 'Solo', level: 3 }));

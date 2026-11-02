@@ -101,6 +101,21 @@ function alignedPanel(model) {
         ? `<select data-alignedpick="${ref}" aria-label="Aligned class at ${esc(name)} level ${s.prcLevel}">${options(s.choices, s.class)}</select>`
         : esc(s.class);
     };
+    // What a class level is made of: the levels taken, then each prestige
+    // class's aligned levels, which may come from another block than this one.
+    const reached = (s) => {
+      const taken = s.parts.taken ? [`${s.parts.taken} level${s.parts.taken === 1 ? '' : 's'} taken`] : [];
+      const tip = `${[...taken, ...s.parts.from.map(([from, n]) => `${n} from ${from}`)].join(', ')}.`;
+      return `<span class="alsum" tabindex="0" data-tip="${esc(tip)}" data-tiphead="${esc(`${s.class} ${s.reaches}`)}">${esc(s.class)} ${s.reaches}</span>`;
+    };
+    // Other prestige classes adding levels to this block's classes.
+    const alsoFrom = new Map();
+    for (const s of steps) {
+      if (s.index === i || !s.class || !mine.some((m) => m.class === s.class)) continue;
+      if (!alsoFrom.has(s.prestige)) alsoFrom.set(s.prestige, new Set());
+      alsoFrom.get(s.prestige).add(s.class);
+    }
+    const also = [...alsoFrom].map(([from, to]) => `${esc(from)} also adds levels to ${esc([...to].join(' and '))}.`).join(' ');
     // The gain rows: which prestige levels, how many different classes each,
     // and whether the player picks them or the lowest ones get them.
     const gainRow = (g, gi) => {
@@ -138,9 +153,10 @@ function alignedPanel(model) {
           <td class="num">${s.prcLevel}</td>
           <td class="num">${s.level}</td>
           <td class="${!s.class && s.level <= level ? 'due' : ''}">${gain(s)}</td>
-          <td class="num">${s.class ? `${esc(s.class)} ${s.reaches}` : ''}</td>
+          <td class="num">${s.class ? reached(s) : ''}</td>
         </tr>`).join('')}</tbody>
       </table></div>` : `<p class="empty">No aligned levels yet.</p>`}
+      ${also ? `<p class="hint">${also}</p>` : ''}
     </div>`;
   };
   const unset = classes.filter((x) => !x.row.aligned);

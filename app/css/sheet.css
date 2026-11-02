@@ -1534,6 +1534,7 @@ table.vmc td { vertical-align: top; }
 .alignedpanel table.algains input[type="number"] { width: 3.5rem; }
 .alignedpanel button[data-action="add-aligned-gain"] { margin: 4px 0 8px; }
 .alignedpanel input.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
+.alignedpanel .alsum { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
 table.featgrid tr.aligned td.num { color: var(--cs-accent); font-style: italic; }
 /* A character just made opens on its rules first: a note with the way on,
    and the one question it must answer -- the lowest level -- edged in the

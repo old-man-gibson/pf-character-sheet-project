@@ -1691,16 +1691,18 @@ function alignedIndex(model) {
  * that kind's gains at that level (where its pick is kept); the class it went
  * to ('' when a pick is still owed), the classes its picker offers
  * (`choices`, empty when nothing is left to choose), the classes tied for it
- * (`tied`) and the level the class reaches. `keys` maps each aligned class to
- * the keys its gains are stored under, and `sources` to the prestige class
- * behind each key.
+ * (`tied`), the level the class reaches and what that level is made of
+ * (`parts`: levels taken, then aligned levels by prestige class). `keys` maps
+ * each aligned class to the keys its gains are stored under, and `sources` to
+ * the prestige class behind each key.
  *
  * Levels are taken in order because the lowest aligned class depends on every
  * gain before it. "Lowest" counts what the class has at that row: the levels
  * the Classes table and Planner give it (classPresence, as hit dice and saves
  * count them) and the aligned gains so far, earlier rows at the same level
  * among them. A lowest row with a count of 2 takes the lowest class, then the
- * lowest of the rest.
+ * lowest of the rest. Within one character level, prestige classes are read in
+ * Classes table order.
  */
 function readAligned(model, known) {
   const d = model.data;
@@ -1739,6 +1741,7 @@ function readAligned(model, known) {
     return counts[Math.min(level, counts.length - 1)];
   };
   const gained = new Map();          // spelling -> gains so far
+  const bySource = new Map();        // spelling -> Map(prestige class -> gains so far)
   const atRow = new Map();           // `${spelling}|${level}` -> gains on that row
   const gain = (name, level, step) => {
     const spelled = alignedSpelling(model, name);
@@ -1753,7 +1756,11 @@ function readAligned(model, known) {
     }
     index.keys.get(spelled).push(key);
     index.sources.get(spelled).set(key, step.prestige);
+    if (!bySource.has(spelled)) bySource.set(spelled, new Map());
+    const from = bySource.get(spelled);
+    from.set(step.prestige, (from.get(step.prestige) || 0) + 1);
     step.reaches = takenTo(name, level) + gained.get(spelled);
+    step.parts = { taken: takenTo(name, level), from: [...from] };
   };
   const effective = (name, level) => takenTo(name, level) + (gained.get(alignedSpelling(model, name)) || 0);
   const pickFrom = (wanted, options) => options.find((o) => o === wanted)
