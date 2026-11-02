@@ -2023,9 +2023,10 @@ export function applyArchetype(model, block) {
     addedNotes: [],        // names written into it
     notFound: [],
   };
-  // The character level a class level sits at, which a gestalt gap makes differ.
+  // The row a class level's cells are kept under: its character level, which a
+  // gestalt gap makes differ (or that plus a tenth on a row giving two levels).
   const charLevelOf = (classLevel) => model.classFeatureRows(className)
-    .find((r) => r.classLevel === classLevel)?.level ?? null;
+    .find((r) => r.classLevel === classLevel)?.key ?? null;
 
   const removeKey = (key) => {
     const base = swapBase(key);

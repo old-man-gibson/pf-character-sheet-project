@@ -58,15 +58,15 @@ import {
 } from './undo.js';
 import {
   addClassFeatureColumn, addClassFeatureColumnOptions, addClassFeatureNote,
-  addClassFeatureRuleGroup, addProgressionTrack, applyGestalt, classFeatureColumnOptions,
+  addClassFeatureRuleGroup, addAligned, addAlignedGain, addProgressionTrack, alignedSteps, applyGestalt, classFeatureColumnOptions,
   classFeatureColumnOptionsChosen, classFeatureDue, classFeatureNoteLevel, classFeatureNotes,
   classFeatureNotesInCell, classFeatureNoteSuggestions, addClassFeatureNoteFromPack, classFeatureParked, moveClassFeatureNote,
   blockClassName, classFeatureRows,
   classFeatureRuleGroups, classLevelAt, classLevelCount, classLevelsIn, classNames,
   featureGroup, fillProgressionTrack, grantingGroups, plannerHasClass, progressionClasses,
   removeClassFeatureColumn, removeClassFeatureColumnOptions, removeClassFeatureNote,
-  removeClassFeatureGroup, removeClassFeatureRuleGroup, removeProgressionTrack,
-  renameClassFeatureColumn,
+  removeAligned, removeAlignedGain, removeClassFeatureGroup, removeClassFeatureRuleGroup, removeProgressionTrack,
+  renameClassFeatureColumn, setAligned, setAlignedGain, setAlignedPick,
   setClassFeature, setClassFeatureColumnOptions, setClassFeatureColumnRule, setClassFeatureNote,
   setClassFeatureRuleGroup, setColumnWidth, setProgressionClass,
 } from './progression.js';
@@ -577,6 +577,14 @@ export class Character {
   classLevelsIn(...a) { return classLevelsIn(this, ...a); }
   classLevelCount(...a) { return classLevelCount(this, ...a); }
   blockClassName(...a) { return blockClassName(this, ...a); }
+  alignedSteps(...a) { return alignedSteps(this, ...a); }
+  addAligned(...a) { return addAligned(this, ...a); }
+  removeAligned(...a) { return removeAligned(this, ...a); }
+  setAligned(...a) { return setAligned(this, ...a); }
+  setAlignedPick(...a) { return setAlignedPick(this, ...a); }
+  addAlignedGain(...a) { return addAlignedGain(this, ...a); }
+  setAlignedGain(...a) { return setAlignedGain(this, ...a); }
+  removeAlignedGain(...a) { return removeAlignedGain(this, ...a); }
   #featureGroup(...a) { return featureGroup(this, ...a); }
   #classLevelAt(...a) { return classLevelAt(this, ...a); }
   #grantingGroups(...a) { return grantingGroups(this, ...a); }

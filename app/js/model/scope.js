@@ -1395,7 +1395,7 @@ export function proseSources(model) {
   for (const feature of d.progression?.actionFeatures || []) push(`actionFeature:${feature.id}`,feature.note);
   for (const [cls, g] of Object.entries(d.progression?.classFeatures || {})) {
     for (const [lvl, row] of Object.entries(g.byLevel || {})) {
-      const future = Number(lvl) > level ? { future: true } : null;
+      const future = Math.floor(Number(lvl)) > level ? { future: true } : null;
       for (const [col, value] of Object.entries(row || {})) {
         // A cell shared by two rule groups holds one entry per group.
         if (value && typeof value === 'object') {

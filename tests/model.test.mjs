@@ -4112,7 +4112,7 @@ console.log('a level box pins the same way everywhere: blank follows, 0 pins');
   const follow = (override) => M.levelFollowingPin(c, 'Wizard', override);
   check('a blank pin follows the class\'s levels', [follow(null).level, follow('').level], [5, 5]);
   check('a pin holds, capped at 20', [follow(3).level, follow(0).level, follow(25).base], [3, 0, 20]);
-  check('a class has a level by its pin when pinned', [M.classHasLevel(c, 'Wizard', 3, 2), M.classHasLevel(c, 'Wizard', 2, 2)], [false, true]);
+  check('a class has a level by its pin when pinned', [M.classGainsAt(c, 'Wizard', 3, 2), M.classGainsAt(c, 'Wizard', 2, 2)], [0, 1]);
 }
 
 console.log('every forward family names its keys under its own prefix');

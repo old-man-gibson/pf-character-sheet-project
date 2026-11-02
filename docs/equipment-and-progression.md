@@ -479,6 +479,59 @@ the viewport, re-evaluated live as you drag a column wider or collapse a group
 (collapsed groups shrink to a header chip and pack too). Narrow groups render
 first to keep the packing tight.
 
+### Aligned classes
+
+Some prestige classes add their levels to a class the character had before them
+("aligned class"). The aligned class gains those levels for its class features;
+hit dice, BAB, saves and skill ranks stay with the prestige class.
+
+The **Aligned classes** panel on Progression sets this up per prestige class
+(it shows once the character has two classes):
+
+- **Aligned classes**: one or more of the character's other classes.
+- **Rows of aligned levels**, each with:
+  - **Prestige levels**: the prestige class levels the row applies at, in the rule
+    group syntax above. `2, +1` is 2nd level and every level after; `2, 5, 8, 10`
+    lists them. Blank, or text that is not a rule, adds nothing.
+  - **Classes**: how many different aligned classes gain a level at each of those
+    levels (1 for most prestige classes).
+  - **Which**: *Chosen* (the player picks) or *Lowest* (the classes with the
+    fewest levels at that point).
+
+A prestige class with "+1 level of the aligned class from 2nd level" is one row:
+`2, +1`, 1, Chosen. Trinity Angel is three: `1, 4, 7`, 1, Lowest; `2, 5, 8, 10`, 2,
+Chosen; `3, 6, 9`, 2, Lowest.
+
+With as many gains as aligned classes, each class gets one. Otherwise each chosen
+gain has a picker; a reached level with nothing picked is counted as *"N to
+pick"*, and one row's pickers cannot name the same class twice. A Lowest row with
+2 takes the lowest class, then the lowest of the rest. A tie goes to the first
+tied class in the list until another is picked.
+
+The Class level column counts every level the class has at that point: levels
+taken on the Planner and aligned levels from any prestige class. Hovering or
+tapping it shows the parts ("1 level taken, 4 from Legendary Samurai, 1 from
+Kheshig"), and a block says when another prestige class also adds levels to its
+classes. Within one character level, prestige classes are read in Classes table
+order.
+
+What changes:
+
+- `classLevelCount` (caster and manifester level, `class.<name>.level`, companion
+  levels) and the Spheres talent ladders count the aligned levels.
+- The aligned class's feature group gets a row at each character level where it
+  gains one, with its level number in the accent colour. Cells written there move
+  with the level when the rules or picks change, as they do for Planner edits.
+- The Planner rows, and so hit dice, BAB, saves and skill ranks, do not change.
+
+One character level can give a class two levels: two rows applying at the same
+prestige level, two prestige classes aligned to the same class, or a gestalt track
+that also runs the aligned class. The second level's cells are stored under
+`level + 0.1` (`12.1`). Stored on the prestige class's row as
+`aligned: { classes, gains: [{ levels, count?, lowest? }], picks?, ties? }`, with
+`picks` and `ties` holding a list per prestige level, written only once the panel
+adds it. Covered by `tests/aligned.test.mjs`.
+
 ---
 
 ## Templates

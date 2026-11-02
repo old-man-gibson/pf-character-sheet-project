@@ -1889,6 +1889,7 @@ function classesPanel(model, ctx) {
     const gestalt = !core && (c.progression?.tracks ?? 1) > 1;
     // Classes the Planner gives no level to, with gestalt off.
     const idle = core ? (c.classes || []).filter((x) => x.name && !x.gestaltLevels).map((x) => x.name) : [];
+    const aligns = model.alignedSteps().filter((s) => s.class);
     // The sub-system picker: a row of toggles under the class it belongs to.
     // Marking a system badges its tabs in the ⚙ manager and puts them on the
     // session view's bar before anything is typed into them.
@@ -1944,9 +1945,16 @@ function classesPanel(model, ctx) {
           const from = planned
             ? `the Planner features it on ${planned} of ${level} level${level === 1 ? '' : 's'}`
             : `the Planner does not name it, so it runs every level (${level})`;
+          // Levels a prestige class adds as an aligned class, which count for
+          // class features and not here.
+          const aligned = aligns.filter((s) => s.class === x.name && s.level <= level);
+          const from2 = [...new Set(aligned.map((s) => s.prestige))];
+          const extra = aligned.length
+            ? ` ${from2.join(' and ')} add${from2.length === 1 ? 's' : ''} ${aligned.length} aligned level${aligned.length === 1 ? '' : 's'} for class features.`
+            : '';
           const why = over == null
-            ? `${from[0].toUpperCase()}${from.slice(1)}. Type a number to override it.`
-            : `Pinned at ${over}. Cleared, ${from}.`;
+            ? `${from[0].toUpperCase()}${from.slice(1)}. Type a number to override it.${extra}`
+            : `Pinned at ${over}. Cleared, ${from}.${extra}`;
           return `<tr>
           <td data-stack="name">${itemText('classes', i, 'name', x.name)}</td>
           <td class="num" data-label="Levels" data-inline="spec">${autoNum(`data-item="classes|${i}|levelsOverride"`, over, {

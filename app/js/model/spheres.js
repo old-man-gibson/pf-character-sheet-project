@@ -17,7 +17,7 @@ import {
 import { isBackgroundSkill } from '../rules.js';
 import { campaignRules, freeBackgroundSkills } from './campaign.js';
 import { emit } from './events.js';
-import { classHasLevel, ownLevelCount } from './progression.js';
+import { classGainsAt, ownLevelCount } from './progression.js';
 import { forwarded, lazyScope } from './scope.js';
 import { recomputeUnarmed } from './stats/attacks.js';
 import { altTrainingFor, altTrainingTalents, grantCount } from './subsystems/alt-training.js';
@@ -1704,25 +1704,33 @@ export function walkClassLadder(model, cls, home, level) {
   const step = poolHasUtility(cls, home) ? poolStepper(cls, home) : null;
   let pool = guile ? { count: 0, utilityCount: 0 } : null;
   for (const lv of cls.levels || []) {
-    const has = classHasLevel(model, cls.name, lv.level, override);
+    // Usually 0 or 1; 2 where an aligned class's gain lands on a row the
+    // Planner already gives this class.
+    const gains = classGainsAt(model, cls.name, lv.level, override);
+    const has = gains > 0;
     const before = Math.floor(cum);
-    if (has) {
-      cum += rate;
-      prog += progRate;
-      classLevels += 1;
-      if (lv.level <= level) classLevelsCurrent += 1;
-    }
+    cum += rate * gains;
+    prog += progRate * gains;
+    classLevels += gains;
+    if (lv.level <= level) classLevelsCurrent += gains;
     // A mirror shares the owner's rows; it counts its own talents off them
     // but must not restate the slot flags in its own rate's terms.
     if (cls.blendedMirror) continue;
     if (!guile) lv.progression = Math.floor(prog);
     lv.future = lv.level > level;
     if (step) {
-      pool = step(has, classLevels, lv.level, Math.floor(cum) > before, Math.floor(cum * 100) / 100);
+      // One step per level gained, so each can grant; a row with none takes one.
+      let granted = false;
+      let utilityGranted = false;
+      for (let k = 1; k <= Math.max(1, gains); k++) {
+        pool = step(has, classLevels - gains + Math.min(k, gains), lv.level, Math.floor(cum) > before, Math.floor(cum * 100) / 100);
+        granted ||= pool.granted;
+        utilityGranted ||= pool.utilityGranted;
+      }
       lv.count = pool.count;
-      lv.granted = pool.granted;
+      lv.granted = granted;
       lv.utilityCount = pool.utilityCount;
-      lv.utilityGranted = pool.utilityGranted;
+      lv.utilityGranted = utilityGranted;
     } else {
       lv.count = Math.floor(cum * 100) / 100;
       lv.granted = Math.floor(cum) > before;
@@ -1735,10 +1743,9 @@ export function walkClassLadder(model, cls, home, level) {
     // does a block added by hand before its rows are filled in; count their
     // class levels straight from the override or the Planner.
     for (let l = 1; l <= 20; l++) {
-      if (classHasLevel(model, cls.name, l, override)) {
-        classLevels += 1;
-        if (l <= level) classLevelsCurrent += 1;
-      }
+      const gains = classGainsAt(model, cls.name, l, override);
+      classLevels += gains;
+      if (l <= level) classLevelsCurrent += gains;
     }
   }
   cls.classLevels = classLevels;
