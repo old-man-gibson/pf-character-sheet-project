@@ -826,14 +826,36 @@ export function extensionStore(medium = globalThis.localStorage) {
     return opened;
   };
 
+  /*
+   * An index that cannot be read is rebuilt from the packs stored beside it.
+   * Read as empty, the next save wrote away every pack. The rebuilt rows are
+   * kept until the index changes, so a render does not parse every pack again.
+   */
+  let rebuilt = null;
+  const rebuildRows = () => {
+    const rows = [];
+    for (const [key, value] of cache) {
+      if (!key.startsWith(extensionKey(''))) continue;
+      try {
+        const ext = normalizeExtension(JSON.parse(value));
+        if (ext.id) rows.push({ ...summarize(ext), origin: 'import', enabled: true });
+      } catch { /* a pack that cannot be read stays unlisted */ }
+    }
+    return rows;
+  };
   const readIndex = () => {
+    const text = cache.get(EXTENSIONS_KEY);
     try {
-      const raw = JSON.parse(cache.get(EXTENSIONS_KEY) || '{}');
-      return {
-        extensions: arr(raw.extensions).filter((e) => e && e.id),
-        disabledBundled: arr(raw.disabledBundled).map(str),
-      };
-    } catch { return { extensions: [], disabledBundled: [] }; }
+      const raw = JSON.parse(text || '{}');
+      if (raw && typeof raw === 'object') {
+        return {
+          extensions: arr(raw.extensions).filter((e) => e && e.id),
+          disabledBundled: arr(raw.disabledBundled).map(str),
+        };
+      }
+    } catch { /* unreadable: rebuilt below */ }
+    if (rebuilt?.from !== text) rebuilt = { from: text, rows: rebuildRows() };
+    return { extensions: rebuilt.rows.slice(), disabledBundled: [] };
   };
 
   /**

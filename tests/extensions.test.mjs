@@ -278,6 +278,26 @@ console.log('store -- reads are answered from memory, so a render never waits');
   check('reading the store touches the medium not at all', reads - before, 0);
 }
 
+console.log('store -- an index that cannot be read is rebuilt from the packs');
+{
+  // Read as empty, the next save wrote an index holding only the new pack,
+  // and every pack already stored dropped out of reach.
+  const storage = fakeStorage();
+  const first = extensionStore(storage);
+  await first.open();
+  await first.save({ format: EXTENSION_FORMAT, name: 'Kept One' });
+  await first.save({ format: EXTENSION_FORMAT, name: 'Kept Two' });
+  storage.setItem(EXTENSIONS_KEY, '{"extensions": [');
+  const store = extensionStore(storage);
+  await store.open();
+  check('the packs are still listed', store.list().map((e) => e.id).sort(), ['kept-one', 'kept-two']);
+  await store.save({ format: EXTENSION_FORMAT, name: 'New One' });
+  const reopened = extensionStore(storage);
+  await reopened.open();
+  check('and a save writes them back into the index',
+    reopened.list().map((e) => e.id).sort(), ['kept-one', 'kept-two', 'new-one']);
+}
+
 console.log('store -- a write that arrives before the store has read its medium');
 {
   /*

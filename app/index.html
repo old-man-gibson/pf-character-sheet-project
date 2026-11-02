@@ -529,6 +529,8 @@
   // into the try/catch that is there for a private window, which turned a
   // reference error into a silent "nothing was remembered".
   const LAST_KEY = 'character-sheet:last';
+  const TRASH_KEY = 'character-sheet:trash';
+  const LIBRARY_BACKUP_KEY = 'character-sheet:library-unreadable';
   const docKey = (id) => `character-sheet:doc:${id}`;
   const editsKey = (id) => `character-sheet:${id}`;
 
@@ -539,14 +541,56 @@
   } catch { /* no roster file at all reads the same as an empty one */ }
 
   function readLibrary() {
+    let text = null;
     try {
-      const raw = JSON.parse(localStorage.getItem(LIBRARY_KEY) || '{}');
-      return (raw.characters || []).map((c) => ({ ...c, local: true }));
-    } catch { return []; }
+      text = localStorage.getItem(LIBRARY_KEY);
+      const raw = JSON.parse(text || '{}');
+      if (raw && typeof raw === 'object' && (raw.characters === undefined || Array.isArray(raw.characters))) {
+        return (raw.characters || []).map((c) => ({ ...c, local: true }));
+      }
+    } catch { /* unreadable: rebuilt below */ }
+    return text === null ? [] : rebuildLibrary(text);
   }
+  /**
+   * A list that cannot be read, rebuilt from the documents stored here.
+   *
+   * Reading it as empty made the next write drop every character from the
+   * picker while their documents stayed in storage. The unreadable text is
+   * kept under its own key.
+   */
+  function rebuildLibrary(text) {
+    try { localStorage.setItem(LIBRARY_BACKUP_KEY, text); } catch { /* the rebuild still lists every document */ }
+    const prefix = docKey('');
+    const trashed = new Set(readTrash().map((c) => c.id));
+    const list = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      const id = key?.startsWith(prefix) ? key.slice(prefix.length) : '';
+      if (!id || trashed.has(id)) continue;
+      try {
+        const doc = JSON.parse(localStorage.getItem(key));
+        const verdict = inspectDocument(doc);
+        if (verdict.ok) list.push({ ...verdict.summary, color: doc.identity?.color || null, id, origin: 'import', local: true });
+      } catch { /* a document that cannot be read stays where it is, unlisted */ }
+    }
+    if (writeLibrary(list)) {
+      say('info', `The character list in this browser could not be read. It was rebuilt from the ${list.length} `
+        + `character${list.length === 1 ? '' : 's'} stored here.`);
+    }
+    return list;
+  }
+  /** True when the list was saved. Says why when it was not. */
   function writeLibrary(list) {
-    localStorage.setItem(LIBRARY_KEY,
-      JSON.stringify({ characters: list.map(({ local, ...c }) => c) }));
+    try {
+      localStorage.setItem(LIBRARY_KEY,
+        JSON.stringify({ characters: list.map(({ local, ...c }) => c) }));
+      return true;
+    } catch (err) {
+      say('err', err.name === 'QuotaExceededError'
+        ? 'Could not save the character list. This browser is out of space.'
+        : `Could not save the character list: ${err.message}`);
+      return false;
+    }
   }
 
   let library = readLibrary();
@@ -562,7 +606,6 @@
    * is here is erased for real when it is a day old (checked on each load),
    * or sooner when the browser runs out of room for a new character.
    */
-  const TRASH_KEY = 'character-sheet:trash';
   const TRASH_TTL = 24 * 60 * 60 * 1000;
   function readTrash() {
     try {
@@ -570,11 +613,13 @@
       return Array.isArray(raw.characters) ? raw.characters : [];
     } catch { return []; }
   }
+  /** True when the trash was saved. */
   function writeTrash(list) {
     try {
       if (list.length) localStorage.setItem(TRASH_KEY, JSON.stringify({ characters: list }));
       else localStorage.removeItem(TRASH_KEY);
-    } catch { /* not fatal: the entry is simply not remembered as removed */ }
+      return true;
+    } catch { return false; }
   }
   /** Erase for real: the document, the edits and every history record. */
   async function erase(id) {
@@ -585,7 +630,10 @@
   async function emptyTrash(age = TRASH_TTL) {
     const now = Date.now();
     const keep = [];
+    // A character still in the list is never erased, whatever the trash says.
+    const listed = new Set(library.map((c) => c.id));
     for (const c of readTrash()) {
+      if (listed.has(c.id)) continue;
       if (now - (c.removedAt || 0) >= age) await erase(c.id);
       else keep.push(c);
     }
@@ -957,24 +1005,26 @@
   async function replaceWith(id, doc, warnings) {
     const entry = all().find((c) => c.id === id);
     const verdict = inspectDocument(doc);
-    const store = historyFor(id, { storageKey: editsKey(id) });
+    // Not `store`: that name is the helper below that writes the document.
+    const revisions = historyFor(id, { storageKey: editsKey(id) });
     const before = entry ? await currentDocument(entry) : null;
     const stored = { ...doc, id };
     if (!(await store(docKey(id), stored, verdict.summary.name))) return null;
     let kept = false;
     try {
-      if (before) { await store.checkpoint(before, 'before import'); kept = true; }
-      store.clearWorking();
-      await store.save(stored);
+      if (before) { await revisions.checkpoint(before, 'before import'); kept = true; }
+      revisions.clearWorking();
+      await revisions.save(stored);
     } catch { /* no database: the document is in, the history simply is not */ }
     // A bundled character replaced becomes one of this browser's own.
     library = library.some((c) => c.id === id)
       ? library.map((c) => (c.id === id ? { ...verdict.summary, color: doc.identity?.color || null, id, origin: 'import', local: true } : c))
       : [...library, { ...verdict.summary, color: doc.identity?.color || null, id, origin: 'import', local: true }];
-    writeLibrary(library);
+    const listed = writeLibrary(library);
     current = id;
     draw();
     select();
+    if (!listed) return id;   // writeLibrary said why
     say(warnings.length ? 'info' : 'ok',
       `Replaced ${entry?.name || id} with ${verdict.summary.name} (level ${verdict.summary.level}).`
       + (kept ? ' The old version is in History as “before import”.' : '')
@@ -1002,10 +1052,9 @@
     if (!verdict.ok) { say('err', verdict.error); return null; }
     if (origin === 'import' && library.length) {
       askWhereToPut(verdict.summary).then((into) => {
-        if (into === undefined) { say('info', `${verdict.summary.name} was not imported.`); return; }
-        if (into) replaceWith(into, doc, warnings);
-        else addNew(doc, warnings, origin, verdict);
-      });
+        if (into === undefined) { say('info', `${verdict.summary.name} was not imported.`); return null; }
+        return into ? replaceWith(into, doc, warnings) : addNew(doc, warnings, origin, verdict);
+      }).catch((err) => say('err', `Could not import ${verdict.summary.name}: ${err.message}`));
       return null;
     }
     return addNew(doc, warnings, origin, verdict);
@@ -1016,8 +1065,13 @@
     const id = freeId(verdict.summary.id);
     const stored = { ...doc, id };
     if (!(await store(docKey(id), stored, verdict.summary.name))) return null;
-    library = [...library, { ...verdict.summary, color: doc.identity?.color || null, id, origin, local: true }];
-    writeLibrary(library);
+    const grown = [...library, { ...verdict.summary, color: doc.identity?.color || null, id, origin, local: true }];
+    if (!writeLibrary(grown)) {
+      // Not in the list, the document would sit in storage where nothing can reach it.
+      try { localStorage.removeItem(docKey(id)); } catch { /* nothing more to undo */ }
+      return null;
+    }
+    library = grown;
     current = id;
     rememberOpen();
     draw();
@@ -1080,10 +1134,17 @@
   function discard(id) {
     const entry = library.find((c) => c.id === id);
     if (!entry) return;
-    library = library.filter((c) => c.id !== id);
-    writeLibrary(library);
     const { local, ...rest } = entry;
-    writeTrash([...readTrash().filter((c) => c.id !== id), { ...rest, removedAt: Date.now() }]);
+    // The trash first: out of the list but not in the trash, a character can
+    // be neither restored nor erased.
+    const trash = readTrash();
+    if (!writeTrash([...trash.filter((c) => c.id !== id), { ...rest, removedAt: Date.now() }])) {
+      say('err', `Could not remove ${entry.name}. This browser could not save the change.`);
+      return;
+    }
+    const remaining = library.filter((c) => c.id !== id);
+    if (!writeLibrary(remaining)) { writeTrash(trash); return; }
+    library = remaining;
     if (current === id) current = all()[0]?.id;
     rememberOpen();
     draw();
@@ -1094,12 +1155,15 @@
 
   /** Undo a removal: the entry comes back, and everything under it was never gone. */
   function restore(id) {
-    const entry = readTrash().find((c) => c.id === id);
+    const trash = readTrash();
+    const entry = trash.find((c) => c.id === id);
     if (!entry) { say('err', 'That character has already been erased.'); return; }
-    writeTrash(readTrash().filter((c) => c.id !== id));
     const { removedAt, ...rest } = entry;
-    library = [...library.filter((c) => c.id !== id), { ...rest, local: true }];
-    writeLibrary(library);
+    // The list first: out of the trash but not in the list, it could not be found again.
+    const back = [...library.filter((c) => c.id !== id), { ...rest, local: true }];
+    if (!writeLibrary(back)) return;
+    library = back;
+    writeTrash(trash.filter((c) => c.id !== id));
     current = id;
     rememberOpen();
     draw();
