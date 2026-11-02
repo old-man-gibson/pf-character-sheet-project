@@ -1623,7 +1623,7 @@ export class CharacterSheetElement extends HTMLElement {
     url.searchParams.set('view', 'control');
     url.searchParams.set('s', id);
     url.searchParams.set('m', member);
-    url.searchParams.set('t', token);
+    url.hash = new URLSearchParams({ t: token }).toString();   // the fragment never reaches a server
     return url.href;
   }
 

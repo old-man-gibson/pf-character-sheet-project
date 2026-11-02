@@ -37,8 +37,32 @@ import { castPickArg, castPickCopy, followCastPick } from './ui/cast-pick.js';
 const params = new URLSearchParams(location.search);
 const view = params.get('view') === 'hand' ? 'hand' : params.get('view') === 'control' ? 'control' : 'table';
 const channelName = params.get('ch') || '';
-// The control view's address: the published id, the member, the grant.
-const control = view === 'control' ? { id: params.get('s') || '', member: params.get('m') || '', grant: params.get('t') || '' } : null;
+// The control view's address: the published id, the member, the grant. The
+// grant rides in the fragment, which is never sent to a server; links made
+// before that carry it in the query.
+const grant = new URLSearchParams(location.hash.slice(1)).get('t') || params.get('t') || '';
+const control = view === 'control' ? { id: params.get('s') || '', member: params.get('m') || '', grant } : null;
+
+/*
+ * Markup from the relay was written by another person's sheet, so it goes in
+ * cleaned: no scripts, frames or embedded objects, no on* handlers, and no
+ * address but http(s), an image, or a path on this site. The pop-out windows
+ * on the player's own sheet are this origin's and take their markup as it is.
+ */
+const DROPPED = 'script, iframe, frame, frameset, object, embed, applet, meta, base, link, form, portal';
+const URL_ATTRS = new Set(['href', 'src', 'srcset', 'action', 'formaction', 'xlink:href', 'poster', 'data', 'ping', 'background']);
+const allowedUrl = (v) => !/^\s*[a-z][a-z0-9+.-]*:/i.test(v) || /^\s*(https?:|blob:|data:image\/)/i.test(v);
+function cleaned(html) {
+  const t = document.createElement('template');
+  t.innerHTML = String(html || '');
+  for (const el of t.content.querySelectorAll(DROPPED)) el.remove();
+  for (const el of t.content.querySelectorAll('*')) {
+    for (const { name, value } of [...el.attributes]) {
+      if (/^on/i.test(name) || (URL_ATTRS.has(name.toLowerCase()) && !allowedUrl(value))) el.removeAttribute(name);
+    }
+  }
+  return t.innerHTML;
+}
 
 const host = document.getElementById('cards');
 const root = host.attachShadow({ mode: 'open' });
@@ -151,8 +175,8 @@ function draw(msg) {
   title.textContent = heading;
   status(view === 'table' ? 'the table — what everyone may see' : view === 'hand' ? 'your hand — keep this one off the stream' : 'the GM’s hand — presses run on the player’s sheet');
   empty.hidden = true;
-  const html = `${SHEET_LINK}<div class="cardwin ${view}">${msg.html || ''}</div>`;
-  const features = control ? `${SHEET_LINK}<div class="cardwin features">${msg.features || '<p class="empty">No features to show.</p>'}</div>` : null;
+  const html = `${SHEET_LINK}<div class="cardwin ${view}">${control ? cleaned(msg.html) : msg.html || ''}</div>`;
+  const features = control ? `${SHEET_LINK}<div class="cardwin features">${cleaned(msg.features) || '<p class="empty">No features to show.</p>'}</div>` : null;
   // The sheet posts a render on every change of its own, most of them to
   // things this window does not show. Markup that has not changed is left
   // standing: a redraw reset the scroll and dropped the focus, so every
