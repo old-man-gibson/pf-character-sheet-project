@@ -24,7 +24,9 @@
  * to the app, and a worker scoped to app/ never sees that page.
  */
 
-const CACHE = 'cs-app-v1';
+// v2 keeps each file under its address without the query. Activating it
+// deletes v1, which held a copy per query, control-link tokens included.
+const CACHE = 'cs-app-v2';
 /** How long a page may take before the kept copy is shown instead. */
 const PAGE_WAIT_MS = 6000;
 /** Pages opened from the copy, whose files come from it too. */
@@ -50,17 +52,28 @@ function keepable(request) {
   return true;
 }
 
-/** The kept copy, ignoring the query (`?v=`, `?s=`) a page or a module was asked for with. */
+/**
+ * The address a copy is kept under: the query (`?v=`, `?s=<id>`) dropped. A
+ * page is the same file whatever it was opened with, and one entry per
+ * published id or control link would grow without end and keep the tokens.
+ */
+const keyOf = (request) => {
+  const url = new URL(request.url);
+  url.search = '';
+  return url.href;
+};
+
+/** The kept copy, whatever query the page or module was asked for with. */
 async function kept(request) {
   const cache = await caches.open(CACHE);
-  return (await cache.match(request)) || cache.match(request, { ignoreSearch: true });
+  return cache.match(keyOf(request));
 }
 
 async function fromNetwork(request) {
   const response = await fetch(request);
   if (response.ok && response.type === 'basic') {
     const copy = response.clone();
-    caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => { /* full: the page still works online */ });
+    caches.open(CACHE).then((cache) => cache.put(keyOf(request), copy)).catch(() => { /* full: the page still works online */ });
   }
   return response;
 }
@@ -113,6 +126,7 @@ self.addEventListener('message', (event) => {
     for (const href of urls) {
       try {
         const url = new URL(href, self.location.href);
+        url.search = '';
         const request = new Request(url.href);
         if (!keepable(request) || await cache.match(request)) continue;
         const response = await fetch(request);
