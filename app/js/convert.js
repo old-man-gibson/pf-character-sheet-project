@@ -268,7 +268,8 @@ function extractIdentity(bk) {
     alignment: bk.cell(CI, 6, 6),
     deity: bk.cell(CI, 6, 9),
     specialty: bk.cell(CI, 7, 3),
-    specialtyFeat: bk.cell(CI, 7, 6) ?? bk.cell(CI, 7, 8),
+    // `or` in convert.py: a 0 or false falls through too, not only a blank.
+    specialtyFeat: bk.cell(CI, 7, 6) || bk.cell(CI, 7, 8),
     specialtyPerks: [bk.cell(CI, 8, 3), bk.cell(CI, 8, 8)].filter(truthy),
     image: bk.cell(CI, 4, 18),
     nativeLanguages: bk.cell(CI, 10, 3),

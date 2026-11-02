@@ -1,0 +1,2370 @@
+{
+ "schemaVersion": 9,
+ "id": "marnie",
+ "source": {
+  "title": "Marnie Tallow (test workbook)",
+  "fileId": "",
+  "url": "",
+  "convertedAt": "2026-11-02T12:47:05"
+ },
+ "tabs": [
+  {
+   "name": "Character Info",
+   "hidden": false
+  },
+  {
+   "name": "Stats",
+   "hidden": false
+  },
+  {
+   "name": "Planner",
+   "hidden": false
+  },
+  {
+   "name": "Feats",
+   "hidden": false
+  },
+  {
+   "name": "Mythic",
+   "hidden": false
+  },
+  {
+   "name": "Equipment",
+   "hidden": false
+  },
+  {
+   "name": "Background & Lore",
+   "hidden": false
+  },
+  {
+   "name": "Combat Training",
+   "hidden": false
+  },
+  {
+   "name": "Magic Training",
+   "hidden": false
+  },
+  {
+   "name": "Akashic",
+   "hidden": false
+  },
+  {
+   "name": "Session Notes",
+   "hidden": true
+  },
+  {
+   "name": "dataSheet",
+   "hidden": true
+  }
+ ],
+ "identity": {
+  "name": "Marnie Tallow",
+  "player": "Jordan Vale",
+  "race": "Half-Elf",
+  "size": "Medium",
+  "gender": "Female",
+  "age": 34,
+  "variant": "Wayfarer",
+  "heroPoints": {
+   "current": 2,
+   "max": 3
+  },
+  "height": "5' 7\"",
+  "weight": "130 lb.",
+  "level": 7,
+  "alignment": "Neutral Good",
+  "deity": null,
+  "specialty": "Scholar",
+  "specialtyFeat": "Skill Focus (Knowledge: arcana)",
+  "specialtyPerks": [
+   "Quick Study"
+  ],
+  "image": "https://example.com/portraits/marnie.png",
+  "nativeLanguages": "Common, Elven",
+  "downtimeLanguages": "Sylvan",
+  "intLanguages": "Draconic; Gnome",
+  "linguisticsLanguages": null,
+  "proficiencies": {
+   "weapons": "Simple, Martial",
+   "armor": "Light",
+   "shield": null
+  },
+  "speeds": [
+   {
+    "type": "Land",
+    "base": 30,
+    "bonus": 0,
+    "final": 30
+   },
+   {
+    "type": "Climb",
+    "base": 15,
+    "bonus": 5,
+    "final": 20
+   },
+   {
+    "type": "Swim",
+    "base": 10,
+    "bonus": 0,
+    "final": 10
+   }
+  ],
+  "mythicPath": "Archmage",
+  "mythicTier": 2,
+  "focusStat": "Int",
+  "guild": "Lantern Society",
+  "primordiaTechnique": "Ember Step"
+ },
+ "abilities": {
+  "str": {
+   "score": 12,
+   "mod": 1,
+   "tempScore": 12,
+   "totalMod": 1,
+   "checkMod": 1,
+   "sources": {
+    "Point Buy": 10,
+    "ABP": 2,
+    "Morale": 2
+   }
+  },
+  "dex": {
+   "score": 14,
+   "mod": 2,
+   "tempScore": 16,
+   "totalMod": 3,
+   "checkMod": 3,
+   "sources": {
+    "Point Buy": 12,
+    "Race": 2,
+    "Attunement": true,
+    "Temp Enhancement": 2
+   }
+  },
+  "con": {
+   "score": 13,
+   "mod": 1,
+   "tempScore": 13,
+   "totalMod": 1,
+   "checkMod": 1,
+   "sources": {
+    "Point Buy": 13
+   }
+  },
+  "int": {
+   "score": 18,
+   "mod": 4,
+   "tempScore": 18,
+   "totalMod": 4,
+   "checkMod": 4,
+   "sources": {
+    "Point Buy": 15,
+    "Race": 2,
+    "Gear": "+0",
+    "Level": 1
+   }
+  },
+  "wis": {
+   "score": 10,
+   "mod": 0,
+   "tempScore": 0,
+   "totalMod": 0,
+   "checkMod": 0,
+   "sources": {
+    "Point Buy": 10
+   }
+  },
+  "cha": {
+   "score": 8,
+   "mod": -1,
+   "tempScore": 8,
+   "totalMod": -1,
+   "checkMod": -1,
+   "sources": {
+    "Point Buy": 7,
+    "Untyped": 1
+   }
+  }
+ },
+ "statsBuild": {
+  "str": {
+   "pointBuy": 10,
+   "race": 0,
+   "abp": 2,
+   "gear": 0,
+   "attunement": 0,
+   "inherent": 0,
+   "array": 0,
+   "level4": 0,
+   "mythic": 0,
+   "size": 0,
+   "untyped": 0,
+   "alchemical": 0,
+   "circumstance": 0,
+   "morale": 2,
+   "tempEnhancement": 0,
+   "tempSize": 0,
+   "sheetTotal": 12
+  },
+  "dex": {
+   "pointBuy": 12,
+   "race": 2,
+   "abp": 0,
+   "gear": 0,
+   "attunement": 2,
+   "inherent": 0,
+   "array": 0,
+   "level4": 0,
+   "mythic": 0,
+   "size": 0,
+   "untyped": 0,
+   "alchemical": 0,
+   "circumstance": 0,
+   "morale": 0,
+   "tempEnhancement": 2,
+   "tempSize": 0,
+   "sheetTotal": 14
+  },
+  "con": {
+   "pointBuy": 13,
+   "race": 0,
+   "abp": 0,
+   "gear": 0,
+   "attunement": 0,
+   "inherent": 0,
+   "array": 0,
+   "level4": 0,
+   "mythic": 0,
+   "size": 0,
+   "untyped": 0,
+   "alchemical": 0,
+   "circumstance": 0,
+   "morale": 0,
+   "tempEnhancement": 0,
+   "tempSize": 0,
+   "sheetTotal": 13
+  },
+  "int": {
+   "pointBuy": 15,
+   "race": 2,
+   "abp": 0,
+   "gear": 0,
+   "attunement": 0,
+   "inherent": 0,
+   "array": 0,
+   "level4": 1,
+   "mythic": 0,
+   "size": 0,
+   "untyped": 0,
+   "alchemical": 0,
+   "circumstance": 0,
+   "morale": 0,
+   "tempEnhancement": 0,
+   "tempSize": 0,
+   "sheetTotal": 18
+  },
+  "wis": {
+   "pointBuy": 10,
+   "race": 0,
+   "abp": 0,
+   "gear": 0,
+   "attunement": 0,
+   "inherent": 0,
+   "array": 0,
+   "level4": 0,
+   "mythic": 0,
+   "size": 0,
+   "untyped": 0,
+   "alchemical": 0,
+   "circumstance": 0,
+   "morale": 0,
+   "tempEnhancement": 0,
+   "tempSize": 0,
+   "sheetTotal": 10
+  },
+  "cha": {
+   "pointBuy": 7,
+   "race": 0,
+   "abp": 0,
+   "gear": 0,
+   "attunement": 0,
+   "inherent": 0,
+   "array": 0,
+   "level4": 0,
+   "mythic": 0,
+   "size": 0,
+   "untyped": 1,
+   "alchemical": 0,
+   "circumstance": 0,
+   "morale": 0,
+   "tempEnhancement": 0,
+   "tempSize": 0,
+   "sheetTotal": 8
+  }
+ },
+ "pointBuyTable": {
+  "7": -4,
+  "8": -2,
+  "9": -1,
+  "10": 0,
+  "11": 1,
+  "12": 2,
+  "13": 3,
+  "14": 5,
+  "15": 7,
+  "16": 10,
+  "17": 13,
+  "18": 17
+ },
+ "progressionPicks": {
+  "level4": [
+   {
+    "level": 4,
+    "ability": "Int"
+   }
+  ],
+  "abp": [
+   {
+    "level": 6,
+    "mental": "Int",
+    "physical": null
+   },
+   {
+    "level": 7,
+    "mental": null,
+    "physical": "Dex"
+   }
+  ],
+  "array": [
+   {
+    "level": 1,
+    "slots": [
+     "Str",
+     "Dex",
+     null,
+     "Int"
+    ]
+   },
+   {
+    "level": 9,
+    "slots": [
+     null,
+     "Con",
+     null,
+     null
+    ]
+   }
+  ],
+  "arrayNote": "Array (Optional)"
+ },
+ "hp": {
+  "total": 52,
+  "ability": "Con",
+  "fcb": 7,
+  "ability2": null,
+  "toughness": 0,
+  "misc": 3,
+  "initiative": 6,
+  "initAbility": "Dex",
+  "initAbility2": "Wis"
+ },
+ "classes": [
+  {
+   "name": "Wizard",
+   "hd": 6,
+   "bab": 0.5,
+   "babOverride": null,
+   "goodFort": false,
+   "goodRef": false,
+   "goodWill": true,
+   "skillRanks": 2,
+   "archetypes": "Hedge Scholar"
+  },
+  {
+   "name": "Rogue",
+   "hd": 8,
+   "bab": 0.75,
+   "babOverride": "3",
+   "goodFort": false,
+   "goodRef": true,
+   "goodWill": false,
+   "skillRanks": 8,
+   "archetypes": "Scout; Sapper"
+  }
+ ],
+ "defenses": {
+  "ac": 17,
+  "touch": 12,
+  "flatFooted": 15,
+  "cmd": 16,
+  "ffCmd": 14,
+  "acStat1": "Dex",
+  "acStat2": null,
+  "bonusAC": "Int",
+  "uncannyDodge": true,
+  "nonTouch": 0,
+  "miscAC": 1,
+  "miscCMD": 0,
+  "spellResistance": null,
+  "dr": "5/cold iron",
+  "weakness": null,
+  "immunities": "Sleep; paralysis",
+  "resistance": "Fire 5, cold 5"
+ },
+ "conditions": {
+  "Blinded": 0,
+  "Dazzled": 0,
+  "Helpless": 0,
+  "Paralyzed": 0,
+  "Fatigued": 0,
+  "Shaken": 0,
+  "Sickened": 0
+ },
+ "attack": {
+  "bab": 3,
+  "iterative": "+3",
+  "miscBonus": 0,
+  "modes": {
+   "melee": {
+    "value": 4,
+    "stat1": "Str",
+    "stat2": null
+   },
+   "altMelee": {
+    "value": 5,
+    "stat1": "Dex",
+    "stat2": null
+   },
+   "ranged": {
+    "value": 5,
+    "stat1": "Dex",
+    "stat2": null
+   },
+   "altRanged": {
+    "value": 4,
+    "stat1": "Str",
+    "stat2": null
+   },
+   "cmb": {
+    "value": 4,
+    "stat1": "Str",
+    "stat2": null
+   },
+   "altCmb": {
+    "value": 5,
+    "stat1": "Dex",
+    "stat2": "Int"
+   }
+  },
+  "totalMelee": 5,
+  "totalRanged": 5,
+  "totalCmb": 5
+ },
+ "saves": {
+  "fortitude": {
+   "total": 4,
+   "stat1": "Con",
+   "stat2": null,
+   "base": 2
+  },
+  "reflex": {
+   "total": 7,
+   "stat1": "Dex",
+   "stat2": null,
+   "base": 5
+  },
+  "will": {
+   "total": 6,
+   "stat1": "Wis",
+   "stat2": "Int",
+   "base": 5
+  }
+ },
+ "traits": [
+  {
+   "slot": "Trait 1",
+   "category": "Magic",
+   "text": "Magical Lineage: one spell counts a level lower."
+  },
+  {
+   "slot": "Trait 2",
+   "category": "Social",
+   "text": null
+  },
+  {
+   "slot": "Drawback",
+   "category": "Drawback",
+   "text": "Doubt (−2 on checks after a failure)"
+  }
+ ],
+ "raceTraits": [
+  "Elf Blood",
+  "Keen Senses: +2 Perception",
+  "Adaptability"
+ ],
+ "skills": [
+  {
+   "name": "Acrobatics",
+   "spec": null,
+   "bonus": 5,
+   "classSkill": false,
+   "totalRanks": 1,
+   "ranks": {
+    "Level": 1
+   },
+   "requiresTraining": false,
+   "armorPenalty": true,
+   "abilities": [
+    "Dex"
+   ],
+   "situational": null
+  },
+  {
+   "name": "Knowledge",
+   "spec": "Arcana",
+   "bonus": 12,
+   "classSkill": true,
+   "totalRanks": 7,
+   "ranks": {
+    "Level": 6,
+    "Specialty": 1
+   },
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": "+2 vs. constructs"
+  },
+  {
+   "name": "Craft",
+   "spec": "Alchemy",
+   "bonus": 4,
+   "classSkill": true,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null
+  },
+  {
+   "name": "Perception",
+   "spec": null,
+   "bonus": 9,
+   "classSkill": true,
+   "totalRanks": 7,
+   "ranks": {
+    "Level": 6,
+    "Gear": 1
+   },
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Wis"
+   ],
+   "situational": null
+  },
+  {
+   "name": "Stealth",
+   "spec": null,
+   "bonus": 2.5,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": true,
+   "abilities": [
+    "Dex",
+    "Cha"
+   ],
+   "situational": null
+  },
+  {
+   "name": "Use Magic Device",
+   "spec": null,
+   "bonus": -1,
+   "classSkill": true,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Cha"
+   ],
+   "situational": "Can't take 10"
+  }
+ ],
+ "skillBudget": {
+  "bonusPerLevel": 1,
+  "intPerLevel": 4,
+  "sheetPerLevel": 13
+ },
+ "carry": {
+  "tiers": [
+   {
+    "name": "Light",
+    "limit": 76
+   },
+   {
+    "name": "Medium",
+    "limit": 153
+   },
+   {
+    "name": "Heavy",
+    "limit": 230
+   },
+   {
+    "name": "Push or Drag",
+    "limit": 1150
+   }
+  ],
+  "antHaul": 1,
+  "strBonus": 2,
+  "quadruped": false,
+  "carried": 41.5
+ },
+ "resources": [
+  {
+   "name": "Arcane Bond",
+   "uses": 0,
+   "total": 1,
+   "refresh": "Day"
+  },
+  {
+   "name": "Wand of Light",
+   "uses": 12,
+   "total": 50,
+   "refresh": null
+  },
+  {
+   "name": "Hand of the Apprentice",
+   "uses": 2,
+   "total": "3 + Int",
+   "refresh": "Day"
+  }
+ ],
+ "wealth": {
+  "baseline": 1250,
+  "current": 1310,
+  "oathOfOfferings": true,
+  "materialCasting": false,
+  "lastOffering": "2026-10-03T18:30:00",
+  "manaPerDay": 12.5,
+  "sessions": 6
+ },
+ "planner": [
+  {
+   "Level": 1,
+   "Class 1 HD": "Wizard",
+   "Class 1 Features": "Arcane bond; cantrips",
+   "Class 2 HD": "Rogue",
+   "Class 2 Features": "Sneak attack +1d6",
+   "HP/ Level": 6,
+   "BAB": 0,
+   "Feats": "Spell Focus",
+   "Array (Optional)": "Str"
+  },
+  {
+   "Level": 2,
+   "Class 1 HD": "Wizard",
+   "Class 2 HD": "Rogue",
+   "Class 2 Features": "Evasion",
+   "HP/ Level": 4,
+   "Armored Discipline Technique": "Ember Step"
+  },
+  {
+   "Level": 3,
+   "Class 1 HD": "Wizard",
+   "Class 2 HD": "Rogue",
+   "HP/ Level": 4,
+   "BAB": 1,
+   "Feats": "Combat Casting"
+  },
+  {
+   "Level": 4,
+   "Level/4": "Int",
+   "Class 1 HD": "Wizard",
+   "Class 2 HD": "Rogue",
+   "HP/ Level": 4,
+   "BAB": 2
+  },
+  {
+   "Level": 5,
+   "Class 1 HD": "Wizard",
+   "Class 1 Features": "Bonus feat",
+   "Class 2 HD": "Rogue",
+   "HP/ Level": "4",
+   "BAB": 2
+  },
+  {
+   "Level": 6,
+   "Class 1 HD": "Wizard",
+   "Class 2 HD": "Rogue",
+   "HP/ Level": 4,
+   "BAB": 3,
+   "Mental Prowess": "Int"
+  },
+  {
+   "Level": 7,
+   "Class 1 HD": "Wizard",
+   "Class 2 HD": "Rogue",
+   "HP/ Level": 4,
+   "BAB": 3,
+   "Feats": "Extend Spell",
+   "3": true,
+   "Physical Prowess": "Dex"
+  }
+ ],
+ "feats": {
+  "Combat Feats": [
+   {
+    "name": "Dodge",
+    "detail": "+1 dodge to AC"
+   },
+   {
+    "name": "Point-Blank Shot",
+    "detail": null
+   },
+   {
+    "name": "Weapon Focus (light crossbow)",
+    "detail": 1
+   },
+   {
+    "name": "Last row read",
+    "detail": null
+   }
+  ],
+  "General Feats": [
+   {
+    "name": "Toughness",
+    "detail": "+3 HP"
+   },
+   {
+    "name": "42",
+    "detail": null
+   },
+   {
+    "name": "Skill Focus (Knowledge: arcana)",
+    "detail": true
+   }
+  ],
+  "Combat Feats 2": [
+   {
+    "name": "Precise Shot",
+    "detail": "No −4 for firing into melee"
+   }
+  ]
+ },
+ "mythic": {
+  "path": "Archmage",
+  "tier": 2,
+  "baseAbilities": [
+   "Hard to Kill",
+   "Mythic Power"
+  ],
+  "abilities": [
+   {
+    "level": 1,
+    "slot": "Path 1",
+    "name": "Wild Arcana",
+    "path": "Archmage",
+    "feat": null,
+    "featChoice": null,
+    "statBonus": null
+   },
+   {
+    "level": 2,
+    "slot": "Feat 1",
+    "name": null,
+    "path": null,
+    "feat": "Mythic Spell Focus",
+    "featChoice": "Evocation",
+    "statBonus": null
+   },
+   {
+    "level": null,
+    "slot": "Stat",
+    "name": null,
+    "path": null,
+    "feat": null,
+    "featChoice": null,
+    "statBonus": "Int +2"
+   }
+  ],
+  "tradition": {
+   "drawback1": "Brittle Bones",
+   "boon1": "Steady Hand",
+   "quality": "Stoic",
+   "drawback2": null
+  },
+  "flowingPower": true,
+  "basePathAbility": "Arcane Surge"
+ },
+ "equipment": {
+  "gear": [
+   {
+    "slot": "Head",
+    "name": "Circlet of Focus",
+    "bonuses": [
+     {
+      "value": 2,
+      "type": "Competence"
+     },
+     {
+      "value": null,
+      "type": "Insight"
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     "Perception +2",
+     "3",
+     "True",
+     "2.5"
+    ],
+    "weight": 1,
+    "cost": 1500
+   },
+   {
+    "slot": "Headband",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Eyes",
+    "name": "Lenses of Detection",
+    "bonuses": [
+     {
+      "value": 1,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 3500
+   },
+   {
+    "slot": "Shoulders",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Neck",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Chest",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Body",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Armor",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Belt",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Wrists",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Hands",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Ring 1",
+    "name": "Ring of Protection +1",
+    "bonuses": [
+     {
+      "value": 1,
+      "type": "Deflection"
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 2000
+   },
+   {
+    "slot": "Ring 2",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Feet",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   }
+  ],
+  "other": [
+   {
+    "slot": "Other 1",
+    "name": "Bag of Holding (Type I)",
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 15,
+    "cost": 2500
+   },
+   {
+    "slot": "Other 2",
+    "name": "Rope, silk (50 ft.)",
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 5,
+    "cost": 10
+   },
+   {
+    "slot": "Other 3",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Other 4",
+    "name": "Scroll case & 3 scrolls",
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     "Spell list in notes",
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Other 5",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Other 6",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Other 7",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Other 8",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   }
+  ],
+  "armor": {
+   "kind": "Armor",
+   "name": "Mithral Shirt",
+   "acBonus": 4,
+   "maxDex": 6,
+   "acp": 0,
+   "type": "Light",
+   "ghostTouch": false,
+   "spellFailure": "10%",
+   "others": [
+    "Silent",
+    "Comfortable"
+   ],
+   "weight": 10,
+   "cost": 1100
+  },
+  "shields": [
+   {
+    "kind": "Shield 1",
+    "name": "Buckler",
+    "acBonus": 1,
+    "maxDex": null,
+    "acp": -1,
+    "type": "Shield",
+    "ghostTouch": true,
+    "spellFailure": "5%",
+    "others": [],
+    "weight": 5,
+    "cost": 15
+   },
+   {
+    "kind": "Shield 2",
+    "name": null,
+    "acBonus": 0,
+    "maxDex": null,
+    "acp": 0,
+    "type": null,
+    "ghostTouch": false,
+    "spellFailure": null,
+    "others": [],
+    "weight": 0,
+    "cost": 0
+   }
+  ],
+  "weapons": [
+   {
+    "name": "Longsword, +1 (cold iron)",
+    "attackType": "Melee",
+    "sheetAttack": 6,
+    "dice": "1d8",
+    "damageAbility": "Str",
+    "abilityMult": 1.5,
+    "miscDamage": 1,
+    "sheetTotalDamage": "1d8+3",
+    "critRange": 19,
+    "critMult": "x2",
+    "bonusCritDamage": null,
+    "damageType": "S",
+    "groups": [
+     "Heavy Blades",
+     null,
+     null
+    ],
+    "miscAttack": 1,
+    "special": "Cold iron; sheds light",
+    "ammunition": null,
+    "size": "Medium",
+    "range": null,
+    "enhancement": 1,
+    "familiarity": "Martial",
+    "handedness": "One-Handed",
+    "weight": 4,
+    "price": 2315
+   },
+   {
+    "name": "Light Crossbow",
+    "attackType": "Ranged",
+    "sheetAttack": 5,
+    "dice": "1d8",
+    "damageAbility": null,
+    "abilityMult": 1,
+    "miscDamage": 0,
+    "sheetTotalDamage": "1d8",
+    "critRange": 19,
+    "critMult": "x2",
+    "bonusCritDamage": "1d6",
+    "damageType": "P",
+    "groups": [
+     "Crossbows",
+     "Thrown",
+     null
+    ],
+    "miscAttack": 0,
+    "special": "Loading: move action",
+    "ammunition": "Bolts x20",
+    "size": "Small",
+    "range": "80 ft.",
+    "enhancement": 0,
+    "familiarity": "Simple",
+    "handedness": "Two-Handed",
+    "weight": 4,
+    "price": 35
+   },
+   {
+    "name": null,
+    "attackType": "Melee",
+    "sheetAttack": null,
+    "dice": "1d4",
+    "damageAbility": null,
+    "abilityMult": 1,
+    "miscDamage": 0,
+    "sheetTotalDamage": null,
+    "critRange": null,
+    "critMult": null,
+    "bonusCritDamage": null,
+    "damageType": null,
+    "groups": [
+     null,
+     null,
+     null
+    ],
+    "miscAttack": 0,
+    "special": null,
+    "ammunition": null,
+    "size": null,
+    "range": null,
+    "enhancement": 0,
+    "familiarity": null,
+    "handedness": null,
+    "weight": 0,
+    "price": 0
+   }
+  ]
+ },
+ "background": {
+  "Personality": "Curious, patient & dry-witted.\nCollects \"lost\" maps.",
+  "Appearance": "Ink-stained fingers; a green scarf.",
+  "Ez'atian Certifications": "Cartography (journeyman)",
+  "Goals": "42\nTrue",
+  "Fears": null,
+  "Additional Information": "First line.\nSecond line."
+ },
+ "training": {
+  "combat": {
+   "classes": [
+    {
+     "name": "Conscript",
+     "type": "Martial",
+     "talentsPerLevel": 1,
+     "mod1": "Str",
+     "mod2": "Dex",
+     "levels": [
+      {
+       "level": 1,
+       "sheetCount": 1,
+       "sheetGranted": true,
+       "sheetProgression": 1,
+       "talent": "Steady Guard",
+       "sphere": "Shield"
+      },
+      {
+       "level": 2,
+       "sheetCount": 2,
+       "sheetGranted": false,
+       "sheetProgression": 2,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 3,
+       "sheetCount": 3,
+       "sheetGranted": true,
+       "sheetProgression": 3,
+       "talent": "Lunge",
+       "sphere": "Fencing"
+      },
+      {
+       "level": 4,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 5,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 6,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 7,
+       "sheetCount": 5,
+       "sheetGranted": true,
+       "sheetProgression": 7,
+       "talent": "Shield Wall",
+       "sphere": "Shield"
+      },
+      {
+       "level": 8,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 9,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 10,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 11,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 12,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 13,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 14,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 15,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 16,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 17,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 18,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 19,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 20,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      }
+     ]
+    },
+    {
+     "name": "Rogue",
+     "type": "Skill",
+     "talentsPerLevel": "1/2",
+     "mod1": "Dex",
+     "mod2": null,
+     "levels": [
+      {
+       "level": 1,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 1,
+       "talent": "Tumbler",
+       "sphere": "Athletics"
+      },
+      {
+       "level": 2,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 3,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 4,
+       "sheetCount": 1,
+       "sheetGranted": true,
+       "sheetProgression": 2,
+       "talent": "Sure Footing",
+       "sphere": "Athletics"
+      },
+      {
+       "level": 5,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 6,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 7,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 8,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 9,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 10,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 11,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 12,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 13,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 14,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 15,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 16,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 17,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 18,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 19,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 20,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      }
+     ]
+    },
+    {
+     "name": "Conscript (epic)",
+     "type": "Martial",
+     "talentsPerLevel": 1,
+     "mod1": "Str",
+     "mod2": null,
+     "levels": [],
+     "extended": true
+    }
+   ],
+   "tradition": {
+    "name": "Iron Vanguard",
+    "entries": [
+     {
+      "talent": "Shield Expert",
+      "sphere": "Shield"
+     },
+     {
+      "talent": null,
+      "sphere": "Guardian"
+     },
+     {
+      "talent": "Lancer Stance",
+      "sphere": null
+     }
+    ]
+   },
+   "bonusTalents": [
+    {
+     "talent": "Extra Grit",
+     "sphere": "Warleader",
+     "source": "Feat"
+    },
+    {
+     "talent": "Brace",
+     "sphere": "Shield",
+     "source": null
+    }
+   ],
+   "sphereBonuses": [
+    {
+     "sphere": "Shield",
+     "rankBonus": 1,
+     "dcBonus": 0,
+     "sheetValue": "x"
+    },
+    {
+     "sphere": "Warleader",
+     "rankBonus": 2,
+     "dcBonus": 1,
+     "sheetValue": 5
+    }
+   ],
+   "skillRanks": [
+    {
+     "skill": "Athletics",
+     "enabled": true,
+     "multiplier": 2,
+     "sheetCurrent": 4,
+     "sheetMax": 7
+    },
+    {
+     "skill": "Acrobatics",
+     "enabled": false,
+     "multiplier": 1,
+     "sheetCurrent": 0,
+     "sheetMax": 7
+    },
+    {
+     "skill": "Intimidate",
+     "enabled": true,
+     "multiplier": 1,
+     "sheetCurrent": 3,
+     "sheetMax": 7
+    },
+    {
+     "skill": "Ride",
+     "enabled": true,
+     "multiplier": 1,
+     "sheetCurrent": 0,
+     "sheetMax": 7
+    },
+    {
+     "skill": "Swim",
+     "enabled": false,
+     "multiplier": 1,
+     "sheetCurrent": 0,
+     "sheetMax": 0
+    }
+   ],
+   "unarmed": {
+    "sheetDice": "1d6",
+    "talentedKnuckle": 1,
+    "brawlersVest": 2,
+    "stepIncreases": 1,
+    "sizeIncreases": 0,
+    "usesBoxing": true,
+    "usesBrute": false,
+    "usesOpenHand": true,
+    "usesWrestling": false,
+    "otherSpheres": [
+     "Boxing",
+     "Wrestling",
+     "Fencing"
+    ],
+    "veilEssence": 3
+   },
+   "sheetBaseDC": 11
+  },
+  "magic": {
+   "classes": [
+    {
+     "name": "Incanter",
+     "type": "High",
+     "talentsPerLevel": 1,
+     "mod1": "Int",
+     "mod2": null,
+     "levels": [
+      {
+       "level": 1,
+       "sheetCount": 1,
+       "sheetGranted": true,
+       "sheetProgression": 1,
+       "talent": "Glow",
+       "sphere": "Light"
+      },
+      {
+       "level": 2,
+       "sheetCount": 2,
+       "sheetGranted": true,
+       "sheetProgression": 2,
+       "talent": "Ward",
+       "sphere": "Protection"
+      },
+      {
+       "level": 3,
+       "sheetCount": 2,
+       "sheetGranted": false,
+       "sheetProgression": 3,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 4,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 5,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 6,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 7,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 8,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 9,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 10,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 11,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 12,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 13,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 14,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 15,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 16,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 17,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 18,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 19,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      },
+      {
+       "level": 20,
+       "sheetCount": 0,
+       "sheetGranted": false,
+       "sheetProgression": 0,
+       "talent": null,
+       "sphere": null
+      }
+     ]
+    }
+   ],
+   "sphereBonuses": [
+    {
+     "sphere": "Light",
+     "clBonus": 1,
+     "dcBonus": 0,
+     "sheetValue": "7"
+    },
+    {
+     "sphere": "Protection",
+     "clBonus": 0,
+     "dcBonus": 2,
+     "sheetValue": 9
+    },
+    {
+     "sphere": "Telekinesis",
+     "clBonus": 0,
+     "dcBonus": 0,
+     "sheetValue": true
+    }
+   ],
+   "tradition": {
+    "name": "Stargazer Lodge",
+    "drawbacks": [
+     "Verbal Casting",
+     "Somatic Casting",
+     "Focus Casting",
+     "Draining Casting"
+    ],
+    "boughtOff": [
+     "Extra Focus",
+     "bought off at 5th"
+    ]
+   },
+   "bonusTalents": [
+    {
+     "talent": "Glow",
+     "sphere": "Light"
+    },
+    {
+     "talent": "Ward",
+     "sphere": "Protection"
+    }
+   ],
+   "amt": true,
+   "mythicAmt": false,
+   "dcBonus": 1,
+   "clBonus": 0,
+   "msbBonus": 0,
+   "msdBonus": 0,
+   "bonusSP": 2,
+   "sheet": {
+    "boons": 2,
+    "spTier": 3,
+    "totalDC": 15,
+    "totalCL": 7,
+    "totalMSB": 7,
+    "totalMSD": 0,
+    "traditionSP": 3,
+    "totalSP": 12,
+    "classSP": [
+     4,
+     2,
+     0,
+     0,
+     1,
+     0
+    ]
+   }
+  }
+ },
+ "named": {
+  "CharName": "Marnie Tallow",
+  "StrMod": 1,
+  "AbilityScores": [
+   [
+    12,
+    1,
+    12,
+    1,
+    1
+   ],
+   [
+    14,
+    2,
+    16,
+    3,
+    3
+   ],
+   [
+    13,
+    1,
+    13,
+    1,
+    1
+   ],
+   [
+    18,
+    4,
+    18,
+    4,
+    4
+   ],
+   [
+    10,
+    0,
+    null,
+    0,
+    "—"
+   ],
+   [
+    8,
+    -1,
+    8,
+    -1,
+    -1
+   ]
+  ],
+  "WalletBlock": [
+   [
+    "Current Mana",
+    null,
+    1310
+   ],
+   [
+    "Oath of Offerings",
+    true,
+    null
+   ],
+   [
+    "Material Casting",
+    false,
+    null
+   ],
+   [
+    "Last Offering",
+    "2026-10-03T18:30:00",
+    null
+   ],
+   [
+    "Mana/Day",
+    12.5,
+    null
+   ],
+   [
+    "Sessions",
+    6,
+    null
+   ]
+  ],
+  "FirstPlannerLevel": 1,
+  "SheetThenLevel": 7
+ },
+ "extraTabs": {
+  "Akashic": {
+   "hidden": false,
+   "rows": [
+    {
+     "r": 35,
+     "cells": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "Veil Essence",
+      3
+     ]
+    }
+   ]
+  },
+  "Session Notes": {
+   "hidden": true,
+   "rows": [
+    {
+     "r": 1,
+     "cells": [
+      "Session",
+      "Date",
+      "Notes"
+     ]
+    },
+    {
+     "r": 2,
+     "cells": [
+      1,
+      "2026-09-12T00:00:00",
+      "Met the ferryman; paid 3 sp."
+     ]
+    },
+    {
+     "r": 3,
+     "cells": [
+      2,
+      null,
+      "Storm — stayed in. Café closed."
+     ]
+    },
+    {
+     "r": 5,
+     "cells": [
+      true,
+      null,
+      null,
+      -3.25
+     ]
+    }
+   ]
+  }
+ }
+}

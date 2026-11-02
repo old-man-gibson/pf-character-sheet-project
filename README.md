@@ -174,6 +174,7 @@ tests/                  node test suites
 docs/                   the long-form documentation, one file per area (index below)
 tests/fixtures.mjs      where the suites find characters to test against
 tests/fixtures/public/  the invented character a checkout without private/ falls back to
+tests/fixtures/workbook/ an invented workbook and the document convert.py made from it
 private/                git-ignored: real characters and their workbooks, if you have them
 .github/workflows/      CI: every suite, on each push and pull request
 ```
@@ -181,12 +182,13 @@ private/                git-ignored: real characters and their workbooks, if you
 Run the tests with:
 
 ```bash
-node tests/formula.test.mjs && node tests/formula-format.test.mjs && node tests/formula-guide.test.mjs && node tests/tracker-style.test.mjs && node tests/column-widths.test.mjs && node tests/model.test.mjs && node tests/diff.test.mjs && node tests/publish.test.mjs && node tests/convert.test.mjs && node tests/history.test.mjs && node tests/zip.test.mjs && node tests/extensions.test.mjs && node tests/forge-pack.test.mjs && node tests/forge.test.mjs && node tests/paste-import.test.mjs && node tests/roll20.test.mjs && node tests/palette.test.mjs && node tests/panels.test.mjs
+node tests/formula.test.mjs && node tests/formula-format.test.mjs && node tests/formula-guide.test.mjs && node tests/tracker-style.test.mjs && node tests/column-widths.test.mjs && node tests/model.test.mjs && node tests/model-blank.test.mjs && node tests/diff.test.mjs && node tests/publish.test.mjs && node tests/convert.test.mjs && node tests/history.test.mjs && node tests/zip.test.mjs && node tests/extensions.test.mjs && node tests/forge-pack.test.mjs && node tests/forge.test.mjs && node tests/paste-import.test.mjs && node tests/roll20.test.mjs && node tests/palette.test.mjs && node tests/panels.test.mjs
 ```
 
 Every suite passes in a fresh clone. The ones that sweep a roster fall back to the
-public fixture; `convert.test` needs the source workbooks and so still says what it
-skipped and exits 0, as do the checks written against a named character. See the next
+public fixture, and `convert.test` converts a committed workbook. The checks written
+against a named character say what they skipped and exit 0. A check that reads a pack
+only `private/extensions/` has prints one line saying so and is skipped. See the next
 section for where they look.
 
 For browser checks, start the local server and open
@@ -242,9 +244,18 @@ node tools/make-public-fixture.mjs --check   # fail if the committed copy is sta
 ```
 
 What still needs the real five is what names them: the bulk of `model.test.mjs`, whose
-expected values were read off five particular workbooks, and `convert.test.mjs`, which
-re-converts the `.xlsx` files themselves and so cannot run without them. Both say which
-characters they wanted and exit 0.
+expected values were read off five particular workbooks. It says which characters it
+wanted and exits 0. The model checks that build their own character are in
+`model-blank.test.mjs` and run everywhere.
+
+`convert.test.mjs` re-converts a committed workbook for an invented character, and the
+private workbooks too when they are present. The workbook is generated, and its
+expected document is what `tools/convert.py` writes for it:
+
+```bash
+python tools/make-public-workbook.py
+python tools/convert.py tests/fixtures/workbook/raw/marnie.xlsx --id marnie --name "Marnie Tallow (test workbook)" --out tests/fixtures/workbook/characters
+```
 
 To rebuild the private set after a workbook changes:
 

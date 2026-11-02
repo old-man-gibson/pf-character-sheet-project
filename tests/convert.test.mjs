@@ -7,12 +7,17 @@
  *  and compares the result, field for field, against the JSON the Python one
  *  wrote. A porting slip in either direction fails here.
  *
- *  Needs the private character fixtures (see tests/fixtures.mjs); without them
- *  it says so and exits 0.
+ *  Two sets of workbooks. One is committed and runs in every checkout, CI
+ *  included: an invented character under tests/fixtures/workbook/, written by
+ *  tools/make-public-workbook.py with something in every section an extractor
+ *  reads, and converted by convert.py. The others are the roster's own (see
+ *  tests/fixtures.mjs), checked the same way when the roster in use has them:
+ *  the private one has a workbook per character, the public one has none.
  *
  *  Run: node tests/convert.test.mjs */
-import { readFileSync } from 'node:fs';
-import { CHARACTERS_DIR, characterPath, workbookPath, fixtureIds, requireFixtures } from './fixtures.mjs';
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { CHARACTERS_DIR, characterPath, workbookPath, fixtureIds } from './fixtures.mjs';
 import { convertWorkbook, indexEntry, warningsFor, slug, blankDocument, weaponColumns } from '../app/js/convert.js';
 import { inspectDocument, SCHEMA_VERSION, Character } from '../app/js/model.js';
 import { STANDARD_SKILLS } from '../app/js/rules.js';
@@ -27,7 +32,6 @@ const check = (label, actual, expected) => {
   }
 };
 
-// Needs no fixture, so it runs before the check that stands the rest down.
 console.log('weapon columns are found by their labels, not their places');
 {
   // A weapon block as rows of cells: the "Weapon Name N" row, the first data
@@ -60,13 +64,25 @@ console.log('weapon columns are found by their labels, not their places');
 
   check('with no labels at all the template columns stand', pick(weaponColumns(block([], [], []), 'Equipment', 1)), [9, 10, 11, 12, 13, 9, 13, 2, 10]);
 }
-if (fail) {
-  console.log(`\n${pass} passed, ${fail} failed`);
-  process.exit(1);
-}
 
-requireFixtures(['saburo'], 'convert.test');
-const IDS = fixtureIds();
+// The committed workbook and what convert.py made of it. To rebuild them,
+// see tools/make-public-workbook.py.
+const WORKBOOK_DIR = join('tests', 'fixtures', 'workbook');
+const WORKBOOK_ID = 'marnie';
+
+/** Each workbook to convert, the document convert.py wrote, and its index. */
+const workbooks = [{
+  id: WORKBOOK_ID,
+  workbook: join(WORKBOOK_DIR, 'raw', `${WORKBOOK_ID}.xlsx`),
+  document: join(WORKBOOK_DIR, 'characters', `${WORKBOOK_ID}.json`),
+  index: join(WORKBOOK_DIR, 'characters', 'index.json'),
+}];
+for (const id of fixtureIds()) {
+  if (!existsSync(workbookPath(id))) continue;
+  workbooks.push({ id, workbook: workbookPath(id), document: characterPath(id), index: join(CHARACTERS_DIR, 'index.json') });
+}
+// The committed one, for the checks that need a single converted document.
+const [fixture] = workbooks;
 
 /**
  * Walk two documents together and report where they part company.
@@ -103,22 +119,21 @@ function differences(a, b, path = '', out = []) {
 }
 
 console.log('converter parity -- the browser must transcribe exactly as convert.py does');
-const converted = new Map();
-for (const id of IDS) {
-  const expected = JSON.parse(readFileSync(characterPath(id), 'utf8'));
-  const actual = await convertWorkbook(readFileSync(workbookPath(id)), {
-    id,
+if (workbooks.length === 1) console.log(`  (the roster in ${CHARACTERS_DIR} has no workbooks, so only the committed one)`);
+for (const w of workbooks) {
+  const expected = JSON.parse(readFileSync(w.document, 'utf8'));
+  w.converted = await convertWorkbook(readFileSync(w.workbook), {
+    id: w.id,
     title: expected.source.title,
     fileId: expected.source.fileId,
     // The one field that cannot match: it records when the conversion ran.
     convertedAt: expected.source.convertedAt,
   });
-  converted.set(id, actual);
 
-  const diff = differences(actual, expected);
+  const diff = differences(w.converted, expected);
   if (diff.length) {
     fail++;
-    console.log(`  FAIL ${id}: ${diff.length > 12 ? 'more than 12' : diff.length} differences`);
+    console.log(`  FAIL ${w.id}: ${diff.length > 12 ? 'more than 12' : diff.length} differences`);
     for (const d of diff) console.log(`         ${d}`);
   } else {
     pass++;
@@ -126,8 +141,7 @@ for (const id of IDS) {
 }
 
 console.log('\nthe converted document is one the app will accept');
-for (const id of IDS) {
-  const doc = converted.get(id);
+for (const { id, converted: doc } of workbooks) {
   const verdict = inspectDocument(doc);
   check(`${id} passes the import gate`, verdict.ok, true);
   check(`${id} declares the current schema`, doc.schemaVersion, SCHEMA_VERSION);
@@ -135,11 +149,9 @@ for (const id of IDS) {
 }
 
 console.log('\nthe index row matches the one already published');
-{
-  const published = JSON.parse(readFileSync(`${CHARACTERS_DIR}/index.json`, 'utf8')).characters;
-  for (const row of published) {
-    check(`${row.id} index row`, indexEntry(row.id, converted.get(row.id)), row);
-  }
+for (const w of workbooks) {
+  const published = JSON.parse(readFileSync(w.index, 'utf8')).characters;
+  check(`${w.id} index row`, indexEntry(w.id, w.converted), published.find((row) => row.id === w.id));
 }
 
 console.log('\nids are slugged the way the app slugs them');
@@ -156,7 +168,7 @@ console.log('\na workbook off the template converts thin rather than failing, an
   // What a player's non-template spreadsheet produces: the extractors return
   // empty structures, and the warnings are the only thing that says why the
   // sheet looks bare.
-  const thin = JSON.parse(JSON.stringify(converted.get(IDS[0])));
+  const thin = JSON.parse(JSON.stringify(fixture.converted));
   thin.identity.name = null;
   thin.identity.level = 0;
   thin.skills = [];
@@ -170,7 +182,7 @@ console.log('\na workbook off the template converts thin rather than failing, an
 
   // A Planner with rows but no levels is the subtle case: everything else is
   // present, so only the Progression tab would come up empty.
-  const noLevels = JSON.parse(JSON.stringify(converted.get(IDS[0])));
+  const noLevels = JSON.parse(JSON.stringify(fixture.converted));
   noLevels.planner = [{ 'Some Column': 'x' }];
   check('an empty Planner is called out on its own',
     warningsFor(noLevels), ['Planner is empty, so the Progression tab will start blank']);
@@ -193,7 +205,7 @@ console.log('a blank character is the thinnest converted document there is');
   const doc = blankDocument({ name: 'Kaito', level: 3, player: 'Mel', createdAt: '2026-08-17T00:00:00' });
   // Same top-level shape as a converted workbook, so nothing downstream has
   // to know it started from nothing.
-  const converted = JSON.parse(readFileSync(characterPath('saburo'), 'utf8'));
+  const converted = JSON.parse(readFileSync(fixture.document, 'utf8'));
   check('same keys as a converted document', Object.keys(doc).sort(), Object.keys(converted).sort());
   check('schema, id, name, level, player', [doc.schemaVersion, doc.id, doc.identity.name, doc.identity.level, doc.identity.player],
     [SCHEMA_VERSION, 'kaito', 'Kaito', 3, 'Mel']);

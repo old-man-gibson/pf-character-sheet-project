@@ -1,0 +1,16 @@
+{
+ "characters": [
+  {
+   "id": "marnie",
+   "name": "Marnie Tallow",
+   "race": "Half-Elf",
+   "level": 7,
+   "classes": [
+    "Wizard",
+    "Rogue"
+   ],
+   "image": "https://example.com/portraits/marnie.png",
+   "file": "marnie.json"
+  }
+ ]
+}
