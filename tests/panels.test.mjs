@@ -50,6 +50,7 @@ import { foldValue } from '../app/js/ui/folds.js';
 import { hasTokens } from '../app/js/inline.js';
 import { hasLink } from '../app/js/ui/links.js';
 import { portraitCss, portraitFrame, portraitHtml } from '../app/js/ui/html.js';
+import { setPath } from '../app/js/model/util.js';
 
 let pass = 0;
 let fail = 0;
@@ -1439,6 +1440,31 @@ console.log('\na character may have more than one template');
   const html = combat.renderTemplatePanel(c, CTX);
   check('two templates, each its own panel, and Add template once',
     [(html.match(/data-tmpl=/g) || []).length, (html.match(/Add template/g) || []).length], [2, 1]);
+}
+
+console.log('\na name with a __proto__ part defines nothing and writes nothing');
+{
+  // {__proto__.attrs = …} in a published or imported sheet used to write onto
+  // Object.prototype, and option defaults such as `{ attrs } = {}` then
+  // printed the value into the markup unescaped.
+  const keys = () => Object.getOwnPropertyNames(Object.prototype).sort();
+  const before = keys();
+  const doc = JSON.parse(JSON.stringify(blankDocument('proto-test')));
+  doc.notes = [{ title: 'Notes', body: [
+    "{__proto__.attrs = '><img src=x onerror=alert(1)>'}",
+    '{a.__proto__.width = 5}',
+    '{constructor.prototype.cls = 1}',
+    '{Prototype.kind = 2}',
+    '{__proto__.style += 3}',
+  ].join(' ') }];
+  const c = new Character(doc);
+  check('loading it adds no keys to Object.prototype', keys(), before);
+  sweep('a sheet with __proto__ names', c);
+  check('drawing it adds no keys to Object.prototype', keys(), before);
+  check('the Overview has no raw tag', overview.renderOverviewPanel(c, CTX).includes('<img src=x'), false);
+  setPath({}, '__proto__.polluted', 1);
+  setPath({ a: {} }, 'a.constructor.prototype.polluted', 1);
+  check('a binding path through __proto__ or constructor writes nothing', keys(), before);
 }
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

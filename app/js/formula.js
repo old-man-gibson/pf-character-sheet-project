@@ -472,6 +472,13 @@ const BLOCKED_KEYS = new Set([
 ]);
 
 /**
+ * Whether a path may never follow or create this key. Also used where a name
+ * typed on the sheet becomes an object key: `{__proto__.x = 1}` would
+ * otherwise write onto every object in the page.
+ */
+export const isBlockedKey = (key) => BLOCKED_KEYS.has(String(key).toLowerCase());
+
+/**
  * Where a scope keeps what its names are *of* -- the skill `kn_arcana` is
  * "Kn. (arcana)", the companion `eidolon2` has a name of its own -- for a
  * reader that files the names under headings, never for a formula.
@@ -497,7 +504,7 @@ export const carriesTotal = (v) => v !== null && typeof v === 'object' && !Array
 /** One key of a path. `fold` is what makes the second pass ignore case. */
 function step(acc, key, fold) {
   if (acc == null || typeof acc !== 'object') return undefined;
-  if (BLOCKED_KEYS.has(key.toLowerCase())) return undefined;
+  if (isBlockedKey(key)) return undefined;
   let k = key;
   if (!Object.prototype.hasOwnProperty.call(acc, k)) {
     if (!fold) return undefined;

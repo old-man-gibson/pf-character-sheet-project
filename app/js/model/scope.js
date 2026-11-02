@@ -24,7 +24,7 @@ import {
   resolveContributions, resolveDefinitions,
 } from '../inline.js';
 import {
-  NameIndex, SCOPE_INFO, collectReferences, parse, resolvePath, tagKey,
+  NameIndex, SCOPE_INFO, collectReferences, isBlockedKey, parse, resolvePath, tagKey,
 } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
@@ -539,6 +539,7 @@ export function characterScope(model) {
   // scope. They never overwrite a built-in value.
   for (const [name, value] of Object.entries(model.inlineNames || {})) {
     const parts = name.split('.');
+    if (parts.some(isBlockedKey)) continue;
     let node = s;
     let clash = false;
     for (let i = 0; i < parts.length - 1; i++) {

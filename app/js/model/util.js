@@ -5,7 +5,7 @@
  * of them. Nothing in this file knows what a character is.
  */
 
-import { carriesTotal, evaluateFormula } from '../formula.js';
+import { carriesTotal, evaluateFormula, isBlockedKey } from '../formula.js';
 
 /**
  * A name as a key: lower case, every run of anything else one underscore.
@@ -233,11 +233,15 @@ export const amountOrText = (v) => (typeof v === 'string' && v.trim() !== '' && 
   ? v : Number(v) || 0);
 
 export function getPath(obj, path) {
-  return String(path).split('.').reduce((a, k) => (a == null ? undefined : a[k]), obj);
+  const keys = String(path).split('.');
+  if (keys.some(isBlockedKey)) return undefined;
+  return keys.reduce((a, k) => (a == null ? undefined : a[k]), obj);
 }
 
+/** A path with a `__proto__` part is never written: it would reach every object in the page. */
 export function setPath(obj, path, value) {
   const keys = String(path).split('.');
+  if (keys.some(isBlockedKey)) return;
   const last = keys.pop();
   const target = keys.reduce((a, k) => {
     if (a[k] == null || typeof a[k] !== 'object') a[k] = {};

@@ -37,13 +37,15 @@
  */
 
 import {
-  parse, evaluateFormula, collectReferences, resolvePath, FormulaError,
+  parse, evaluateFormula, collectReferences, resolvePath, FormulaError, isBlockedKey,
 } from './formula.js';
 import { formatNumber } from './formula-format.js';
 import { STACKING_TYPES, baseType, stacksWithItself } from './rules.js';
 
 const TOKEN_RE = /\{([^{}]*)\}/g;
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_.]*$/;
+// A name is a dotted path, so no part of it may be a key a path refuses.
+const isName = (s) => NAME_RE.test(s) && !s.split('.').some(isBlockedKey);
 // "dest += expr" / "dest -= expr". The left side may not contain "=" at all,
 // so ">=", "<=", "!=" and "==" can never be mistaken for the operator, and
 // "*=" is not offered: a bonus adds to a stat, it does not scale one.
@@ -87,7 +89,7 @@ export function tokenize(text) {
  */
 function parseTargets(left, { keyword = false } = {}) {
   const parts = String(left).split(',').map((p) => p.trim());
-  if (!parts.length || parts.some((p) => !NAME_RE.test(p))) return null;
+  if (!parts.length || parts.some((p) => !isName(p))) return null;
   // `{target.x = 1}` is a bonus; `{x = 1}` is a definition, and always was.
   if (keyword && !TARGET_RE.test(parts[0])) return null;
   return parts.map((p) => p.replace(TARGET_RE, ''));
@@ -180,10 +182,10 @@ function parseToken(inner, raw) {
     // {target.skill.bluff = 4} -- the same bonus, spelled the long way.
     const targets = parseTargets(name, { keyword: true });
     if (targets) return { kind: 'push', targets, sign: 1, raw, ...parseType(expr) };
-    if (NAME_RE.test(name)) return { kind: 'define', name, expr, raw };
+    if (isName(name)) return { kind: 'define', name, expr, raw };
     return { kind: 'value', expr: s, raw };   // "a+b = c" is not a definition
   }
-  if (NAME_RE.test(s)) return { kind: 'ref', name: s, raw };
+  if (isName(s)) return { kind: 'ref', name: s, raw };
   return { kind: 'value', expr: s, raw };
 }
 
