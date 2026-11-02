@@ -479,6 +479,41 @@ the viewport, re-evaluated live as you drag a column wider or collapse a group
 (collapsed groups shrink to a header chip and pack too). Narrow groups render
 first to keep the packing tight.
 
+### Aligned classes
+
+Some prestige classes add their levels to a class the character had before them
+("aligned class"). The aligned class gains those levels for its class features;
+hit dice, BAB, saves and skill ranks stay with the prestige class.
+
+The **Aligned classes** panel on Progression sets this up per prestige class
+(it shows once the character has two classes):
+
+- **Aligned classes**: one or more of the character's other classes.
+- **Levels**: the prestige class levels that add a level to an aligned class, in
+  the rule group syntax above. `2, +1` is 2nd level and every level after;
+  `2, 3, 5` lists them. Blank adds nothing.
+- **Lowest class levels**: prestige class levels that also add a level to
+  whichever aligned class is lowest at that point. Blank for most prestige classes.
+
+With one aligned class every gain goes to it. With several, each prestige level
+has a picker; a reached level with nothing picked is counted as *"N to pick"*. A
+tie for lowest goes to the first tied class in the list until another is picked.
+
+What changes:
+
+- `classLevelCount` (caster and manifester level, `class.<name>.level`, companion
+  levels) and the Spheres talent ladders count the aligned levels.
+- The aligned class's feature group gets a row at each character level where it
+  gains one, with its level number in the accent colour. Cells written there move
+  with the level when the rules or picks change, as they do for Planner edits.
+- The Planner rows, and so hit dice, BAB, saves and skill ranks, do not change.
+
+A row can give one class two levels (a Trinity-style chosen gain and lowest gain
+landing on the same class, or a gestalt track that also runs the aligned class).
+The second level's cells are stored under `level + 0.1` (`12.1`). Stored on the
+prestige class's row as `aligned: { classes, levels, lowest?, picks?, ties? }`,
+written only once the panel adds it. Covered by `tests/aligned.test.mjs`.
+
 ---
 
 ## Templates

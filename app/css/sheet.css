@@ -1520,6 +1520,17 @@ select.jumpto[hidden] { display: none; }
 table.vmc col.lvl { width: 4.5rem; }
 table.vmc col.vname { width: 16rem; }
 table.vmc td { vertical-align: top; }
+/* Aligned classes on Progression: one block per prestige class, and the rows
+   of a ladder that came from one, their level in the accent colour. */
+.alignedpanel .alblock + .alblock { margin-top: 12px; }
+.alignedpanel h4 { margin: 0 0 6px; }
+.alignedpanel table.alsteps td.due { box-shadow: inset 3px 0 0 var(--cs-accent); }
+.alignedpanel .fillcol { margin-top: 8px; }
+.alignedpanel .alclasses { grid-column: 1 / -1; }
+.alignedpanel .alclasses .pair { flex-wrap: wrap; }
+.alignedpanel table.alsteps { width: auto; }
+.alignedpanel input.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
+table.featgrid tr.aligned td.num { color: var(--cs-accent); font-style: italic; }
 /* A character just made opens on its rules first: a note with the way on,
    and the one question it must answer -- the lowest level -- edged in the
    edit colour so it is found first. */

@@ -21,7 +21,7 @@ import {
 } from '../rows.js';
 import { linkField } from '../fields.js';
 import { same } from '../format.js';
-import { columnLetter, optionCatalogues, systemTabWidth } from '../../model.js';
+import { alignedRule, columnLetter, optionCatalogues, systemTabWidth } from '../../model.js';
 import { parseLevelRule, levelRuleLevels, summariseLevels } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
 import { rgba } from '../../tracker-style.js';
@@ -60,6 +60,84 @@ function vmcPanel(model) {
   }).join('')}</tbody>
       </table></div>
       <p class="hint">These replace the feats at 3rd, 7th, 11th, 15th and 19th.</p>
+    </section>`);
+}
+
+/**
+ * Aligned classes: a prestige class that adds some of its levels to a class
+ * the character had before it. One block per prestige class set up, with the
+ * prestige levels it gains on and the class each goes to.
+ */
+function alignedPanel(model) {
+  const c = model.data;
+  const classes = (c.classes || []).map((x, i) => ({ name: String(x?.name ?? '').trim(), i, row: x }))
+    .filter((x) => x.name);
+  if (classes.length < 2) return '';
+  const set = classes.filter((x) => x.row.aligned);
+  const steps = model.alignedSteps();
+  const level = Number(c.identity?.level) || 0;
+  const owed = steps.filter((s) => !s.class && s.level <= level).length;
+  // `blank` false for a choice that always has an answer (a tie for lowest).
+  const options = (names, value, blank = true) => {
+    const pairs = names.map((n) => [n, n]);
+    if (value && !names.includes(value)) pairs.push([value, `${value} *`]);
+    return `${blank ? '<option value="">—</option>' : ''}${pairs.map(([v, l]) => `<option value="${esc(v)}"${v === value ? ' selected' : ''}>${esc(l)}</option>`).join('')}`;
+  };
+  const block = ({ name, i, row }) => {
+    const a = row.aligned;
+    const others = classes.filter((x) => x.i !== i).map((x) => x.name);
+    const chosen = Array.isArray(a.classes) ? a.classes : [];
+    // One picker per aligned class, and a blank one to add another.
+    const pickers = [...chosen.filter((n) => String(n ?? '').trim()), ''];
+    const mine = steps.filter((s) => s.index === i);
+    const gain = (s) => {
+      const ref = esc(JSON.stringify({ i, kind: s.kind, p: s.prcLevel }));
+      if (s.kind === 'lowest') {
+        return s.tied.length
+          ? `<span class="pair">Lowest: <select data-alignedpick="${ref}" aria-label="Tied lowest class at ${esc(name)} level ${s.prcLevel}">${options(s.tied, s.class, false)}</select></span>`
+          : `Lowest: ${esc(s.class)}`;
+      }
+      return s.options.length > 1
+        ? `<select data-alignedpick="${ref}" aria-label="Aligned class at ${esc(name)} level ${s.prcLevel}">${options(s.options, s.class)}</select>`
+        : esc(s.class);
+    };
+    return `<div class="alblock">
+      <h4><span class="pair">${esc(name)}
+        ${removeAction('remove-aligned', { index: i }, { what: `${name}'s aligned class` })}</span></h4>
+      <div class="fieldgrid">
+        <label class="fld alclasses"><span>Aligned class${pickers.length > 2 ? 'es' : ''}</span>
+          <span class="pair">${pickers.map((n, k) => `<select data-aligned="${esc(JSON.stringify({ i, k: 'class', n: k }))}"
+            aria-label="Aligned class ${k + 1}">${options(others, String(n ?? '').trim())}</select>`).join('')}</span></label>
+        ${['levels', 'lowest'].map((k) => {
+    const value = String(a[k] ?? '').trim();
+    const bad = value && !alignedRule(value);
+    return `<label class="fld"><span>${k === 'levels' ? 'Levels' : 'Lowest class levels'}</span>
+          <input type="text" data-aligned="${esc(JSON.stringify({ i, k }))}" value="${esc(value)}"${bad ? ' class="bad" title="Not a level rule, so it adds nothing."' : ''}
+            placeholder="${k === 'levels' ? '2, +1' : 'None'}" spellcheck="false"></label>`;
+  }).join('')}
+      </div>
+      ${mine.length ? `<div class="tablewrap"><table class="gridtab alsteps">
+        <thead><tr><th class="num">${esc(name)} level</th><th class="num">Level</th><th>Gain</th><th class="num">Class level</th></tr></thead>
+        <tbody>${mine.map((s) => `<tr class="${s.level > level ? 'future' : ''}">
+          <td class="num">${s.prcLevel}</td>
+          <td class="num">${s.level}</td>
+          <td class="${!s.class && s.level <= level ? 'due' : ''}">${gain(s)}</td>
+          <td class="num">${s.class ? `${esc(s.class)} ${s.reaches}` : ''}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>` : `<p class="empty">No aligned levels yet.</p>`}
+    </div>`;
+  };
+  const unset = classes.filter((x) => !x.row.aligned);
+  return collapsible(model, 'aligned', `<section class="panel span2 alignedpanel">
+      <h3>Aligned classes${owed ? ` <span class="badge due">${owed} to pick</span>` : ''}</h3>
+      ${set.map(block).join('')}
+      ${unset.length ? `<select class="fillcol" data-alignedadd aria-label="Add an aligned class to a prestige class">
+        <option value="" selected disabled hidden>Add to a prestige class…</option>
+        ${unset.map((x) => `<option value="${x.i}">${esc(x.name)}</option>`).join('')}
+      </select>` : ''}
+      <p class="hint">Aligned levels count as levels of the aligned class for everything except hit dice, BAB, saves and skill ranks.
+        Levels lists the prestige class levels that add an aligned level, as a rule group: <code>2, +1</code> is 2nd and every level after.
+        Lowest class levels also add a level to the lowest aligned class.</p>
     </section>`);
 }
 
@@ -146,6 +224,7 @@ export function renderProgressionPanel(model, ctx) {
           marked.
         </p>
       </section>`)}
+      ${alignedPanel(model)}
       ${vmcPanel(model)}
     </div>
     <div class="featgroups">
@@ -214,9 +293,9 @@ function classFeatureGroups(model, ctx) {
           <thead><tr><th class="num">Lvl</th>
             ${g.columns.map((col, i) => featureColumnHead(model, name, col, i, tableKey)).join('')}
           </tr></thead>
-          <tbody>${rows.map((row) => `<tr class="${row.level > charLevel ? 'future' : ''}">
+          <tbody>${rows.map((row) => `<tr class="${row.future ? 'future' : ''}${row.aligned ? ' aligned' : ''}">
             <td class="num"${name === 'General' ? ''
-    : ` title="Character level ${row.level} — ${esc(name)} level ${row.classLevel}"`}>${row.level}</td>
+    : ` title="Character level ${row.level}: ${esc(name)} level ${row.classLevel}${row.aligned ? `, from ${esc(row.aligned)}` : ''}"`}>${row.level}</td>
             ${g.columns.map((col) => featureCell(ctx, model, name, col, row,
     groupNamesShown(model, name, col, (g.rules?.[col] || []).length))).join('')}
           </tr>`).join('')}</tbody>
@@ -518,7 +597,7 @@ function featureField(ctx, model, className, col, row, field, multi) {
     // JSON rather than a delimiter: class, column and group names are free
     // text and any of them may contain the separator.
     const ref = esc(JSON.stringify({
-      c: className, l: row.level, k: col, g: field.key,
+      c: className, l: row.key, k: col, g: field.key,
     }));
 
     // Where a menu is attached the cell offers it, and says what the entry

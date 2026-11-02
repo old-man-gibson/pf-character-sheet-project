@@ -6090,6 +6090,35 @@ export class CharacterSheetElement extends HTMLElement {
     // "Fill column…": one class down every level of a track. The picker is an
     // action rather than a value, so it goes back to its prompt afterwards --
     // which the re-render does for it.
+    // Aligned classes (Progression tab): the block's classes and level rules,
+    // the class a prestige level goes to, and starting a block on a class.
+    root.querySelectorAll('[data-aligned]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const { i, k, n } = JSON.parse(input.dataset.aligned);
+        if (k === 'class') {
+          const names = [...(this.#model.data.classes?.[i]?.aligned?.classes || [])];
+          names[n] = input.value;
+          const kept = names.map((x) => String(x ?? '').trim()).filter(Boolean);
+          this.#model.setAligned(i, { classes: kept.length ? kept : [''] });
+        } else this.#model.setAligned(i, { [k]: input.value });
+        this.#rerender(input);
+      });
+    });
+    root.querySelectorAll('[data-alignedpick]').forEach((select) => {
+      select.addEventListener('change', () => {
+        const { i, kind, p } = JSON.parse(select.dataset.alignedpick);
+        this.#model.setAlignedPick(i, kind, p, select.value);
+        this.#rerender(select);
+      });
+    });
+    root.querySelectorAll('[data-alignedadd]').forEach((select) => {
+      select.addEventListener('change', () => {
+        if (select.value === '') return;
+        this.#model.addAligned(Number(select.value));
+        this.#render();
+      });
+    });
+
     root.querySelectorAll('[data-filltrack]').forEach((select) => {
       select.addEventListener('change', () => {
         if (!select.value) return;
@@ -8376,6 +8405,10 @@ export class CharacterSheetElement extends HTMLElement {
       // thing standing between you and losing. The button asks (data-arm).
       case 'remove-cf-group':
         this.#model.removeClassFeatureGroup(button?.dataset.class);
+        this.#render();
+        break;
+      case 'remove-aligned':
+        this.#model.removeAligned(Number(button?.dataset.index));
         this.#render();
         break;
       case 'add-rule-group':
