@@ -57,7 +57,8 @@ import {
   spellCatalogue, spellDetails, powerCatalogue, powerDetails, veilsAvailable, veilDetails, veilOwn,
   slug, manifesterForwardKey, vancianForwardKey, poolTracker,
 } from '../../model.js';
-import { ABILITY_LABELS_LIST, nameDatalist, noteCell, packText, portraitHtml } from '../html.js';
+import { ABILITY_LABELS_LIST, imageSrc, nameDatalist, noteCell, packText, portraitHtml } from '../html.js';
+import { webUrl } from '../links.js';
 import {
   CARD_CASTING_TIMES, CARD_DAMAGE_TYPES, CARD_DURATIONS, CARD_RANGES, CARD_SAVES, CARD_STAT_FIELDS, CARD_TARGETS,
   TERRAIN_CHOICES, stepCastingTime,
@@ -1265,7 +1266,7 @@ export function altTrainingPanel(model) {
   /** A grant's cite tag, linked where the pack, or the document's own copy, supplied a URL. */
 function citeTag(cite, k = {}) {
     if (!cite) return '';
-    const url = altTrainingLink(cite) || k.links?.[cite] || null;
+    const url = webUrl(altTrainingLink(cite) || k.links?.[cite]);
     return url
       ? ` <a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${esc(cite)}">[${esc(cite)}]</a>`
       : ` <span class="hint">[${esc(cite)}]</span>`;
@@ -2705,7 +2706,7 @@ function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = 
         ${expandBtn(id, open)}
       </div>
       ${String(card.subtitle || '').trim() ? `<div class="bar sub subtitle"><span>${esc(card.subtitle)}</span></div>` : ''}
-      ${card.art ? `<div class="art"><img src="${esc(card.art)}" alt="" loading="lazy"></div>` : ''}
+      ${imageSrc(card.art) ? `<div class="art"><img src="${esc(imageSrc(card.art))}" alt="" loading="lazy"></div>` : ''}
       <div class="bar type"><span>${esc(card.sphere || (isMana ? 'Mana Point' : ''))}${card.tags ? ` — ${esc(card.tags)}` : ''}</span></div>
       ${statsLine(model, card)}
       ${String(card.effect || '').trim() ? `<div class="text">${markKeywords(hasTokens(card.effect) ? renderedProse(model, card.effect) : esc(card.effect))}</div>` : ''}
@@ -3525,7 +3526,7 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
         ${itemSelect(list, i, 'suit', card.suit, ABILITY_LABELS_LIST, 'suit')}
         <input type="text" value="${esc(card.alignment ?? '')}" data-item="${list}|${i}|alignment" data-kind="text" placeholder="align." aria-label="Alignment">
       </div>` : ''}
-      <div class="art">${card.art ? `<img src="${esc(card.art)}" alt="" loading="lazy">` : ''}</div>
+      <div class="art">${imageSrc(card.art) ? `<img src="${esc(imageSrc(card.art))}" alt="" loading="lazy">` : ''}</div>
       <div class="bar type">
         <input type="text" value="${esc(card.sphere ?? '')}" data-item="${list}|${i}|sphere" data-kind="text" placeholder="${isMana ? 'Mana Point' : 'Sphere'}" aria-label="Sphere">
         <span class="dash">—</span>

@@ -3,7 +3,8 @@
  *  field. Run: node tests/links.test.mjs */
 import { blankDocument } from '../app/js/convert.js';
 import { Character } from '../app/js/model.js';
-import { fieldUrl, findLinks, findUrls, hasLink, linkedText } from '../app/js/ui/links.js';
+import { fieldUrl, findLinks, findUrls, hasLink, linkHtml, linkedText, webUrl } from '../app/js/ui/links.js';
+import { imageSrc, portraitHtml } from '../app/js/ui/html.js';
 import { prose, renderedProse } from '../app/js/ui/prose.js';
 import { linkField, text } from '../app/js/ui/fields.js';
 import { itemText } from '../app/js/ui/rows.js';
@@ -182,6 +183,19 @@ console.log('a field that holds one address');
     ['https://a.example/t']);
   check('an address with a quote in it stays in its attribute',
     linkField(text('templates.0.link', 'https://a.example/"><svg>'), 'https://a.example/"><svg>').includes('<svg'), false);
+}
+
+console.log('\nonly http and https addresses become links; images take a narrow set of schemes');
+{
+  check('webUrl keeps an https address', webUrl(' https://a.example/x '), 'https://a.example/x');
+  check('webUrl refuses javascript:, data: and a bare path',
+    ['javascript:alert(1)', 'data:text/html,x', '/app/x', 'http://'].map(webUrl), ['', '', '', '']);
+  check('linkHtml draws the label alone for an address that is not http(s)', linkHtml('javascript:alert(1)', 'cite'), 'cite');
+  check('imageSrc keeps http(s), data and blob images, and a path on this site',
+    ['https://a.example/p.png', 'data:image/png;base64,AA', 'blob:https://a.example/1', '../img/p.png'].map(imageSrc),
+    ['https://a.example/p.png', 'data:image/png;base64,AA', 'blob:https://a.example/1', '../img/p.png']);
+  check('imageSrc refuses any other scheme', ['javascript:alert(1)', 'data:text/html,x', 'file:///c:/x.png'].map(imageSrc), ['', '', '']);
+  check('a portrait with a refused address is an empty box', portraitHtml('javascript:alert(1)'), '<div class="portrait"></div>');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

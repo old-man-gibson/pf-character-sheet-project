@@ -70,8 +70,16 @@ export function portraitCss(frame) {
   return `object-position: ${x}% ${y}%; transform-origin: ${x}% ${y}%;${zoom !== 100 ? ` transform: scale(${zoom / 100});` : ''}`;
 }
 
+/** An image address the page may load: http(s), a data or blob image, or a path on this site; '' for anything else. */
+export function imageSrc(value) {
+  const s = String(value ?? '').trim();
+  if (/^(https?:|blob:|data:image\/)/i.test(s)) return s;
+  return /^[a-z][a-z0-9+.-]*:/i.test(s) ? '' : s;
+}
+
 /** A portrait in its square box, framed by `frame` (see portraitFrame); an empty box without a picture. */
-export function portraitHtml(src, frame = null) {
+export function portraitHtml(value, frame = null) {
+  const src = imageSrc(value);
   if (!src) return '<div class="portrait"></div>';
   const css = portraitCss(frame);
   return `<div class="portrait"><img src="${esc(src)}" alt="" loading="lazy"${css ? ` style="${esc(css)}"` : ''}></div>`;

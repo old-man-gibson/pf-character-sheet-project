@@ -125,14 +125,23 @@ export function findLinks(text) {
 /** Does this text hold a web address, on its own or behind words? */
 export const hasLink = (text) => findLinks(text).length > 0;
 
+/** The address if it is an absolute http or https one, else ''. Every href built from data goes through it. */
+export function webUrl(value) {
+  const s = String(value ?? '').trim();
+  return /^https?:\/\/\S/i.test(s) ? s : '';
+}
+
 /**
  * One link, opening in a new tab and telling the page it goes to nothing
  * about this one. `label` is markup -- the escaped address unless the caller
  * draws something else -- and `name` what a screen reader calls a link whose
- * label is not words. `title` is the tooltip.
+ * label is not words. `title` is the tooltip. An address that is not http or
+ * https draws the label alone.
  */
-export const linkHtml = (url, label = esc(url), name = '', title = 'Open in a new tab') => `<a class="weblink" href="${esc(url)}"`
-  + ` target="_blank" rel="noopener noreferrer" title="${esc(title)}"${name ? ` aria-label="${esc(name)}"` : ''}>${label}</a>`;
+export const linkHtml = (url, label = esc(url), name = '', title = 'Open in a new tab') => (webUrl(url)
+  ? `<a class="weblink" href="${esc(url)}"`
+    + ` target="_blank" rel="noopener noreferrer" title="${esc(title)}"${name ? ` aria-label="${esc(name)}"` : ''}>${label}</a>`
+  : label);
 
 /**
  * Text as markup: escaped, with each link drawn. An address typed on its own
