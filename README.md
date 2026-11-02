@@ -44,8 +44,10 @@ node tools/serve.mjs
 
 Then open <http://localhost:8777/app/index.html>. Pass a port to use another one
 (`node tools/serve.mjs 8778`). `tools/serve.mjs` is a small dependency-free static
-server — Node only, nothing to install. If you have Python instead, `python -m
-http.server 8777` from the repository root does the same job for the sheet.
+server — Node only, nothing to install. It answers this computer only; `--host 0.0.0.0`
+serves the folder to the network, `private/` included. If you have Python instead,
+`python -m http.server 8777 --bind 127.0.0.1` from the repository root does the same
+job for the sheet.
 
 The sheet's **GM tools** button opens the tools in `gm-module/` (the session
 planner and its player view). On this computer the Node server also mounts their

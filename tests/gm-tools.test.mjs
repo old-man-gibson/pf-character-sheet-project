@@ -168,8 +168,10 @@ try {
     const tools = await request('GET', '/gm-module/tools');
     check('the sheet server lists the GM tools', [tools.status, tools.json.tools.map(t => t.id)], [200, ['planner', 'player-view']]);
     check('the sheet itself is served as before', (await request('GET', '/app/index.html')).status, 200);
-    check('even to a page under another name, as before', (await request('GET', '/app/index.html', { host: 'evil.example' })).status, 200);
-    check('but nothing in gm-module/ is', (await request('GET', '/gm-module/planner/plan.js', { host: 'evil.example' })).status, 403);
+    // A page on another site can reach the port under a name of its own (DNS
+    // rebinding), and the root holds private/: such a request gets nothing.
+    check('but not to a request under another name', (await request('GET', '/app/index.html', { host: 'evil.example' })).status, 403);
+    check('and nothing in gm-module/ either', (await request('GET', '/gm-module/planner/plan.js', { host: 'evil.example' })).status, 403);
     const upper = await request('GET', '/GM-MODULE/planner/plan.js', { host: 'evil.example' });
     check('however the path is spelt', upper.status === 403 || upper.status === 404, true);
 

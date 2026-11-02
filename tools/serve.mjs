@@ -1,9 +1,15 @@
 // Dependency-free static file server — the Node equivalent of `python -m http.server`.
 //
-//   node tools/serve.mjs [port] [--gm-data <folder>]       (default 8777)
+//   node tools/serve.mjs [port] [--gm-data <folder>] [--host <address>]   (default 8777)
 //
 // Serves the repository root, so http://localhost:8777/app/index.html is the app
 // and any /data/characters/*.json a deployment bundles load the way the sheet expects.
+//
+// It answers this machine only: it listens on 127.0.0.1 and refuses a request
+// that names the server by anything but localhost, 127.0.0.1 or [::1]. The root
+// holds private/, and a page on another site can reach a local port under a
+// name of its own (DNS rebinding). `--host 0.0.0.0` serves it to the network,
+// with every file in it.
 //
 // It also mounts the GM tools in gm-module/ (see gm-module/lib/gm-tools.mjs): the
 // list behind the sheet's GM tools button, and each tool's server part. Everything
@@ -16,15 +22,19 @@ import { createReadStream, existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { stat, readdir, realpath } from 'node:fs/promises';
 import { join, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isLocalRequest } from '../gm-module/lib/http.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const args = process.argv.slice(2);
 let port = Number(process.env.PORT ?? 8777);
 let gmData = null;
+let host = '127.0.0.1';
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--gm-data') gmData = resolve(args[++i]);
+  else if (args[i] === '--host') host = args[++i];
   else if (/^\d+$/.test(args[i])) port = Number(args[i]);
 }
+const localOnly = ['127.0.0.1', '::1', 'localhost'].includes(host);
 
 // GM tools, when the checkout has them. The sheet works the same without.
 const gmRoot = join(root, 'gm-module');
@@ -65,6 +75,7 @@ const send = (res, code, body, headers = {}) => {
 };
 
 const server = createServer(async (req, res) => {
+  if (localOnly && !isLocalRequest(req)) return send(res, 403, '403 Forbidden');
   let pathname;
   try {
     pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
@@ -131,9 +142,10 @@ server.on('error', err => {
   throw err;
 });
 
-server.listen(port, () => {
+server.listen(port, host, () => {
   console.log(`Serving ${root}`);
   console.log(`  http://localhost:${server.address().port}/app/index.html`);
+  if (!localOnly) console.warn(`  Listening on ${host}: anyone who can reach it can read every file here, private/ included.`);
   if (gm) {
     console.log(`  GM tools: ${gm.tools.map(t => t.name).join(', ') || 'none'} (this machine only)`);
     for (const problem of gm.problems) console.warn(`  GM tool not loaded: ${problem}`);
