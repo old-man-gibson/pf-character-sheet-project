@@ -19,8 +19,9 @@
  *   - workbook-global defined names, which is how the template's ~476 named
  *     ranges are found
  *
- * Values come back raw — string, number, boolean, Date or null. Normalising
- * them is `convert.js`'s job, exactly as `clean()` is the Python Book's.
+ * Values come back raw — string, number, boolean, null, or for a date or time
+ * cell the fields openpyxl gives it (see `moment`). Normalising them is
+ * `convert.js`'s job, exactly as `clean()` is the Python Book's.
  *
  * Not supported, because the character workbooks never use it: ZIP64 (a
  * 4 GB spreadsheet is not a thing), encrypted workbooks, and the .xls binary
@@ -191,40 +192,131 @@ function firstText(xml, name) {
  * Number formats and dates
  * ---------------------------------------------------------------------- */
 
-// Built-in formats that mean "this number is a date". Every other built-in id
-// is numeric, and ids >= 164 are custom and carry their own format code.
+// Built-in formats that mean "this number is a date"; 46, [h]:mm:ss, is also
+// a length of time. Every other built-in id is numeric, and a workbook's own
+// formats (ids >= 164 as a rule) carry their own format code.
 const BUILTIN_DATE_IDS = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 45, 46, 47]);
+const BUILTIN_DURATION_ID = 46;
 
 /**
  * Whether a format code renders a date, by openpyxl's rule: look at the first
- * section only, drop bracketed conditions, escaped characters and quoted
- * literals, then see if any date/time placeholder survives.
+ * section only, drop quoted literals and bracketed parts other than [h], [m]
+ * and [s], then look for a date or time letter not escaped by \ or _.
  */
 function isDateFormat(code) {
   if (!code) return false;
-  const bare = code.split(';')[0]
-    .replace(/\[[^\]]*\]/g, '')
-    .replace(/\\.|"[^"]*"/g, '');
-  return /[dmyhs]/i.test(bare);
+  const bare = code.split(';')[0].replace(/".*?"|\[(?!hh?\]|mm?\]|ss?\])[^\]]*\]/g, '');
+  return /(?<![_\\])[dmhysDMHYS]/.test(bare);
+}
+
+/** Whether a format code shows a length of time ([h]:mm), by openpyxl's rule. */
+function isDurationFormat(code) {
+  if (!code) return false;
+  return /\[hh?\](:mm(:ss(\.0*)?)?)?|\[mm?\](:ss(\.0*)?)?|\[ss?\](\.0*)?/i.test(code.split(';')[0]);
 }
 
 const EXCEL_EPOCH_UTC = Date.UTC(1899, 11, 30);
 const MS_PER_DAY = 86400000;
+const US_PER_DAY = 86400e6;
+
+/** Python's round() on a float: a half goes to the even neighbour. */
+function roundHalfEven(x) {
+  const r = Math.round(x);
+  return r - x === 0.5 && r % 2 !== 0 ? r - 1 : r;
+}
 
 /**
- * Convert an Excel serial number to a Date.
+ * CPython's `timedelta(...)` from float parts, in microseconds: the whole
+ * microseconds of each part exactly, and the fractions left over summed and
+ * rounded half to even. `parts` is [[value, microseconds per unit], ...].
+ */
+function timedeltaMicroseconds(parts) {
+  let us = 0;
+  let left = 0;
+  for (const [value, factor] of parts) {
+    const whole = Math.trunc(value);
+    const scaled = (value - whole) * factor;
+    us += whole * factor + Math.trunc(scaled);
+    left += scaled - Math.trunc(scaled);
+  }
+  if (!left) return us;
+  // C's round() takes a half away from zero; on an exact half CPython uses
+  // the parity of what it has so far to land on an even total.
+  const away = (x) => Math.sign(x) * Math.round(Math.abs(x));
+  let step = away(left);
+  if (Math.abs(step - left) === 0.5) {
+    const odd = Math.abs(us) % 2;
+    step = 2 * away((left + odd) * 0.5) - odd;
+  }
+  return us + step;
+}
+
+/**
+ * A date or time cell as the fields openpyxl gives it. `kind` is 'datetime',
+ * 'date', 'time' (Python's datetime, date and time) or 'duration' (timedelta),
+ * which has only `microseconds`, its signed length.
+ */
+function moment(kind, d, microsecond = d.getUTCMilliseconds() * 1000) {
+  return {
+    kind, year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate(),
+    hour: d.getUTCHours(), minute: d.getUTCMinutes(), second: d.getUTCSeconds(), microsecond,
+  };
+}
+
+/**
+ * A date-formatted number as openpyxl's `from_excel` reads it: a time of day
+ * below 1, a date and time from there on, and a length of time when the
+ * format shows one.
  *
  * Serials below 60 are shifted by a day to absorb the 1900-leap-year bug that
  * Excel keeps for compatibility with Lotus 1-2-3 and openpyxl reproduces.
  */
-function fromExcelSerial(value) {
+function fromExcelSerial(value, format) {
+  if (format === 'duration') {
+    // Past what a timedelta holds, openpyxl makes it an error cell. Exact to
+    // the microsecond for about 285 years, past which a double cannot hold
+    // the count; no duration cell runs that long.
+    if (value < -999999999 || value >= 1e9) return '#VALUE!';
+    // Rounded to the millisecond after timedelta's own rounding, half to even.
+    const us = timedeltaMicroseconds([[value, US_PER_DAY]]);
+    const part = ((us % 1e6) + 1e6) % 1e6;
+    const microseconds = part ? Math.floor(us / 1e6) * 1e6 + roundHalfEven(part / 1000) * 1000 : us;
+    return { kind: 'duration', microseconds };
+  }
   let day = Math.floor(value);
-  const ms = Math.round((value - day) * MS_PER_DAY);
+  // fraction * 86400 * 1000 in that order, rounded as Python rounds.
+  const ms = roundHalfEven((value - day) * 86400 * 1000);
+  if (value >= 0 && value < 1 && ms < MS_PER_DAY) return moment('time', new Date(ms));
   if (value > 0 && value < 60) day += 1;
-  return new Date(EXCEL_EPOCH_UTC + day * MS_PER_DAY + ms);
+  const d = new Date(EXCEL_EPOCH_UTC + day * MS_PER_DAY + ms);
+  // A date past what a Python datetime holds is an error cell in openpyxl.
+  const year = d.getUTCFullYear();
+  return year >= 1 && year <= 9999 ? moment('datetime', d) : '#VALUE!';
 }
 
-/** Read styles.xml into a per-cell-format "is this a date" lookup. */
+// openpyxl's from_ISO8601, for t="d" cells: a date, a time or both, matched
+// from the start. A zone (Z, +02:00) is not read, so the time is the one
+// written, whatever zone the reader is in.
+const ISO_DATE = /^(?:(\d{4})-(\d{2})-(\d{2}))?T?(?:(\d{2}):(\d{2})(?::(\d{2})(\.\d{1,3})?)?)?Z?/;
+const ISO_DURATION = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d{1,3})?)S)?/;
+
+function fromISO8601(text) {
+  const m = ISO_DATE.exec(text);
+  if (m && m.slice(1).some((g) => g !== undefined)) {
+    const [year, month, day, hour, minute, second] = m.slice(1, 7).map((g) => Number(g ?? 0));
+    const microsecond = m[7] ? Math.trunc(Number(m[7]) * 1e6) : 0;
+    const kind = m[1] === undefined ? 'time' : m[4] === undefined ? 'date' : 'datetime';
+    return { kind, year, month, day, hour, minute, second, microsecond };
+  }
+  const d = ISO_DURATION.exec(text);
+  if (d && d.slice(1).some((g) => g !== undefined)) {
+    const [hours, minutes, seconds] = d.slice(1).map((g) => Number(g ?? 0));
+    return { kind: 'duration', microseconds: timedeltaMicroseconds([[seconds, 1e6], [minutes, 60e6], [hours, 3600e6]]) };
+  }
+  return null;
+}
+
+/** Read styles.xml into a per-cell-format lookup: 'date', 'duration' or null. */
 function readStyles(xml) {
   if (!xml) return [];
   const custom = new Map();
@@ -239,7 +331,11 @@ function readStyles(xml) {
   const out = [];
   for (const el of elements(block, 'xf')) {
     const id = Number(attrs(el.attrs).numFmtId ?? 0);
-    out.push(BUILTIN_DATE_IDS.has(id) || isDateFormat(custom.get(id)));
+    // A workbook's own code for an id wins over the built-in one.
+    const own = custom.has(id);
+    const date = own ? isDateFormat(custom.get(id)) : BUILTIN_DATE_IDS.has(id);
+    const duration = own ? isDurationFormat(custom.get(id)) : id === BUILTIN_DURATION_ID;
+    out.push(date ? (duration ? 'duration' : 'date') : null);
   }
   return out;
 }
@@ -346,11 +442,12 @@ function cellValue(a, body, shared, dateFormats) {
     case 'e':     // #REF!, #NAME?, ... — the converter drops these downstream
       return raw;
     case 'd':
-      return new Date(raw);
+      return fromISO8601(raw);
     default: {
       const n = Number(raw);
       if (!Number.isFinite(n)) return raw;
-      return dateFormats[Number(a.s || 0)] ? fromExcelSerial(n) : n;
+      const format = dateFormats[Number(a.s || 0)];
+      return format ? fromExcelSerial(n, format) : n;
     }
   }
 }
@@ -366,7 +463,9 @@ function runText(chunk) {
 function readSharedStrings(xml) {
   if (!xml) return [];
   const out = [];
-  for (const si of elements(xml, 'si')) out.push(runText(si.body));
+  // openpyxl drops "x005F_" from shared strings (not inline ones): the
+  // escape that keeps a literal "_x0041_" from reading as "A".
+  for (const si of elements(xml, 'si')) out.push(runText(si.body).replace(/x005F_/g, ''));
   return out;
 }
 
@@ -374,23 +473,23 @@ function readSharedStrings(xml) {
  * Defined names
  * ---------------------------------------------------------------------- */
 
-// 'Character Info'!$C$15  — the sheet name is quoted when it contains a space,
-// and a literal apostrophe inside it is doubled.
-const SHEET_RANGE = /(?:'((?:[^']|'')*)'|([A-Za-z_\\][\w.]*))!(\$?[A-Z]+\$?\d+(?::\$?[A-Z]+\$?\d+)?)/g;
+// A defined name that points at cells: one sheet range, or several joined by
+// commas ('Character Info'!$C$15). A name holding anything else (a constant,
+// a formula over cells, a LAMBDA) has no cell of its own to read. A sheet
+// name with a space or punctuation is quoted, and an apostrophe inside the
+// quotes is doubled. `destinations` in convert.py is the same rule.
+const SHEET_RANGE = String.raw`(?:'((?:[^']|'')+)'|([^' ^!,]+))!(\$?[A-Z]+\$?\d+(?::\$?[A-Z]+\$?\d+)?)`;
+const RANGE_LIST = new RegExp(`^(?:${SHEET_RANGE})(?:,(?:${SHEET_RANGE}))*$`);
 
 /**
- * Split a defined name's value into (sheet, range) pairs, as openpyxl's
- * `destinations` does. A name that points at a constant or a formula yields
- * nothing, which is the caller's cue to skip it.
+ * Split a defined name's value into (sheet, range) pairs. A name that points
+ * at a constant or a formula yields nothing, which is the caller's cue to
+ * skip it.
  */
 export function destinations(value) {
-  const out = [];
-  SHEET_RANGE.lastIndex = 0;
-  let m;
-  while ((m = SHEET_RANGE.exec(value))) {
-    out.push([m[1] !== undefined ? m[1].replace(/''/g, "'") : m[2], m[3]]);
-  }
-  return out;
+  if (!RANGE_LIST.test(value)) return [];
+  return [...value.matchAll(new RegExp(SHEET_RANGE, 'g'))]
+    .map((m) => [m[1] !== undefined ? m[1].replace(/''/g, "'") : m[2], m[3]]);
 }
 
 /* ---------------------------------------------------------------------- *

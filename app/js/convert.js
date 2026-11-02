@@ -55,7 +55,7 @@ const STRUCTURED_TABS = new Set([
 ]);
 
 /* ---------------------------------------------------------------------- *
- * Value normalisation — the Python `clean`, `num`, `slug` and `str`
+ * Value normalisation — the Python `clean`, `num`, `slug` and `as_text`
  * ---------------------------------------------------------------------- */
 
 // A filename- and URL-safe id: the app's own slug rule, not a copy of it.
@@ -64,24 +64,40 @@ import { CAMPAIGN_DEFAULTS } from './model/campaign.js';
 
 export { slug };
 
-/** `datetime.isoformat()`: seconds precision, microseconds only when non-zero. */
-function isoFromDate(d) {
+/**
+ * A date or time cell as text, as `clean` writes it in convert.py: Python's
+ * `isoformat()` for a date and time, a date or a time of day, and a length of
+ * time as an [h]:mm:ss cell shows it (36:00:00).
+ */
+function timeText(t) {
   const p = (n, w = 2) => String(n).padStart(w, '0');
-  const base = `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`
-    + `T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
-  const ms = d.getUTCMilliseconds();
-  return ms ? `${base}.${p(ms * 1000, 6)}` : base;
+  const us = (n) => (n ? `.${p(n, 6)}` : '');
+  if (t.kind === 'duration') {
+    const length = Math.abs(t.microseconds);
+    const seconds = Math.floor(length / 1e6);
+    return `${t.microseconds < 0 ? '-' : ''}${p(Math.floor(seconds / 3600))}`
+      + `:${p(Math.floor(seconds / 60) % 60)}:${p(seconds % 60)}${us(length % 1e6)}`;
+  }
+  const date = `${p(t.year, 4)}-${p(t.month)}-${p(t.day)}`;
+  const time = `${p(t.hour)}:${p(t.minute)}:${p(t.second)}${us(t.microsecond)}`;
+  return t.kind === 'date' ? date : t.kind === 'time' ? time : `${date}T${time}`;
 }
 
-/** Normalise a cell value: trim strings, collapse float-ints, drop blanks. */
+// What both converters trim from text: whatever Python's strip() or
+// JavaScript's trim() takes, so a byte-order mark (U+FEFF) and a next-line
+// (U+0085) go as well as spaces and line breaks. `\s` is trim()'s set.
+const EDGE_SPACE = /^[\s\x1c-\x1f\x85]+|[\s\x1c-\x1f\x85]+$/g;
+
+/** Normalise a cell value: trim strings, collapse float-ints, drop blanks,
+ *  and write dates and times as text. */
 function clean(v) {
   if (v === null || v === undefined) return null;
   if (typeof v === 'string') {
-    const t = v.trim();
+    const t = v.replace(EDGE_SPACE, '');
     // '' and the spreadsheet's own error values (#REF!, #NAME?, ...) are noise.
     return t === '' || t.startsWith('#') ? null : t;
   }
-  if (v instanceof Date) return isoFromDate(v);
+  if (typeof v === 'object') return timeText(v);
   return v;
 }
 
@@ -90,14 +106,18 @@ function num(v, fallback = 0) {
   if (typeof c === 'boolean') return c ? 1 : 0;
   if (typeof c === 'number') return c;
   if (typeof c === 'string') {
-    const m = /^[+\s]*(-?\d+(?:\.\d+)?)/.exec(c.replace(/,/g, ''));
+    // Full-width forms (U+FF01-FF5E), as a Japanese or Chinese keyboard types
+    // them, read as the ASCII they stand for: a level typed "７" is 7.
+    const ascii = c.replace(/[\uff01-\uff5e]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0));
+    const m = /^[+\s\x1c-\x1f\x85]*(-?\d+(?:\.\d+)?)/.exec(ascii.replace(/,/g, ''));
     if (m) return Number(m[1]);
   }
   return fallback;
 }
 
-/** Python's `str()`, which spells booleans differently from JavaScript's. */
-function pystr(v) {
+/** `as_text` in convert.py: True and False for booleans, and numbers as
+ *  JavaScript spells them (0.00005), which convert.py copies. */
+function asText(v) {
   if (v === true) return 'True';
   if (v === false) return 'False';
   return String(v);
@@ -166,7 +186,7 @@ class Book {
     const out = {};
     const REF = /^\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$/;
     for (const { name, value } of this.definedNames) {
-      if (typeof value !== 'string' || value.startsWith('LAMBDA')) continue;
+      if (typeof value !== 'string') continue;
       for (const [tab, ref] of destinations(value)) {
         if (!this.grids.has(tab) || REF_TABS.has(tab)) continue;
         const m = REF.exec(ref);
@@ -212,7 +232,7 @@ function table(bk, tab, headerRow, startRow, colStart, colEnd, stopBlank = 3) {
   const headers = [];
   for (let c = colStart; c <= colEnd; c++) {
     const h = bk.cell(tab, headerRow, c);
-    headers.push(h !== null ? pystr(h) : `col${c}`);
+    headers.push(h !== null ? asText(h) : `col${c}`);
   }
   const rows = [];
   let blanks = 0;
@@ -247,7 +267,7 @@ function extractIdentity(bk) {
     const t = bk.cell(CI, r, 13);  // M: movement type
     if (t === null) continue;
     speeds.push({
-      type: pystr(t),
+      type: asText(t),
       base: num(bk.cell(CI, r, 14)),
       bonus: num(bk.cell(CI, r, 15)),
       final: num(bk.cell(CI, r, 16)),
@@ -315,7 +335,7 @@ function extractAbilities(bk) {
       breakdownHeaders.forEach((h, j) => {
         if (!h) return;
         const v = bk.cell(ST, 3 + i, 3 + j);
-        if (v !== null && v !== false && v !== 0) src[pystr(h)] = v;
+        if (v !== null && v !== false && v !== 0) src[asText(h)] = v;
       });
       entry.sources = src;
     }
@@ -487,7 +507,7 @@ function extractConditions(bk) {
   for (let r = 44; r < 53; r++) {
     for (const [lblC, valC] of [[11, 12], [13, 14]]) {
       const lbl = bk.cell(CI, r, lblC);
-      if (lbl) out[pystr(lbl)] = num(bk.cell(CI, r, valC));
+      if (lbl) out[asText(lbl)] = num(bk.cell(CI, r, valC));
     }
   }
   // The shared template has Helpless and Paralyzed at 1 in every workbook,
@@ -571,7 +591,7 @@ function extractTraits(bk) {
     const kind = bk.cell(CI, r, 12);
     const desc = bk.cell(CI, r, 14);
     if (kind === null && desc === null) continue;
-    traits.push({ slot: pystr(label), category: kind, text: desc });
+    traits.push({ slot: asText(label), category: kind, text: desc });
   }
   const raceTraits = [];
   for (let r = 66; r < 74; r++) {
@@ -604,28 +624,28 @@ function extractSkills(bk) {
       continue;
     }
     blanks = 0;
-    if (pystr(name) === 'Skills') { r += 1; continue; }
+    if (asText(name) === 'Skills') { r += 1; continue; }
     // The rank-budget metrics live directly under the skill rows; they are not
     // skills, and everything from there on belongs to other sections.
     if (['Bonus Skill points', 'Int Bonus per', 'Total Skill Points',
-         'Other Trackables', 'Name, Info'].some((p) => pystr(name).startsWith(p))) {
+         'Other Trackables', 'Name, Info'].some((p) => asText(name).startsWith(p))) {
       break;
     }
     const ranks = {};
     rankHeaders.forEach((h, j) => {
       if (!h) return;
       const v = num(bk.cell(CI, r, 7 + j), null);
-      if (v) ranks[pystr(h)] = v;
+      if (v) ranks[asText(h)] = v;
     });
     const abil = [17, 18, 19].map((c) => bk.cell(CI, r, c));
     out.push({
-      name: pystr(name),
+      name: asText(name),
       spec: bk.cell(CI, r, 3),
       bonus: num(bk.cell(CI, r, 4)),
       classSkill: truthy(bk.cell(CI, r, 5)),
       totalRanks: num(bk.cell(CI, r, 6)),
       ranks,
-      requiresTraining: pystr(bk.cell(CI, r, 15) ?? '').toLowerCase() === 'yes',
+      requiresTraining: asText(bk.cell(CI, r, 15) ?? '').toLowerCase() === 'yes',
       armorPenalty: truthy(bk.cell(CI, r, 16)),
       abilities: abil.filter(truthy),
       situational: bk.cell(CI, r, 20),
@@ -667,7 +687,7 @@ function extractCarry(bk) {
   const out = { tiers: [] };
   for (let r = 44; r < 49; r++) {
     const lbl = bk.cell(CI, r, 22);
-    if (lbl) out.tiers.push({ name: pystr(lbl), limit: num(bk.cell(CI, r, 24)) });
+    if (lbl) out.tiers.push({ name: asText(lbl), limit: num(bk.cell(CI, r, 24)) });
   }
   out.antHaul = num(bk.cell(CI, 49, 23), 1);
   out.strBonus = num(bk.cell(CI, 50, 23));
@@ -688,7 +708,7 @@ function extractResources(bk) {
     const name = bk.cell(CI, r, c);
     if (name) {
       out.push({
-        name: pystr(name),
+        name: asText(name),
         uses: num(bk.cell(CI, r, c + 1)),
         total: bk.cell(CI, r, c + 2),
         refresh: bk.cell(CI, r, c + 3),
@@ -764,7 +784,7 @@ function extractPlanner(bk) {
   const headers = [];
   for (let c = 1; c < 60; c++) {
     const h = bk.cell('Planner', 1, c);
-    if (h) headers.push([c, pystr(h)]);
+    if (h) headers.push([c, asText(h)]);
   }
   const out = [];
   for (let r = 2; r < 22; r++) {
@@ -789,11 +809,11 @@ function extractFeats(bk) {
     const entries = [];
     for (let r = 3; r < 25; r++) {
       const name = bk.cell('Feats', r, c);
-      if (!name || pystr(name) === 'Name') continue;
-      entries.push({ name: pystr(name), detail: bk.cell('Feats', r, c + 2) });
+      if (!name || asText(name) === 'Name') continue;
+      entries.push({ name: asText(name), detail: bk.cell('Feats', r, c + 2) });
     }
     if (entries.length) {
-      const base = pystr(cat);
+      const base = asText(cat);
       let key = base;
       let n = 2;
       while (key in groups) { key = `${base} ${n}`; n += 1; }
@@ -815,7 +835,7 @@ function extractMythic(bk) {
   };
   for (let r = 6; r < 10; r++) {
     const v = bk.cell('Mythic', r, 3);
-    if (v && !['Base Path Ability', 'Base Mythic Abilities'].includes(pystr(v))) {
+    if (v && !['Base Path Ability', 'Base Mythic Abilities'].includes(asText(v))) {
       out.baseAbilities.push(v);
     }
   }
@@ -889,7 +909,7 @@ function gearRow(bk, tab, r, slot) {
     slot,
     name: bk.cell(tab, r, 2),
     bonuses,
-    others: others.map((o) => (typeof o === 'string' ? o : (o !== null ? pystr(o) : null))),
+    others: others.map((o) => (typeof o === 'string' ? o : (o !== null ? asText(o) : null))),
     weight: num(bk.cell(tab, r, 17)),
     cost: num(bk.cell(tab, r, 18)),
   };
@@ -1065,7 +1085,7 @@ function extractBackground(bk) {
       const chunks = [];
       for (let rr = r + 1; rr < Math.min(r + 10, total + 1); rr++) {
         const v = bk.cell(TAB, rr, c);
-        if (v) chunks.push(pystr(v));
+        if (v) chunks.push(asText(v));
       }
       out[lbl] = chunks.length ? chunks.join('\n') : null;
     }
@@ -1116,7 +1136,7 @@ function trainingClasses(bk, tab) {
       });
     }
     classes.push({
-      name: pystr(name),
+      name: asText(name),
       type: bk.cell(tab, ...ty),
       talentsPerLevel: bk.cell(tab, ...tpl),
       mod1: bk.cell(tab, ...m1),
@@ -1128,7 +1148,7 @@ function trainingClasses(bk, tab) {
     const name = bk.cell(tab, ...nm);
     if (!name) continue;
     classes.push({
-      name: pystr(name),
+      name: asText(name),
       type: bk.cell(tab, ...ty),
       talentsPerLevel: bk.cell(tab, ...tpl),
       mod1: bk.cell(tab, ...m1),
@@ -1195,7 +1215,7 @@ function extractCombatTraining(bk) {
       const s = bk.cell(tab, r, 26);
       if (s) {
         sphereBonuses.push({
-          sphere: pystr(s),
+          sphere: asText(s),
           rankBonus: num(bk.cell(tab, r, 27)),
           dcBonus: num(bk.cell(tab, r, 28)),
           sheetValue: bk.cell(tab, r, 29),
@@ -1210,7 +1230,7 @@ function extractCombatTraining(bk) {
     if (!s) continue;
     const enabled = bk.cell(tab, r, V);
     skillRanks.push({
-      skill: pystr(s),
+      skill: asText(s),
       enabled: enabled === null ? true : truthy(num(enabled, 0) || enabled === true),
       multiplier: num(bk.cell(tab, r, 25), 1) || 1,
       sheetCurrent: num(bk.cell(tab, r, W)),
@@ -1315,7 +1335,7 @@ function extractMagicTraining(bk) {
       const s = bk.cell(tab, r, 25);
       if (s) {
         sphereBonuses.push({
-          sphere: pystr(s),
+          sphere: asText(s),
           clBonus: num(bk.cell(tab, r, 26)),
           dcBonus: num(bk.cell(tab, r, 27)),
           sheetValue: bk.cell(tab, r, 28),

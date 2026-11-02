@@ -8,6 +8,18 @@ row or two to read: text with punctuation, numbers typed as text, booleans,
 dates, blanks inside tables, a hidden tab and one tab no extractor knows. The
 numbers are not a consistent build.
 
+It also carries the inputs the two converters once read differently: a TRUE
+in the point-buy table, a name holding a formula, a tab name with an
+apostrophe, text with a byte-order mark or a next-line at its edge,
+full-width digits, numbers too small or too large for plain digits, a time of
+day, lengths of time, and ISO dates.
+
+openpyxl writes every string inline and no cached formula values, which a
+Google Sheets export never does. So save() rewrites a few things in the file
+it wrote: two tabs keep their text in the shared-string table, some cells
+become raw XML (ISO dates, formulas with their last values, rich text), and
+two parts are stored rather than compressed.
+
 The bytes are reproducible: the document properties and ZIP entry times are
 pinned, so a re-run writes the same file.
 
@@ -19,6 +31,7 @@ Then:  python tools/convert.py tests/fixtures/workbook/raw/marnie.xlsx --id marn
 import datetime
 import io
 import os
+import re
 import zipfile
 
 import openpyxl
@@ -58,7 +71,8 @@ def character_info(ws):
         "C4": "Half-Elf", "F4": "Medium", "I4": "Female", "K4": 34,
         "R4": "https://example.com/portraits/marnie.png",
         "C5": "Wayfarer", "E5": "+2", "I5": "5' 7\"", "K5": "130 lb.",
-        "B6": "Level", "C6": 7, "F6": "Neutral Good",
+        # The level in a full-width digit, as a Japanese keyboard types it.
+        "B6": "Level", "C6": "\uff17", "F6": "Neutral Good",
         # A 0 where the specialty feat goes, as a lookup leaves it: the feat
         # beside it is the one read.
         "C7": "Scholar", "F7": 0, "H7": "Skill Focus (Knowledge: arcana)",
@@ -70,7 +84,7 @@ def character_info(ws):
     # Speeds: type, base, bonus, final. Row 6 is left empty.
     row(ws, "M4", ["Land", 30, 0, 30])
     row(ws, "M5", ["Climb", 15, 5, 20])
-    row(ws, "M7", ["Swim", "10 ft.", None, 10])
+    row(ws, "M7", ["Swim", "10 ft.", "\uff0d\uff12\uff0e\uff15", 10])   # full-width -2.5
 
     # Abilities: score, mod, temp score, total mod, check mod.
     for i, values in enumerate([
@@ -282,7 +296,8 @@ def equipment(ws):
     row(ws, "B2", ["Circlet of Focus", 2, "Competence", None, "Insight", None, None,
                    "Perception +2", None, 3, None, True, None, 2.5, None, 1, "1,500 gp"])
     row(ws, "B4", ["Lenses of Detection", "+1", 5])
-    cells(ws, {"R4": 3500})
+    # Numbers in text fields that Python's str() spells with an exponent.
+    cells(ws, {"R4": 3500, "I4": 0.00005, "K4": 1e21})
     row(ws, "B13", ["Ring of Protection +1", 1, "Deflection"])
     cells(ws, {"R13": 2000})
     # Other items.
@@ -343,9 +358,11 @@ def equipment(ws):
 def background(ws):
     cells(ws, {
         "A1": "Background & Lore",
+        # A byte-order mark before one line and a next-line after another,
+        # which both converters trim.
         "B2": "Personality", "B3": "Curious, patient & dry-witted.",
-        "B5": "Collects \"lost\" maps.",
-        "F2": "Appearance", "F3": "Ink-stained fingers; a green scarf.",
+        "B5": "\ufeffCollects \"lost\" maps.",
+        "F2": "Appearance", "F3": "Ink-stained fingers; a green scarf.\x85",
         "H2": "Notes", "H3": "not a section",
         "J2": "Ez'atian Certifications", "J3": "Cartography (journeyman)",
         "B12": "Goals", "B13": 42, "B14": True,
@@ -455,6 +472,23 @@ def session_notes(ws):
     ws["B2"].number_format = "mm-dd-yy"
     row(ws, "A3", [2, None, "Storm — stayed in. Café closed."])
     row(ws, "A5", [True, None, None, -3.25, "#N/A", "=1+1"])
+    # A time of day; lengths of time in a format of the workbook's own and in
+    # a built-in one; and a time and a date and time on a half millisecond,
+    # which round to the even one.
+    row(ws, "A6", [datetime.time(18, 30), datetime.timedelta(hours=36),
+                   datetime.timedelta(hours=-12), 0.7708333622685185, 45000.77099609375])
+    ws["B6"].number_format = "[h]:mm"
+    ws["C6"].number_format = "[h]:mm:ss"
+    ws["D6"].number_format = "h:mm:ss"
+    ws["E6"].number_format = "yyyy-mm-dd h:mm:ss"
+    # An escaped underscore, which only openpyxl's shared-string reader undoes.
+    row(ws, "A9", ["Tag _x005F_x0041_ kept"])
+
+
+def maps(ws):
+    """A tab no extractor knows, with an apostrophe in its name."""
+    row(ws, "A1", ["Map", "Copies"])
+    row(ws, "A2", ["Ferry crossing", 3])
 
 
 def data_sheet(ws):
@@ -462,7 +496,8 @@ def data_sheet(ws):
     costs = [-4, -2, -1, 0, 1, 2, 3, 5, 7, 10, 13, 17]
     for i, cost in enumerate(costs):
         row(ws, f"K{22 + i}", [7 + i, cost])
-    row(ws, "K34", ["Max", "n/a"])
+    row(ws, "K34", [True, 25])                          # TRUE is not a score of 1
+    row(ws, "K35", ["Max", "n/a"])
 
 
 def names(wb):
@@ -479,10 +514,51 @@ def names(wb):
         ("EmptyCell", "'Character Info'!$Z$99"),
         ("EmptyBlock", "'Character Info'!$Y$90:$Z$91"),
         ("NoSuchTab", "'Missing Tab'!$A$1"),
+        # An apostrophe in a tab name, doubled inside the quotes.
+        ("FerryCopies", "'Marnie''s Maps'!$B$2"),
         ("HalfLevel", "3.5"),
         ("PlusOne", "LAMBDA(x,x+1)"),
+        # A formula over cells, which has no cell of its own.
+        ("ScoreTotal", "SUM('Character Info'!$C$15:$C$20)"),
     ]:
         wb.defined_names[name] = DefinedName(name, attr_text=ref)
+
+
+# Cells openpyxl cannot write, as the type and XML body that replace each one
+# in the saved file. build() puts a placeholder in each, so the cell is there.
+RAW_CELLS = {
+    "Marnie's Maps": {
+        # Rich text kept inline: runs, and a reading guide no converter reads.
+        "A3": ("inlineStr", '<is><r><rPr><b/></rPr><t>Coast road</t></r>'
+                            '<r><t xml:space="preserve">, redrawn</t></r>'
+                            '<rPh sb="0" eb="5"><t>こうすと</t></rPh></is>'),
+    },
+    "Session Notes": {
+        # ISO dates (t="d"): a date and time, a date, a time with milliseconds,
+        # one with a zone (which is not read), and a length of time.
+        "A7": ("d", "<v>2026-10-03T18:30:00</v>"),
+        "B7": ("d", "<v>2026-10-03</v>"),
+        "C7": ("d", "<v>18:30:05.250</v>"),
+        "D7": ("d", "<v>2026-10-03T18:30:00+02:00</v>"),
+        "E7": ("d", "<v>PT1H30M</v>"),
+        # Formulas with the values they last computed, as an export keeps them:
+        # a number, text, a boolean, an error, and a Google-only function.
+        "A8": (None, "<f>1+1</f><v>2</v>"),
+        "B8": ("str", '<f>"Ferry"&amp;"man"</f><v>Ferryman</v>'),
+        "C8": ("b", "<f>TRUE()</f><v>1</v>"),
+        "D8": ("e", "<f>1/0</f><v>#DIV/0!</v>"),
+        "E8": ("str", '<f>IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Spell list")</f>'
+                      "<v>Spell list</v>"),
+        # Rich text, which joins the shared-string table with the tab's other text.
+        "B9": ("inlineStr", '<is><r><rPr><i/></rPr><t>Ferry</t></r>'
+                            '<r><t xml:space="preserve"> fare: 3 sp</t></r></is>'),
+    },
+}
+
+# Tabs whose text moves to the shared-string table, and the tab whose part is
+# stored uncompressed along with that table.
+SHARED_TABS = ("Background & Lore", "Session Notes")
+STORED_TAB = "Session Notes"
 
 
 def build():
@@ -500,6 +576,7 @@ def build():
         ("Combat Training", combat_training, "visible"),
         ("Magic Training", magic_training, "visible"),
         ("Akashic", akashic, "visible"),
+        ("Marnie's Maps", maps, "visible"),
         ("Session Notes", session_notes, "hidden"),
         ("dataSheet", data_sheet, "hidden"),
     ]
@@ -508,23 +585,73 @@ def build():
         ws.title = title
         ws.sheet_state = state
         fill(ws)
+        for ref in RAW_CELLS.get(title, {}):
+            ws[ref] = "raw"
     names(wb)
     return wb
 
 
+def hand_made(wb, parts):
+    """Rewrite the parts openpyxl wrote: raw cells in, and the text of
+    SHARED_TABS out to a shared-string table. Returns the parts to store."""
+    sheet = {ws.title: f"xl/worksheets/sheet{i + 1}.xml" for i, ws in enumerate(wb.worksheets)}
+    for title, raw in RAW_CELLS.items():
+        xml = parts[sheet[title]].decode("utf-8")
+        for ref, (kind, body) in raw.items():
+            kind = f' t="{kind}"' if kind else ""
+            cell = f'<c r="{ref}"{kind}>{body}</c>'
+            xml, n = re.subn(rf'<c r="{ref}"[^>]*>.*?</c>', lambda m: cell, xml, count=1, flags=re.S)
+            assert n == 1, (title, ref)
+        parts[sheet[title]] = xml.encode("utf-8")
+
+    strings, index, uses = [], {}, 0
+
+    def share(m):
+        nonlocal uses
+        uses += 1
+        if m.group(3) not in index:
+            index[m.group(3)] = len(strings)
+            strings.append(m.group(3))
+        return f'<c {m.group(1)}t="s"{m.group(2)}><v>{index[m.group(3)]}</v></c>'
+
+    for title in SHARED_TABS:
+        xml = parts[sheet[title]].decode("utf-8")
+        xml = re.sub(r'<c ([^>]*)t="inlineStr"([^>]*)><is>(.*?)</is></c>', share, xml, flags=re.S)
+        parts[sheet[title]] = xml.encode("utf-8")
+    parts["xl/sharedStrings.xml"] = (
+        '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+        f' count="{uses}" uniqueCount="{len(strings)}">'
+        + "".join(f"<si>{s}</si>" for s in strings) + "</sst>").encode("utf-8")
+    # openpyxl finds the table by its content type, Excel by its relationship.
+    for name, close, entry in [
+        ("[Content_Types].xml", "</Types>",
+         '<Override PartName="/xl/sharedStrings.xml" ContentType="application/'
+         'vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>'),
+        ("xl/_rels/workbook.xml.rels", "</Relationships>",
+         '<Relationship Id="rIdStrings" Type="http://schemas.openxmlformats.org/'
+         'officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>'),
+    ]:
+        parts[name] = parts[name].decode("utf-8").replace(close, entry + close).encode("utf-8")
+    return {"xl/sharedStrings.xml", sheet[STORED_TAB]}
+
+
 def save(wb, path):
-    """Write the workbook, then repack it with fixed entry times."""
+    """Write the workbook, rewrite it by hand_made(), then repack it with fixed
+    entry times."""
     raw = io.BytesIO()
     # ExcelWriter rather than wb.save, which stamps the modified time.
     ExcelWriter(wb, zipfile.ZipFile(raw, "w", zipfile.ZIP_DEFLATED)).save()
+    with zipfile.ZipFile(raw) as src:
+        parts = {entry.filename: src.read(entry.filename) for entry in src.infolist()}
+    stored = hand_made(wb, parts)
     out = io.BytesIO()
-    with zipfile.ZipFile(raw) as src, zipfile.ZipFile(out, "w") as dst:
-        for entry in src.infolist():
-            info = zipfile.ZipInfo(entry.filename, date_time=ZIP_TIME)
-            info.compress_type = zipfile.ZIP_DEFLATED
+    with zipfile.ZipFile(out, "w") as dst:
+        for name, data in parts.items():
+            info = zipfile.ZipInfo(name, date_time=ZIP_TIME)
+            info.compress_type = zipfile.ZIP_STORED if name in stored else zipfile.ZIP_DEFLATED
             info.create_system = 0
             info.external_attr = 0
-            dst.writestr(info, src.read(entry.filename))
+            dst.writestr(info, data)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as f:
         f.write(out.getvalue())
