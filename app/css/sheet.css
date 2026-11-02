@@ -1528,7 +1528,11 @@ table.vmc td { vertical-align: top; }
 .alignedpanel .fillcol { margin-top: 8px; }
 .alignedpanel .alclasses { grid-column: 1 / -1; }
 .alignedpanel .alclasses .pair { flex-wrap: wrap; }
-.alignedpanel table.alsteps { width: auto; }
+.alignedpanel table.alsteps, .alignedpanel table.algains { width: auto; }
+.alignedpanel table.algains input[type="text"] { min-width: 7rem; }
+.alignedpanel table.algains select { min-width: 6rem; }
+.alignedpanel table.algains input[type="number"] { width: 3.5rem; }
+.alignedpanel button[data-action="add-aligned-gain"] { margin: 4px 0 8px; }
 .alignedpanel input.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
 table.featgrid tr.aligned td.num { color: var(--cs-accent); font-style: italic; }
 /* A character just made opens on its rules first: a note with the way on,

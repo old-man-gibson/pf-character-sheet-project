@@ -21,7 +21,7 @@ import {
 } from '../rows.js';
 import { linkField } from '../fields.js';
 import { same } from '../format.js';
-import { alignedRule, columnLetter, optionCatalogues, systemTabWidth } from '../../model.js';
+import { alignedGainRows, alignedRule, columnLetter, optionCatalogues, systemTabWidth } from '../../model.js';
 import { parseLevelRule, levelRuleLevels, summariseLevels } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
 import { rgba } from '../../tracker-style.js';
@@ -91,31 +91,47 @@ function alignedPanel(model) {
     const pickers = [...chosen.filter((n) => String(n ?? '').trim()), ''];
     const mine = steps.filter((s) => s.index === i);
     const gain = (s) => {
-      const ref = esc(JSON.stringify({ i, kind: s.kind, p: s.prcLevel }));
+      const ref = esc(JSON.stringify({ i, kind: s.kind, p: s.prcLevel, n: s.n }));
       if (s.kind === 'lowest') {
         return s.tied.length
           ? `<span class="pair">Lowest: <select data-alignedpick="${ref}" aria-label="Tied lowest class at ${esc(name)} level ${s.prcLevel}">${options(s.tied, s.class, false)}</select></span>`
           : `Lowest: ${esc(s.class)}`;
       }
-      return s.options.length > 1
-        ? `<select data-alignedpick="${ref}" aria-label="Aligned class at ${esc(name)} level ${s.prcLevel}">${options(s.options, s.class)}</select>`
+      return s.choices.length > 1
+        ? `<select data-alignedpick="${ref}" aria-label="Aligned class at ${esc(name)} level ${s.prcLevel}">${options(s.choices, s.class)}</select>`
         : esc(s.class);
+    };
+    // The gain rows: which prestige levels, how many different classes each,
+    // and whether the player picks them or the lowest ones get them.
+    const gainRow = (g, gi) => {
+      const ref = (k) => esc(JSON.stringify({ i, g: gi, k }));
+      const value = String(g.levels ?? '').trim();
+      const bad = value && !alignedRule(value);
+      return `<tr>
+          <td><input type="text" data-alignedgain="${ref('levels')}" value="${esc(value)}"${bad ? ' class="bad" title="Not a level rule, so it adds nothing."' : ''}
+            placeholder="2, +1" spellcheck="false" aria-label="Prestige levels"></td>
+          <td class="num"><input type="number" min="1" step="1" data-alignedgain="${ref('count')}" value="${Math.max(1, Math.floor(Number(g.count) || 1))}"
+            aria-label="Classes that gain a level"></td>
+          <td><select data-alignedgain="${ref('lowest')}" aria-label="Which classes">
+            <option value=""${g.lowest ? '' : ' selected'}>Chosen</option>
+            <option value="1"${g.lowest ? ' selected' : ''}>Lowest</option>
+          </select></td>
+          <td class="tools">${removeAction('remove-aligned-gain', { index: i, gain: gi }, { what: 'this row' })}</td>
+        </tr>`;
     };
     return `<div class="alblock">
       <h4><span class="pair">${esc(name)}
         ${removeAction('remove-aligned', { index: i }, { what: `${name}'s aligned class` })}</span></h4>
       <div class="fieldgrid">
         <label class="fld alclasses"><span>Aligned class${pickers.length > 2 ? 'es' : ''}</span>
-          <span class="pair">${pickers.map((n, k) => `<select data-aligned="${esc(JSON.stringify({ i, k: 'class', n: k }))}"
+          <span class="pair">${pickers.map((n, k) => `<select data-aligned="${esc(JSON.stringify({ i, n: k }))}"
             aria-label="Aligned class ${k + 1}">${options(others, String(n ?? '').trim())}</select>`).join('')}</span></label>
-        ${['levels', 'lowest'].map((k) => {
-    const value = String(a[k] ?? '').trim();
-    const bad = value && !alignedRule(value);
-    return `<label class="fld"><span>${k === 'levels' ? 'Levels' : 'Lowest class levels'}</span>
-          <input type="text" data-aligned="${esc(JSON.stringify({ i, k }))}" value="${esc(value)}"${bad ? ' class="bad" title="Not a level rule, so it adds nothing."' : ''}
-            placeholder="${k === 'levels' ? '2, +1' : 'None'}" spellcheck="false"></label>`;
-  }).join('')}
       </div>
+      <div class="tablewrap"><table class="gridtab algains">
+        <thead><tr><th>Prestige levels</th><th class="num">Classes</th><th>Which</th><th></th></tr></thead>
+        <tbody>${alignedGainRows(a).map(gainRow).join('')}</tbody>
+      </table></div>
+      <button data-action="add-aligned-gain" data-index="${i}">+ Add levels</button>
       ${mine.length ? `<div class="tablewrap"><table class="gridtab alsteps">
         <thead><tr><th class="num">${esc(name)} level</th><th class="num">Level</th><th>Gain</th><th class="num">Class level</th></tr></thead>
         <tbody>${mine.map((s) => `<tr class="${s.level > level ? 'future' : ''}">
@@ -136,8 +152,9 @@ function alignedPanel(model) {
         ${unset.map((x) => `<option value="${x.i}">${esc(x.name)}</option>`).join('')}
       </select>` : ''}
       <p class="hint">Aligned levels count as levels of the aligned class for everything except hit dice, BAB, saves and skill ranks.
-        Levels lists the prestige class levels that add an aligned level, as a rule group: <code>2, +1</code> is 2nd and every level after.
-        Lowest class levels also add a level to the lowest aligned class.</p>
+        Each row gives one level to that many different aligned classes at the prestige levels it lists.
+        Chosen classes are picked per level. Lowest goes to the classes with the fewest levels.
+        Prestige levels use rule group syntax: <code>2, +1</code> is 2nd and every level after.</p>
     </section>`);
 }
 

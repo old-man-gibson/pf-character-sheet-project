@@ -58,15 +58,15 @@ import {
 } from './undo.js';
 import {
   addClassFeatureColumn, addClassFeatureColumnOptions, addClassFeatureNote,
-  addClassFeatureRuleGroup, addAligned, addProgressionTrack, alignedSteps, applyGestalt, classFeatureColumnOptions,
+  addClassFeatureRuleGroup, addAligned, addAlignedGain, addProgressionTrack, alignedSteps, applyGestalt, classFeatureColumnOptions,
   classFeatureColumnOptionsChosen, classFeatureDue, classFeatureNoteLevel, classFeatureNotes,
   classFeatureNotesInCell, classFeatureNoteSuggestions, addClassFeatureNoteFromPack, classFeatureParked, moveClassFeatureNote,
   blockClassName, classFeatureRows,
   classFeatureRuleGroups, classLevelAt, classLevelCount, classLevelsIn, classNames,
   featureGroup, fillProgressionTrack, grantingGroups, plannerHasClass, progressionClasses,
   removeClassFeatureColumn, removeClassFeatureColumnOptions, removeClassFeatureNote,
-  removeAligned, removeClassFeatureGroup, removeClassFeatureRuleGroup, removeProgressionTrack,
-  renameClassFeatureColumn, setAligned, setAlignedPick,
+  removeAligned, removeAlignedGain, removeClassFeatureGroup, removeClassFeatureRuleGroup, removeProgressionTrack,
+  renameClassFeatureColumn, setAligned, setAlignedGain, setAlignedPick,
   setClassFeature, setClassFeatureColumnOptions, setClassFeatureColumnRule, setClassFeatureNote,
   setClassFeatureRuleGroup, setColumnWidth, setProgressionClass,
 } from './progression.js';
@@ -582,6 +582,9 @@ export class Character {
   removeAligned(...a) { return removeAligned(this, ...a); }
   setAligned(...a) { return setAligned(this, ...a); }
   setAlignedPick(...a) { return setAlignedPick(this, ...a); }
+  addAlignedGain(...a) { return addAlignedGain(this, ...a); }
+  setAlignedGain(...a) { return setAlignedGain(this, ...a); }
+  removeAlignedGain(...a) { return removeAlignedGain(this, ...a); }
   #featureGroup(...a) { return featureGroup(this, ...a); }
   #classLevelAt(...a) { return classLevelAt(this, ...a); }
   #grantingGroups(...a) { return grantingGroups(this, ...a); }

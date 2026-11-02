@@ -1610,22 +1610,24 @@ export function plannedLevels(model, className, level) {
  * class the character had before it, for that class's features only. Hit
  * dice, BAB, saves and skill ranks stay the prestige class's, so the Planner
  * rows are left alone (those four are built from them) and the gains are read
- * beside them: at each prestige level the rule grants on, the aligned class
- * gains a level at that character level.
+ * beside them: at each prestige level a gain row lists, an aligned class gains
+ * a level at that character level.
  *
  * The block sits on the prestige class's row of the Classes table, written
  * only once it is set up (addAligned):
  *   classes  the aligned classes: one for most prestige classes, several for
  *            the kind that picks among them level by level
- *   levels   a level rule (rules.js) over prestige levels: the ones that
- *            advance an aligned class; with several, the player picks which
- *   lowest   a level rule: the prestige levels that also advance whichever
- *            aligned class is lowest at that point
- *   picks    {prestige level: class} for those picks
- *   ties     {prestige level: class} where two are tied for lowest
+ *   gains    rows of {levels, count?, lowest?}: at the prestige levels the rule
+ *            (rules.js) lists, `count` aligned classes (1 when left out) each
+ *            gain a level, chosen by the player or, with `lowest`, the ones
+ *            with the fewest levels at that point. One row's gains at a level
+ *            go to different classes ("+1 level of any 2 aligned classes").
+ *   picks    {prestige level: [class, …]} for the chosen gains at that level,
+ *            in row order
+ *   ties     {prestige level: [class, …]} where lowest gains there are tied
  *
  * A blank rule grants nothing, unlike a feature column's, where blank is
- * every level: a block with no levels written yet should not start adding.
+ * every level: a row with no levels written yet should not start adding.
  * Nor does one that does not parse ("2+"), which a column reads as every level.
  * ------------------------------------------------------------------ */
 
@@ -1648,6 +1650,24 @@ export function alignedRule(text) {
   return rule && parseLevelRule(rule).kind !== 'error' ? rule : '';
 }
 
+/**
+ * A block's gain rows. A block written before gains were rows has one chosen
+ * rule in `levels` and one lowest rule in `lowest`, read here as two rows.
+ */
+export function alignedGainRows(a) {
+  if (Array.isArray(a?.gains)) return a.gains.filter((g) => g && typeof g === 'object');
+  const out = [];
+  if (a && 'levels' in a) out.push({ levels: String(a.levels ?? '') });
+  if (String(a?.lowest ?? '').trim()) out.push({ levels: String(a.lowest), lowest: true });
+  return out;
+}
+
+/** How many classes a gain row advances at each level it lists. */
+const gainCount = (g) => Math.max(1, Math.floor(Number(g?.count) || 1));
+
+/** The picks or ties at one prestige level, as a list (an older block kept one name). */
+const pickList = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]).map((x) => String(x ?? '').trim());
+
 /** The name a class's feature group and aligned gains are kept under. */
 function alignedSpelling(model, name) {
   return plannerSpelling(model, name) || tableSpelling(model, name) || String(name ?? '').trim();
@@ -1663,20 +1683,24 @@ function alignedIndex(model) {
 }
 
 /**
- * Every prestige level's aligned gain, in character-level order.
+ * Every prestige level's aligned gains, in character-level order.
  *
- * `steps` is one entry per gain the rules call for, for the Progression panel:
+ * `steps` is one entry per gain the rows call for, for the Progression panel:
  * the prestige class (`index` on the Classes table), its level and the
- * character level, `kind` ('chosen' or 'lowest'), the class it went to ('' when
- * a pick is still owed) and the level that class reaches. `keys` maps each
- * aligned class to the keys its gains are stored under, and `sources` to the
- * prestige class behind each key.
+ * character level, `kind` ('chosen' or 'lowest') and `n`, its place among
+ * that kind's gains at that level (where its pick is kept); the class it went
+ * to ('' when a pick is still owed), the classes its picker offers
+ * (`choices`, empty when nothing is left to choose), the classes tied for it
+ * (`tied`) and the level the class reaches. `keys` maps each aligned class to
+ * the keys its gains are stored under, and `sources` to the prestige class
+ * behind each key.
  *
  * Levels are taken in order because the lowest aligned class depends on every
  * gain before it. "Lowest" counts what the class has at that row: the levels
  * the Classes table and Planner give it (classPresence, as hit dice and saves
- * count them) and the aligned gains so far, the chosen one at the same level
- * among them. The rule text names the chosen gain first.
+ * count them) and the aligned gains so far, earlier rows at the same level
+ * among them. A lowest row with a count of 2 takes the lowest class, then the
+ * lowest of the rest.
  */
 function readAligned(model, known) {
   const d = model.data;
@@ -1733,12 +1757,12 @@ function readAligned(model, known) {
   };
   const effective = (name, level) => takenTo(name, level) + (gained.get(alignedSpelling(model, name)) || 0);
   const pickFrom = (wanted, options) => options.find((o) => o === wanted)
-    || closestName(wanted, options) || '';
+    || (wanted ? closestName(wanted, options) : '') || '';
 
   const plans = prestige.map(({ row, index: at }) => ({
     row, at, options: alignedNames(row).filter((n) => normalizeName(n) !== normalizeName(row.name)),
-    levels: alignedRule(row.aligned.levels),
-    lowest: alignedRule(row.aligned.lowest),
+    gains: alignedGainRows(row.aligned).map((g) => ({ rule: alignedRule(g.levels), count: gainCount(g), lowest: !!g.lowest }))
+      .filter((g) => g.rule),
     rows: presence(row.name, true),
     count: 0,
   }));
@@ -1746,22 +1770,46 @@ function readAligned(model, known) {
     for (const plan of plans) {
       if (!plan.rows[level - 1] || !plan.options.length) continue;
       const prcLevel = ++plan.count;
-      const base = { index: plan.at, prestige: plan.row.name, prcLevel, level, options: plan.options };
-      if (plan.levels && levelRuleGrants(plan.levels, prcLevel, level)) {
-        const cls = plan.options.length === 1 ? plan.options[0]
-          : pickFrom(String(plan.row.aligned.picks?.[prcLevel] ?? '').trim(), plan.options);
-        const step = { ...base, kind: 'chosen', class: cls, tied: [], reaches: 0 };
-        if (cls) gain(cls, level, step);
-        index.steps.push(step);
-      }
-      if (plan.lowest && levelRuleGrants(plan.lowest, prcLevel, level)) {
-        const at = plan.options.map((n) => effective(n, level));
-        const tied = plan.options.filter((n, i) => at[i] === Math.min(...at));
-        const cls = tied.length === 1 ? tied[0]
-          : pickFrom(String(plan.row.aligned.ties?.[prcLevel] ?? '').trim(), tied) || tied[0];
-        const step = { ...base, kind: 'lowest', class: cls, tied: tied.length > 1 ? tied : [], reaches: 0 };
-        gain(cls, level, step);
-        index.steps.push(step);
+      const base = { index: plan.at, prestige: plan.row.name, prcLevel, level };
+      const picks = pickList(plan.row.aligned.picks?.[prcLevel]);
+      const ties = pickList(plan.row.aligned.ties?.[prcLevel]);
+      let chosen = 0;
+      let lowest = 0;
+      for (const g of plan.gains) {
+        if (!levelRuleGrants(g.rule, prcLevel, level)) continue;
+        const count = Math.min(g.count, plan.options.length);
+        if (!g.lowest) {
+          // Fewer classes than gains leaves nothing to choose: each gets one.
+          const steps = Array.from({ length: count }, () => ({
+            ...base, kind: 'chosen', n: chosen++, class: '', choices: [], tied: [], reaches: 0,
+          }));
+          if (plan.options.length <= count) steps.forEach((s, j) => { s.class = plan.options[j]; });
+          else {
+            const used = new Set();
+            for (const s of steps) {
+              const cls = pickFrom(picks[s.n] || '', plan.options);
+              if (cls && !used.has(cls)) { s.class = cls; used.add(cls); }
+            }
+            for (const s of steps) s.choices = plan.options.filter((o) => o === s.class || !used.has(o));
+          }
+          for (const s of steps) {
+            if (s.class) gain(s.class, level, s);
+            index.steps.push(s);
+          }
+          continue;
+        }
+        const used = new Set();
+        for (let j = 0; j < count; j++) {
+          const open = plan.options.filter((o) => !used.has(o));
+          const at = open.map((o) => effective(o, level));
+          const tied = open.filter((o, k) => at[k] === Math.min(...at));
+          const n = lowest++;
+          const cls = tied.length === 1 ? tied[0] : pickFrom(ties[n] || '', tied) || tied[0];
+          const s = { ...base, kind: 'lowest', n, class: cls, choices: [], tied: tied.length > 1 ? tied : [], reaches: 0 };
+          used.add(cls);
+          gain(cls, level, s);
+          index.steps.push(s);
+        }
       }
     }
   }
@@ -1802,11 +1850,11 @@ export function alignedGainsAt(model, className, lvl) {
   return (index.keys.get(alignedSpelling(model, className)) || []).filter((key) => Math.floor(key) === lvl).length;
 }
 
-/** Start an aligned block on a class row: one aligned class still to name. */
+/** Start an aligned block on a class row: one aligned class still to name, one empty gain row. */
 export function addAligned(model, index) {
   const row = model.data.classes?.[index];
   if (!row || row.aligned) return model;
-  row.aligned = { classes: [''], levels: '' };
+  row.aligned = { classes: [''], gains: [{ levels: '' }] };
   model.recompute();
   return model;
 }
@@ -1820,38 +1868,84 @@ export function removeAligned(model, index) {
 }
 
 /**
- * Change one part of a class row's aligned block: `classes` (the list),
- * `levels` or `lowest` (rule text). Feature cells written for an aligned
- * level follow it to wherever it now lands, as they follow a Planner edit.
+ * Edit a class row's aligned block. `edit` gets the block with its gains as
+ * rows and its picks as lists (an older block is brought up to that first).
+ * Feature cells written for an aligned level follow it to wherever it now
+ * lands, as they follow a Planner edit.
  */
-export function setAligned(model, index, patch = {}) {
+function editAligned(model, index, edit) {
   const row = model.data.classes?.[index];
   if (!row) return model;
   return movingClassLevels(model, () => {
-    const a = (row.aligned ||= { classes: [''], levels: '' });
-    if (Array.isArray(patch.classes)) a.classes = patch.classes.map((n) => String(n ?? '').trim());
-    for (const k of ['levels', 'lowest']) {
-      if (patch[k] === undefined) continue;
-      const v = String(patch[k] ?? '').trim();
-      if (v) a[k] = v;
-      else if (k === 'lowest') delete a.lowest;
-      else a.levels = '';
+    const a = (row.aligned ||= { classes: [''], gains: [{ levels: '' }] });
+    if (!Array.isArray(a.gains)) {
+      a.gains = alignedGainRows(a);
+      delete a.levels;
+      delete a.lowest;
+    }
+    for (const key of ['picks', 'ties']) {
+      for (const [lvl, v] of Object.entries(a[key] || {})) a[key][lvl] = pickList(v);
+    }
+    edit(a);
+  });
+}
+
+/** Set a class row's aligned classes. */
+export function setAligned(model, index, { classes } = {}) {
+  if (!Array.isArray(classes)) return model;
+  return editAligned(model, index, (a) => { a.classes = classes.map((n) => String(n ?? '').trim()); });
+}
+
+/** Add an empty gain row to a class row's aligned block. */
+export function addAlignedGain(model, index) {
+  return editAligned(model, index, (a) => { a.gains.push({ levels: '' }); });
+}
+
+/**
+ * Change one gain row: `levels` (rule text), `count` (classes advanced at
+ * each level, 1 left out) or `lowest` (true for the lowest classes, left out
+ * for chosen ones).
+ */
+export function setAlignedGain(model, index, gainIndex, patch = {}) {
+  return editAligned(model, index, (a) => {
+    const g = a.gains[gainIndex];
+    if (!g) return;
+    if (patch.levels !== undefined) g.levels = String(patch.levels ?? '').trim();
+    if (patch.count !== undefined) {
+      const n = Math.max(1, Math.floor(Number(patch.count) || 1));
+      if (n > 1) g.count = n;
+      else delete g.count;
+    }
+    if (patch.lowest !== undefined) {
+      if (patch.lowest) g.lowest = true;
+      else delete g.lowest;
     }
   });
 }
 
+/** Remove a gain row. */
+export function removeAlignedGain(model, index, gainIndex) {
+  const row = model.data.classes?.[index];
+  if (!alignedGainRows(row?.aligned)[gainIndex]) return model;
+  markUndo(model, `Removed a row of ${rowLabel(row.name, 'class')}'s aligned levels`);
+  return editAligned(model, index, (a) => { a.gains.splice(gainIndex, 1); });
+}
+
 /**
- * Pick the aligned class a prestige level goes to: `kind` 'chosen' for a level
- * that advances the player's choice, 'lowest' to settle a tie for lowest.
+ * Pick the class one gain at a prestige level goes to: `kind` 'chosen' for a
+ * gain the player chooses, 'lowest' to settle a tie for lowest; `n` is the
+ * gain's place among that kind's gains at the level (a step's `n`).
  */
-export function setAlignedPick(model, index, kind, prcLevel, className) {
-  const a = model.data.classes?.[index]?.aligned;
-  if (!a) return model;
+export function setAlignedPick(model, index, kind, prcLevel, n, className) {
+  if (!model.data.classes?.[index]?.aligned) return model;
   const key = kind === 'lowest' ? 'ties' : 'picks';
-  return movingClassLevels(model, () => {
+  return editAligned(model, index, (a) => {
     const picks = (a[key] ||= {});
-    const name = String(className ?? '').trim();
-    if (name) picks[prcLevel] = name;
+    const list = picks[prcLevel] || [];
+    list[n] = String(className ?? '').trim();
+    for (let i = 0; i < list.length; i++) if (list[i] == null) list[i] = '';
+    while (list.length && !list[list.length - 1]) list.pop();
+    if (list.length) picks[prcLevel] = list;
     else delete picks[prcLevel];
     if (!Object.keys(picks).length) delete a[key];
   });

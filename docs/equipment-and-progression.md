@@ -489,15 +489,24 @@ The **Aligned classes** panel on Progression sets this up per prestige class
 (it shows once the character has two classes):
 
 - **Aligned classes**: one or more of the character's other classes.
-- **Levels**: the prestige class levels that add a level to an aligned class, in
-  the rule group syntax above. `2, +1` is 2nd level and every level after;
-  `2, 3, 5` lists them. Blank adds nothing.
-- **Lowest class levels**: prestige class levels that also add a level to
-  whichever aligned class is lowest at that point. Blank for most prestige classes.
+- **Rows of aligned levels**, each with:
+  - **Prestige levels**: the prestige class levels the row applies at, in the rule
+    group syntax above. `2, +1` is 2nd level and every level after; `2, 5, 8, 10`
+    lists them. Blank, or text that is not a rule, adds nothing.
+  - **Classes**: how many different aligned classes gain a level at each of those
+    levels (1 for most prestige classes).
+  - **Which**: *Chosen* (the player picks) or *Lowest* (the classes with the
+    fewest levels at that point).
 
-With one aligned class every gain goes to it. With several, each prestige level
-has a picker; a reached level with nothing picked is counted as *"N to pick"*. A
-tie for lowest goes to the first tied class in the list until another is picked.
+A prestige class with "+1 level of the aligned class from 2nd level" is one row:
+`2, +1`, 1, Chosen. Trinity Angel is three: `1, 4, 7`, 1, Lowest; `2, 5, 8, 10`, 2,
+Chosen; `3, 6, 9`, 2, Lowest.
+
+With as many gains as aligned classes, each class gets one. Otherwise each chosen
+gain has a picker; a reached level with nothing picked is counted as *"N to
+pick"*, and one row's pickers cannot name the same class twice. A Lowest row with
+2 takes the lowest class, then the lowest of the rest. A tie goes to the first
+tied class in the list until another is picked.
 
 What changes:
 
@@ -508,11 +517,13 @@ What changes:
   with the level when the rules or picks change, as they do for Planner edits.
 - The Planner rows, and so hit dice, BAB, saves and skill ranks, do not change.
 
-A row can give one class two levels (a Trinity-style chosen gain and lowest gain
-landing on the same class, or a gestalt track that also runs the aligned class).
-The second level's cells are stored under `level + 0.1` (`12.1`). Stored on the
-prestige class's row as `aligned: { classes, levels, lowest?, picks?, ties? }`,
-written only once the panel adds it. Covered by `tests/aligned.test.mjs`.
+One character level can give a class two levels: two rows applying at the same
+prestige level, two prestige classes aligned to the same class, or a gestalt track
+that also runs the aligned class. The second level's cells are stored under
+`level + 0.1` (`12.1`). Stored on the prestige class's row as
+`aligned: { classes, gains: [{ levels, count?, lowest? }], picks?, ties? }`, with
+`picks` and `ties` holding a list per prestige level, written only once the panel
+adds it. Covered by `tests/aligned.test.mjs`.
 
 ---
 
