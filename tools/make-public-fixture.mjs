@@ -227,6 +227,62 @@ function playerValues(c) {
   });
   c.stepTracker('power_points', 5);
 
+  // Rows in the four sub-systems a roster sweep would otherwise find empty:
+  // veils, maneuvers, a card deck and Alternate Training. Every veil,
+  // discipline, maneuver, card, manipulation and technique name is invented
+  // and no pack lists it, so each is read as the player's own entry.
+  // Veils: the class row names her Psion, so the veilweaving level and the
+  // base DC are read off the class table rather than typed.
+  c.listAdd('akashic.classes', { name: 'Psion', mod: 'Int', levelOverride: null, essenceCap: 2, bonusCap: 1 });
+  c.set('akashic.essence.pool', 4);
+  c.set('akashic.essence.featTraits', 1);
+  c.set('akashic.essence.fcb', 3);
+  c.listAdd('akashic.slots', {
+    slot: 'Head', bound: false, twinveil: false,
+    veils: [{ name: 'Lantern Circlet', desc: 'Sees through smoke & fog', essence: 1 }],
+  });
+  c.listAdd('akashic.slots', {
+    slot: 'Hands', bound: true, twinveil: true,
+    veils: [
+      { name: 'Glasswright Gloves', desc: 'Mends "brittle" things', essence: 2 },
+      { name: 'Ember Mitts', desc: '', essence: 0 },
+    ],
+  });
+  // Maneuvers: one discipline no catalogue lists, with a maneuver and a
+  // stance readied and a third known but not readied.
+  c.set('maneuvers.possibleManeuvers', 2);
+  c.set('maneuvers.possibleStances', 1);
+  c.listAdd('maneuvers.disciplines', {
+    name: 'Ashen Lantern',
+    known: ['Cinder Feint', 'Banked Coals Stance'],
+    custom: [
+      { level: 1, kind: 'maneuver', name: 'Cinder Feint', type: 'Strike' },
+      { level: 1, kind: 'stance', name: 'Banked Coals Stance', type: 'Stance' },
+      { level: 2, kind: 'maneuver', name: 'Smoke Ladder', type: 'Boost' },
+    ],
+  });
+  c.setManeuverNote('maneuvers.disciplines.0', 'Cinder Feint', 'Feint, then strike at +2 & move 5 ft.');
+  // A deck: two effect cards, a mana card, one card in the sideboard and a
+  // manipulation taken.
+  for (const [path, value] of Object.entries({
+    'cardcasting.enabled': true,
+    'cardcasting.castingStat': 'Int',
+    'cardcasting.cooldown': true,
+    'cardcasting.colors': 'UR',
+  })) c.set(path, value);
+  for (const card of [
+    { name: 'Glass Kite', qty: 3, cost: '1', color: 'U', mana: '', effect: 'Spark Lance', sphere: 'Destruction', tags: '', dice: '{1+floor(caster.level/2)}d6' },
+    { name: 'Tin Lantern', qty: 2, cost: '2', color: 'R', mana: '', effect: 'Warm Ward', sphere: 'Protection', tags: '', dice: '' },
+    { name: 'Blue Ink', qty: 4, cost: '', color: '', mana: 'U', effect: '', sphere: '', tags: '', dice: '' },
+  ]) c.listAdd('cardcasting.cards', card);
+  c.listAdd('cardcasting.sideboard', { name: 'Paper Moth', qty: 1, cost: '1', color: 'U', mana: '', effect: 'Flutter', sphere: 'Illusion', tags: '', dice: '' });
+  c.listAdd('cardcasting.manipulations', { group: 'General', name: 'Quiet Shuffle', note: 'Once a day', count: 1 });
+  // Alternate Training: a technique no pack lists, with picks at two levels.
+  c.set('altTraining.technique', 'Lantern Drill');
+  c.set('altTraining.picks.1', 'Steady Hands');
+  c.set('altTraining.picks.3', 'Quiet Step');
+  c.set('altTraining.notes', 'Practised at dawn.');
+
   /*
    * Hit points as the player rolled and recorded them. Twelve levels of d6
    * taken at maximum would be 120 with her Constitution, and she rolled 78; a

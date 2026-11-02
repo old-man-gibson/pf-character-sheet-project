@@ -1030,7 +1030,7 @@ function dashManeuversCard(model) {
         .map((k) => entry[k].trim()).concat(save).filter(Boolean);
       return `<div class="statline">
         <span class="label" title="${esc(e.name)}${entry.type || e.type ? ` — ${esc(entry.type || e.type)}` : ''}">${esc(e.name)}</span>
-        <span class="value dim">${e.kind === 'stance' ? 'stance' : `L${e.level ?? '—'}`}</span>
+        <span class="value dim">${e.kind === 'stance' ? 'stance' : `L${esc(e.level ?? '—')}`}</span>
       </div>
       ${head.length ? `<div class="dashtalent mnote">${head.map(shown).join(' · ')}</div>` : ''}
       ${entry.text ? `<div class="dashtalent mnote" title="${esc(entry.text)}">${shown(entry.text)}</div>` : ''}`;

@@ -10,7 +10,7 @@
  *
  *  Run: node tests/publish.test.mjs */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -21,7 +21,7 @@ import { describePublish, publishDocument } from '../app/js/publish.js';
 import { setAltTrainingTables } from '../app/js/model/subsystems/alt-training.js';
 import { blankDocument } from '../app/js/convert.js';
 import { COMPANION_KINDS, companionAbilityText as companionText } from '../app/js/companions.js';
-import { fixtureIds, hasFixtures, loadCharacter } from './fixtures.mjs';
+import { bundledPacks, fixtureIds, hasFixtures, loadCharacter, packCheck } from './fixtures.mjs';
 
 let pass = 0;
 let fail = 0;
@@ -34,21 +34,10 @@ const check = (label, actual, expected) => {
   }
 };
 
-/** Every pack a deployment carries, from either folder the app reads. */
-function bundledPacks() {
-  const packs = [];
-  for (const dir of [join('data', 'extensions'), join('private', 'extensions')]) {
-    const indexPath = join(dir, 'index.json');
-    if (!existsSync(indexPath)) continue;
-    for (const e of JSON.parse(readFileSync(indexPath, 'utf8')).extensions || []) {
-      const file = join(dir, e.file);
-      if (existsSync(file)) packs.push(JSON.parse(readFileSync(file, 'utf8')));
-    }
-  }
-  return packs;
-}
-
-registerTables(mergeTables(bundledPacks()), model);
+const bundled = mergeTables(bundledPacks());
+registerTables(bundled, model);
+// The veils live only in the git-ignored private/extensions.
+const veilCheck = packCheck(check, (bundled.veils?.veils || []).length > 0, 'the akashic veils');
 
 /*  Feats, spells and powers travel as the pack's words beside the player's
  *  own, never in their place, and a sheet with no pack reads them there. A
@@ -132,10 +121,17 @@ if (!hasFixtures()) {
 const richest = fixtureIds()
   .map((id) => {
     const doc = new Character(loadCharacter(id)).toJSON();
-    const { report } = publishDocument(doc);
-    // Veils and maneuvers, which the stranger below reads back.
-    const weight = (report.carriedBy.veil || 0) + (report.carriedBy.maneuver || 0)
-      + report.outline.filter((o) => /^(veil|maneuver):/.test(o)).length;
+    // Veils and maneuvers whose words come from a pack, which the stranger
+    // below reads back. What the player wrote is in the document either way.
+    const veils = [...(doc.akashic?.slots || []), ...(doc.akashic?.kheshig || [])]
+      .flatMap((s) => s.veils || []).filter((v) => v?.name);
+    const fromPack = (v) => {
+      const d = model.veilDetails(v);
+      return d.known && !d.mine;
+    };
+    const weight = veils.filter(fromPack).length
+      + (doc.maneuvers?.disciplines || []).reduce((n, d) => n
+        + (d.known || []).filter((k) => model.disciplineEntries(d.name).some((e) => e.name === k)).length, 0);
     return { id, doc, weight };
   })
   .sort((a, b) => b.weight - a.weight)[0];
@@ -223,8 +219,9 @@ for (const d of published.maneuvers?.disciplines || []) {
 /* ---------------- what a stranger sees ---------------- */
 
 /*  The half below needs a character that actually references a pack, and the
- *  public fixture references none -- it is invented rather than converted, and
- *  the repository ships no catalogue for it to draw on. So in a fresh clone
+ *  public fixture references none -- it is invented rather than converted, its
+ *  veils and maneuvers carry their own words, and the repository ships no
+ *  catalogue for it to draw on. So in a fresh clone
  *  (and in CI) this stands down and says so, exactly as the roster suites do
  *  for checks written against a named character.
  *
@@ -234,7 +231,7 @@ for (const d of published.maneuvers?.disciplines || []) {
  *  for the fixture to reference. */
 if (richest.weight === 0) {
   console.log('\npublish: no character in this roster references a pack, so what a stranger\n'
-    + '  sees is not checked here. It needs a roster with veils or maneuvers on it.');
+    + '  sees is not checked here. It needs a roster with veils or maneuvers from a pack.');
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 }
@@ -272,7 +269,7 @@ const seen = JSON.parse(execFileSync(process.execPath, [join(dir, 'stranger.mjs'
 
 check('without the packs an unpublished character shows a stranger nothing',
   [seen.plain.veil, seen.plain.maneuver], ['', '']);
-check('the published one still carries its veil text', seen.published.veil.length > 0, true);
+veilCheck('the published one still carries its veil text', seen.published.veil.length > 0, true);
 check('and what its maneuvers are', seen.published.maneuver.length > 0, true);
 check('a stranger is shown no more entries than the author had',
   seen.published.veilCount, seen.plain.veilCount);

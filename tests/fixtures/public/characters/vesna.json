@@ -3771,15 +3771,53 @@
   }
  },
  "akashic": {
-  "classes": [],
+  "classes": [
+   {
+    "name": "Psion",
+    "mod": "Int",
+    "levelOverride": null,
+    "essenceCap": 2,
+    "bonusCap": 1
+   }
+  ],
   "essence": {
-   "featTraits": 0,
+   "featTraits": 1,
    "boon": 0,
    "radiantDawn": 0,
-   "fcb": 0,
-   "pool": 0
+   "fcb": 3,
+   "pool": 4
   },
-  "slots": [],
+  "slots": [
+   {
+    "slot": "Head",
+    "bound": false,
+    "twinveil": false,
+    "veils": [
+     {
+      "name": "Lantern Circlet",
+      "desc": "Sees through smoke & fog",
+      "essence": 1
+     }
+    ]
+   },
+   {
+    "slot": "Hands",
+    "bound": true,
+    "twinveil": true,
+    "veils": [
+     {
+      "name": "Glasswright Gloves",
+      "desc": "Mends \"brittle\" things",
+      "essence": 2
+     },
+     {
+      "name": "Ember Mitts",
+      "desc": "",
+      "essence": 0
+     }
+    ]
+   }
+  ],
   "kheshig": [],
   "otherReceptacles": [],
   "sourceExtras": [],
@@ -3787,9 +3825,43 @@
   "steadyVeilDCOverride": null
  },
  "maneuvers": {
-  "possibleManeuvers": 0,
-  "possibleStances": 0,
-  "disciplines": [],
+  "possibleManeuvers": 2,
+  "possibleStances": 1,
+  "disciplines": [
+   {
+    "name": "Ashen Lantern",
+    "known": [
+     "Cinder Feint",
+     "Banked Coals Stance"
+    ],
+    "custom": [
+     {
+      "level": 1,
+      "kind": "maneuver",
+      "name": "Cinder Feint",
+      "type": "Strike"
+     },
+     {
+      "level": 1,
+      "kind": "stance",
+      "name": "Banked Coals Stance",
+      "type": "Stance"
+     },
+     {
+      "level": 2,
+      "kind": "maneuver",
+      "name": "Smoke Ladder",
+      "type": "Boost"
+     }
+    ],
+    "notes": {
+     "Cinder Feint": "Feint, then strike at +2 & move 5 ft."
+    },
+    "readiedStances": [
+     "Banked Coals Stance"
+    ]
+   }
+  ],
   "sourceExtras": []
  },
  "psionics": {
@@ -3821,10 +3893,10 @@
   "sourceExtras": []
  },
  "cardcasting": {
-  "enabled": false,
-  "castingStat": "",
+  "enabled": true,
+  "castingStat": "Int",
   "useD100": false,
-  "cooldown": false,
+  "cooldown": true,
   "manaPool": false,
   "manaGraveyard": false,
   "mods": {
@@ -3839,7 +3911,7 @@
    "strikableAssets": false,
    "tightHand": false
   },
-  "colors": "",
+  "colors": "UR",
   "colorSpheres": {
    "R": [],
    "B": [],
@@ -3848,10 +3920,104 @@
    "G": []
   },
   "attunedSpheres": [],
-  "manipulations": [],
+  "manipulations": [
+   {
+    "group": "General",
+    "name": "Quiet Shuffle",
+    "note": "Once a day",
+    "count": 1,
+    "owner": ""
+   }
+  ],
   "manipulationsAvailable": null,
-  "cards": [],
-  "sideboard": [],
+  "cards": [
+   {
+    "name": "Glass Kite",
+    "qty": 3,
+    "cost": "1",
+    "color": "U",
+    "mana": "",
+    "effect": "Spark Lance",
+    "sphere": "Destruction",
+    "tags": "",
+    "dice": "{1+floor(caster.level/2)}d6",
+    "art": "",
+    "subtitle": "",
+    "save": "",
+    "dc": "",
+    "range": "",
+    "target": "",
+    "duration": "",
+    "casting": "",
+    "damage": "",
+    "owner": ""
+   },
+   {
+    "name": "Tin Lantern",
+    "qty": 2,
+    "cost": "2",
+    "color": "R",
+    "mana": "",
+    "effect": "Warm Ward",
+    "sphere": "Protection",
+    "tags": "",
+    "dice": "",
+    "art": "",
+    "subtitle": "",
+    "save": "",
+    "dc": "",
+    "range": "",
+    "target": "",
+    "duration": "",
+    "casting": "",
+    "damage": "",
+    "owner": ""
+   },
+   {
+    "name": "Blue Ink",
+    "qty": 4,
+    "cost": "",
+    "color": "",
+    "mana": "U",
+    "effect": "",
+    "sphere": "",
+    "tags": "",
+    "dice": "",
+    "art": "",
+    "subtitle": "",
+    "save": "",
+    "dc": "",
+    "range": "",
+    "target": "",
+    "duration": "",
+    "casting": "",
+    "damage": "",
+    "owner": ""
+   }
+  ],
+  "sideboard": [
+   {
+    "name": "Paper Moth",
+    "qty": 1,
+    "cost": "1",
+    "color": "U",
+    "mana": "",
+    "effect": "Flutter",
+    "sphere": "Illusion",
+    "tags": "",
+    "dice": "",
+    "art": "",
+    "subtitle": "",
+    "save": "",
+    "dc": "",
+    "range": "",
+    "target": "",
+    "duration": "",
+    "casting": "",
+    "damage": "",
+    "owner": ""
+   }
+  ],
   "harrow": false,
   "notes": "",
   "sourceExtras": [],
@@ -6017,10 +6183,13 @@
   "classFeatures": {}
  },
  "altTraining": {
-  "picks": {},
+  "picks": {
+   "1": "Steady Hands",
+   "3": "Quiet Step"
+  },
   "alt": {},
-  "notes": "",
-  "technique": "",
+  "notes": "Practised at dawn.",
+  "technique": "Lantern Drill",
   "rowNotes": {}
  },
  "gestalt": {

@@ -747,7 +747,7 @@ function disciplineColumn(model, ctx, d, i) {
         ${d.inCatalogue === false && !entries.length
     ? '<p class="empty">Not in the catalogue.</p>' : ''}
         ${levels.map((lvl) => `
-          <div class="dlevel">${lvl ? `Level ${lvl}` : 'Other'}</div>
+          <div class="dlevel">${lvl ? `Level ${esc(lvl)}` : 'Other'}</div>
           ${entries.map((e, ei) => [e, ei]).filter(([e]) => e.level === lvl).map(([e, ei]) => {
     const wiki = wikiUrl(e.name);
     const key = `${list}|${e.name}`;
