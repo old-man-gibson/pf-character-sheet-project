@@ -8,7 +8,7 @@
  */
 
 import { forwarded, lazyScope, scopeIfFormulas } from './scope.js';
-import { evaluateAmount, speedRows } from './util.js';
+import { evaluateAmount, isLandSpeed, speedRows } from './util.js';
 import { LOAD_PENALTIES, armorParts, reducedSpeed } from '../rules.js';
 import { featNames } from './feats.js';
 
@@ -56,9 +56,6 @@ export function recomputeSpeeds(model) {
       }
     });
 }
-
-/** A walking speed: the land row, or a row with no type. */
-const isLandSpeed = (sp) => /^(land|base|walk|)$/i.test(String(sp?.type ?? '').trim());
 
 /**
  * How many languages the character may know beyond the native ones.

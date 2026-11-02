@@ -15,8 +15,9 @@ import {
 } from '../rules.js';
 import { deathThreshold, effectiveMythicTier, mythicPowerUses, surgeDie } from '../rules.js';
 import {
-  COMPANION_ALIASES, COMPANION_FAMILIES, COMPANION_KINDS, COMPANION_LABELS, COMPANION_TARGETS, companionAttackKey,
-  companionHeading, companionInUse, companionNameTest, companionScope, companionSkillKey,
+  COMPANION_ALIASES, COMPANION_FAMILIES, COMPANION_KINDS, COMPANION_LABELS, COMPANION_TARGETS, companionArmor,
+  companionAttackKey, companionById, companionHeading, companionInUse, companionNameTest, companionScope,
+  companionSkillKey,
 } from '../companions.js';
 import {
   collectContributions, collectDefinitions, collectUses, hasTokens, plainTokens, renderTokens,
@@ -1193,6 +1194,14 @@ export function typedColumns(model, key) {
       out.shield = Number(worn.shield) || 0;
     }
     return out;
+  }
+  // A companion's armour is an armour bonus on the two armour classes it
+  // reaches, so a forwarded armour bonus (mage armour) does not stack with it.
+  const compAc = /^([A-Za-z]\w*)\.ac\.(total|flatFooted)$/.exec(key);
+  const comp = compAc && companionById(c, compAc[1]);
+  if (comp) {
+    const worn = companionArmor(comp.kind, comp.b)?.ac || 0;
+    return worn ? { armor: worn } : null;
   }
   const ability = /^(str|dex|con|int|wis|cha)\.score$/.exec(key);
   if (ability) {

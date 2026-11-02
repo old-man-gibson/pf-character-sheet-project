@@ -1337,6 +1337,70 @@ for (const id of IDS) {
   check(`${id} and the row is still there`, b.slotless[0].name, 'Belt of giant strength');
 }
 
+console.log('companions -- barding in the Armor slot');
+{
+  const c = new Character(blankDocument('barding-test'));
+  const set = (path, v) => c.set(`animalCompanion.0.${path}`, v);
+  const b = () => c.data.animalCompanion[0];
+  const k = () => b().calc;
+  set('name', 'Warhorse');
+  set('levelOverride', 4);
+  set('size', 'Large');
+  set('bodyType', 'Quadruped (hooves)');
+  set('scores.dex.base', 18);
+  for (const [type, base] of [['Land', 50], ['Fly', 60], ['Swim', 20]]) {
+    c.listAdd('animalCompanion.0.speeds', { type, base, bonus: 0 });
+  }
+  const skill = (name) => b().skills.find((s) => s.name === name).total;
+  const was = {
+    ac: k().ac, touch: k().touch, ff: k().flatFooted, cmd: k().cmd, dex: k().scores.dex.mod,
+    stealth: skill('Stealth'), perception: skill('Perception'),
+  };
+  set('items.Armor.name', 'Chainmail barding');
+  set('items.Armor.type', 'Medium');
+  set('items.Armor.acBonus', 6);
+  set('items.Armor.maxDex', 2);
+  set('items.Armor.acp', -5);
+  check('the armour bonus is on AC and flat-footed, not touch or CMD',
+    [k().flatFooted - was.ff, k().cmd - was.cmd], [6, 0]);
+  check('max Dex caps the Dex bonus on AC and touch',
+    [k().ac - was.ac, k().touch - was.touch], [6 - (was.dex - 2), 2 - was.dex]);
+  check('the working names both',
+    companionBreakdown('animalCompanion', b(), 'ac').parts
+      .filter((x) => x.label === 'armor' || x.label === 'Dex').map((x) => [x.label, x.value]),
+    [['Dex', 2], ['armor', 6]]);
+  check('the check penalty is on Str and Dex skills only',
+    [skill('Stealth') - was.stealth, skill('Perception') - was.perception], [-5, 0]);
+  check('medium barding slows land speed by the table and stops flight',
+    k().speeds.map((s) => [s.final, s.uncut ?? null]), [[35, 50], [0, 60], [20, null]]);
+  check('a typed check penalty of 5 is still a penalty', (set('items.Armor.acp', 5), skill('Stealth') - was.stealth), -5);
+  set('items.Armor.type', 'Heavy');
+  check('heavy barding runs at ×3', k().armor.run, 3);
+
+  // An armour bonus forwarded at it (mage armour) does not stack with barding.
+  c.listAdd('animalCompanion.0.slotless', {
+    name: 'Mage armor', cost: 0, worn: true,
+    effect: '{animalCompanion.ac.total, animalCompanion.ac.flatFooted += 4 as armor}',
+  });
+  check('a smaller armour bonus adds nothing', [k().ac - was.ac, c.contributions.errors], [6 - (was.dex - 2), []]);
+  set('items.Armor.worn', false);
+  check('taken off, it stops and the forwarded one applies',
+    [k().flatFooted - was.ff, k().touch - was.touch, k().speeds[0].final, skill('Stealth')], [4, 0, 50, was.stealth]);
+  set('items.Armor.worn', true);
+  set('bodyType', 'Serpentine');
+  check('a body type with no Armor slot wears none', k().armor, null);
+
+  // The eidolon has no body types; its armour slows it but is not barding.
+  c.set('eidolon.0.items.Armor', { name: 'Breastplate', type: 'Medium', acBonus: 6, worn: true });
+  c.listAdd('eidolon.0.speeds', { type: 'Land', base: 30, bonus: 0 });
+  c.listAdd('eidolon.0.speeds', { type: 'Fly', base: 40, bonus: 0 });
+  check('an eidolon in medium armour is slowed but still flies',
+    c.data.eidolon[0].calc.speeds.map((s) => s.final), [20, 40]);
+  check('the saved document keeps no worked-out skill penalty', JSON.stringify(c.toJSON()).includes('armorCheck'), false);
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and reopens wearing the same barding', back.data.animalCompanion[0].items.Armor.name, 'Chainmail barding');
+}
+
 /*
  * The conjured companion never had a worksheet, so its checks need no fixture:
  * a blank sheet carries the block, and every number is the wiki table's. This

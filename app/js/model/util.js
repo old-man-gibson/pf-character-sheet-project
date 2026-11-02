@@ -70,6 +70,9 @@ export function speedForwardKey(sp) {
   return head ? `speed.${slug(head)}` : null;
 }
 
+/** A walking speed: the land row, or a row with no type. */
+export const isLandSpeed = (sp) => /^(land|base|walk|)$/i.test(String(sp?.type ?? '').trim());
+
 /**
  * A movement row as it is kept -- a type, a base in feet, and a bonus -- on
  * the character's Speed panel and on every companion's. The bonus may be a
