@@ -345,6 +345,24 @@ export function repeatColumns(features) {
 }
 
 /**
+ * The tails of a menu's name as patterns, longest first, for
+ * `parseOptionReplaces`. Built once per name rather than once per option.
+ */
+const MENU_TAILS = new Map();
+function menuTails(feature) {
+  const name = str(feature).trim();
+  if (!MENU_TAILS.has(name)) {
+    const words = name.split(/\s+/).filter(Boolean);
+    MENU_TAILS.set(name, words.map((_, i) => words.slice(i).join(' ')).filter((s) => s.length > 2).map((tail) => {
+      // singular or plural, since one sentence writes "Techniques" and the next "Technique"
+      const stem = tail.replace(/s$/i, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`\\s+${stem}s?$`, 'i');
+    }));
+  }
+  return MENU_TAILS.get(name);
+}
+
+/**
  * Which entries of the menu it joins an option pushes out, read off its own
  * text: "This replaces the Ranged Cut and Armor Rending Slash Iaijutsu
  * Techniques." The kind-word at the end is the menu's own name, which every
@@ -352,15 +370,13 @@ export function repeatColumns(features) {
  * with comes off -- leaving the entries themselves.
  */
 export function parseOptionReplaces(text, feature = '') {
-  const words = str(feature).trim().split(/\s+/).filter(Boolean);
-  const tails = words.map((_, i) => words.slice(i).join(' ')).filter((s) => s.length > 2);
+  // Most entries say nothing of the kind, and this check is far cheaper than the pattern below.
+  if (!/replace/i.test(str(text))) return [];
+  const tails = menuTails(feature);
   const out = [];
   for (const m of str(text).matchAll(/\breplace[sd]?\s+(?:the\s+)?([^.;]+?)(?=[.;]|$)/gi)) {
     let list = m[1].trim();
-    for (const tail of tails) {
-      // singular or plural, since one sentence writes "Techniques" and the next "Technique"
-      const stem = tail.replace(/s$/i, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const re = new RegExp(`\\s+${stem}s?$`, 'i');
+    for (const re of tails) {
       if (re.test(list)) { list = list.replace(re, ''); break; }
     }
     for (const s of list.replace(/\s*,?\s+(?:and|or)\s+/gi, ', ').split(/,\s*/)) {
@@ -543,14 +559,18 @@ const featureType = (t) => {
  * A pack in its canonical shape. Unknown keys under `provides` are kept -- a
  * newer app may know a table this one does not, and a pack should survive a
  * round trip through an older one -- but unknown top-level keys are dropped.
+ *
+ * `owned` says nothing else holds `doc`, as when it has just come out of
+ * `JSON.parse`, so its tables are kept rather than copied. Copying them was
+ * over half the time it took to read a large set of stored packs.
  */
-export function normalizeExtension(doc) {
+export function normalizeExtension(doc, { owned = false } = {}) {
   const d = obj(doc);
   const name = str(d.name).trim();
   const id = slugId(d.id) || slugId(name);
   const provides = {};
   for (const [key, table] of Object.entries(obj(d.provides))) {
-    if (table && typeof table === 'object') provides[key] = structuredClone(table);
+    if (table && typeof table === 'object') provides[key] = owned ? table : structuredClone(table);
   }
   return {
     format: EXTENSION_FORMAT,
@@ -760,6 +780,13 @@ export function packsWorthMoving(found) {
  */
 export function extensionStore(medium = globalThis.localStorage) {
   const cache = new Map();
+  // Each pack's document as `read` made it, by key. Parsing is the slow part
+  // of a read, and the sheet reads every pack on every render of the
+  // Extensions tab. A write to a key drops its entry.
+  const parsed = new Map();
+  // Goes up on every change, so a caller can tell whether what it worked out
+  // from the store is still current.
+  let revision = 0;
   let opened = null;
   let backing = null;
   let moved = [];
@@ -776,7 +803,9 @@ export function extensionStore(medium = globalThis.localStorage) {
         else backing = asMedium(chosen);
         const found = await backing.all();
         cache.clear();
+        parsed.clear();
         for (const [key, value] of found) cache.set(key, value);
+        revision++;
         return true;
       })().catch(() => false);
     }
@@ -809,7 +838,9 @@ export function extensionStore(medium = globalThis.localStorage) {
     await backing.commit(writes);
     for (const [key, value] of writes) {
       if (value === null) cache.delete(key); else cache.set(key, value);
+      parsed.delete(key);
     }
+    revision++;
   };
 
   return {
@@ -820,15 +851,26 @@ export function extensionStore(medium = globalThis.localStorage) {
     get medium() { return backing?.name || null; },
     get moved() { return [...moved]; },
 
+    /** A number that changes whenever the store does. */
+    get revision() { return revision; },
+
     /** Every local pack's index row, in the order they were added. */
     list() { return readIndex().extensions.map((e) => ({ ...e, local: true })); },
 
-    /** One local pack's full document, or null. */
+    /**
+     * One local pack's full document, or null. Parsed on the first read and
+     * kept until the pack is written again, so every caller gets the same
+     * object: copy it before changing it.
+     */
     read(id) {
-      try {
-        const raw = cache.get(extensionKey(id));
-        return raw ? normalizeExtension(JSON.parse(raw)) : null;
-      } catch { return null; }
+      const key = extensionKey(id);
+      if (parsed.has(key)) return parsed.get(key);
+      const raw = cache.get(key);
+      if (!raw) return null;
+      let doc = null;
+      try { doc = normalizeExtension(JSON.parse(raw), { owned: true }); } catch { doc = null; }
+      parsed.set(key, doc);
+      return doc;
     },
 
     /**
@@ -1245,8 +1287,26 @@ export function activeExtensions(bundled, store) {
   return out;
 }
 
+/**
+ * What a catalogue entry was read as, by the entry and the name of the
+ * reading: a class block, a page's features, a menu option.
+ *
+ * Reading means regexes over the entry's text, and every refresh reads every
+ * entry of every active pack. An entry belongs to a pack document, which is
+ * kept until the pack is written again, so each entry is read once per pack
+ * revision. Nothing changes an entry in place: an edited pack is saved and
+ * read back as a new document. Readings come back shared: do not change them.
+ */
+const ENTRY_READINGS = new WeakMap();
+function readEntry(entry, reading, read) {
+  if (!entry || typeof entry !== 'object') return read();
+  let held = ENTRY_READINGS.get(entry);
+  if (!held) ENTRY_READINGS.set(entry, held = new Map());
+  if (!held.has(reading)) held.set(reading, read());
+  return held.get(reading);
+}
+
 /** Every block across the active packs, tagged with the pack it came from. */
-const DERIVED_CLASS = new WeakMap();
 export function activeBlocks(extensions) {
   const out = [];
   for (const ext of arr(extensions)) {
@@ -1266,9 +1326,7 @@ export function activeBlocks(extensions) {
     for (const cat of arr(ext.provides?.catalogues?.catalogues)) {
       if (lower(cat?.kind) !== 'class' && lower(cat?.kind) !== 'prestige class') continue;
       for (const entry of arr(cat.entries)) {
-        // Read once per entry: the blocks are asked for on every render of the list.
-        if (!DERIVED_CLASS.has(entry)) DERIVED_CLASS.set(entry, classBlockFromEntry(entry));
-        const block = DERIVED_CLASS.get(entry);
+        const block = readEntry(entry, 'class block', () => classBlockFromEntry(entry));
         if (!block || written.has(lower(block.name))) continue;
         derived.set(lower(block.name), { ...block, extId: ext.id, extName: ext.name, index: index++ });
       }
@@ -1653,31 +1711,35 @@ export function optionCataloguesFromTables(tables) {
   for (const cat of arr(tables?.catalogues?.catalogues)) {
     if (lower(cat?.kind) !== 'class option') continue;
     for (const e of arr(cat.entries)) {
-      const fields = new Map(arr(e?.fields).map(([k, v]) => [lower(k), str(v).trim()]));
-      const feature = fields.get('option');
+      const { cls, feature } = readEntry(e, 'class option', () => {
+        const fields = new Map(arr(e?.fields).map(([k, v]) => [lower(k), str(v).trim()]));
+        return { cls: fields.get('class') || '', feature: fields.get('option') };
+      });
       if (!feature || !str(e?.name).trim()) continue;
-      const cls = fields.get('class') || '';
       const key = `${lower(cls)}|${lower(feature)}`;
       if (!groups.has(key)) groups.set(key, { class: cls, feature, entries: [] });
       groups.get(key).entries.push(e);
     }
   }
   for (const g of groups.values()) {
-    const listed = g.entries.length === 1 ? listedOptions(g.entries[0].text, str(g.entries[0].source)) : [];
+    const only = g.entries.length === 1 ? g.entries[0] : null;
+    const listed = only
+      ? readEntry(only, `listed|${g.feature}`, () => normalizeOptions(listedOptions(only.text, str(only.source)), g.feature))
+      : [];
     // An entry named for the list itself -- "Vigilante Talent" among the
     // vigilante's talents -- is the list's own rules, not one more to pick.
     const menuName = [g.class, g.feature].filter(Boolean).join(' ');
     const about = g.entries.length > 1 ? g.entries.find((e) => lower(e.name) === lower(menuName)) : null;
-    const options = listed.length ? listed : g.entries.filter((e) => e !== about).map((e) => {
+    const options = listed.length ? [...listed] : g.entries.filter((e) => e !== about).map((e) => readEntry(e, `option|${g.feature}`, () => {
       const { name, type } = splitAbilityType(e.name);
-      return {
+      return normalizeOptions([{
         name, type,
         text: str(e.text), source: str(e.source), minLevel: optionMinLevel(e.text),
-      };
-    });
+      }], g.feature)[0];
+    })).filter(Boolean);
     out.push({
       name: menuName, class: g.class, feature: g.feature,
-      text: str(about?.text), options: normalizeOptions(options, g.feature),
+      text: str(about?.text), options,
     });
   }
 
@@ -1686,16 +1748,22 @@ export function optionCataloguesFromTables(tables) {
     const kind = lower(row?.kind);
     if (!kind || kind === 'power' || !str(row?.name).trim()) continue;
     if (!kinds.has(kind)) kinds.set(kind, []);
-    const { name: type, type: abilityType } = splitAbilityType(row.type);
-    const facts = [type, row.level != null && row.level !== '' ? `level ${row.level}` : '',
-      str(row.burn).trim() ? `burn ${str(row.burn).trim()}` : '', str(row.element).trim()];
-    kinds.get(kind).push({
-      family: type,
-      option: { name: str(row.name).trim(), type: abilityType, category: facts.filter(Boolean).join(', '), text: str(row.text), source: str(row.source) },
-    });
+    kinds.get(kind).push(readEntry(row, 'power', () => {
+      const { name: type, type: abilityType } = splitAbilityType(row.type);
+      const facts = [type, row.level != null && row.level !== '' ? `level ${row.level}` : '',
+        str(row.burn).trim() ? `burn ${str(row.burn).trim()}` : '', str(row.element).trim()];
+      return {
+        row,
+        family: type,
+        option: { name: str(row.name).trim(), type: abilityType, category: facts.filter(Boolean).join(', '), text: str(row.text), source: str(row.source) },
+      };
+    }));
   }
   for (const [kind, rows] of kinds) {
-    const menu = (name, list) => out.push({ name, class: '', feature: name, text: '', options: normalizeOptions(list.map((r) => r.option), name) });
+    const menu = (name, list) => out.push({
+      name, class: '', feature: name, text: '',
+      options: list.map((r) => readEntry(r.row, `power|${name}`, () => normalizeOptions([r.option], name)[0])).filter(Boolean),
+    });
     menu(title(kind), rows);
     const types = [...new Set(rows.map((r) => r.family).filter(Boolean))];
     for (const t of types) menu(`${title(kind)}: ${t}`, rows.filter((r) => r.family === t));
@@ -1717,7 +1785,8 @@ function pageFeatures(text) {
   const out = [];
   let open = null;
   for (const para of str(text).split(/\n{2,}/)) {
-    const m = para.match(/^\*{0,2}([A-Z][^.:*\n]{1,60}?)(?:\s*\((Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?\))?\*{0,2}:\*{0,2}\s+(\S[\s\S]*)$/);
+    // A label ends in a colon, so a paragraph without one is not a label.
+    const m = para.includes(':') && para.match(/^\*{0,2}([A-Z][^.:*\n]{1,60}?)(?:\s*\((Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?\))?\*{0,2}:\*{0,2}\s+(\S[\s\S]*)$/);
     if (m && !CLASS_FRONT_MATTER.test(m[1])) {
       open = { name: m[1].trim(), type: m[2] || '', text: m[3].trim() };
       out.push(open);
@@ -1780,20 +1849,20 @@ export function classFeatureTextFromTables(tables) {
     const kind = lower(cat?.kind);
     if (kind !== 'class' && kind !== 'prestige class' && kind !== 'archetype') continue;
     for (const e of arr(cat.entries)) {
-      const name = str(e?.name).trim();
-      if (!name) continue;
-      const fields = new Map(arr(e?.fields).map(([k, v]) => [lower(k), str(v).trim()]));
-      // An archetype may be open to several classes, and is each one's.
-      const classes = kind === 'archetype' ? (fields.get('class') || '').split(',').map((s) => s.trim()).filter(Boolean) : [name];
-      if (!classes.length) continue;
-      const category = kind === 'archetype' ? `${name} archetype` : name;
-      const options = pageFeatures(e.text).map((f) => ({ ...f, category, source: str(e.source) }));
-      for (const cls of options.length ? classes : []) {
-        out.push({
+      out.push(...readEntry(e, `features of ${kind}`, () => {
+        const name = str(e?.name).trim();
+        if (!name) return [];
+        const fields = new Map(arr(e?.fields).map(([k, v]) => [lower(k), str(v).trim()]));
+        // An archetype may be open to several classes, and is each one's.
+        const classes = kind === 'archetype' ? (fields.get('class') || '').split(',').map((s) => s.trim()).filter(Boolean) : [name];
+        if (!classes.length) return [];
+        const category = kind === 'archetype' ? `${name} archetype` : name;
+        const options = pageFeatures(e.text).map((f) => ({ ...f, category, source: str(e.source) }));
+        return (options.length ? classes : []).map((cls) => ({
           name: `${name} — features${classes.length > 1 ? ` (${cls})` : ''}`, class: cls, feature: '', text: '',
           hidden: true, archetype: kind === 'archetype', options: normalizeOptions(options, ''),
-        });
-      }
+        }));
+      }));
     }
   }
   return out;

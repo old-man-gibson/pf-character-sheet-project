@@ -28,7 +28,7 @@
  *
  *  Run: node tests/panels.test.mjs */
 import { blankDocument } from '../app/js/convert.js';
-import { Character } from '../app/js/model.js';
+import { Character, setOptionCatalogues } from '../app/js/model.js';
 import { hasFixtures, fixtureIds, loadCharacter } from './fixtures.mjs';
 import * as overview from '../app/js/ui/panels/overview.js';
 import * as combat from '../app/js/ui/panels/combat.js';
@@ -680,6 +680,50 @@ console.log('\nthe gear table: three cells a bonus, and the card grows with its 
   ok('and its description is a growing prose field', /<span class="prose  grow"[^>]*>\s*<textarea data-item="equipment\.gear\|0\|note"/.test(open));
   const span = Number(open.match(/gearcardrow"><td colspan="(\d+)"/)?.[1]);
   ok('the card spans exactly the row’s cells', span === 5 + 3 * 3 + 4);
+}
+
+console.log('\nthe Progression tab: a menu picker is drawn with its choice and filled when pressed');
+{
+  const menu = (name, cls, feature, extra = {}) => ({ name, class: cls, feature, options: [{ name: `${name} one`, text: 'x' }], ...extra });
+  setOptionCatalogues([
+    menu('Kiai Arts', 'Samurai', 'Kiai art'), menu('Rogue Talents', 'Rogue', 'Rogue talent'),
+    menu('Samurai — features', 'Samurai', '', { hidden: true }),
+  ]);
+  const c = new Character(blankDocument({ name: 'Menus', level: 3 }));
+  for (let l = 1; l <= 3; l++) c.setProgressionClass(l, 0, 'Samurai');
+  for (const col of ['Kiai art', 'Special', 'Gone']) c.addClassFeatureColumn('Samurai', col);
+  const cols = c.data.progression.classFeatures.Samurai.columns;
+  c.setClassFeatureColumnOptions('Samurai', cols.indexOf('Gone'), 'Old Menu');
+  c.addClassFeatureRuleGroup('Samurai', cols.indexOf('Special'), { rule: 'odd' });
+  c.addClassFeatureRuleGroup('Samurai', cols.indexOf('Special'), { rule: 'even' });
+  c.setClassFeatureRuleGroup('Samurai', cols.indexOf('Special'), 1, { optionsFrom: 'rogue talents' });
+  const html = lore.renderProgressionPanel(c, CTX);
+  const pickers = [...html.matchAll(/<select class="colmenu[^>]*>[\s\S]*?<\/select>/g)].map((m) => m[0]);
+  const fill = (s) => s.match(/data-fill="(\w+)"/)?.[1];
+  const picked = (s) => s.match(/<option [^>]*selected>[^<]*<\/option>/)?.[0];
+  const options = (s) => (s.match(/<option\b/g) || []).length;
+  const full = (s, value) => (fill(s) === 'menus' ? lore.columnMenuChoices : lore.groupMenuChoices)(c, value);
+  const valueOf = (s) => s.match(/<option value="([^"]*)"[^>]*selected>/)?.[1];
+  ok('every picker is drawn with its blank and its choice only, and asks for the rest',
+    pickers.length === 5 && pickers.every((s) => fill(s) && options(s) <= 2));
+  ok('filled, each lists every menu but the hidden, and reads the same as before',
+    pickers.every((s) => {
+      const all = full(s, valueOf(s));
+      return picked(all) === picked(s) && /Kiai Arts/.test(all) && /Rogue Talents/.test(all) && !/features/.test(all);
+    }));
+  const kiai = pickers.find((s) => /Kiai Arts/.test(s));
+  ok('a column a menu names is drawn with it', /<option value="Kiai Arts" selected>Kiai Arts<\/option>/.test(kiai));
+  ok('a group menu written in other letters reads as the pack spells it, both ways',
+    pickers.some((s) => fill(s) === 'groupmenus' && /<option value="Rogue Talents" selected>/.test(s))
+      && /<option value="Rogue Talents" selected>/.test(lore.groupMenuChoices(c, 'rogue talents')));
+  const gone = pickers.find((s) => /Old Menu/.test(s));
+  ok('a menu no pack provides is marked, and kept when the list is filled',
+    /class="colmenu bad"/.test(gone) && /<option value="Old Menu" selected>Old Menu<\/option>/.test(gone)
+      && /<option value="Old Menu" selected>Old Menu<\/option>$/.test(lore.columnMenuChoices(c, 'Old Menu')));
+  ok('an empty picker reads the blank either way',
+    lore.columnMenuChoices(c, '', { all: false }) === '<option value="" selected>— no menu —</option>'
+      && lore.columnMenuChoices(c, '').startsWith('<option value="" selected>— no menu —</option><option value="Kiai Arts">'));
+  setOptionCatalogues([]);
 }
 
 if (hasFixtures()) {

@@ -74,6 +74,10 @@ class ExtensionRuntime extends EventTarget {
   bundled = [];
   #loading = null;
   #store = null;
+  // What active() and blocks() last answered, and from what. The Extensions
+  // tab asks for both on every render, each keystroke in its search included.
+  #active = null;
+  #blocks = null;
 
   /**
    * The local store. It exists from the first ask, but it is empty until
@@ -114,8 +118,24 @@ class ExtensionRuntime extends EventTarget {
     return this.#loading;
   }
 
-  active() { return activeExtensions(this.bundled, this.store); }
-  blocks() { return activeBlocks(this.active()); }
+  /**
+   * Worked out again only when the bundled list or the store has changed, so
+   * both come back as the same arrays until then: read them, do not change them.
+   */
+  active() {
+    const store = this.store;
+    const revision = store ? store.revision : 0;
+    if (this.#active?.bundled !== this.bundled || this.#active.revision !== revision) {
+      this.#active = { bundled: this.bundled, revision, list: activeExtensions(this.bundled, store) };
+    }
+    return this.#active.list;
+  }
+
+  blocks() {
+    const active = this.active();
+    if (this.#blocks?.active !== active) this.#blocks = { active, list: activeBlocks(active) };
+    return this.#blocks.list;
+  }
 
   /** Re-merge and re-register; fires `change` unless told to be quiet. */
   refresh({ silent = false } = {}) {

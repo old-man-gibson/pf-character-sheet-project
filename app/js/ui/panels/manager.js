@@ -29,6 +29,18 @@ import { campaignPanel } from './campaign.js';
  */
 const EXT_GROUP_FOLD = 12;
 
+/*
+ * More blocks than this in one pack and it arrives folded. A pack of several
+ * hundred classes drawn open was thousands of elements on every render.
+ */
+const EXT_PACK_FOLD = 60;
+
+/*
+ * The most blocks a search draws. A search folds nothing, so one letter
+ * matched nearly every block.
+ */
+const EXT_SEARCH_MAX = 100;
+
 /**
  * The ⚙ manager: the tab bar as a list to rearrange, then everything that
  * is off it -- alphabetical, so a tab is found by name rather than by where
@@ -167,16 +179,22 @@ function extensionBlocksPanel(model, ctx) {
       ...(b.features || []).flatMap((f) => [f.name, ...(f.replaces || []), ...(f.alters || [])]),
       ...(b.options || []).map((o) => o.name)].filter(Boolean).join(' ').toLowerCase();
     const shown = words.length ? byKind.filter((b) => { const h = haystack(b); return words.every((w) => h.includes(w)); }) : byKind;
+    // Searching looks through what a block is for as well as what it is called,
+    // so "warrior" finds an archetype that replaces warrior's grace. A block
+    // the words name outright comes first all the same, and is kept first
+    // when there are more hits than are drawn.
+    const named = (b) => words.every((w) => String(b.name || '').toLowerCase().includes(w));
+    let drawn = shown;
+    if (words.length && shown.length > EXT_SEARCH_MAX) {
+      const kept = new Set([...shown.filter(named), ...shown.filter((b) => !named(b))].slice(0, EXT_SEARCH_MAX));
+      drawn = shown.filter((b) => kept.has(b));
+    }
     const byPack = new Map();
-    for (const b of shown) {
+    for (const b of drawn) {
       if (!byPack.has(b.extId)) byPack.set(b.extId, { name: b.extName, blocks: [] });
       byPack.get(b.extId).blocks.push(b);
     }
-    // Searching looks through what a block is for as well as what it is called,
-    // so "warrior" finds an archetype that replaces warrior's grace. A block
-    // the words name outright comes first all the same.
     if (words.length) {
-      const named = (b) => words.every((w) => String(b.name || '').toLowerCase().includes(w));
       for (const p of byPack.values()) p.blocks.sort((a, b) => Number(named(b)) - Number(named(a)));
     }
     const detail = (b) => {
@@ -278,7 +296,7 @@ function extensionBlocksPanel(model, ctx) {
         loose.splice(loose.indexOf(note), 1);
       }
       const packKey = `extpack:${id}`;
-      const packShut = !seeking && rows.isCollapsed(model, packKey);
+      const packShut = !seeking && rows.isCollapsed(model, packKey, p.blocks.length > EXT_PACK_FOLD);
       const groupHtml = [...groups.entries()].map(([name, list]) => {
         const key = `extgrp:${id}:${name}`;
         // Big groups arrive folded, small ones open. A chakra of sixty veils
@@ -316,7 +334,8 @@ function extensionBlocksPanel(model, ctx) {
         <input type="search" data-ext-search="1" value="${esc(ctx.extSearch)}" spellcheck="false"
           placeholder="Search ${byKind.length} block${byKind.length === 1 ? '' : 's'}…"
           title="Search by name, pack, class, or the features a block adds or replaces.">
-        ${words.length ? `<span class="hint" style="margin:0">${shown.length} of ${byKind.length}</span>` : ''}
+        ${words.length ? `<span class="hint" style="margin:0">${shown.length} of ${byKind.length}${
+    drawn.length < shown.length ? `, first ${drawn.length} shown` : ''}</span>` : ''}
       </p>` : ''}
       <div class="rowlist">
         ${packList || `<p class="empty">${words.length ? `Nothing matches “${esc(ctx.extSearch)}”.`
