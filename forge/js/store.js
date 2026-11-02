@@ -8,6 +8,7 @@
  * and "Publish to this sheet" is how it reaches the sheet next door.
  */
 import { indexedDbMedium, storageMedium } from '../../app/js/pack-storage.js';
+import { plainId } from './schema.js';
 
 export const FORGE_DB = 'homebrew-workbench';
 export const FORGE_STORE = 'entries';
@@ -25,7 +26,9 @@ export function forgeStore({ factory = globalThis.indexedDB, storage = globalThi
       try {
         if (key === META) { meta = JSON.parse(value) || {}; continue; }
         const e = JSON.parse(value);
-        if (e && e.id) cache.set(e.id, e);
+        // Ids are printed into the page unescaped: a record whose id is not
+        // plain stays in storage, unshown, and a parent that is not plain is dropped.
+        if (e && plainId(e.id)) cache.set(e.id, !e.parent || plainId(e.parent) ? e : { ...e, parent: '' });
       } catch { /* a record that does not parse is left where it is */ }
     }
   };

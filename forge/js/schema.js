@@ -119,14 +119,14 @@ export function normalizeCustomTypes(list) {
     if (!raw || typeof raw !== 'object') continue;
     const label = str(raw.label).trim();
     if (!label) continue;
-    let id = str(raw.id).trim() || `x-${slug(label)}`;
-    if (!id.startsWith('x-')) id = `x-${slug(id)}`;
+    let id = str(raw.id).trim();
+    if (!/^x-[\w-]{1,80}$/.test(id)) id = `x-${slug(id.replace(/^x-/, '') || label)}`;
     if (seen.has(id)) continue;
     seen.add(id);
     const fields = (Array.isArray(raw.fields) ? raw.fields : str(raw.fields).split(','))
       .map((c) => (c && typeof c === 'object' ? { k: str(c.k).trim(), l: str(c.l).trim() } : { k: '', l: str(c).trim() }))
       .filter((c) => c.l)
-      .map((c) => ({ k: c.k || slug(c.l).replace(/-/g, '_'), l: c.l, t: 'text' }));
+      .map((c) => ({ k: /^\w{1,60}$/.test(c.k) ? c.k : slug(c.l).replace(/-/g, '_'), l: c.l, t: 'text' }));
     out.push({
       id, label,
       plural: str(raw.plural).trim() || `${label}s`,
@@ -211,6 +211,27 @@ export const slug = (s) => (String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').
 export const now = () => new Date().toISOString();
 export const ord = (n) => { n = +n || 0; const s = ['th', 'st', 'nd', 'rd']; const v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 export const str = (v) => (v === null || v === undefined ? '' : String(v));
+
+/** An id the page can write into an attribute as it is: letters, digits, `-` and `_`. */
+export const plainId = (id) => /^[A-Za-z0-9_-]{1,120}$/.test(str(id));
+
+/**
+ * Entries from a file, every id made plain. An id that is not plain gets a
+ * new one, and a parent that named it follows; ids are printed unescaped.
+ */
+export function withPlainIds(list) {
+  const renamed = new Map();
+  const out = list.map((e) => {
+    if (plainId(e.id)) return e;
+    const id = `${slug(e.name || e.type)}-${uid()}`;
+    renamed.set(str(e.id), id);
+    return { ...e, id };
+  });
+  return out.map((e) => {
+    const parent = str(e.parent);
+    return !parent || plainId(parent) ? e : { ...e, parent: renamed.get(parent) || '' };
+  });
+}
 
 /** A fresh entry of a type, empty but for what is given. */
 export function newEntry(type = 'article', name = '', parent = '') {

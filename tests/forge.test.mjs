@@ -4,7 +4,7 @@
  *  Run: node tests/forge.test.mjs */
 import { importPack, forgeToPack } from '../forge/js/pack.js';
 import { forgeStore } from '../forge/js/store.js';
-import { TYPES, GROUPS, newEntry, linksIn, sortEntries, normalizeCustomTypes, applyCustomTypes } from '../forge/js/schema.js';
+import { TYPES, GROUPS, newEntry, linksIn, sortEntries, normalizeCustomTypes, applyCustomTypes, plainId, withPlainIds } from '../forge/js/schema.js';
 
 let pass = 0;
 let fail = 0;
@@ -85,6 +85,28 @@ const st2 = forgeStore({ factory: null, storage }); await st2.open();
 eq([...st2.entries().keys()].sort(), ['impaler', 'sky', 'wings'], 'a fresh store reads them back');
 eq(st2.getMeta('packRevision'), 4, 'meta reads back');
 await st2.remove('wings'); eq(st2.entries().size, 2, 'removed');
+
+/* ---- ids are written into the page unescaped, so only plain ones come in ---- */
+{
+  const bad = 'x"><img src=x onerror=alert(1)>';
+  const got = withPlainIds([
+    entry(bad, 'discipline', 'Evil Doctrine'),
+    entry('ok-child', 'maneuver', 'Child', {}, '', bad),
+    entry('plain', 'article', 'Plain', {}, '', 'not plain"'),
+  ]);
+  ok(got.every((e) => plainId(e.id)), 'an id that is not plain is replaced');
+  eq(got[1].parent, got[0].id, 'and a parent that named it follows');
+  eq([got[2].id, got[2].parent], ['plain', ''], 'a plain id stays; a parent that matches nothing is dropped');
+  const raw = new Map();
+  const fake = { getItem: (k) => raw.get(k) ?? null, setItem: (k, v) => raw.set(k, String(v)), removeItem: (k) => raw.delete(k), get length() { return raw.size; }, key: (i) => [...raw.keys()][i] };
+  raw.set(`homebrew-workbench:entry:${bad}`, JSON.stringify(entry(bad, 'article', 'Stored Evil')));
+  raw.set('homebrew-workbench:entry:fine', JSON.stringify(entry('fine', 'article', 'Fine', {}, '', bad)));
+  const held = forgeStore({ factory: null, storage: fake }); await held.open();
+  eq([...held.entries().keys()], ['fine'], 'a stored record with an id that is not plain is not shown');
+  eq(held.entries().get('fine').parent, '', 'nor is a stored parent that is not plain');
+  const keys = normalizeCustomTypes([{ id: 'x-"><b>', label: 'Odd', fields: [{ k: '"><b>', l: 'Cell' }] }]);
+  eq([keys[0].id, keys[0].fields[0].k], ['x-b', 'cell'], 'a custom type id and cell key that are not plain are slugged');
+}
 
 /* ---- helpers ---- */
 eq(linksIn('a [[B]] and [[C|see c]]'), ['B', 'C'], 'linksIn');
