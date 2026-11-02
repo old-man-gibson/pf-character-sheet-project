@@ -24,7 +24,8 @@
  */
 
 import {
-  ABILITIES, ABILITY_LABELS, STANDARD_SKILLS, TYPE_RATES, abilityMod, abilityOf, armorCategory, boonStep, drawbackWeight,
+  ABILITIES, ABILITY_LABELS, ARMOR_SIZE_FACTORS, STANDARD_SKILLS, TYPE_RATES, abilityMod, abilityOf, armorCategory,
+  boonStep, drawbackWeight,
   recipePart, recipePlain, reducedSpeed, saveBase, sizeModifiers, skillTotal, sumParts,
 } from './rules.js';
 import { parse } from './formula.js';
@@ -472,6 +473,28 @@ export function companionArmor(kind, b) {
     slows: category >= 2,
     grounds: category >= 2 && wearsBarding(kind),
     run: category === 3 ? 3 : 4,
+  };
+}
+
+/**
+ * What the armour in a companion's Armor slot weighs and costs. The row takes
+ * the armour table's figures, which are for a Medium humanoid; these scale
+ * them for the companion's size and shape. Barding is priced as for a
+ * non-humanoid, and so is an eidolon's or conjured companion's armour once
+ * its base form is not a biped.
+ */
+export function companionArmorPrice(kind, b) {
+  const it = b?.items?.Armor || {};
+  const size = ARMOR_SIZE_FACTORS[b?.size] ? b.size : 'Medium';
+  const f = ARMOR_SIZE_FACTORS[size];
+  const form = String(b?.baseForm ?? '').trim();
+  const humanoid = !wearsBarding(kind) && (!form || /^biped/i.test(form));
+  const costTimes = humanoid ? f.cost : f.bardingCost;
+  const round = (n) => Math.round(n * 100) / 100;
+  return {
+    size, humanoid, costTimes, weightTimes: f.weight,
+    cost: round((Number(it.cost) || 0) * costTimes),
+    weight: round((Number(it.weight) || 0) * f.weight),
   };
 }
 
@@ -1277,6 +1300,7 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     sizeAC,
     tableNatural,
     armor,
+    armorPrice: hasArmorSlot(kind, b) ? companionArmorPrice(kind, b) : null,
     ac,
     touch,
     flatFooted,

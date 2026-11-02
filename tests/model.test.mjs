@@ -1377,6 +1377,15 @@ console.log('companions -- barding in the Armor slot');
   set('items.Armor.type', 'Heavy');
   check('heavy barding runs at ×3', k().armor.run, 3);
 
+  // The row takes the armour table's weight and cost; the size scales them.
+  set('items.Armor.weight', 40);
+  set('items.Armor.cost', 150);
+  check('Large barding weighs ×2 and costs ×4',
+    [k().armorPrice.weight, k().armorPrice.cost], [80, 600]);
+  set('size', 'Medium');
+  check('Medium barding weighs ×1 and costs ×2', [k().armorPrice.weight, k().armorPrice.cost], [40, 300]);
+  set('size', 'Large');
+
   // An armour bonus forwarded at it (mage armour) does not stack with barding.
   c.listAdd('animalCompanion.0.slotless', {
     name: 'Mage armor', cost: 0, worn: true,
@@ -1396,6 +1405,17 @@ console.log('companions -- barding in the Armor slot');
   c.listAdd('eidolon.0.speeds', { type: 'Fly', base: 40, bonus: 0 });
   check('an eidolon in medium armour is slowed but still flies',
     c.data.eidolon[0].calc.speeds.map((s) => s.final), [20, 40]);
+  c.set('eidolon.0.items.Armor.weight', 30);
+  c.set('eidolon.0.items.Armor.cost', 200);
+  c.set('eidolon.0.size', 'Large');
+  const eidolonPrice = () => c.data.eidolon[0].calc.armorPrice;
+  check('a Large biped eidolon\'s armour is priced as for a humanoid',
+    [eidolonPrice().humanoid, eidolonPrice().weight, eidolonPrice().cost], [true, 60, 400]);
+  c.set('eidolon.0.baseForm', 'Quadruped');
+  check('and as for a non-humanoid once it is a quadruped',
+    [eidolonPrice().humanoid, eidolonPrice().cost], [false, 800]);
+  c.set('eidolon.0.size', 'Tiny');
+  check('a Tiny creature\'s armour weighs a tenth', eidolonPrice().weight, 3);
   check('the saved document keeps no worked-out skill penalty', JSON.stringify(c.toJSON()).includes('armorCheck'), false);
   const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('and reopens wearing the same barding', back.data.animalCompanion[0].items.Armor.name, 'Chainmail barding');

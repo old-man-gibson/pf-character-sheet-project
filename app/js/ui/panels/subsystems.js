@@ -64,7 +64,7 @@ import {
 } from '../../model/subsystems/cardcasting.js';
 import { round } from '../format.js';
 import {
-  ABILITIES, ABILITY_LABELS, ARMOR_SIZE_FACTORS, CASTING_SOURCES, ESSENCE_SOURCES, MANEUVER_FIELDS,
+  ABILITIES, ABILITY_LABELS, CASTING_SOURCES, ESSENCE_SOURCES, MANEUVER_FIELDS,
   PREP_STYLES, SIZE_MODIFIERS,
   SPELL_LEVELS, SP_PER_TEMP_ESSENCE, VEIL_SLOTS, WIKI_BASE, castingNoun, fmt, prepStyle,
   skillLabel, wikiUrl,
@@ -81,7 +81,7 @@ import { getPath } from '../../model/util.js';
 import { speedTable } from '../speeds.js';
 import { countsTowardLine } from '../counts-toward.js';
 import { squareLayout } from '../../tracker-style.js';
-import { abilitySelect, check, field, num, autoNum, levelPin, levelPinHint, postBox, select, text } from '../fields.js';
+import { abilitySelect, check, field, num, autoNum, levelPin, levelPinHint, postBox, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, collapsible, exprField, foldButton, gridCell, isCollapsed, isOpen, itemCheck, itemNum,
   itemSelect, itemText, line,
@@ -2364,15 +2364,20 @@ function companionItemsPanel(model, cc) {
     const word = wearsBarding(kind) ? 'Barding' : 'Armor';
     const ap = `${p}.items.Armor`;
     const ar = b.items?.Armor || {};
-    const size = ARMOR_SIZE_FACTORS[b.size] ? b.size : 'Medium';
-    const factor = ARMOR_SIZE_FACTORS[size];
+    // The row takes the armour table's weight and cost; what it weighs and
+    // costs at this companion's size and shape is worked out beside them.
+    const price = k.armorPrice || {};
     const times = (n) => (n === 0.5 ? '½' : n === 0.1 ? '1/10' : String(n));
+    const who = wearsBarding(kind) ? `a ${price.size} creature` : `a ${price.size} ${price.humanoid ? 'humanoid' : 'non-humanoid'}`;
+    const scaled = (n, unit, by) => roValue(`${Number(n || 0).toLocaleString('en-US')} ${unit}`, `×${times(by)} for ${who}`, { fit: true });
     const armorTable = hasArmorSlot(kind, b) ? `<h4 style="margin:10px 0 4px">${word}</h4>
       <div class="tablewrap"><table class="stacked" data-fold="shut"><thead><tr>
         <th style="width:1.6rem" title="Worn">✓</th><th style="width:14rem">${word}</th><th style="width:7rem">Type</th>
         <th class="num" style="width:4rem">AC</th><th class="num" style="width:4rem" title="Its enhancement bonus">Enh.</th>
         <th class="num" style="width:4.6rem">Max Dex</th><th class="num" style="width:4rem" title="Armor check penalty">ACP</th>
-        <th class="num" style="width:4.4rem">Wt</th><th class="num" style="width:5rem">Cost</th>
+        <th class="num" style="width:4.6rem" title="From the armor table">Table wt</th>
+        <th class="num" style="width:5rem" title="From the armor table">Table cost</th>
+        <th class="num" style="width:5rem">Wt</th><th class="num" style="width:6rem">Cost</th>
         <th>Effect</th></tr></thead><tbody><tr>
           <td class="mid" data-label="Worn">${worn(`${ap}.worn`, ar.worn)}</td>
           <td data-stack="name">${text(`${ap}.name`, ar.name, '')}</td>
@@ -2381,13 +2386,15 @@ function companionItemsPanel(model, cc) {
           <td class="num" data-label="Enhancement">${num(`${ap}.enhancement`, ar.enhancement, 'style="width:3.2rem"')}</td>
           <td class="num" data-label="Max Dex">${autoNum(`data-set="${ap}.maxDex"`, ar.maxDex, { placeholder: '—', width: '3.2rem' })}</td>
           <td class="num" data-label="Armor check penalty">${num(`${ap}.acp`, ar.acp, 'style="width:3.2rem"')}</td>
-          <td class="num" data-label="Weight">${num(`${ap}.weight`, ar.weight, 'style="width:3.6rem"')}</td>
-          <td class="num" data-label="Cost">${num(`${ap}.cost`, ar.cost, 'style="width:4rem"')}</td>
+          <td class="num" data-label="Table weight">${num(`${ap}.weight`, ar.weight, 'style="width:3.6rem"')}</td>
+          <td class="num" data-label="Table cost">${num(`${ap}.cost`, ar.cost, 'style="width:4rem"')}</td>
+          <td class="num" data-label="Weight">${scaled(price.weight, 'lb.', price.weightTimes)}</td>
+          <td class="num" data-label="Cost">${scaled(price.cost, 'gp', price.costTimes)}</td>
           <td data-label="Effect">${prose(model, `data-set="${ap}.effect"`, ar.effect, 1, 'grow', null, off(ar))}</td>
         </tr></tbody></table></div>
-      <p class="hint">${wearsBarding(kind)
-    ? `Barding for a ${size} creature costs ×${times(factor.bardingCost)} and weighs ×${times(factor.weight)} the armor table’s figures. Medium and heavy barding slow land speed and stop flight. Heavy barding runs at ×3.`
-    : `Armor for a ${size} creature costs ×${times(factor.cost)} (×${times(factor.bardingCost)} if not humanoid) and weighs ×${times(factor.weight)} the armor table’s figures. Medium and heavy armor slow land speed. Heavy armor runs at ×3.`}</p>` : '';
+      <p class="hint">Enter the armor table’s weight and cost. ${word} for ${who} weighs ×${times(price.weightTimes)} and costs ×${times(price.costTimes)}. ${wearsBarding(kind)
+    ? 'Medium and heavy barding slow land speed and stop flight. Heavy barding runs at ×3.'
+    : 'Medium and heavy armor slow land speed. Heavy armor runs at ×3.'}</p>` : '';
     return `<section class="panel span2">
       <h3>Items
         ${b.bodyType ? `<span class="badge">${esc(b.bodyType)}</span>` : ''}
