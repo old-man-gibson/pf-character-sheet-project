@@ -82,6 +82,9 @@ function fail(message) {
   if (empty) empty.textContent = message;
 }
 
+/** The keys #previewPublished in sheet-element.js writes. No other key is read or removed. */
+const PREVIEW_PREFIX = 'published-preview:';
+
 /**
  * The handover from the Preview published button in another tab.
  *
@@ -89,6 +92,7 @@ function fail(message) {
  * copy left behind in storage would outlive the look at it.
  */
 function fromStorage(key) {
+  if (!key.startsWith(PREVIEW_PREFIX)) return null;
   let payload = null;
   try {
     const raw = localStorage.getItem(key);
@@ -162,7 +166,9 @@ if (payload?.doc) {
   document.getElementById('wrap').append(sheet);
   sheet.character = payload.doc;
 } else if (key) {
-  fail('That preview has already been opened. Press “Preview published” again to make a new one.');
+  fail(key.startsWith(PREVIEW_PREFIX)
+    ? 'That preview has already been opened. Press “Preview published” again to make a new one.'
+    : 'This link does not open a preview.');
 }
 </script>
 
