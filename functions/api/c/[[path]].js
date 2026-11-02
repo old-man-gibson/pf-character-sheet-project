@@ -13,6 +13,12 @@
  *                                                   -> { id, rev, published }
  *   GET  /api/c/<id>         the latest revision   -> { id, rev, published, summary, history, doc }
  *   GET  /api/c/<id>/<rev>   that revision, immutable, cached for a year
+ *   DELETE /api/c/<id>       header Authorization: Bearer <token>; removes every revision
+ *                                                   -> { id, deleted: true }
+ *
+ * Writes (POST, PUT, DELETE) are limited per client address where the
+ * deployment binds PUBLISH_LIMIT (wrangler.jsonc): KV's free plan allows 1,000
+ * writes a day for the whole site, and a publish is two.
  *
  * Every revision stays addressable, so the list in `history` is the published
  * history and the latest view is a pointer that moves. Layout in KV:
@@ -33,7 +39,7 @@ const MAX_HISTORY = 50;
 
 const CORS = {
   'access-control-allow-origin': '*',
-  'access-control-allow-methods': 'GET, POST, PUT, OPTIONS',
+  'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'access-control-allow-headers': 'authorization, content-type',
   'access-control-max-age': '86400',
 };
@@ -82,6 +88,9 @@ async function readPublish(request) {
   }
   const doc = body?.doc;
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return { error: fail(400, 'The body needs a "doc" object.') };
+  if (typeof doc.schemaVersion !== 'number' || typeof doc.identity?.name !== 'string') {
+    return { error: fail(400, 'The "doc" is not a character document.') };
+  }
   const text = JSON.stringify(doc);
   if (text.length > MAX_BODY) return { error: fail(413, `A published character is at most ${MAX_BODY / 1024 / 1024} MB.`) };
   const summary = typeof body.summary === 'string' ? body.summary.slice(0, 500) : '';
@@ -98,6 +107,21 @@ async function storeRevision(env, id, meta, doc, summary) {
   return { rev, published };
 }
 
+/** A 429 when this address has written too often in the last minute, else null. */
+async function limited(request, env) {
+  if (!env?.PUBLISH_LIMIT) return null;
+  const address = request.headers.get('cf-connecting-ip') || 'unknown';
+  const { success } = await env.PUBLISH_LIMIT.limit({ key: `publish:${address}` });
+  return success ? null : fail(429, 'Too many publishes from this address. Wait a minute and try again.');
+}
+
+/** Whether the request's bearer token is the one this character was published with. */
+async function opens(request, meta) {
+  const auth = request.headers.get('authorization') || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  return !!token && (await hash(token)) === meta.tokenHash;
+}
+
 export async function onRequestOptions() {
   return new Response(null, { status: 204, headers: CORS });
 }
@@ -106,6 +130,8 @@ export async function onRequestPost({ request, env, params }) {
   const { id: given } = route(params);
   if (given) return fail(405, 'Publish a new character with POST /api/c; publish again with PUT /api/c/<id>.');
   if (!env?.SHEETS) return fail(503, 'This copy of the app has no publishing store.');
+  const slow = await limited(request, env);
+  if (slow) return slow;
   const read = await readPublish(request);
   if (read.error) return read.error;
 
@@ -122,17 +148,35 @@ export async function onRequestPut({ request, env, params }) {
   const { id, rev: extra } = route(params);
   if (!validId(id) || extra) return fail(404, 'No such published character.');
   if (!env?.SHEETS) return fail(503, 'This copy of the app has no publishing store.');
+  const slow = await limited(request, env);
+  if (slow) return slow;
   const meta = await env.SHEETS.get(`c:${id}`, { type: 'json' });
   if (!meta) return fail(404, 'No such published character.');
-
-  const auth = request.headers.get('authorization') || '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
-  if (!token || (await hash(token)) !== meta.tokenHash) return fail(403, 'That publish token does not open this link.');
+  if (!(await opens(request, meta))) return fail(403, 'That publish token does not open this link.');
 
   const read = await readPublish(request);
   if (read.error) return read.error;
   const { rev, published } = await storeRevision(env, id, meta, read.doc, read.summary);
   return json({ id, rev, published }, 200, { 'cache-control': 'no-store' });
+}
+
+/**
+ * Unpublish: every revision, then the pointer, so a delete that stops
+ * partway can be sent again with the same token. A copy a browser cached
+ * (a revision is served as immutable) is out of reach.
+ */
+export async function onRequestDelete({ request, env, params }) {
+  const { id, rev: extra } = route(params);
+  if (!validId(id) || extra) return fail(404, 'No such published character.');
+  if (!env?.SHEETS) return fail(503, 'This copy of the app has no publishing store.');
+  const slow = await limited(request, env);
+  if (slow) return slow;
+  const meta = await env.SHEETS.get(`c:${id}`, { type: 'json' });
+  if (!meta) return fail(404, 'No such published character.');
+  if (!(await opens(request, meta))) return fail(403, 'That publish token does not open this link.');
+  for (let rev = 1; rev <= (meta.rev || 0); rev++) await env.SHEETS.delete(`c:${id}:${rev}`);
+  await env.SHEETS.delete(`c:${id}`);
+  return json({ id, deleted: true }, 200, { 'cache-control': 'no-store' });
 }
 
 export async function onRequestGet({ env, params }) {

@@ -24,6 +24,13 @@
   "kv_namespaces": [
     { "binding": "SHEETS", "id": "4e52b930d33f4b449da628387c48b08c" }
   ],
+  // Publishes, republishes and deletes per client address: 10 a minute in each
+  // Cloudflare location. The free plan allows 1,000 KV writes a day for the
+  // whole site, and a publish is two. namespace_id is any integer not used by
+  // another rate limiter on the same account.
+  "ratelimits": [
+    { "name": "PUBLISH_LIMIT", "namespace_id": "4401", "simple": { "limit": 10, "period": 60 } }
+  ],
   // The relay that hands a squad member to the GM: one Durable Object per
   // published character, holding the WebSockets and the grants (see
   // functions/api/c/relay.js). SQLite-backed, which is the free-plan kind.

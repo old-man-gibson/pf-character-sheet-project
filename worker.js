@@ -8,13 +8,13 @@
  * 404 page. The handlers are written against the Pages Functions calling
  * convention -- `{ request, env, params }` -- so this only has to build that.
  */
-import { hash, onRequestGet, onRequestOptions, onRequestPost, onRequestPut, validId } from './functions/api/c/[[path]].js';
+import { hash, onRequestDelete, onRequestGet, onRequestOptions, onRequestPost, onRequestPut, validId } from './functions/api/c/[[path]].js';
 import { RELAY_ROUTES, relayOptions, relayRequest } from './functions/api/c/relay.js';
 
 // The relay's Durable Object, one per published character (wrangler.jsonc binds it as RELAY).
 export { Relay } from './functions/api/c/relay.js';
 
-const HANDLERS = { GET: onRequestGet, POST: onRequestPost, PUT: onRequestPut, OPTIONS: onRequestOptions };
+const HANDLERS = { GET: onRequestGet, POST: onRequestPost, PUT: onRequestPut, DELETE: onRequestDelete, OPTIONS: onRequestOptions };
 
 export default {
   async fetch(request, env) {

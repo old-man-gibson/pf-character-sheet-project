@@ -134,7 +134,7 @@ console.log('\nthe Worker routes the relay calls');
   const env = { SHEETS, RELAY, ASSETS: { fetch: () => new Response('asset') } };
   const call = (method, path, headers = {}, body) => worker.fetch(new Request(`https://sheets.example${path}`, { method, headers: { 'content-type': 'application/json', ...headers }, body: body === undefined ? undefined : JSON.stringify(body) }), env);
 
-  const made = await (await call('POST', '/api/c', {}, { doc: { id: 'nico' } })).json();
+  const made = await (await call('POST', '/api/c', {}, { doc: { id: 'nico', schemaVersion: 9, identity: { name: 'Relay Test' } } })).json();
   check('a relay call without a token is refused', (await call('POST', `/api/c/${made.id}/ticket`)).status, 403);
   check('a wrong token is refused', (await call('POST', `/api/c/${made.id}/ticket`, { authorization: 'Bearer nope' })).status, 403);
   check('an unknown character is 404', (await call('POST', '/api/c/zzzzzzzzzz/ticket', { authorization: 'Bearer x' })).status, 404);

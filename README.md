@@ -96,7 +96,9 @@ is one Workers KV namespace: create it (Storage & Databases → KV), put its id 
 `wrangler.jsonc` under `kv_namespaces` as the `SHEETS` binding, and push. Bindings come
 from that file, not the dashboard. Without one the button says this copy of the app has
 no publishing server, and everything else still works. The free plan allows 1,000 KV
-writes a day; a publish is two. With the id in place, `npx wrangler dev --persist-to ../sheets-state`
+writes a day; a publish is two. Writes are limited to 10 a minute per address
+(`PUBLISH_LIMIT` in `wrangler.jsonc`), and `DELETE /api/c/<id>` with the publish token
+removes a published character and every revision. With the id in place, `npx wrangler dev --persist-to ../sheets-state`
 runs the site locally with a store of its own; the state has to live outside the
 repository, because the repository is the watched asset folder and a store inside it
 reloads the server on its own writes.

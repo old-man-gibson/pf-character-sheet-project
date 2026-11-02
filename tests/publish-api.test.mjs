@@ -24,7 +24,7 @@ const check = (label, actual, expected) => {
   }
 };
 
-/** The two KV calls the handlers make. */
+/** The three KV calls the handlers make. */
 function fakeKv() {
   const store = new Map();
   return {
@@ -35,6 +35,7 @@ function fakeKv() {
       return opts?.type === 'json' ? JSON.parse(v) : v;
     },
     async put(key, value) { store.set(key, value); },
+    async delete(key) { store.delete(key); },
   };
 }
 
@@ -50,7 +51,7 @@ const call = (method, path, { body, token } = {}) => {
   return handler({ request, env, params: { path: parts } });
 };
 
-const doc = { id: 'vesna', identity: { name: 'Vesna' }, abilities: { str: { score: 14 } } };
+const doc = { id: 'vesna', schemaVersion: 9, identity: { name: 'Vesna' }, abilities: { str: { score: 14 } } };
 
 // Publish.
 let res = await call('POST', '', { body: { doc, summary: '3 entries carried' } });
@@ -102,6 +103,34 @@ check('POST to an id is 405', (await call('POST', made.id, { body: { doc } })).s
 check('no store is 503', (await api.onRequestGet({ env: {}, params: { path: [made.id] } })).status, 503);
 check('preflight is 204', (await api.onRequestOptions()).status, 204);
 check('a wrong token left the store alone', got.rev, 2);
+check('a doc that is not a character is 400', (await call('POST', '', { body: { doc: { anything: 'at all' } } })).status, 400);
+check('nor one without a name', (await call('POST', '', { body: { doc: { schemaVersion: 9, identity: {} } } })).status, 400);
+
+// Unpublish.
+check('a delete without the token is refused', (await call('DELETE', made.id)).status, 403);
+check('a delete with a wrong token is refused', (await call('DELETE', made.id, { token: 'nope' })).status, 403);
+res = await call('DELETE', made.id, { token: made.token });
+check('a delete with the token answers 200', [res.status, (await res.json()).deleted], [200, true]);
+check('the link is gone', (await call('GET', made.id)).status, 404);
+check('and so is every revision', [...env.SHEETS.store.keys()].filter((k) => k.startsWith(`c:${made.id}`)), []);
+check('a second delete is 404', (await call('DELETE', made.id, { token: made.token })).status, 404);
+
+// Writes are limited per address where the deployment binds a limiter.
+{
+  let calls = 0;
+  const limit = { async limit({ key }) { calls++; return { success: calls <= 2 && key === 'publish:203.0.113.9' }; } };
+  const lenv = { SHEETS: fakeKv(), PUBLISH_LIMIT: limit };
+  const post = () => api.onRequestPost({
+    request: new Request('https://sheets.example/api/c', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.9' }, body: JSON.stringify({ doc }),
+    }),
+    env: lenv, params: {},
+  });
+  const statuses = [];
+  for (let i = 0; i < 3; i++) statuses.push((await post()).status);
+  check('the third write in the window is 429', statuses, [201, 201, 429]);
+  check('and nothing was stored for it', lenv.SHEETS.store.size, 4);
+}
 
 // The Worker that fronts the same handlers on a Workers deployment.
 const worker = (await import(pathToFileURL(resolve('worker.js')).href)).default;
@@ -117,7 +146,8 @@ check('worker: latest comes back', (await res.json()).summary, 'via worker');
 res = await wfetch('PUT', `/api/c/${viaWorker.id}`, { doc: doc2 }, { authorization: `Bearer ${viaWorker.token}` });
 check('worker: republish is revision 2', (await res.json()).rev, 2);
 check('worker: revision 1 is served', (await wfetch('GET', `/api/c/${viaWorker.id}/1`)).status, 200);
-check('worker: a verb the store lacks is 405', (await wfetch('DELETE', `/api/c/${viaWorker.id}`)).status, 405);
+check('worker: a verb the store lacks is 405', (await wfetch('PATCH', `/api/c/${viaWorker.id}`)).status, 405);
+check('worker: unpublish goes through', (await wfetch('DELETE', `/api/c/${viaWorker.id}`, undefined, { authorization: `Bearer ${viaWorker.token}` })).status, 200);
 check('worker: everything else is an asset', await (await wfetch('GET', '/app/published.html')).text(), 'asset /app/published.html');
 check('worker: /api alone is an asset miss', await (await wfetch('GET', '/api')).text(), 'asset /api');
 
