@@ -468,8 +468,8 @@ schedule there is no notion of a slot.
 Groups are stored per column name beside the text, so they survive a rename and are
 deleted with the column, and name, rule and colour all round-trip through Export JSON;
 a rule saved by the first version of this feature as a bare string loads as a single
-unnamed group. Covered by `tests/model.test.mjs`, including all three schedules above,
-the interleaved kineticist column, Bryva's overlapping Blacksmith groups and their
+unnamed group. Covered by `tests/model.test.mjs` and `tests/model-blank.test.mjs`,
+including all three schedules above, the interleaved kineticist column, Bryva's overlapping Blacksmith groups and their
 independent fields, the string↔map storage in both directions, group rename and
 removal, the owed-slot counting, the class/character divergence and the round trip.
 

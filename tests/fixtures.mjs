@@ -89,3 +89,40 @@ export function requireFixtures(ids, suite) {
   console.log(`${suite}: skipped -- ${missingNote(missing)}`);
   process.exit(0);
 }
+
+/**
+ * The two folders the app loads packs from, in its order. `data/extensions`
+ * is committed. `private/extensions` is git-ignored and holds the packs that
+ * carry rules text, so a fresh clone and CI have only the first. It is read
+ * relative to the working directory, like the app, and `CHARACTER_FIXTURES`
+ * does not move it.
+ */
+export const PACK_DIRS = [join('data', 'extensions'), join('private', 'extensions')];
+
+/** Every pack listed in either folder, parsed. */
+export function bundledPacks() {
+  const packs = [];
+  for (const dir of PACK_DIRS) {
+    const indexPath = join(dir, 'index.json');
+    if (!existsSync(indexPath)) continue;
+    for (const e of JSON.parse(readFileSync(indexPath, 'utf8')).extensions || []) {
+      const file = join(dir, e.file);
+      if (existsSync(file)) packs.push(JSON.parse(readFileSync(file, 'utf8')));
+    }
+  }
+  return packs;
+}
+
+/**
+ * `check` for a check that reads a pack this checkout may not have.
+ *
+ * When `present` is false the returned function runs nothing and prints one
+ * line saying which check stood down and why, the way `requireFixtures` does
+ * for characters. A real character read without its packs would otherwise
+ * fail on an empty catalogue rather than on anything the code did.
+ */
+export function packCheck(check, present, what) {
+  if (present) return check;
+  return (label) => console.log(`  skipped "${label}" -- needs ${what}, which no pack in `
+    + `${PACK_DIRS.join(' or ')} provides.`);
+}

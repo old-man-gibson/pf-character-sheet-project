@@ -37,8 +37,8 @@ _Part of the [Pathfinder Character Sheet Program](../README.md) docs. Things agr
   because they carried actual rules prose) are the worked example, and they took three
   things with them worth repeating: an entry in `private/extensions/index.json`, the
   bundled-pack id list in `tests/extensions.test.mjs`, and a gate in `tests/model.test.mjs`
-  for the one check that reads a technique off the pack (`hasAltTraining` — a fresh clone
-  runs 270 assertions, a checkout with `private/` runs 3,603, both green).
+  for the one check that reads a technique off the pack (now `packCheck` in
+  `tests/fixtures.mjs`, which skips a check and says so when its pack is absent).
 
   Two things to decide when it happens. The app fetches **both** folders, so a pack in
   `private/` still auto-loads in a dev checkout — which is what keeps your own play
