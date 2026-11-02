@@ -1052,7 +1052,7 @@ hit points, and each skill —
 
 ```
 Belt of giant strength   {animalCompanion.str.score += 4 as enhancement}
-Barding                  {animalCompanion.ac.total += 2 as armor} {animalCompanion.ac.flatFooted += 2 as armor}
+Ring of protection       {animalCompanion.ac += 1 as deflection}
 Amulet of mighty fists   {animalCompanion.attack += 1} {animalCompanion.damage += 1}
 Collar of alertness      {animalCompanion.skill.perception += 5} {animalCompanion.init += 2}
 ```
@@ -1063,6 +1063,22 @@ any other, they show in gold beside the column they land in, and they point back
 row that sent them. Damage stays the free text it has always been — `1d6 plus grab` is as
 common on these rows as `1d6+7` — so what a rule adds to it is a number kept beside the
 column and added to the roll's flat part.
+
+**Armor and barding.** The Armor slot has its own row, titled *Barding* on the animal
+companion and familiar, with the armor columns from the Equipment tab: type, AC,
+enhancement, max Dex, ACP, weight and cost.
+
+- The bonus counts on AC and flat-footed AC, not touch or CMD.
+- Max Dex caps Dex on AC and touch.
+- ACP applies to Str- and Dex-based skills, whichever sign it is typed with.
+- Medium and heavy armor cut a land speed by a third, to the square (40 → 30, 50 → 35,
+  60 → 40 ft.). Medium and heavy barding also set a fly speed to 0. A cut speed carries a
+  badge saying why; heavy armor's says it runs at ×3.
+- An armor bonus forwarded at the companion, such as mage armor, does not stack with it.
+- On the animal companion the row appears only for body types with an Armor slot.
+- Enter the armor table's weight and cost. The row shows the weight and cost for the
+  companion's size: barding for a Large creature weighs ×2 and costs ×4. An eidolon's or
+  conjured companion's armor is priced as for a humanoid unless its base form is not a biped.
 
 A companion acts on its own initiative, so it rolls on its own sheet: **d20** buttons
 sit on the Init tile, on each save total, on each ability's Mod, on every skill and on

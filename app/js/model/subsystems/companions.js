@@ -6,7 +6,7 @@
  */
 
 import {
-  COMPANION_KINDS, COMPANION_TARGETS, CONJURED_ARCHETYPES, companionAttackKey, companionEntries, companionFormulas,
+  COMPANION_KINDS, COMPANION_TARGETS, CONJURED_ARCHETYPES, armoredSpeeds, companionAttackKey, companionEntries, companionFormulas,
   companionSkillKey, computeCompanion, defaultCompanion, emptyCompanionFeat, LEGACY_SPEED_TYPES, legacySpeedRows,
   seedSkills, withTypedNumbers,
 } from '../../companions.js';
@@ -22,7 +22,7 @@ import { setPath, skillRanksNamed } from '../util.js';
 // typed -- scores, ranks, the attacks' names and damage -- is saved.
 export const COMPANION_DERIVED = [
   'calc',
-  { path: 'skills', keys: ['masterRanks', 'effectiveRanks', 'abilityMod', 'forwarded', 'total'] },
+  { path: 'skills', keys: ['masterRanks', 'effectiveRanks', 'abilityMod', 'forwarded', 'armorCheck', 'total'] },
   { path: 'attacks', keys: ['damageType', 'primaryResolved', 'toHit', 'damageBonus'] },
 ];
 
@@ -568,7 +568,7 @@ export function recomputeCompanions(model, { bare = false } = {}) {
       const { calc, skills, attacks } = computeCompanion(kind, withTypedNumbers(b, typed), master,
         bare ? null : companionBonuses(model, kind, b));
       calc.typed = typed;
-      calc.speeds = speeds;
+      calc.speeds = armoredSpeeds(b.speeds, speeds, calc.armor);
       b.calc = calc;
       b.skills = skills;
       b.attacks = attacks;

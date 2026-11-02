@@ -2732,6 +2732,7 @@ label.fld > .value.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
   display: inline-flex; justify-content: flex-end; width: 3.6rem; min-height: 1.85rem;
   vertical-align: middle; cursor: default;
 }
+.rovalue.fit { width: auto; min-width: 3.6rem; white-space: nowrap; }
 /* Wraps, because a pair is a row of controls inside something that is itself
    a wrapping row: without this the outer row wraps and the pair does not, so
    on a narrow screen one long pair carries the page sideways with it. */

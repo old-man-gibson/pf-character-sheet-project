@@ -2823,6 +2823,17 @@ export function armorCategory(type) {
 }
 
 /**
+ * Armour for a creature that is not a Medium humanoid: what the armour
+ * table's price and weight are multiplied by at each size, for a humanoid
+ * (`cost`) and for a non-humanoid such as a horse (`bardingCost`).
+ */
+export const ARMOR_SIZE_FACTORS = Object.fromEntries([
+  ['Fine', 0.5, 1, 0.1], ['Diminutive', 0.5, 1, 0.1], ['Tiny', 0.5, 1, 0.1],
+  ['Small', 1, 2, 0.5], ['Medium', 1, 2, 1], ['Large', 2, 4, 2],
+  ['Huge', 4, 8, 5], ['Gargantuan', 8, 16, 8], ['Colossal', 16, 32, 12],
+].map(([size, cost, bardingCost, weight]) => [size, { cost, bardingCost, weight }]));
+
+/**
  * Active armor + shields, reduced to the numbers the sheet needs.
  *
  * `ac` is the two together, which is all the AC formulas ever wanted. They are

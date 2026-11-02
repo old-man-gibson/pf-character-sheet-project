@@ -73,14 +73,15 @@ import {
   BODY_TYPES, COMPANION_LABELS, COMPANION_LEVEL_SOURCES, CONJURED_ARCHETYPES,
   CONJURED_BASE_FORMS, CONJURED_LEVEL_SOURCES, NATURAL_ATTACKS,
   abilityTextKey, companionAbilityText,
-  companionAttackKey, companionScopeName, companionSkillKey, emptyCompanionFeat, isOtherConjurationTalent,
+  companionAttackKey, companionScopeName, companionSkillKey, emptyCompanionFeat, hasArmorSlot, isOtherConjurationTalent,
+  wearsBarding,
 } from '../../companions.js';
 import { hasTokens } from '../../inline.js';
 import { getPath } from '../../model/util.js';
 import { speedTable } from '../speeds.js';
 import { countsTowardLine } from '../counts-toward.js';
 import { squareLayout } from '../../tracker-style.js';
-import { abilitySelect, check, field, num, autoNum, levelPin, levelPinHint, postBox, select, text } from '../fields.js';
+import { abilitySelect, check, field, num, autoNum, levelPin, levelPinHint, postBox, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, collapsible, exprField, foldButton, gridCell, isCollapsed, isOpen, itemCheck, itemNum,
   itemSelect, itemText, line,
@@ -1887,7 +1888,17 @@ function companionSavesPanel(model, cc) {
         .filter((x) => k.formSaves[x]).map((x) => ({ fort: 'Fortitude', ref: 'Reflex', will: 'Will' }[x])).join(' and ') || 'none, as printed'}. The table gives the good and poor base at this HD.`
       : 'Tick the good saves. The table gives the good and poor base at this level.'}</p>
       <h4 class="subhead">Speed</h4>
-      ${speedTable(`${p}.speeds`, b.speeds || [], k.speeds || [], { example: `30 + 10 * floor(${sn}.hd / 5)` })}
+      ${speedTable(`${p}.speeds`, b.speeds || [], k.speeds || [], {
+    example: `30 + 10 * floor(${sn}.hd / 5)`,
+    // A rate its armour cut (armoredSpeeds) says so beside the number.
+    final: (i, w) => {
+      if (w.uncut === undefined) return null;
+      const worn = `${['', 'Light', 'Medium', 'Heavy'][k.armor?.category] || ''} ${wearsBarding(kind) ? 'barding' : 'armor'}`.trim();
+      const tip = w.final === 0 ? `${worn}: cannot fly.`
+        : `${worn}: ${w.uncut} ft. to ${w.final} ft.${k.armor?.run === 3 ? ' Runs at ×3.' : ''}`;
+      return `${Number(w.final) || 0} ft. <span class="badge" tabindex="0" data-tip="${esc(tip)}">${wearsBarding(kind) ? 'barding' : 'armor'}</span>`;
+    },
+  })}
     </section>`;
   }
 
@@ -2268,7 +2279,9 @@ function companionSkillsPanel(model, cc) {
           ${fam ? `<td class="num derived">${s.masterRanks || 0}</td>` : ''}
           <td>${itemNum(list, i, 'misc', s.misc)}${
             forwardedBadge(model, `${sn}.skill.${companionSkillKey(s)}`)}</td>
-          <td class="num total"><span class="rollpair">${fmt(s.total ?? 0)}${
+          <td class="num total"><span class="rollpair">${s.armorCheck
+    ? `<span tabindex="0" data-tip="${esc(`Includes the armor check penalty, ${s.armorCheck}.`)}">${fmt(s.total ?? 0)}</span>`
+    : fmt(s.total ?? 0)}${
             rollButton(model, roll, `skill:${i}`, `a ${skillLabel(s.name, s.spec) || 'skill'} check`)}</span></td>
           ${rowRemove(list, i)}
         </tr>`;
@@ -2314,10 +2327,14 @@ function companionSkillsPanel(model, cc) {
  *
  * Taking a thing off is a tick, not a deletion: the row stays, still shows
  * what it would do, and stops doing it.
+ *
+ * The Armor slot has a table of its own, with the character's armour columns
+ * on the slot's row: what is worn there is armour -- barding, on a mount --
+ * and the model applies it (companionArmor).
  */
 function companionItemsPanel(model, cc) {
     const { kind, p, sn, b, k, label } = cc;
-    const slots = k.slots || [];
+    const slots = (k.slots || []).filter((slot) => slot !== 'Armor');
     const list = `${p}.slotless`;
     const rows = b.slotless || [];
     const worn = (path, on) => `<label class="chk" title="${
@@ -2344,6 +2361,40 @@ function companionItemsPanel(model, cc) {
      */
     const head = `<tr><th style="width:1.6rem" title="Worn">✓</th><th style="width:14rem">Item</th>
       <th style="width:6rem">Cost</th><th>Effect</th>`;
+    const word = wearsBarding(kind) ? 'Barding' : 'Armor';
+    const ap = `${p}.items.Armor`;
+    const ar = b.items?.Armor || {};
+    // The row takes the armour table's weight and cost; what it weighs and
+    // costs at this companion's size and shape is worked out beside them.
+    const price = k.armorPrice || {};
+    const times = (n) => (n === 0.5 ? '½' : n === 0.1 ? '1/10' : String(n));
+    const who = wearsBarding(kind) ? `a ${price.size} creature` : `a ${price.size} ${price.humanoid ? 'humanoid' : 'non-humanoid'}`;
+    const scaled = (n, unit, by) => roValue(`${Number(n || 0).toLocaleString('en-US')} ${unit}`, `×${times(by)} for ${who}`, { fit: true });
+    const armorTable = hasArmorSlot(kind, b) ? `<h4 style="margin:10px 0 4px">${word}</h4>
+      <div class="tablewrap"><table class="stacked" data-fold="shut"><thead><tr>
+        <th style="width:1.6rem" title="Worn">✓</th><th style="width:14rem">${word}</th><th style="width:7rem">Type</th>
+        <th class="num" style="width:4rem">AC</th><th class="num" style="width:4rem" title="Its enhancement bonus">Enh.</th>
+        <th class="num" style="width:4.6rem">Max Dex</th><th class="num" style="width:4rem" title="Armor check penalty">ACP</th>
+        <th class="num" style="width:4.6rem" title="From the armor table">Table wt</th>
+        <th class="num" style="width:5rem" title="From the armor table">Table cost</th>
+        <th class="num" style="width:5rem">Wt</th><th class="num" style="width:6rem">Cost</th>
+        <th>Effect</th></tr></thead><tbody><tr>
+          <td class="mid" data-label="Worn">${worn(`${ap}.worn`, ar.worn)}</td>
+          <td data-stack="name">${text(`${ap}.name`, ar.name, '')}</td>
+          <td data-label="Type">${select(`${ap}.type`, ar.type, ['Light', 'Medium', 'Heavy'])}</td>
+          <td class="num" data-label="AC">${num(`${ap}.acBonus`, ar.acBonus, 'style="width:3.2rem"')}</td>
+          <td class="num" data-label="Enhancement">${num(`${ap}.enhancement`, ar.enhancement, 'style="width:3.2rem"')}</td>
+          <td class="num" data-label="Max Dex">${autoNum(`data-set="${ap}.maxDex"`, ar.maxDex, { placeholder: '—', width: '3.2rem' })}</td>
+          <td class="num" data-label="Armor check penalty">${num(`${ap}.acp`, ar.acp, 'style="width:3.2rem"')}</td>
+          <td class="num" data-label="Table weight">${num(`${ap}.weight`, ar.weight, 'style="width:3.6rem"')}</td>
+          <td class="num" data-label="Table cost">${num(`${ap}.cost`, ar.cost, 'style="width:4rem"')}</td>
+          <td class="num" data-label="Weight">${scaled(price.weight, 'lb.', price.weightTimes)}</td>
+          <td class="num" data-label="Cost">${scaled(price.cost, 'gp', price.costTimes)}</td>
+          <td data-label="Effect">${prose(model, `data-set="${ap}.effect"`, ar.effect, 1, 'grow', null, off(ar))}</td>
+        </tr></tbody></table></div>
+      <p class="hint">Enter the armor table’s weight and cost. ${word} for ${who} weighs ×${times(price.weightTimes)} and costs ×${times(price.costTimes)}. ${wearsBarding(kind)
+    ? 'Medium and heavy barding slow land speed and stop flight. Heavy barding runs at ×3.'
+    : 'Medium and heavy armor slow land speed. Heavy armor runs at ×3.'}</p>` : '';
     return `<section class="panel span2">
       <h3>Items
         ${b.bodyType ? `<span class="badge">${esc(b.bodyType)}</span>` : ''}
@@ -2364,9 +2415,9 @@ function companionItemsPanel(model, cc) {
           <th scope="row" data-label="Slot">${esc(slot)}</th>
         </tr>`;
   }).join('')}
-      </tbody></table></div>` : `<p class="empty">${kind === 'animalCompanion'
-    ? 'Pick a body type above to see the item slots it can use.'
-    : 'No body-type slots here — everything goes in the list below.'}</p>`}
+      </tbody></table></div>` : kind === 'animalCompanion'
+    ? '<p class="empty">Pick a body type above to see the item slots it can use.</p>' : ''}
+      ${armorTable}
       <h4 style="margin:10px 0 4px">${slots.length ? 'Slotless items' : 'Items'}</h4>
       ${rows.length ? `<div class="tablewrap"><table class="stacked" data-fold="shut"><thead>
         ${head}<th></th></tr></thead><tbody>
@@ -2381,7 +2432,7 @@ function companionItemsPanel(model, cc) {
       <div style="margin-top:6px">${addButton(list, slots.length ? 'Add slotless item' : 'Add item', { name: '', cost: 0, worn: true, effect: '' })}</div>
       <p class="hint"><strong>Effect</strong> reads <code>{…}</code> like any prose field on the sheet.
         Every number the ${esc(label.toLowerCase())} rolls can be the target of a bonus:
-        <code>{${esc(sn)}.str.score += 4 as enhancement}</code>, <code>{${esc(sn)}.ac.total += 2 as armor}</code>,
+        <code>{${esc(sn)}.str.score += 4 as enhancement}</code>, <code>{${esc(sn)}.ac += 1 as deflection}</code>,
         <code>{${esc(sn)}.skill.perception += 5}</code>, <code>{${esc(sn)}.attack += 1}</code>,
         <code>{${esc(sn)}.damage += 1}</code>, <code>{${esc(sn)}.saves += 2 as resistance}</code>,
         <code>{${esc(sn)}.cmb += 2}</code>. Untick <em>Worn</em> and the row still shows its effect

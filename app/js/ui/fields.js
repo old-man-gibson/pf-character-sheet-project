@@ -66,10 +66,11 @@ export function roField(value, title = '', extra = '') {
 /**
  * A value that is read, not typed, in a cell of a table: the dashed box the
  * Details panel gives the mythic tier, so a number the sheet works out is not
- * a stray word sitting in a column of fields.
+ * a stray word sitting in a column of fields. `fit` lets the box grow to its
+ * value, for a figure with a unit ("2,400 gp").
  */
-export function roValue(value, title = '') {
-  return `<span class="rovalue"${title ? ` title="${esc(title)}"` : ''}>${esc(value ?? '')}</span>`;
+export function roValue(value, title = '', { fit = false } = {}) {
+  return `<span class="rovalue${fit ? ' fit' : ''}"${title ? ` title="${esc(title)}"` : ''}>${esc(value ?? '')}</span>`;
 }
 
 /**

@@ -24,12 +24,13 @@
  */
 
 import {
-  ABILITIES, ABILITY_LABELS, STANDARD_SKILLS, TYPE_RATES, abilityMod, abilityOf, boonStep, drawbackWeight,
-  recipePart, recipePlain, saveBase, sizeModifiers, skillTotal, sumParts,
+  ABILITIES, ABILITY_LABELS, ARMOR_SIZE_FACTORS, STANDARD_SKILLS, TYPE_RATES, abilityMod, abilityOf, armorCategory,
+  boonStep, drawbackWeight,
+  recipePart, recipePlain, reducedSpeed, saveBase, sizeModifiers, skillTotal, sumParts,
 } from './rules.js';
 import { parse } from './formula.js';
 import {
-  evaluateAmount, getPath, isPinned, normalizeName, setPath, slug, speedRow, speedRows,
+  evaluateAmount, getPath, isLandSpeed, isPinned, normalizeName, setPath, slug, speedRow, speedRows,
 } from './model/util.js';
 
 export const COMPANION_KINDS = ['familiar', 'animalCompanion', 'eidolon', 'conjured'];
@@ -438,6 +439,80 @@ export const BODY_TYPES = [
 ].map(([name, slots, canGrasp]) => ({ name, slots, canGrasp }));
 
 export const bodyType = (name) => BODY_TYPES.find((b) => b.name === name) || null;
+
+/**
+ * Whether a companion has an Armor slot to wear armour in. The animal
+ * companion's body type says; the other kinds have no body types and always do.
+ */
+export const hasArmorSlot = (kind, b) => kind !== 'animalCompanion'
+  || !!bodyType(b?.bodyType)?.slots.includes('Armor');
+
+/** Whether a kind's armour is barding: armour for an animal, priced as for a non-humanoid. */
+export const wearsBarding = (kind) => kind === 'animalCompanion' || kind === 'familiar';
+
+/**
+ * The armour a companion is wearing -- barding, on a mount -- or null when it
+ * wears none. It is the item in the Armor slot, with the character's armour
+ * columns added to the slot's row: type, AC bonus, enhancement, max Dex and
+ * check penalty. A row taken off, or a body type with no Armor slot, wears
+ * nothing. The check penalty is a penalty whichever sign it was typed with.
+ */
+export function companionArmor(kind, b) {
+  const it = b?.items?.Armor;
+  if (!it || typeof it !== 'object' || it.worn === false || !hasArmorSlot(kind, b)) return null;
+  const cap = it.maxDex === null || it.maxDex === undefined || it.maxDex === '' ? NaN : Number(it.maxDex);
+  const category = armorCategory(it.type);
+  return {
+    name: String(it.name ?? '').trim(),
+    ac: Math.trunc(Number(it.acBonus) || 0) + Math.trunc(Number(it.enhancement) || 0),
+    maxDex: Number.isFinite(cap) ? cap : null,
+    acp: -Math.abs(Math.trunc(Number(it.acp) || 0)),
+    category,
+    // Medium and heavy armour slow the wearer, and a mount in medium or heavy
+    // barding cannot fly. Heavy armour runs at three times speed, not four.
+    slows: category >= 2,
+    grounds: category >= 2 && wearsBarding(kind),
+    run: category === 3 ? 3 : 4,
+  };
+}
+
+/**
+ * What the armour in a companion's Armor slot weighs and costs. The row takes
+ * the armour table's figures, which are for a Medium humanoid; these scale
+ * them for the companion's size and shape. Barding is priced as for a
+ * non-humanoid, and so is an eidolon's or conjured companion's armour once
+ * its base form is not a biped.
+ */
+export function companionArmorPrice(kind, b) {
+  const it = b?.items?.Armor || {};
+  const size = ARMOR_SIZE_FACTORS[b?.size] ? b.size : 'Medium';
+  const f = ARMOR_SIZE_FACTORS[size];
+  const form = String(b?.baseForm ?? '').trim();
+  const humanoid = !wearsBarding(kind) && (!form || /^biped/i.test(form));
+  const costTimes = humanoid ? f.cost : f.bardingCost;
+  const round = (n) => Math.round(n * 100) / 100;
+  return {
+    size, humanoid, costTimes, weightTimes: f.weight,
+    cost: round((Number(it.cost) || 0) * costTimes),
+    weight: round((Number(it.weight) || 0) * f.weight),
+  };
+}
+
+/**
+ * A companion's movement rows with its armour's cut made: medium or heavy
+ * armour slows a land speed (40 ft. to 30, 50 to 35, 60 to 40 -- the same
+ * third off, to the square, that a load makes), and medium or heavy barding
+ * stops a fly speed. Each cut row keeps what it was before as `uncut`. Swim,
+ * climb and burrow rows are left alone.
+ */
+export function armoredSpeeds(rows, worked, armor) {
+  if (!armor?.slows) return worked;
+  return worked.map((w, i) => {
+    const final = armor.grounds && /^fly\b/i.test(String(rows?.[i]?.type ?? '').trim()) ? 0
+      : isLandSpeed(rows?.[i]) ? reducedSpeed(w.final) : w.final;
+    return final === w.final ? w : { ...w, final, uncut: w.final };
+  });
+}
 
 /* ------------------------------------------------------------------ *
  * What the table's abilities actually do -- which the engine does not know.
@@ -1087,11 +1162,15 @@ export function computeCompanion(kind, block, master, bonuses = null) {
   // `cmbAbility` picks, blank for the rule.
   const tiny = ['Tiny', 'Diminutive', 'Fine'].includes(b.size);
   const cmbKey = abilityKey(b.cmbAbility) || (tiny ? 'dex' : 'str');
+  // What it wears in its Armor slot: the bonus goes on AC and flat-footed,
+  // the max Dex caps Dex on AC and touch (not CMD, as on the character), and
+  // the check penalty goes on the Str and Dex skills below.
+  const armor = companionArmor(kind, b);
   // The armour classes, CMD, CMB, initiative and the attack are each the sum
   // of their recipe (companionRecipe), which the working shown beside each
   // number lists line by line.
   const inputs = {
-    scores, bab, sizeAC, tableNatural, formNatural: form ? form.natural : 0,
+    scores, bab, sizeAC, tableNatural, formNatural: form ? form.natural : 0, armor,
     attackAbility: ABILITY_LABELS[atkKey], attackMod, cmbAbility: ABILITY_LABELS[cmbKey],
     forwarded: { ac: fwd.ac, touch: fwd.touch, ff: fwd.ff, cmd: fwd.cmd, cmb: fwd.cmb, init: fwd.init, attack: fwd.attack },
   };
@@ -1111,11 +1190,13 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     const own = Math.max(0, Number(s.ranks) || 0);
     const masterRanks = kind === 'familiar' ? Math.max(0, Number(master.skillRanks(s.name, s.spec)) || 0) : 0;
     const ranks = Math.max(own, masterRanks);
-    const am = mod(abilityKey(s.ability) || 'int');
+    const ak = abilityKey(s.ability) || 'int';
+    const am = mod(ak);
     const forwarded = Math.trunc(Number(fwd.skill[companionSkillKey(s)]) || 0);
+    const armorCheck = armor && (ak === 'str' || ak === 'dex') ? armor.acp : 0;
     const total = forwarded
-      + skillTotal({ ranks, classSkill: !!s.classSkill, abilityMod: am, misc: Number(s.misc) || 0 });
-    return { ...s, masterRanks, effectiveRanks: ranks, abilityMod: am, forwarded, total };
+      + skillTotal({ ranks, classSkill: !!s.classSkill, abilityMod: am, misc: Number(s.misc) || 0, acp: armorCheck });
+    return { ...s, masterRanks, effectiveRanks: ranks, abilityMod: am, forwarded, armorCheck, total };
   });
   const ranksSpent = skills.reduce((n, s) => n + Math.max(0, Number(s.ranks) || 0), 0);
   // The eidolon's budget is the sheet's cell (HD × (6 + Int)); the animal
@@ -1218,6 +1299,8 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     },
     sizeAC,
     tableNatural,
+    armor,
+    armorPrice: hasArmorSlot(kind, b) ? companionArmorPrice(kind, b) : null,
     ac,
     touch,
     flatFooted,
@@ -1431,13 +1514,22 @@ export function companionRecipe(b, k, stat) {
     ];
   };
   const special = () => part('special size', -size, 'the size modifier the other way round');
+  // The armour worn (companionArmor): its bonus, and its max Dex on the Dex
+  // that AC and touch take.
+  const armor = k.armor || null;
+  const worn = () => part('armor', armor?.ac, armor?.name || '');
+  const dex = () => {
+    const cap = armor?.maxDex;
+    return cap !== null && cap !== undefined && mod('dex') > cap
+      ? part('Dex', cap, `max Dex ${cap}${armor.name ? ` (${armor.name})` : ''}`) : part('Dex', mod('dex'));
+  };
   switch (stat) {
-    case 'ac': return [base(10), part('Dex', mod('dex')), part('size', size),
+    case 'ac': return [base(10), dex(), part('size', size), worn(),
       part('bonus AC (all)', b.ac?.all), part('touch only', b.ac?.touch), part('flat-footed only', b.ac?.ff),
       ...natural(), forwarded('ac')];
-    case 'touch': return [base(10), part('Dex', mod('dex')), part('size', size),
+    case 'touch': return [base(10), dex(), part('size', size),
       part('bonus AC (all)', b.ac?.all), part('touch only', b.ac?.touch), forwarded('touch')];
-    case 'ff': return [base(10), part('size', size), part('bonus AC (all)', b.ac?.all),
+    case 'ff': return [base(10), part('size', size), worn(), part('bonus AC (all)', b.ac?.all),
       part('flat-footed only', b.ac?.ff), ...natural(), forwarded('ff')];
     case 'cmd': return [base(10), part('BAB', k.bab), part('Str', mod('str')), part('Dex', mod('dex')), special(),
       part('bonus AC (all)', b.ac?.all), part('touch only', b.ac?.touch, 'dodge counts toward CMD'),
