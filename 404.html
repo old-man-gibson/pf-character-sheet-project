@@ -1,13 +1,13 @@
 <!doctype html>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self'; object-src 'none'; base-uri 'self'">
 <title>Not found</title>
 <link rel="icon" href="/app/img/logo.png">
 <!--
-  Cloudflare Pages serves the root index.html, with a 200, for every path that
-  has no file -- unless a 404.html exists. The app asks for files that may not
-  be there (private/extensions/index.json on a deployment with no private
-  packs) and tells a missing one from a present one by the status, so the
-  fallback has to be a real 404. GitHub Pages and tools/serve.mjs already
-  answer 404; this makes Pages match them.
+  The deployed site answers a path with no file with this page and a 404
+  (`not_found_handling: "404-page"` in wrangler.jsonc). The app asks for files
+  that may not be there (private/extensions/index.json on a deployment with no
+  private packs) and tells a missing one from a present one by the status, so
+  the answer has to be a real 404, as tools/serve.mjs gives.
 -->
 <p>There is nothing at this address. <a href="/app/">Open the app.</a></p>

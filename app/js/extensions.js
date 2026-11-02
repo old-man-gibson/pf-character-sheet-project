@@ -847,7 +847,7 @@ export function extensionStore(medium = globalThis.localStorage) {
     const text = cache.get(EXTENSIONS_KEY);
     try {
       const raw = JSON.parse(text || '{}');
-      if (raw && typeof raw === 'object') {
+      if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
         return {
           extensions: arr(raw.extensions).filter((e) => e && e.id),
           disabledBundled: arr(raw.disabledBundled).map(str),

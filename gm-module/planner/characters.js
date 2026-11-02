@@ -27,9 +27,7 @@ import { rollSpec } from '../../app/js/roll20.js';
 import { skillLabel } from '../../app/js/rules.js';
 import { normalizeName } from '../../app/js/model/util.js';
 import { buildIndex, kindLabel } from '../../app/js/ui/palette.js';
-
-const LIBRARY_KEY = 'character-sheet:library';
-const docKey = id => `character-sheet:doc:${id}`;
+import { LIBRARY_KEY, docKey } from '../../app/js/roster.js';
 const bundled = file => new URL(`../../data/characters/${file}`, import.meta.url);
 
 export async function roster() {

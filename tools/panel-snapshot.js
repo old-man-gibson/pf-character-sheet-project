@@ -24,9 +24,10 @@
  * public fixture alone is still captured, which is thinner but not nothing.
  */
 
+import { LIBRARY_KEY } from '../app/js/roster.js';
+
 const DB = 'panel-refactor-baseline';
 const STORE = 'snap';
-const LIBRARY_KEY = 'character-sheet:library';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* ---------------- storage ---------------- */
