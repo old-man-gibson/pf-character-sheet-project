@@ -10,8 +10,9 @@
  *   model/document.js    reading and normalising an imported document
  *   model/scope.js       the flat scope formulas read, and forwarded bonuses
  *   model/stats/         saves, defences, attacks, wealth
- *   model/subsystems/    akashic, cardcasting, cooking, crafting, maneuvers,
- *                        primordia, psionics, techniques, vancian, companions
+ *   model/subsystems/    akashic, alt-training, cardcasting, catalogues, companions,
+ *                        cooking, crafting, guile, maneuvers, psionics, techniques,
+ *                        vancian, and the registry that lists them
  *
  * Why a barrel rather than deep imports: the model is one thing to its
  * callers. Which file a helper happens to live in is this directory's business

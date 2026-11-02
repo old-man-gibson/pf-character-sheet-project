@@ -221,8 +221,8 @@ are written in brackets too (`[utility]`), so those are named in the reader rath
 guessed at. A talent's own `Source:` line joins `sources` as well, since it says which book
 where the tag only says which shelf.
 
-`sphereEntry(name)`, `sphereTalents(name)`, `talentsTagged(tag)` and `talentTagCounts()`
-read the registered catalogue; `talentsTagged` searches both lists, since which of the two
+`sphereEntry(name)`, `sphereTalents(name)` and `talentsTagged(tag)` read the registered
+catalogue; `talentsTagged` searches both lists, since which of the two
 a wiki wrote a label in is its business rather than a caller's.
 
 **What the sheet does with it.** Two things, both light. Every sphere picker on the

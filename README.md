@@ -127,7 +127,7 @@ tools/dump_tab.py       debugging aid: print a worksheet as a coordinate grid
 tools/maneuvers_ref.py  build the disciplines pack from a workbook's maneuversRef tab
 tools/extension_pack.py what the *_ref tools use to write a table as a pack
 tools/audit-diff.mjs    the audit diff between two character JSON documents, for a GM
-tools/deploy-pages.mjs  upload the committed tree to Cloudflare Pages (never a checkout)
+tools/deploy-site.mjs   deploy the committed tree to Cloudflare (never a checkout)
 tools/scrape-pack.mjs   a directory of scraper markdown into packs, using the same
                         reader the Paste text… panel uses
 tools/forge-pack.mjs    a Homebrew Workbench export into a pack under private/extensions,
@@ -185,7 +185,7 @@ private/                git-ignored: real characters and their workbooks, if you
 Run the tests with:
 
 ```bash
-node tests/formula.test.mjs && node tests/formula-format.test.mjs && node tests/formula-guide.test.mjs && node tests/tracker-style.test.mjs && node tests/column-widths.test.mjs && node tests/model.test.mjs && node tests/diff.test.mjs && node tests/publish.test.mjs && node tests/convert.test.mjs && node tests/history.test.mjs && node tests/zip.test.mjs && node tests/extensions.test.mjs && node tests/forge-pack.test.mjs && node tests/forge.test.mjs && node tests/paste-import.test.mjs && node tests/roll20.test.mjs && node tests/palette.test.mjs && node tests/panels.test.mjs
+for suite in tests/*.test.mjs; do node "$suite" || echo "FAILED: $suite"; done
 ```
 
 Every suite passes in a fresh clone. The ones that sweep a roster fall back to the

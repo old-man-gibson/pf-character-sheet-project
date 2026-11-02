@@ -188,7 +188,7 @@ console.log('\ncompression -- what a snapshot actually costs');
   // Awkward payloads, because a character document is arbitrary player text.
   const odd = {
     schemaVersion: SCHEMA_VERSION,
-    text: 'ō ✦ — 日本語   \\ " \n\t',
+    text: 'ō ✦ — 日本語 \u0000 \\ " \n\t',
     empty: {}, list: [], nothing: null, deep: { a: { b: { c: [1, [2, [3]]] } } },
   };
   check('awkward text survives', await unpack(await pack(odd)), odd);
