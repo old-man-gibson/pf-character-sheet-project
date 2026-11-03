@@ -90,8 +90,8 @@ export const BLOCK_KINDS = {
   template: { label: 'Feature group', lands: 'A template with its features (Template tab)' },
   tracker: { label: 'Tracker', lands: 'Trackers tab' },
   veil: { label: 'Veil', lands: 'Its chakra slot on the Akashic tab (shaped, essence 0)' },
-  archetype: { label: 'Archetype', lands: 'Its class on the sheet: replaced features leave the Progression ladder and Template group, the new ones go in; a pill on the class row removes it and restores them' },
-  options: { label: 'Option menu', lands: 'The class feature it names on the Progression tab, as the menu its cells pick from; and its own Template group' },
+  archetype: { label: 'Archetype', lands: 'Its class. Replaced features are removed from the Progression tab and Template group, and the new ones are added. The pill on the class row removes the archetype' },
+  options: { label: 'Option menu', lands: 'The class feature it names on the Progression tab, as a menu of choices, and its own Template group' },
   note: { label: 'Note', lands: 'Extras & Notes' },
 };
 

@@ -1883,9 +1883,9 @@ console.log('copying a bundled pack -- what it costs, said before the Save');
 
   check('a small pack says nothing', copyCost(small), null);
   const line = copyCost(big);
-  ok('a big one says it costs nothing where it is', line.includes('costs no storage at all'));
+  ok('a big one says it costs nothing where it is', line.includes('uses no browser storage'));
   ok('names the size the copy would take', line.includes(packSize(big)));
-  ok('and that editing is not what spends it', line.includes('only Save spends anything'));
+  ok('and that editing is not what spends it', line.includes('until you save'));
 }
 
 console.log('the pack list -- filed by author, found by name, author or contents');
