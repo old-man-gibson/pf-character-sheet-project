@@ -1,0 +1,8 @@
+[
+  {
+    "file": "app/js/convert.js",
+    "code": 6133,
+    "name": "table",
+    "why": "The port of convert.py's table(), unused today. The open converter-parity change edits it; remove it or this entry once that lands."
+  }
+]

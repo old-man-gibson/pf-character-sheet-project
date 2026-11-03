@@ -3,6 +3,8 @@
 # There is nothing to install: the app is plain ES modules with no dependencies,
 # and each suite is a Node script that prints "N passed, M failed" and exits
 # non-zero if anything failed. So the job is checkout, a Node, and run them.
+# The names job below installs one pinned package, TypeScript, outside the
+# checkout, to read the code; the app still depends on nothing.
 #
 # CI has no `private/` directory -- the real characters belong to their players
 # and are not in the repository -- so the suites that sweep a roster fall back
@@ -69,3 +71,24 @@ jobs:
             exit 1
           fi
           echo "all ${#suites[@]} suites passed"
+
+  names:
+    # Names the code uses that nothing declares, imports and locals nothing
+    # uses, and calls with the wrong number of arguments: what a block of code
+    # moved between files leaves behind, which no suite notices until the line
+    # runs. TypeScript reads the plain JavaScript and only those slips are
+    # reported (tools/check-names.mjs). One Node is enough; the answer does not
+    # depend on it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install TypeScript
+        run: npm install --no-save --no-package-lock --prefix "$RUNNER_TEMP/ts" typescript@5.9.3
+
+      - name: Check names
+        run: node tools/check-names.mjs --typescript "$RUNNER_TEMP/ts/node_modules/typescript"

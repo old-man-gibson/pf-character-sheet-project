@@ -196,6 +196,17 @@ public fixture; `convert.test` needs the source workbooks and so still says what
 skipped and exits 0, as do the checks written against a named character. See the next
 section for where they look.
 
+CI also checks for names the code uses that nothing declares, imports and locals
+nothing uses, and calls with the wrong number of arguments. It needs a copy of
+TypeScript, which the repository does not install:
+
+```bash
+npm install --no-save --no-package-lock --prefix ../ts typescript@5.9.3
+node tools/check-names.mjs --typescript ../ts/node_modules/typescript
+```
+
+A finding that is meant goes in `tools/check-names-allow.json` with the reason.
+
 For browser checks, start the local server and open
 <http://localhost:8777/tests/browser.html>, then press **Run browser checks**.
 These use disposable test characters to exercise real IndexedDB saves, unsaved-edit
