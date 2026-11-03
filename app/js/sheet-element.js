@@ -107,6 +107,8 @@ import { bindClassActions } from './ui/class-actions.js';
 import { bindChains } from './ui/session-chains.js';
 import { sessionRollSpec } from './model/session-rolls.js';
 import { bindCardTable } from './ui/card-table.js';
+import { bindProgressionControls, PROGRESSION_ACTIONS } from './ui/progression-controls.js';
+import { bindSphereControls, SPHERE_ACTIONS } from './ui/sphere-controls.js';
 import * as combat from './ui/panels/combat.js';
 import * as guile from './ui/panels/guile.js';
 import * as trainingPanels from './ui/panels/training.js';
@@ -4820,58 +4822,8 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
-    root.querySelectorAll('[data-prog]').forEach((select) => {
-      select.addEventListener('change', () => {
-        const [lvl, track] = select.dataset.prog.split('|');
-        this.#model.setProgressionClass(Number(lvl), Number(track), select.value || null);
-        this.#rerender(select);
-      });
-    });
-
-    // "Fill column…": one class down every level of a track. The picker is an
-    // action rather than a value, so it goes back to its prompt afterwards --
-    // which the re-render does for it.
-    // Aligned classes (Progression tab): the block's classes, its gain rows,
-    // the class each gain goes to, and starting a block on a class.
-    root.querySelectorAll('[data-aligned]').forEach((select) => {
-      select.addEventListener('change', () => {
-        const { i, n } = JSON.parse(select.dataset.aligned);
-        const names = [...(this.#model.data.classes?.[i]?.aligned?.classes || [])];
-        names[n] = select.value;
-        const kept = names.map((x) => String(x ?? '').trim()).filter(Boolean);
-        this.#model.setAligned(i, { classes: kept.length ? kept : [''] });
-        this.#rerender(select);
-      });
-    });
-    root.querySelectorAll('[data-alignedgain]').forEach((input) => {
-      input.addEventListener('change', () => {
-        const { i, g, k } = JSON.parse(input.dataset.alignedgain);
-        this.#model.setAlignedGain(i, g, { [k]: k === 'lowest' ? !!input.value : input.value });
-        this.#rerender(input);
-      });
-    });
-    root.querySelectorAll('[data-alignedpick]').forEach((select) => {
-      select.addEventListener('change', () => {
-        const { i, kind, p, n } = JSON.parse(select.dataset.alignedpick);
-        this.#model.setAlignedPick(i, kind, p, n, select.value);
-        this.#rerender(select);
-      });
-    });
-    root.querySelectorAll('[data-alignedadd]').forEach((select) => {
-      select.addEventListener('change', () => {
-        if (select.value === '') return;
-        this.#model.addAligned(Number(select.value));
-        this.#render();
-      });
-    });
-
-    root.querySelectorAll('[data-filltrack]').forEach((select) => {
-      select.addEventListener('change', () => {
-        if (!select.value) return;
-        this.#model.fillProgressionTrack(Number(select.dataset.filltrack), select.value);
-        this.#render();
-      });
-    });
+    // The Progression tab's ladder, aligned classes and class-feature grid.
+    bindProgressionControls(root, this.#model, { render: () => this.#render(), rerender: (el) => this.#rerender(el) });
 
     // Feature cells: multi-line, auto-growing. When a rendered view is showing
     // (formulas collapsed to values) the view is the in-flow element and sizes
@@ -4992,75 +4944,13 @@ export class CharacterSheetElement extends HTMLElement {
       }),
     });
 
-    // The two halves of a tradition pool always add up to its steps, so typing
-    // into either one is really moving the boundary between them.
-    root.querySelectorAll('[data-split]').forEach((input) => {
-      input.addEventListener('change', () => {
-        const [target, total, kind] = input.dataset.split.split('|');
-        const n = Math.max(0, Math.min(Number(total), Math.floor(Number(input.value) || 0)));
-        this.#model.set(target, kind === 'sp' ? n : Number(total) - n);
-        this.#rerender(input);
-      });
-    });
-
-    // A "counts as" tick: which kinds of talent a class's pool reaches. It may
-    // add or drop the class's block on another side, and it moves the class
-    // into or out of the blended group, so the whole tab is redrawn rather
-    // than the one control.
-    root.querySelectorAll('[data-reach]').forEach((box) => {
-      box.addEventListener('change', () => {
-        const [home, index, system] = box.dataset.reach.split('|');
-        this.#model.setPoolReach(home, Number(index), system, box.checked);
-        this.#render();
-      });
-    });
-
-    // Drawing a weapon moves every sphere number on the tab, so the tab is
-    // redrawn rather than the radio.
-    root.querySelectorAll('[data-custactive]').forEach((radio) => {
-      radio.addEventListener('change', () => {
-        const [block, set] = radio.dataset.custactive.split('|');
-        this.#model.setCustomizationActive(Number(block), Number(set));
-        this.#rerender(radio);
-      });
-    });
-    // Widening or narrowing what a track may learn changes every sphere
-    // dropdown under it, so the tab is redrawn.
-    root.querySelectorAll('[data-custspheres]').forEach((select) => {
-      select.addEventListener('change', () => {
-        this.#model.setCustomizationRule(Number(select.dataset.custspheres), 'spheres', select.value);
-        this.#rerender(select);
-      });
-    });
-    // A counting rule opens and shuts rows under the panel it is typed in.
-    root.querySelectorAll('[data-custrule]').forEach((input) => {
-      input.addEventListener('change', () => {
-        const [block, key, field] = input.dataset.custrule.split('|');
-        this.#model.setCustomizationRule(Number(block), key, field, input.value);
-        this.#rerender(input);
-      });
-    });
-    root.querySelectorAll('[data-remove-customization]').forEach((button) => {
-      button.addEventListener('click', () => {
-        this.#model.removeCustomization(Number(button.dataset.removeCustomization));
-        this.#render();
-      });
-    });
+    // The sphere tabs' pools, reach ticks and customized weapons.
+    bindSphereControls(root, this.#model, { render: () => this.#render(), rerender: (el) => this.#rerender(el) });
 
     this.#bindTemplateDrag(root);
     this.#bindNoteDrag(root);
     this.#bindFeatDrag(root);
     this.#bindRowDrag(root);
-
-    root.querySelectorAll('[data-cfcol]').forEach((input) => {
-      input.addEventListener('change', () => {
-        const sep = input.dataset.cfcol.lastIndexOf('|');
-        const cls = input.dataset.cfcol.slice(0, sep);
-        const idx = Number(input.dataset.cfcol.slice(sep + 1));
-        this.#model.renameClassFeatureColumn(cls, idx, input.value.trim());
-        this.#rerender(input);
-      });
-    });
 
     // The block shelf's search: typed into, so it filters as you go and keeps
     // the caret where it was.
@@ -5070,39 +4960,6 @@ export class CharacterSheetElement extends HTMLElement {
         this.#rerender(input);
       });
     });
-
-    // A class's own feature text, under its ladder.
-    root.querySelectorAll('[data-cfnote]').forEach((el) => {
-      el.addEventListener('change', () => {
-        const { c, i, k } = JSON.parse(el.dataset.cfnote);
-        this.#model.setClassFeatureNote(c, Number(i), { [k]: el.value });
-        this.#rerender(el);
-      });
-    });
-
-    root.querySelectorAll('[data-cfmenu]').forEach((select) => {
-      select.addEventListener('change', () => {
-        const sep = select.dataset.cfmenu.lastIndexOf('|');
-        const cls = select.dataset.cfmenu.slice(0, sep);
-        const idx = Number(select.dataset.cfmenu.slice(sep + 1));
-        this.#model.setClassFeatureColumnOptions(cls, idx, select.value);
-        this.#render();
-      });
-    });
-
-    // A column's rule groups: name, levels, colour and menu. Each re-renders,
-    // because a rule decides which cells in the whole column are live.
-    for (const [attr, field] of [['cfgname', 'name'], ['cfgrule', 'rule'], ['cfgcolor', 'color'], ['cfgmenu', 'optionsFrom']]) {
-      root.querySelectorAll(`[data-${attr}]`).forEach((input) => {
-        input.addEventListener('change', () => {
-          const parts = input.dataset[attr].split('|');
-          const gi = Number(parts.pop());
-          const idx = Number(parts.pop());
-          this.#model.setClassFeatureRuleGroup(parts.join('|'), idx, gi, { [field]: input.value });
-          this.#rerender(input);
-        });
-      });
-    }
 
     root.querySelectorAll('[data-systab-name]').forEach((input) => {
       input.addEventListener('change', () => {
@@ -6201,6 +6058,14 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   #action(name, button) {
+    // A button that only edits the character, kept beside its tab's other
+    // controls: the sheet runs it and redraws.
+    const edit = PROGRESSION_ACTIONS[name] || SPHERE_ACTIONS[name];
+    if (edit) {
+      edit(this.#model, button);
+      this.#render();
+      return;
+    }
     // A two-click ×: the first press only arms it (rows.removeControl).
     const arm = button?.dataset?.arm;
     if (arm) {
@@ -6215,26 +6080,6 @@ export class CharacterSheetElement extends HTMLElement {
       this.#view.armedRemove = null;
     }
     switch (name) {
-      case 'add-training-class': {
-        this.#model.addTrainingClass(button?.dataset.side === 'magic' ? 'magic' : 'combat');
-        this.#render();
-        break;
-      }
-      case 'add-guile-class':
-        this.#model.addGuileClass();
-        this.#render();
-        break;
-      case 'fill-talent-notes':
-        // The button only exists while there is something to fill, so the
-        // render that follows is also what takes it away.
-        this.#model.fillTalentNotes(button?.dataset.side);
-        this.#render();
-        break;
-      case 'add-guile-sphere':
-        // Named when the button sits on a sphere in the All spheres list.
-        this.#model.addGuileSphere(button?.dataset.sphere || '');
-        this.#render();
-        break;
       case 'add-customization': {
         // Named after whichever class on the sheet has none yet, since that is
         // nearly always the one meant; blank when they all have.
@@ -6535,10 +6380,6 @@ export class CharacterSheetElement extends HTMLElement {
         this.#model.forgetSheetCasting();
         this.#render();
         break;
-      case 'add-system-pool':
-        this.#model.addSystemPool(button?.dataset.pool);
-        this.#render();
-        break;
       case 'add-tracker': {
         const { name: n, formula, minFormula, refresh, note, fill } = this.#view.draft;
         if (!n.trim()) return;
@@ -6639,17 +6480,6 @@ export class CharacterSheetElement extends HTMLElement {
         if (op === 'damage') this.#model.companionDamage(kind, index, amount);
         else if (op === 'heal') this.#model.companionHeal(kind, index, amount);
         else if (op === 'rest') this.#model.companionRest(kind, index);
-        this.#render();
-        break;
-      }
-      case 'attune-sphere': {
-        // Land-attuned magic: a sphere is attuned or not, kept as a list of names.
-        const sphere = button?.dataset.sphere;
-        if (!sphere) break;
-        const list = new Set(this.#model.data.cardcasting?.attunedSpheres || []);
-        if (list.has(sphere)) list.delete(sphere);
-        else list.add(sphere);
-        this.#model.set('cardcasting.attunedSpheres', [...list]);
         this.#render();
         break;
       }
@@ -7076,72 +6906,6 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       case 'remove-template-column':
         this.#model.removeTemplateTableColumn(button?.dataset.path, Number(button?.dataset.col));
-        this.#render();
-        break;
-      case 'add-track':
-        this.#model.addProgressionTrack();
-        this.#render();
-        break;
-      case 'remove-track':
-        this.#model.removeProgressionTrack(Number(button?.dataset.track));
-        this.#render();
-        break;
-      case 'add-cfnote':
-        this.#model.addClassFeatureNote(button?.dataset.class, { name: 'New feature' });
-        this.#render();
-        return;
-      case 'add-cfnote-pack':
-        // One, or every one the panel is offering for this class.
-        for (const s of button?.dataset.name !== undefined
-          ? [{ name: button.dataset.name }] : this.#model.classFeatureNoteSuggestions(button?.dataset.class)) {
-          this.#model.addClassFeatureNoteFromPack(button?.dataset.class, s.name);
-        }
-        this.#render();
-        return;
-      case 'remove-cfnote':
-        this.#model.removeClassFeatureNote(button?.dataset.class, Number(button?.dataset.index));
-        this.#render();
-        return;
-      case 'add-cf-column': {
-        const cls = button?.dataset.class;
-        const cols = this.#model.data.progression.classFeatures?.[cls]?.columns || [];
-        let n = 1;
-        while (cols.includes(`Column ${n}`)) n += 1;
-        this.#model.addClassFeatureColumn(cls, cols.length ? `Column ${n}` : 'Features');
-        this.#render();
-        break;
-      }
-      case 'remove-cf-column':
-        this.#model.removeClassFeatureColumn(button?.dataset.class, Number(button?.dataset.col));
-        this.#render();
-        break;
-      // Deleting a whole feature group takes a second click even now that
-      // Ctrl+Z can put it back: it is a column of the player's own writing per
-      // level, and twenty levels of it is more than a toast should be the only
-      // thing standing between you and losing. The button asks (data-arm).
-      case 'remove-cf-group':
-        this.#model.removeClassFeatureGroup(button?.dataset.class);
-        this.#render();
-        break;
-      case 'remove-aligned':
-        this.#model.removeAligned(Number(button?.dataset.index));
-        this.#render();
-        break;
-      case 'add-aligned-gain':
-        this.#model.addAlignedGain(Number(button?.dataset.index));
-        this.#render();
-        break;
-      case 'remove-aligned-gain':
-        this.#model.removeAlignedGain(Number(button?.dataset.index), Number(button?.dataset.gain));
-        this.#render();
-        break;
-      case 'add-rule-group':
-        this.#model.addClassFeatureRuleGroup(button?.dataset.class, Number(button?.dataset.col));
-        this.#render();
-        break;
-      case 'remove-rule-group':
-        this.#model.removeClassFeatureRuleGroup(button?.dataset.class,
-          Number(button?.dataset.col), Number(button?.dataset.group));
         this.#render();
         break;
       case 'add-condition': {
