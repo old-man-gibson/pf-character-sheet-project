@@ -37,6 +37,7 @@ import { SECTION_KINDS, guessTags, readSections } from './pdf-import.js';
 import { MANEUVER_FIELDS } from './rules.js';
 
 import { esc } from './html-escape.js';
+import { signed } from './ui/format.js';
 
 const lower = (s) => String(s ?? '').trim().toLowerCase();
 
@@ -289,7 +290,7 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
           <button data-export="${esc(s.id)}" data-bundled="${isBundled}" title="Download this pack as a .json file to share">Export</button>
           ${isBundled ? '' : (confirmRemove === s.id
     ? `<button class="danger" data-remove-confirm="${esc(s.id)}">Really remove</button><button data-remove-cancel>Keep</button>`
-    : `<button class="danger" data-remove="${esc(s.id)}" title="Remove from this browser">×</button>`)}
+    : `<button class="danger" data-remove="${esc(s.id)}" title="Remove from this browser" aria-label="Remove from this browser">×</button>`)}
         </div>
       </div>`;
 
@@ -573,7 +574,7 @@ Hit Die: d12.
     const detail = (b) => {
       switch (b.kind) {
         case 'class': return `d${b.hd} · ${b.bab === 1 ? 'full' : b.bab === 0.5 ? '½' : '¾'} BAB · good ${['goodFort', 'goodRef', 'goodWill'].filter((k) => b[k]).map((k) => k.slice(4)).join('/') || 'no'} save · ${b.skillRanks} ranks · ${b.classSkills.length} class skills · ${b.features.length} features (${b.features.filter((f) => f.text).length} with text)`;
-        case 'race': return [b.size, b.speed && `${b.speed} ft`, Object.entries(b.abilityMods).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${k}`).join(' '), `${b.traits.length} traits`, b.languages.length && b.languages.join(', ')].filter(Boolean).join(' · ');
+        case 'race': return [b.size, b.speed && `${b.speed} ft`, Object.entries(b.abilityMods).map(([k, v]) => `${signed(v)} ${k}`).join(' '), `${b.traits.length} traits`, b.languages.length && b.languages.join(', ')].filter(Boolean).join(' · ');
         case 'trait': return `${b.replaces.length ? `replaces ${b.replaces.join(', ')} · ` : ''}${b.text.slice(0, 90)}${b.text.length > 90 ? '…' : ''}`;
         case 'feature': case 'note': return `${b.text.slice(0, 110)}${b.text.length > 110 ? '…' : ''}`;
         case 'veil': return `${b.slot || 'no slot'}${b.descriptor ? ` · ${b.descriptor}` : ''} · ${b.text.slice(0, 80)}…`;
@@ -1020,7 +1021,7 @@ Hit Die: d12.
           placeholder="Discipline name" maxlength="80" aria-label="Discipline name">
         <span class="meta">${esc(count)}</span>
         <button data-dopen="${i}" aria-expanded="${open}">${open ? 'Done' : 'Edit'}</button>
-        <button class="danger" data-dremove="${i}" title="Remove this discipline">×</button>
+        <button class="danger" data-dremove="${i}" title="Remove this discipline" aria-label="Remove this discipline">×</button>
       </div>
       ${open ? `<div class="body">${entriesHtml(entries, i)}</div>` : ''}
     </div>`;
@@ -1059,7 +1060,7 @@ Hit Die: d12.
           placeholder="Name" maxlength="120" aria-label="Name">
         <button data-eopen="${esc(key)}" aria-expanded="${open}"
           title="${filled ? `${filled} of ${MANEUVER_FIELDS.length} cells filled in` : 'No cells filled in'}">${open ? 'Done' : `Cells${filled ? ` ${filled}` : ''}`}</button>
-        <button class="danger" data-eremove="${esc(key)}" title="Remove">×</button>
+        <button class="danger" data-eremove="${esc(key)}" title="Remove this maneuver" aria-label="Remove this maneuver">×</button>
       </div>
       ${open ? `<div class="cells"><div class="fields">${MANEUVER_FIELDS.map((f) => {
     if (f.options) {
@@ -1174,7 +1175,7 @@ Hit Die: d12.
         <div class="head">
           <span class="kind">${esc(sp.kind || 'sphere')}</span>
           <span class="title">${esc(sp.name || '(unnamed)')}</span>
-          <button class="danger" data-sremove="${i}" title="Remove this sphere">×</button>
+          <button class="danger" data-sremove="${i}" title="Remove this sphere" aria-label="Remove this sphere">×</button>
         </div>
         <div class="land">${esc(sphereLine(sp))}</div>
       </div>`).join('')}`;
@@ -1190,7 +1191,7 @@ Hit Die: d12.
         <button data-bmove="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''} title="Move up">↑</button>
         <button data-bmove="${i}" data-dir="1" ${i === draft.blocks.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
         <button data-bopen="${i}" aria-expanded="${open}">${open ? 'Done' : 'Edit'}</button>
-        <button class="danger" data-bremove="${i}" title="Remove this block">×</button>
+        <button class="danger" data-bremove="${i}" title="Remove this block" aria-label="Remove this block">×</button>
       </div>
       ${open ? `<div class="body">${blockFormHtml(b, i)}<div class="land">Lands on: ${esc(kind.lands)}.</div></div>` : ''}
     </div>`;

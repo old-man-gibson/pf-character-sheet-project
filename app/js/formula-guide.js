@@ -32,6 +32,7 @@ import {
 
 import { esc } from './html-escape.js';
 import { linkedText } from './ui/links.js';
+import { signed } from './ui/format.js';
 
 /* ------------------------------------------------------------------ *
  * Grouping the character's values
@@ -825,7 +826,7 @@ export function forwardedHtml(rows, query) {
           ${!r.error && r.dropped?.length
     ? `<span class="badge err">${esc(r.dropped.join(', '))} goes nowhere</span>` : ''}
           <span class="fx-rowval">${r.error ? '—'
-    : esc(r.shown ?? `${r.value > 0 ? '+' : ''}${formatNumber(r.value)}`)}</span>
+    : esc(r.shown ?? `${signed(r.value, formatNumber)}`)}</span>
         </div>
         <code class="fx-code fx-rowsrc" data-fx-insert="${esc(r.expr)}" data-fx-replace="1"
           title="Click to open this in the box above">${highlight(r.expr)}</code>

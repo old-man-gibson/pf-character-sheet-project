@@ -26,6 +26,7 @@
 import { babFromText, minLevelIn, normalizeBlock, featureKey } from './extensions.js';
 import { isGuileSphere, sphereSide } from './rules.js';
 import { TEXT_STEPS, cleanText } from './text.js';
+import { signed } from './ui/format.js';
 
 // One definition, shared: the block reader needs it to tell which of a class's
 // features repeat, and the paste reader to pair a table's names with its prose.
@@ -1113,7 +1114,7 @@ export function readRace(lines, pre = new Set()) {
     kind: 'race', name, size: fields.size || '', speed: fields.speed ?? null, abilityMods, traits,
     languages: fields.languages || [], text: description,
   }));
-  report.push(`Race ${name}: ${Object.entries(abilityMods).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${k}`).join(' ') || 'no ability modifiers found'}, ${fields.size || 'size ?'}, ${fields.speed ? `${fields.speed} ft` : 'speed ?'}, ${traits.length} standard trait(s)${tables ? '; age/height tables dropped' : ''}.`);
+  report.push(`Race ${name}: ${Object.entries(abilityMods).map(([k, v]) => `${signed(v)} ${k}`).join(' ') || 'no ability modifiers found'}, ${fields.size || 'size ?'}, ${fields.speed ? `${fields.speed} ft` : 'speed ?'}, ${traits.length} standard trait(s)${tables ? '; age/height tables dropped' : ''}.`);
 
   for (const a of alternates) blocks.push(normalizeBlock({ kind: 'trait', name: a.name, text: a.text, source: sourceTag(a.text), race: name }));
   if (alternates.length) {

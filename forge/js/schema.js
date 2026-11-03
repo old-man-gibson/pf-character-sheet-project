@@ -205,7 +205,7 @@ export const ELEMENT_BASE = {
 
 /* ---------------- small helpers every module wants ---------------- */
 
-export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+export { esc } from '../../app/js/html-escape.js';
 export const uid = () => Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
 export const slug = (s) => (String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'entry');
 export const now = () => new Date().toISOString();

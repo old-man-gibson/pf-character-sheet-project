@@ -5,13 +5,14 @@
 // pages use (escaping, zoom, per-viewer settings).
 
 import { clock, end, minutesText, npcName, placesText, playerName, span, whole } from './plan.js';
+import { esc } from '../../app/js/html-escape.js';
 
 export const ZOOMS = [1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24]; // pixels per minute
 export const DEFAULT_ZOOM = 5;
 export const ROOM = 60; // minutes of empty track after the last activity, to drag into
 export const WORLD = '@world'; // the lane id of the world events row (no player has it)
 
-export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+export { esc };
 
 // Per-viewer settings (zoom, toggles) in this browser. Storage can be blocked
 // or empty; the page then uses its defaults.
