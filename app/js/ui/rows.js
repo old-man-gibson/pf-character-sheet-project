@@ -47,7 +47,7 @@ export function itemText(list, i, field, value, placeholder = '', opts = false) 
 /**
  * One cell of a grid copied from a workbook: a worksheet the sheet does not
  * model (lore.js `gridTab`) or the cells a sub-system tab's headings left
- * over (subsystems.js `systemExtrasPanel`).
+ * over (panels/system-tabs.js `systemExtrasPanel`).
  *
  * Most hold a word or a number and are a one-line box. One that holds a {…}
  * formula or a web address is a prose field, whose read view shows what the

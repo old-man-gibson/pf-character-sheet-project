@@ -2,7 +2,7 @@
  * ui/cast-pick.js -- reading the card table's mode chooser.
  *
  * A card with several Dice entries opens a chooser on Cast… (castPicker in
- * panels/subsystems.js): a mode, and the spell points to put into it. The
+ * panels/cardcasting.js): a mode, and the spell points to put into it. The
  * two answers ride on the Cast button's argument as a query --
  * `cast?mode=boost (1 SP)&sp=1` -- so the one table-action switch gets a
  * plain string whether the press came from the tab or from a pop-out
