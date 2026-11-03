@@ -13,8 +13,9 @@
  * would otherwise put that window's work back to what this one last saw.
  *
  * Snapshots are whole documents, and sessionStorage has a few megabytes. A
- * write that does not fit drops the oldest snapshots until it does, then the
- * oldest redo entries; play actions are small and are kept to the last.
+ * write that does not fit first drops the stacks kept for other characters
+ * opened in this tab, then the oldest snapshots until it fits, then the oldest
+ * redo entries; play actions are small and are kept to the last.
  */
 
 const TAB_KEY = 'cs-tab-id';
@@ -46,11 +47,28 @@ export function readUndo(key) {
   }
 }
 
+/** Remove the stacks kept for every other character in this tab. Answers whether any were there. */
+function dropOthers(key) {
+  try {
+    const others = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && k !== key && k.endsWith(':undo')) others.push(k);
+    }
+    for (const k of others) sessionStorage.removeItem(k);
+    return others.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 /** Keep `state` ({ undo, play, redo }) under `key`, trimming to fit. Answers whether anything was kept. */
 export function writeUndo(key, state) {
-  const undo = [...(state?.undo ?? [])];
-  const play = [...(state?.play ?? [])];
-  const redo = [...(state?.redo ?? [])];
+  // Each entry is serialised once: a write that does not fit is retried with
+  // the pieces that are left, not by serialising every snapshot again.
+  const undo = (state?.undo ?? []).map((e) => JSON.stringify(e));
+  const play = (state?.play ?? []).map((e) => JSON.stringify(e));
+  const redo = (state?.redo ?? []).map((e) => JSON.stringify(e));
   try {
     if (!undo.length && !play.length && !redo.length) {
       sessionStorage.removeItem(key);
@@ -59,11 +77,13 @@ export function writeUndo(key, state) {
   } catch {
     return false;
   }
+  let othersDropped = false;
   for (;;) {
     try {
-      sessionStorage.setItem(key, JSON.stringify({ undo, play, redo }));
+      sessionStorage.setItem(key, `{"undo":[${undo.join(',')}],"play":[${play.join(',')}],"redo":[${redo.join(',')}]}`);
       return true;
     } catch {
+      if (!othersDropped) { othersDropped = true; if (dropOthers(key)) continue; }
       if (undo.length) undo.shift();
       else if (redo.length) redo.shift();
       else if (play.length) play.shift();

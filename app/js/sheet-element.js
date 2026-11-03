@@ -2044,8 +2044,16 @@ export class CharacterSheetElement extends HTMLElement {
     clearTimeout(this.#undoSaveTimer);
     this.#undoSaveTimer = null;
     if (!this.#model || this.isPublished) return;
-    writeUndo(this.#undoStoreKey(), this.#model.undoState());
+    // The stacks hold up to twenty whole documents, so they are written only
+    // when they moved: any push, pop or trim changes a length or an end entry.
+    const key = this.#undoStoreKey();
+    const state = this.#model.undoState();
+    const shape = [key, ...['undo', 'play', 'redo'].flatMap((k) => [state[k].length, state[k][0], state[k].at(-1)])];
+    if (this.#undoWritten?.every((v, i) => v === shape[i])) return;
+    this.#undoWritten = writeUndo(key, state) ? shape : null;
   };
+  /** The key and each stack's length and end entries when the stacks were last written. */
+  #undoWritten = null;
 
   /** The marker a save or a checkpoint stamps for the other windows. */
   #historyMarkKey() { return `${workingKey(this.#model?.data?.id || 'character')}:history`; }
