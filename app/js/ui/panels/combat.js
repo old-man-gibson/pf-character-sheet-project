@@ -29,7 +29,7 @@ import {
 import {
   COMBAT_SPHERES, SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule,
 } from '../../rules.js';
-import { check, field, linkField, roField, select, text } from '../fields.js';
+import { check, dropdownOptions, field, linkField, roField, text } from '../fields.js';
 import {
   abilityField, blendTicks, blendedSection, bonusTalentTable, classLevelsField, classNames, singleLadderTable, traditionTable,
 } from './training.js';
@@ -218,8 +218,8 @@ function customizationPanel(model, blocks) {
           <label class="fld"><span>Spheres</span>
             <select data-custspheres="${bi}"
               title="What a ${esc(unit)} may teach. Martial unless an archetype widens it.">
-              ${TRACK_SPHERE_SIDES.map((k) => `<option value="${k}"${
-    (block.spec?.spheres || 'combat') === k ? ' selected' : ''}>${esc(TRACK_SPHERE_LABELS[k])}</option>`).join('')}
+              ${dropdownOptions(block.spec?.spheres || 'combat',
+    TRACK_SPHERE_SIDES.map((k) => [k, TRACK_SPHERE_LABELS[k]]), null)}
             </select></label>
           <label class="fld"><span>Grants</span>
             <span class="pair">${roField(`${block.setCount} × ${block.talentCount}`,
@@ -770,8 +770,7 @@ function templateTables(model, ctx, ti, path, f) {
         <div class="ttablehead">
           ${text(`${table}.caption`, t.caption, 'Table caption (optional)')}
           ${homes.length ? `<select data-tmove="${path}|${bi}" title="Move this table to another ability">
-            <option value="">Move to…</option>
-            ${homes.map(([p, label]) => `<option value="${p}">${esc(label)}</option>`).join('')}
+            ${dropdownOptions('', homes, 'Move to…')}
           </select>` : ''}
           <button data-view data-cells="${table}" aria-pressed="${raw}"
             title="Show every cell as it is stored, merge markers and all">Cells</button>

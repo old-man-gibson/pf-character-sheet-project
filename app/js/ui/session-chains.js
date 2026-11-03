@@ -1,4 +1,5 @@
 import { esc } from './html.js';
+import { dropdownOptions } from './fields.js';
 import { renderedProse } from './prose.js';
 import { removeControl } from './rows.js';
 import { ACTION_TYPES, sessionState } from '../model/session.js';
@@ -21,21 +22,22 @@ export function routineEditor(model, owner, ref) {
   const select = (step, field, options, label) => `<select aria-label="${label}" data-step-owner="${ref}" data-step-id="${esc(step.id)}" data-step-field="${field}">${options}</select>`;
   const input = (step, field, label, placeholder = '') => `<label>${label} <input data-step-owner="${ref}" data-step-id="${esc(step.id)}" data-step-field="${field}" value="${esc(String(step[field] ?? ''))}" ${placeholder ? `placeholder="${esc(placeholder)}"` : ''}></label>`;
   const check = (step, field, label) => `<label><input type="checkbox" data-step-owner="${ref}" data-step-id="${esc(step.id)}" data-step-field="${field}" ${step[field] ? 'checked' : ''}> ${label}</label>`;
-  const options = (list, value) => list.map(([k, l]) => `<option value="${esc(k)}" ${k === (value || '') ? 'selected' : ''}>${esc(l)}</option>`).join('');
+  // Grouped by where each target lives, with one that is gone named as
+  // missing at the top: more than `dropdownOptions` draws.
   const targetOptions = step => `<option value="">Choose a card, feature or attack</option>${step.target && !targets.some(t => t.key === step.target) ? `<option selected value="${esc(step.target)}">Missing target</option>` : ''}
     ${groups.map(g => `<optgroup label="${esc(g)}">${targets.filter(t => t.group === g).map(t => `<option value="${esc(t.key)}" ${t.key === step.target ? 'selected' : ''}>${esc(t.title)}</option>`).join('')}</optgroup>`).join('')}`;
   const row = step => {
     const branch = step.when !== 'then';
     const children = steps.filter(s => s.after === step.id);
     return `<li class="session-step" data-when="${esc(step.when)}">
-      <div class="session-step-head">${select(step, 'when', options(STEP_KINDS, step.when), 'When')}${select(step, 'target', targetOptions(step), 'Step')}
+      <div class="session-step-head">${select(step, 'when', dropdownOptions(step.when, STEP_KINDS, null), 'When')}${select(step, 'target', targetOptions(step), 'Step')}
         <button class="session-step-add" data-step-add="${ref}" data-step-after="${esc(step.id)}" title="Add a step that follows this one">+ Under</button>
         ${removeControl(`data-step-remove="${esc(step.id)}" data-step-owner="${ref}"`, { what: 'step', tiny: true })}</div>
       <details class="session-step-more"><summary>Rolls${branch ? ' and cost' : ''}</summary>
         <div class="session-settings-grid">
-          <label>Attacks ${select(step, 'attacks', options(ATTACK_CHOICES, step.attacks), 'Attacks')}</label>
+          <label>Attacks ${select(step, 'attacks', dropdownOptions(step.attacks, ATTACK_CHOICES, null), 'Attacks')}</label>
           ${input(step, 'attackModifier', 'Attack modifier', 'e.g. -5')}${input(step, 'extraAttacks', 'Extra attacks', 'e.g. 1')}${input(step, 'extraDamage', 'Extra damage on each hit', 'e.g. 1d6')}
-          ${branch ? `<label>Action cost ${select(step, 'action', `<option value="">Normal action cost</option>${options(ACTION_TYPES, step.action)}`, 'Action cost')}</label>` : ''}
+          ${branch ? `<label>Action cost ${select(step, 'action', dropdownOptions(step.action, ACTION_TYPES, 'Normal action cost'), 'Action cost')}</label>` : ''}
           ${input(step, 'note', 'Granted by / reminder')}
         </div>
         ${branch ? `${check(step, 'waiveResource', 'Waive resource cost too')}${check(step, 'required', 'Required follow-up')}` : ''}

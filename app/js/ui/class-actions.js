@@ -1,4 +1,5 @@
 import { esc } from './html.js';
+import { dropdownOptions } from './fields.js';
 import { collapsible, collapsibleSub } from './rows.js';
 import { actionFeatures } from '../model/action-features.js';
 import { ACTION_TYPES } from '../model/session.js';
@@ -18,9 +19,9 @@ export function classActionsPanel(model) {
     ${names.map(name=>collapsibleSub(model, `classactions-${name}`, `${esc(name)} <span class="badge">${count(name)}</span>`, `
       ${rows.map((f,i)=>f.className!==name?'':collapsibleSub(model, `classactions-feature-${f.id}`, esc(f.title || 'New class feature'), `
         <div class="session-settings-grid">${[['title','Feature name'],['attackFormula','Attack bonus / formula'],['damageFormula','Damage roll'],['extraAttacks','Extra attacks (count, or count @ modifier)'],['attackModifier','Attack modifier'],['extraDamage','Extra damage per hit'],['range','Range'],['targets','Targets / area'],['save','Save / DC'],['duration','Duration'],['cost','Resource cost']].map(([key,label])=>`<label>${label}<input data-class-action="${i}" data-feature-field="${key}" value="${esc(String(f[key] ?? ''))}"></label>`).join('')}
-        <label>Action<select data-class-action="${i}" data-feature-field="type">${ACTION_TYPES.map(([k,l])=>`<option value="${k}" ${f.type===k?'selected':''}>${l}</option>`).join('')}</select></label>
-        <label>Attack set<select data-class-action="${i}" data-feature-field="attackSet"><option value="">Normal</option><option value="top" ${f.attackSet==='top'?'selected':''}>Highest bonus only (flurry)</option></select></label>
-        <label>Resource<select data-class-action="${i}" data-feature-field="resource"><option value="">None</option>${f.resource && !model.trackers.some(t=>t.id===f.resource)?`<option selected value="${esc(f.resource)}">Missing resource</option>`:''}${model.trackers.map(t=>`<option value="${esc(t.id)}" ${f.resource===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label></div>
+        <label>Action<select data-class-action="${i}" data-feature-field="type">${dropdownOptions(f.type,ACTION_TYPES,null)}</select></label>
+        <label>Attack set<select data-class-action="${i}" data-feature-field="attackSet">${dropdownOptions(f.attackSet,[['top','Highest bonus only (flurry)']],'Normal')}</select></label>
+        <label>Resource<select data-class-action="${i}" data-feature-field="resource">${dropdownOptions(f.resource,model.trackers.map(t=>[t.id,t.name]),'None',{unknown:'Missing resource'})}</select></label></div>
         <label>Description / notes<textarea data-class-action="${i}" data-feature-field="note">${esc(f.note || '')}</textarea></label>
         ${routineEditor(model,f,`feature:${i}`)}
         <button data-feature-pin="${i}">${model.data.session?.cards?.some(c=>c.source===`class-feature:${f.id}`)?'Pinned to session':'Pin to session'}</button>

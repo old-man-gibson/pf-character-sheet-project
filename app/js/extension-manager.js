@@ -37,6 +37,7 @@ import { SECTION_KINDS, guessTags, readSections } from './pdf-import.js';
 import { MANEUVER_FIELDS } from './rules.js';
 
 import { esc } from './html-escape.js';
+import { dropdownOptions } from './ui/fields.js';
 import { signed } from './ui/format.js';
 
 const lower = (s) => String(s ?? '').trim().toLowerCase();
@@ -528,7 +529,7 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
         <p class="hint">Building blocks a player adds to a character from the sheet's ⚙ manager.</p>
         ${d.blocks.map((b, i) => blockHtml(b, i)).join('') || '<p class="hint">No blocks yet.</p>'}
         <div class="actions" style="margin-top:6px">
-          <select data-newkind>${Object.entries(BLOCK_KINDS).map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join('')}</select>
+          <select data-newkind>${dropdownOptions('', Object.entries(BLOCK_KINDS).map(([k, v]) => [k, v.label]), null)}</select>
           <button data-action="add-block">+ Add block</button>
         </div>
       `}
@@ -614,8 +615,7 @@ Hit Die: d12.
         <span class="what"><strong>${esc(sp.name || '(unnamed)')}</strong>
           <span class="d">${esc(sphereLine(sp, ssec[i]))}</span>
           <div class="secs">${sphereSections(sp).map((x) => `<label>
-            <select data-ssec="${i}" data-sec="${esc(x.name)}">${SECTION_CHOICES.map(([v, label]) =>
-    `<option value="${v}" ${ssec[i].get(x.name) === v ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>
+            <select data-ssec="${i}" data-sec="${esc(x.name)}">${dropdownOptions(ssec[i].get(x.name), SECTION_CHOICES, null)}</select>
             <span>${esc(x.name)}</span><i>${x.count}</i></label>`).join('')}</div></span>
       </div>`).join('')}` : ''}
 
@@ -660,7 +660,7 @@ Hit Die: d12.
     const split = splitChunk(l.text);
     return `<div class="left ${tag.choice === 'skip' ? 'skip' : ''}" data-left="${i}">
         <div class="top">
-          <select data-tag="${i}">${choicesFor(l).map(([v, label]) => `<option value="${esc(v)}" ${tag.choice === v ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>
+          <select data-tag="${i}">${dropdownOptions(tag.choice, choicesFor(l), null)}</select>
           ${tag.choice === 'skip' ? '' : `<input type="text" data-tagname="${i}" value="${esc(tag.name ?? split.name)}" placeholder="name" title="The name it gets">`}
           ${tag.choice === 'feature' ? `<input type="text" data-taggroup="${i}" value="${esc(tag.group ?? (l.near?.name || ''))}" placeholder="group" title="The template group it joins">` : ''}
           <span class="near">${l.near ? `near ${esc(l.near.name)}` : ''} · ${l.text.split('\n').length} line(s)</span>
@@ -722,7 +722,6 @@ Hit Die: d12.
 
   function pdfHtml() {
     const { title, outline, tags } = paste.pdf;
-    const kinds = (now) => SECTION_KINDS.map(([v, label]) => `<option value="${v}"${v === now ? ' selected' : ''}>${esc(label)}</option>`).join('');
     const chosen = tags.filter((t) => t.kind !== 'skip').length;
     return `
       <p class="hint">Read <strong>${outline.sections.length}</strong> sections out of the PDF, by the type its headings
@@ -743,7 +742,7 @@ Hit Die: d12.
           <span class="kind">p. ${sec.page}</span>
           <span class="what"><strong>${esc(sec.heading)}</strong>
             <span class="d">${esc(size)} — ${esc(peek)}</span></span>
-          <select data-pdf-kind="${i}">${kinds(t.kind)}</select>
+          <select data-pdf-kind="${i}">${dropdownOptions(t.kind, SECTION_KINDS, null)}</select>
           ${t.kind === 'talents' || t.kind === 'sphere' ? `<input type="text" data-pdf-sphere="${i}" value="${esc(t.sphere)}"
             placeholder="Sphere" title="The sphere these belong to" style="width:9rem"${t.sphere ? '' : ' class="needs"'}>` : ''}
           ${t.kind === 'options' ? `<input type="text" data-pdf-class="${i}" value="${esc(t.className || '')}"
@@ -1053,8 +1052,7 @@ Hit Die: d12.
         <input type="number" data-e="${esc(key)}" data-k="level" value="${esc(e.level ?? 0)}"
           min="0" max="9" step="1" aria-label="Level" title="Level it is granted at">
         <select data-e="${esc(key)}" data-k="kind" aria-label="Maneuver or stance">
-          <option value="maneuver" ${e.kind === 'stance' ? '' : 'selected'}>Maneuver</option>
-          <option value="stance" ${e.kind === 'stance' ? 'selected' : ''}>Stance</option>
+          ${dropdownOptions(e.kind === 'stance' ? 'stance' : 'maneuver', [['maneuver', 'Maneuver'], ['stance', 'Stance']], null)}
         </select>
         <input type="text" class="nm" data-e="${esc(key)}" data-k="name" value="${esc(e.name || '')}"
           placeholder="Name" maxlength="120" aria-label="Name">
@@ -1066,8 +1064,7 @@ Hit Die: d12.
     if (f.options) {
       return `<label>${esc(f.label)}
           <select data-e="${esc(key)}" data-k="${f.key}">
-            <option value="">—</option>
-            ${f.options.map((o) => `<option value="${esc(o)}" ${e[f.key] === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}
+            ${dropdownOptions(e[f.key], f.options, '—')}
           </select></label>`;
     }
     if (f.lines) {
@@ -1214,9 +1211,7 @@ Hit Die: d12.
           ${F(i, 'hd', 'Hit die (d)', b.hd, { type: 'number', extra: 'min="4" max="12" step="2"' })}
           <label>Base attack
             <select data-b="${i}" data-k="bab">
-              <option value="1" ${b.bab === 1 ? 'selected' : ''}>Full (+1/level)</option>
-              <option value="0.75" ${b.bab === 0.75 ? 'selected' : ''}>3/4</option>
-              <option value="0.5" ${b.bab === 0.5 ? 'selected' : ''}>1/2</option>
+              ${dropdownOptions(b.bab, [[1, 'Full (+1/level)'], [0.75, '3/4'], [0.5, '1/2']], null)}
             </select></label>
           ${F(i, 'skillRanks', 'Skill ranks / level', b.skillRanks, { type: 'number', extra: 'min="0" max="10"' })}
           ${C(i, 'goodFort', 'Good Fortitude', b.goodFort)}
@@ -1254,8 +1249,7 @@ Hit Die: d12.
         return `<div class="fields">
           ${F(i, 'name', 'Feature name', b.name)}
           <label>Type <select data-b="${i}" data-k="type">
-            <option value="" ${!b.type ? 'selected' : ''}>—</option>
-            ${['Ex', 'Su', 'Sp'].map((t) => `<option ${b.type === t ? 'selected' : ''}>${t}</option>`).join('')}
+            ${dropdownOptions(b.type, ['Ex', 'Su', 'Sp'], '—')}
           </select></label>
           ${F(i, 'group', 'Group (template) it joins', b.group, { ph: 'e.g. Barbarian — made if missing' })}
           ${A(i, 'text', 'Text', b.text, 5)}

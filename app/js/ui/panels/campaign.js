@@ -15,6 +15,7 @@
  * this character alone. The panel folds like any other.
  */
 import { esc } from '../html.js';
+import { select } from '../fields.js';
 import { collapsible, collapsibleSub, stepGrid } from '../rows.js';
 import {
   MAX_TIER, TIER_CEILING, XP_TRACKS, campaignChanges, campaignRules, followsShared,
@@ -28,9 +29,7 @@ const XP_TRACK_NAMES = { slow: 'Slow', medium: 'Medium', fast: 'Fast' };
 
 /** A select bound to a `campaign.*` rule. */
 function ruleSelect(key, value, options, label, disabled = false) {
-  return `<select data-set="campaign.${key}" aria-label="${esc(label)}"${disabled ? ' disabled' : ''}>
-      ${options.map(([id, name]) => `<option value="${id}"${value === id ? ' selected' : ''}>${esc(name)}</option>`).join('')}
-    </select>`;
+  return select(`campaign.${key}`, value, options, null, { attrs: `aria-label="${esc(label)}"${disabled ? ' disabled' : ''}` });
 }
 
 /** A small number box for a count a rule is measured in. */

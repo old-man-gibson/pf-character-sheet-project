@@ -115,19 +115,36 @@ export function check(path, value, label = '', title = '') {
  * binding), never document text.
  */
 export function dropdown(binding, value, options, blank = '—', { kind = 'text', abOf = null, attrs = '' } = {}) {
+  const { html, mark } = optionList(value, options, blank, abOf);
+  return `<select ${binding} data-kind="${kind}"${mark(value)}${attrs ? ` ${attrs}` : ''}>${html}</select>`;
+}
+
+/**
+ * Only the `<option>`s of a dropdown, for a select bound some other way than
+ * `data-set` or `data-item` -- a routine step, a class feature's field, a
+ * form in the Extensions dialog -- whose tag its caller writes. The options,
+ * `blank` and the kept unknown value are `dropdown`'s. `unknown` labels that
+ * kept value where `value *` would show an id nobody reads.
+ */
+export function dropdownOptions(value, options, blank = '—', { unknown = null } = {}) {
+  return optionList(value, options, blank, null, unknown).html;
+}
+
+/** The options both of the above draw, and the `data-ab` mark that colors them. */
+function optionList(value, options, blank, abOf, unknown = null) {
   const pairs = options.map((o) => (Array.isArray(o) ? o : [o, o]));
   const ab = picksAbility(pairs.map(([v]) => v));
   // Keep a value the option list doesn't know (e.g. a magic sphere recorded
   // in a combat column) instead of silently blanking it.
   if (value && !pairs.some(([v]) => String(v) === String(value))) {
-    pairs.push([value, `${value} *`]);
+    pairs.push([value, unknown ?? `${value} *`]);
   }
   const mark = (v) => (abOf ? abKeyAttr(abOf(v)) : abAttr(ab, v));
-  const opts = (blank === null ? pairs : [['', blank], ...pairs])
+  const html = (blank === null ? pairs : [['', blank], ...pairs])
     .map(([v, label, hint]) => `<option value="${esc(v)}"${hint ? ` title="${esc(hint)}"` : ''}${mark(v)}${
       String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
     .join('');
-  return `<select ${binding} data-kind="${kind}"${mark(value)}${attrs ? ` ${attrs}` : ''}>${opts}</select>`;
+  return { html, mark };
 }
 
 /** A dropdown bound to a path; `dropdown` says what the rest do. */
