@@ -31,9 +31,9 @@ const STALE_KEY = 'cs-column-widths';
 /** Narrower than this and a heading is a smear; the drag stops here. */
 export const MIN_COLUMN = 36;
 /**
- * A table that sizes its own columns -- the class-feature grid has a drag
- * handle of its own and keeps its widths in the character -- says so with
- * `data-colresize="off"`, and is left entirely alone here.
+ * A table that sizes its own columns -- the class-feature grid has grips of
+ * its own (`bindColumnGrips`) and keeps its widths in the character -- says
+ * so with `data-colresize="off"`, and its edges are left alone here.
  */
 const optedOut = (table) => table.dataset?.colresize === 'off';
 /** A press on one of these is a press on it, however close to the cell's edge. */
@@ -225,6 +225,92 @@ function columnIndex(cell) {
 }
 
 /**
+ * Follow one column drag, from the press that took hold of it to its end.
+ *
+ * Both ways of taking hold of a column come here: the heading edges
+ * `bindColumnResize` finds on any table, and the grips `bindColumnGrips`
+ * wires up on a table whose headings are all controls.
+ *
+ * Only the dragged column moves: the others are frozen at their measured
+ * widths when the drag starts, and the table is made their sum (`setWidths`).
+ * The drag ends on release -- and on anything that could have swallowed the
+ * release. The pointer-up is listened for on the window rather than the
+ * table, because a button let go over the page header never reaches the
+ * sheet; a render in the middle of a drag (a tracker ticking over) replaces
+ * the table, and with it any chance of its cells reporting the release; and a
+ * move with no button held is a release that was missed however it happened.
+ * Without all three a drag once stuck was stuck for good, and every pass of
+ * the pointer over the sheet resized the column.
+ *
+ * `move(widths)` runs on each step and `end(widths, moved)` once, with every
+ * column's width and whether the dragged one moved. Returns a function that
+ * ends the drag early.
+ */
+export function dragColumn(e, table, col, { min = MIN_COLUMN, move = () => {}, end = () => {} } = {}) {
+  const win = table.ownerDocument?.defaultView || globalThis;
+  const widths = measuredWidths(headerRow(table));
+  const w0 = widths[col];
+  const x0 = e.clientX;
+  let done = false;
+  table.classList.add('colresizing');
+  setWidths(table, widths);
+
+  const onMove = (ev) => {
+    if (ev.buttons === 0 || !table.isConnected) { finish(); return; }
+    widths[col] = Math.max(min, Math.round(w0 + ev.clientX - x0));
+    setWidths(table, widths);
+    move(widths);
+  };
+  const finish = () => {
+    if (done) return;
+    done = true;
+    win.removeEventListener('pointermove', onMove, true);
+    win.removeEventListener('pointerup', finish, true);
+    win.removeEventListener('pointercancel', finish, true);
+    win.removeEventListener('blur', finish);
+    table.classList.remove('colresizing');
+    end(widths, widths[col] !== w0);
+  };
+  win.addEventListener('pointermove', onMove, true);
+  win.addEventListener('pointerup', finish, true);
+  win.addEventListener('pointercancel', finish, true);
+  win.addEventListener('blur', finish);
+  return finish;
+}
+
+/**
+ * The grips on a table whose headings are all controls, so that no edge is
+ * left to take hold of: the class-feature grid's, which keeps its widths in
+ * the character, by column name, rather than in this browser.
+ *
+ * A grip is an element with `data-resize-table` (the table's key) and
+ * `data-resize-col` (the column's name) inside the heading it resizes, in a
+ * table of one heading row. `keep(table, column, px)` stores a width once a
+ * drag has moved it; `refit(table, col)` runs as it moves, for cells that
+ * size to their text by script.
+ */
+export function bindColumnGrips(root, { min = MIN_COLUMN, keep, refit = () => {} }) {
+  for (const grip of root.querySelectorAll('[data-resize-table]')) {
+    grip.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const table = grip.closest('table');
+      const col = grip.closest('th').cellIndex;
+      grip.classList.add('dragging');
+      try { grip.setPointerCapture(e.pointerId); } catch { /* not a pointer that captures */ }
+      dragColumn(e, table, col, {
+        min,
+        move: () => refit(table, col),
+        end: (widths, moved) => {
+          grip.classList.remove('dragging');
+          if (moved) keep(grip.dataset.resizeTable, grip.dataset.resizeCol, widths[col]);
+        },
+      });
+    });
+  }
+}
+
+/**
  * Wire dragging up on a root (the sheet's shadow root). Returns the function
  * that takes the listeners off again.
  *
@@ -233,41 +319,12 @@ function columnIndex(cell) {
  */
 export function bindColumnResize(root, { read, write }) {
   let hot = null;     // the heading cell whose edge the pointer is resting on
-  let drag = null;    // the drag in progress, if one is
-  const win = root.ownerDocument?.defaultView || globalThis;
+  let stop = null;    // ends the drag in progress, if one is (see dragColumn)
 
   const unhot = () => { if (hot) hot.classList.remove('colgrip'); hot = null; };
 
-  /*
-   * A drag ends on release -- and on anything that could have swallowed the
-   * release. The pointer-up is listened for on the window rather than the
-   * root, because a button let go over the page header never reaches the
-   * sheet; a render in the middle of a drag (a tracker ticking over) replaces
-   * the captured heading cell, and with it any chance of that cell reporting
-   * the release; and a move with no button held is a release that was missed
-   * however it happened. Without all three a drag once stuck was stuck for
-   * good, and every pass of the pointer over the sheet resized the column.
-   */
-  const finish = () => {
-    if (!drag) return;
-    const { table, key, widths, w0, col, had } = drag;
-    drag = null;
-    table.classList.remove('colresizing');
-    // A click on an edge that never moved is not a decision about widths:
-    // a table that was sizing itself goes on doing so.
-    if (widths[col] === w0 && !had) { clearWidths(table); return; }
-    if (key) write({ ...read(), [key]: widths });
-  };
-
   const onMove = (e) => {
-    if (drag) {
-      if (e.buttons === 0 || !drag.table.isConnected) { finish(); return; }
-      const dx = e.clientX - drag.x0;
-      drag.widths[drag.col] = Math.max(MIN_COLUMN, Math.round(drag.w0 + dx));
-      setWidths(drag.table, drag.widths);
-      return;
-    }
-    if (e.pointerType === 'touch') return;
+    if (stop || e.pointerType === 'touch') return;
     const at = edgeAt(root, e.clientX, e.clientY);
     if (at?.cell === hot) return;
     unhot();
@@ -279,15 +336,19 @@ export function bindColumnResize(root, { read, write }) {
     const at = edgeAt(root, e.clientX, e.clientY);
     if (!at) return;
     e.preventDefault();
-    const widths = measuredWidths(at.row);
-    const col = columnIndex(at.cell);
     // The key is taken now: by the time the drag ends the table may have
     // been rendered away, and the widths still deserve keeping.
     const key = keyedTables(root).find((t) => t.table === at.table)?.key || null;
     const had = Boolean(key && read()[key]);
-    drag = { table: at.table, key, had, col, widths, x0: e.clientX, w0: widths[col] };
-    at.table.classList.add('colresizing');
-    setWidths(at.table, widths);
+    stop = dragColumn(e, at.table, columnIndex(at.cell), {
+      end: (widths, moved) => {
+        stop = null;
+        // A click on an edge that never moved is not a decision about widths:
+        // a table that was sizing itself goes on doing so.
+        if (!moved && !had) { clearWidths(at.table); return; }
+        if (key) write({ ...read(), [key]: widths });
+      },
+    });
     try { at.cell.setPointerCapture(e.pointerId); } catch { /* not a pointer that captures */ }
   };
 
@@ -307,17 +368,11 @@ export function bindColumnResize(root, { read, write }) {
   root.addEventListener('pointermove', onMove);
   root.addEventListener('pointerdown', onDown);
   root.addEventListener('dblclick', onDouble);
-  win.addEventListener('pointerup', finish, true);
-  win.addEventListener('pointercancel', finish, true);
-  win.addEventListener('blur', finish);
   return () => {
     root.removeEventListener('pointermove', onMove);
     root.removeEventListener('pointerdown', onDown);
     root.removeEventListener('dblclick', onDouble);
-    win.removeEventListener('pointerup', finish, true);
-    win.removeEventListener('pointercancel', finish, true);
-    win.removeEventListener('blur', finish);
-    finish();
+    stop?.();
     unhot();
   };
 }

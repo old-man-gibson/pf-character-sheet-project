@@ -123,7 +123,7 @@ import * as feats from './ui/panels/feats.js';
 import * as techniques from './ui/panels/techniques.js';
 import * as manager from './ui/panels/manager.js';
 import { renderSkillsPanel, skillRowIndices } from './ui/panels/skills.js';
-import { readColumnWidths, writeColumnWidths, applyColumnWidths, bindColumnResize } from './ui/column-widths.js';
+import { readColumnWidths, writeColumnWidths, applyColumnWidths, bindColumnResize, bindColumnGrips } from './ui/column-widths.js';
 import { fmt, SIZE_MODIFIERS, conditionInfo } from './rules.js';
 import { analyse } from './formula.js';
 import { pretty } from './formula-format.js';
@@ -4980,41 +4980,16 @@ export class CharacterSheetElement extends HTMLElement {
       input.addEventListener('blur', () => wrap.classList.remove('editing'));
     });
 
-    // Draggable column widths on the feature-group tables.
-    root.querySelectorAll('.col-resizer').forEach((handle) => {
-      handle.addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        const th = handle.closest('th');
-        const table = handle.closest('table');
-        const colEl = table.querySelectorAll('colgroup col')[th.cellIndex];
-        if (!colEl) return;
-        const startX = e.clientX;
-        const startW = colEl.getBoundingClientRect().width;
-        handle.setPointerCapture(e.pointerId);
-        handle.classList.add('dragging');
-
-        const onMove = (ev) => {
-          const w = Math.max(90, Math.round(startW + ev.clientX - startX));
-          colEl.style.width = `${w}px`;
-          const cols = [...table.querySelectorAll('colgroup col')];
-          table.style.width = `${cols.reduce((t, c) => t + parseFloat(c.style.width || 0), 0)}px`;
-          // Re-fit the wrapped text as the column moves.
-          const idx = th.cellIndex;
-          table.querySelectorAll('tbody tr').forEach((row) => {
-            const cell = row.cells[idx]?.querySelector('textarea.cfeat');
-            if (cell) grow(cell);
-          });
-        };
-        const onUp = () => {
-          handle.classList.remove('dragging');
-          handle.removeEventListener('pointermove', onMove);
-          const w = parseFloat(colEl.style.width);
-          this.#model.setColumnWidth(handle.dataset.resizeTable, handle.dataset.resizeCol, w);
-        };
-        handle.addEventListener('pointermove', onMove);
-        handle.addEventListener('pointerup', onUp, { once: true });
-        handle.addEventListener('pointercancel', onUp, { once: true });
-      });
+    // The class-feature grid's grips: the shared column drag, with the widths
+    // kept in the character by column name, and the wrapped text re-fitted as
+    // the column moves.
+    bindColumnGrips(root, {
+      min: 90,
+      keep: (table, column, px) => this.#model.setColumnWidth(table, column, px),
+      refit: (table, col) => table.querySelectorAll('tbody tr').forEach((row) => {
+        const cell = row.cells[col]?.querySelector('textarea.cfeat');
+        if (cell) grow(cell);
+      }),
     });
 
     // The two halves of a tradition pool always add up to its steps, so typing
