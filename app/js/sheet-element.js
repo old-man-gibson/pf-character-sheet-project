@@ -2831,10 +2831,10 @@ export class CharacterSheetElement extends HTMLElement {
 
   /** The two sphere tabs and Templates live in ui/panels/combat.js. */
 
-  #martialPanel() { return combat.renderMartialPanel(this.#model); }
-  #guilePanel() { return guile.renderGuilePanel(this.#model); }
+  #martialPanel() { return combat.renderMartialPanel(this.#model, this.#ctx()); }
+  #guilePanel() { return guile.renderGuilePanel(this.#model, this.#ctx()); }
 
-  #magicPanel() { return combat.renderMagicPanel(this.#model); }
+  #magicPanel() { return combat.renderMagicPanel(this.#model, this.#ctx()); }
 
   #templatePanel() { return combat.renderTemplatePanel(this.#model, this.#ctx()); }
 

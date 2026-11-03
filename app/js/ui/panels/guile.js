@@ -52,7 +52,8 @@ function skillOptions(model) {
   return out.sort((a, b) => a.localeCompare(b));
 }
 
-export function renderGuilePanel(model) {
+/** The Guile tab. It takes `ctx` as every tab does, though nothing here reads it yet. */
+export function renderGuilePanel(model, ctx) {
     const g = model.data.training?.guile;
     if (!g) return '<div class="grid"><section class="panel"><h3>Guile Spheres</h3><p class="empty">No guile training on this character.</p></section></div>';
     const wrap = (key, html) => collapsible(model, key, html);

@@ -66,8 +66,10 @@ const NEW_TEMPLATE_TABLE = () => ({
  * it decides whether the tab is on the bar. Once the tab is shown it is drawn
  * whole, with its "+ Add class", whether or not the document has stored the
  * side yet: adding a class writes it.
+ *
+ * Both take `ctx` as every tab does, though nothing here reads it yet.
  */
-export function renderMartialPanel(model) {
+export function renderMartialPanel(model, ctx) {
     const t = model.data.training || {};
     const side = t.combat || {};
     const wrap = (key, html) => collapsible(model, key, html);
@@ -91,7 +93,7 @@ export function renderMartialPanel(model) {
     </div>`;
   }
 
-export function renderMagicPanel(model) {
+export function renderMagicPanel(model, ctx) {
     const t = model.data.training || {};
     const magic = t.magic || {};
     const wrap = (key, html) => collapsible(model, key, html);
