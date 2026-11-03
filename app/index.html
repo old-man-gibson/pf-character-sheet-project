@@ -245,14 +245,14 @@
   <nav class="picker" id="picker"></nav>
   <span class="spacer"></span>
   <div class="tools">
-    <button type="button" class="btn" id="extBtn" title="Content packs (catalogues, tables and building blocks) and the campaign rules every character can share">Extensions and Rules</button>
-    <a class="btn" href="../forge/" title="Homebrew Workbench: write homebrew here, publish it to this sheet as a pack">Workbench</a>
+    <button type="button" class="btn" id="extBtn" title="Manage content packs and campaign rules.">Extensions and Rules</button>
+    <a class="btn" href="../forge/" title="Write homebrew content and publish it as a pack.">Workbench</a>
     <div class="menu" id="gmTools">
       <button type="button" class="btn" id="gmToolsBtn" aria-haspopup="true" aria-expanded="false" aria-controls="gmToolsList"
-              title="Tools for running a game. Each opens in its own tab and keeps its own saved files, apart from the characters.">GM tools ▾</button>
+              title="Tools for running a game. Each one opens in a new tab.">GM tools ▾</button>
       <div class="drop" id="gmToolsList"></div>
     </div>
-    <button type="button" class="btn" id="helpBtn" title="How this app works: new characters, importing, saving and history">? Help</button>
+    <button type="button" class="btn" id="helpBtn" title="How to create, import, save and restore characters.">? Help</button>
     <label class="role">
       <input type="checkbox" id="adminToggle"> GM / inspector view
     </label>
@@ -264,10 +264,10 @@
 <main>
   <section id="welcome" class="welcome" hidden>
     <h2>No characters yet</h2>
-    <p>Start one from a blank sheet, or bring in a workbook exported from Google Sheets
-      (<em>File → Download → Microsoft Excel (.xlsx)</em>) — or a <code>.json</code> this
-      app exported. Files are read here in your browser and never uploaded; everything you
-      make is saved to this browser only.</p>
+    <p>Create a blank character, or import an <code>.xlsx</code> workbook or a
+      <code>.json</code> file this app exported. To get a workbook from Google Sheets, use
+      <em>File → Download → Microsoft Excel (.xlsx)</em>. Files are not uploaded, and
+      characters are saved in this browser only.</p>
     <div class="actions">
       <button type="button" id="welcomeNew" class="btn primary">+ New character</button>
       <button type="button" id="welcomeImport" class="btn">+ Import a workbook or JSON</button>
@@ -294,9 +294,8 @@
     <label class="radio"><input type="radio" name="how" value="replace">
       <span>Replace one that is already here:</span></label>
     <select name="target" id="importTarget" aria-label="Which character to replace"></select>
-    <p class="hint">Replacing keeps that character’s slot and its history. Its current
-      version is filed as a checkpoint named “before import” first, so nothing is lost —
-      open <strong>History</strong> on the sheet to go back to it.</p>
+    <p class="hint">Replacing keeps the character’s history and saves its current version
+      as a checkpoint named “before import”.</p>
     <div class="actions">
       <button type="button" id="importCancel" class="btn">Cancel</button>
       <button type="submit" class="btn primary">Import</button>
@@ -309,10 +308,8 @@
        submit handler is the one place the decision is read. -->
   <form id="removeForm">
     <h2>Remove <span id="removeName">this character</span>?</h2>
-    <p class="hint">It leaves the picker, and its sheet, saved version and history go with it.
-      <strong>Undo</strong> stays on offer in the banner, and the character is kept out of
-      sight for a day in case you change your mind — after that it is gone. If you want a
-      copy for good, cancel and use <strong>Export JSON</strong> on the sheet first.</p>
+    <p class="hint">This removes the character and its history from this browser. You can
+      undo it for one day. To keep a copy, use <strong>Export JSON</strong> first.</p>
     <div class="actions">
       <button type="button" id="removeCancel" class="btn">Cancel</button>
       <button type="submit" class="btn danger">Remove</button>
@@ -323,17 +320,14 @@
 <dialog id="newDialog" class="box">
   <form id="newForm" method="dialog">
     <h2>New character</h2>
-    <p class="hint">A blank sheet: 10 in every score, the standard skill list, 6 hit points a
-      level to start, and slots waiting for traits, race traits and perks. Classes, level
-      plan, gear and everything else are yours to enter. Any level from 1 up; it starts at the
-      lowest level the shared campaign rules give, 3rd unless they say otherwise.</p>
+    <p class="hint">The new character starts with 10 in every ability score, the standard
+      skill list and 6 hit points per level.</p>
     <label>Name <input name="name" type="text" required maxlength="80" placeholder="Character name" autocomplete="off"></label>
     <label>Player <input name="player" type="text" maxlength="80" autocomplete="off"></label>
     <fieldset id="newFirst" class="first" hidden disabled>
       <legend>The campaign's lowest level</legend>
-      <p class="hint"><strong>The lowest level a character can have in this campaign.</strong> The first
-        character sets it as the standard for every character in this browser. Change it later under
-        <strong>Campaign rules</strong> (any character's ⚙ tab) or <strong>Extensions and Rules</strong>.</p>
+      <p class="hint">This is the lowest legal level for a character and applies to every
+        character in this browser.</p>
       <label>Lowest level <input name="lowest" type="number" min="1" value="3"></label>
     </fieldset>
     <label>Level <input name="level" type="number" min="1" value="3"></label>
@@ -348,27 +342,22 @@
 <dialog id="helpDialog" class="box" aria-labelledby="helpTitle">
   <h2 id="helpTitle">How this works</h2>
   <div class="helpbody">
-    <p><strong>Start a character from nothing:</strong> press <strong>+ New</strong>, give it a
-    name and a level, and you get a blank sheet with 10 in every score and the standard
-    skill list; it is saved in this browser exactly like an import.</p>
-    <p><strong>Add your own character:</strong> in Google Sheets choose
-    <em>File → Download → Microsoft Excel (.xlsx)</em>, then press <strong>+ Import</strong>
-    — or drop the file anywhere on this page. The workbook is read here in your browser
-    and thrown away once it has been transcribed; it is never uploaded. A
-    <code>.json</code> this app exported can be dropped back the same way.</p>
-    <p>Everything is saved to this browser only — nobody else sees it, and clearing your
-    browser data clears it.</p>
-    <p><strong>Saving and going back:</strong> your edits are kept as you make them, so a
-    closed tab loses nothing. <strong>Save</strong> marks the version the sheet opens on,
-    and anything edited after it is offered back to you next time rather than assumed.
-    A snapshot is taken automatically every 20 changes and the last 5 are kept; a
-    <strong>checkpoint</strong> you name — “before respec” — is kept until you delete it.
-    <strong>History</strong> lists all of them. “Reset” goes back to the character as
-    imported and keeps your named checkpoints.</p>
-    <p><strong>Export JSON</strong> downloads one character, which is how you send a build to
-    someone else; <strong>Export all</strong> downloads every character in the picker as a
-    <code>.zip</code> of those same files. Tick <strong>GM / inspector view</strong> to
-    reveal the Formula Audit tab, which lists every player-authored formula as plain text.</p>
+    <p><strong>+ New</strong> creates a blank character with 10 in every ability score and
+    the standard skill list.</p>
+    <p><strong>+ Import</strong> reads an <code>.xlsx</code> workbook or a <code>.json</code>
+    file this app exported. You can also drop the file onto this page. To get a workbook from
+    Google Sheets, use <em>File → Download → Microsoft Excel (.xlsx)</em>. Files are not
+    uploaded.</p>
+    <p>Characters are saved in this browser only. Clearing your browser data deletes them.</p>
+    <p>Edits are saved as you make them. <strong>Save</strong> sets the version the sheet
+    opens on, and edits made after it are offered for restore when you reopen the sheet.
+    A snapshot is taken every 20 changes and the last 5 are kept. A named
+    <strong>checkpoint</strong> is kept until you delete it. <strong>History</strong> lists
+    snapshots and checkpoints. <strong>Reset</strong> returns the character to how it was
+    imported and keeps named checkpoints.</p>
+    <p><strong>Export JSON</strong> downloads one character. <strong>Export all</strong>
+    downloads every character as a <code>.zip</code> file. <strong>GM / inspector
+    view</strong> shows the Formula Audit tab, which lists every player-written formula.</p>
   </div>
   <div class="actions">
     <button type="button" id="helpClose" class="btn primary">Got it</button>
@@ -423,8 +412,8 @@
     const level = Math.floor(Number(newForm.elements.level.value));
     const below = Number.isFinite(level) && level >= 1 && level < lowest;
     newBelow.hidden = !below;
-    newBelow.textContent = below ? `Below this campaign's lowest level, ${lowest}. The lowest level is a campaign `
-      + 'rule: set it under Campaign rules on any character\'s ⚙ tab, or in Extensions and Rules.' : '';
+    newBelow.textContent = below ? `This is below the campaign's lowest level of ${lowest}. `
+      + 'You can change it in Campaign rules on the ⚙ tab.' : '';
   }
   function openNewDialog() {
     const first = library.length === 0;
@@ -487,7 +476,7 @@
   const loadGmTools = () => (gmToolsLoaded ??= gmToolsList().then((tools) => {
     gmToolsDrop.innerHTML = tools.length
       ? tools.map((t) => `<a href="../gm-module/${esc(encodeURI(t.href))}" target="_blank" rel="noopener">${esc(t.name)}<small>${esc(t.description)}</small></a>`).join('')
-      : '<p class="hint">No GM tools here.</p>';
+      : '<p class="hint">No GM tools are available.</p>';
   }));
   const setGmToolsOpen = (open) => {
     gmTools.classList.toggle('open', open);
@@ -656,13 +645,13 @@
     };
     const chip = (c) => (c.local
       ? `<span class="member local">
-           <button${tint(c)} data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}. Right-click to colour">
+           <button${tint(c)} data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}. Right-click to change its color.">
              <span class="cname">${esc(c.name)}</span> <b>L${esc(c.level)}</b><span class="local-tag">${{ blank: 'new', copy: 'copy' }[c.origin] || 'imported'}</span>
            </button>
-           <button class="drop" data-drop="${esc(c.id)}" title="Remove from this browser"
+           <button class="drop" data-drop="${esc(c.id)}" title="Remove this character from this browser."
              aria-label="Remove ${esc(c.name)}">×</button>
          </span>`
-      : `<span class="member"><button${tint(c)} data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}. Right-click to colour">
+      : `<span class="member"><button${tint(c)} data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}. Right-click to change its color.">
            <span class="cname">${esc(c.name)}</span> <b>L${esc(c.level)}</b>
          </button></span>`);
     // Where the list was scrolled, so a redraw -- a colour picked, a level
@@ -671,19 +660,19 @@
     const keptScroll = picker.slot === 'rail' && oldBox?.clientHeight ? oldBox.scrollTop : null;
     picker.innerHTML = `${folded
     ? `<button class="chip fold" id="unfoldBtn" aria-expanded="false"
-          title="Show every character, and the new/import/export controls">▸ ${others > 0 ? `${others} more` : 'roster'}…</button>`
+          title="Show all characters and the New, Import and Export buttons.">▸ ${others > 0 ? `${others} more` : 'roster'}…</button>`
     : `<button class="chip fold" id="foldBtn" aria-expanded="true"
-        title="Fold the picker to just the open character">▾ Fold</button>`}
+        title="Show only the open character.">▾ Fold</button>`}
       <div class="rosterwrap">
         <button type="button" class="more up" hidden tabindex="-1" aria-hidden="true"></button>
         <div class="roster">${shown.map(chip).join('')}</div>
         <button type="button" class="more down" hidden tabindex="-1" aria-hidden="true"></button>
       </div>
-      ${folded ? '' : `<button class="chip import" id="newBtn" title="Start a character from a blank sheet">+ New</button>
-      ${current ? '<button class="chip import" id="dupBtn" title="Add a copy of the open character, as it is now">Duplicate</button>' : ''}
-      <button class="chip import" id="importBtn" title="Add a character: a .xlsx workbook, or a JSON this app exported">+ Import</button>
+      ${folded ? '' : `<button class="chip import" id="newBtn" title="Create a blank character.">+ New</button>
+      ${current ? '<button class="chip import" id="dupBtn" title="Copy the open character, including unsaved edits.">Duplicate</button>' : ''}
+      <button class="chip import" id="importBtn" title="Import an .xlsx workbook or a .json file this app exported.">+ Import</button>
       <button class="chip exportall" id="exportAllBtn"
-        title="Download every character in this picker as one .zip">Export all</button>`}`;
+        title="Download all characters as one .zip file.">Export all</button>`}`;
     bindRosterScroll(keptScroll);
 
     picker.querySelectorAll('button.pick').forEach((b) => {
@@ -837,7 +826,7 @@
         `Exported ${files.length} character${files.length === 1 ? '' : 's'} (${size} KB).`
         + (missing.length ? ` Could not read ${missing.join(', ')}.` : ''));
     } catch (err) {
-      say('err', `Could not build the archive — ${err.message}`);
+      say('err', `Could not build the .zip file: ${err.message}`);
     } finally {
       button.disabled = false;
       button.textContent = 'Export all';
@@ -978,7 +967,7 @@
     say(warnings.length ? 'info' : 'ok',
       `Replaced ${entry?.name || id} with ${verdict.summary.name} (level ${verdict.summary.level}).`
       + (kept ? ' The old version is in History as “before import”.' : '')
-      + (warnings.length ? ` Note — ${warnings.join('; ')}.` : ''));
+      + (warnings.length ? ` Note: ${warnings.join('; ')}.` : ''));
     return id;
   }
 
@@ -1028,8 +1017,8 @@
     say(warnings.length ? 'info' : 'ok',
       `${{ blank: 'Created', copy: 'Added' }[origin] || 'Imported'} ${verdict.summary.name} (level ${verdict.summary.level})`
       + `${id === verdict.summary.id ? '' : ` as “${id}”, because “${verdict.summary.id}” was taken`}.`
-      + (warnings.length ? ` Note — ${warnings.join('; ')}.` : '')
-      + (origin !== 'import' ? ' It is saved in this browser like an import; use Export JSON to keep a copy.' : ''));
+      + (warnings.length ? ` Note: ${warnings.join('; ')}.` : '')
+      + (origin !== 'import' ? ' It is saved in this browser only. Use Export JSON to keep a copy.' : ''));
     return id;
   }
 
@@ -1051,8 +1040,8 @@
           await emptyTrash(0);
           continue;
         }
-        say('err', `Could not store ${name} — ${err.name === 'QuotaExceededError'
-          ? 'this browser is out of space. Remove an imported character and try again.'
+        say('err', `Could not save ${name}: ${err.name === 'QuotaExceededError'
+          ? 'this browser is out of space. Remove a character and try again.'
           : err.message}`);
         return false;
       }
@@ -1088,14 +1077,14 @@
     rememberOpen();
     draw();
     select();
-    say('ok', `Removed ${entry.name} from this browser. It is kept out of sight for a day, then erased with its history.`,
+    say('ok', `Removed ${entry.name}. You can undo this for one day.`,
       { label: 'Undo', run: () => restore(id) });
   }
 
   /** Undo a removal: the entry comes back, and everything under it was never gone. */
   function restore(id) {
     const entry = readTrash().find((c) => c.id === id);
-    if (!entry) { say('err', 'That character has already been erased.'); return; }
+    if (!entry) { say('err', 'That character has already been deleted.'); return; }
     writeTrash(readTrash().filter((c) => c.id !== id));
     const { removedAt, ...rest } = entry;
     library = [...library.filter((c) => c.id !== id), { ...rest, local: true }];
@@ -1104,7 +1093,7 @@
     rememberOpen();
     draw();
     select();
-    say('ok', `${entry.name} is back, with its edits and history.`);
+    say('ok', `Restored ${entry.name}.`);
   }
 
   /** "2 hours ago", for the offer to restore on the next visit. */
@@ -1133,7 +1122,7 @@
       if (looksLikeExtension(doc) || looksLikeLibrary(doc)) { extManager.importDoc(doc); return; }
     }
     if (/\.xls[xm]$/i.test(file.name || '')) {
-      say('info', `Converting ${file.name} — this runs in your browser; the workbook is not uploaded anywhere.`);
+      say('info', `Converting ${file.name}. The file is not uploaded.`);
       // Let the banner paint before the parse takes over the main thread.
       await new Promise(requestAnimationFrame);
     }
@@ -1294,7 +1283,7 @@
     const latest = held.reduce((a, b) => ((b.removedAt || 0) > (a.removedAt || 0) ? b : a));
     say('info', `${latest.name} was removed ${ago(latest.removedAt || 0)}`
       + (held.length > 1 ? ` (and ${held.length - 1} more before it)` : '')
-      + '. It is kept for a day, then erased.', { label: 'Restore', run: () => restore(latest.id) });
+      + '. Removed characters are deleted after one day.', { label: 'Restore', run: () => restore(latest.id) });
   });
 </script>
 
