@@ -8,7 +8,7 @@
   import { zip, safeName } from './zip.js';
   import { downloadFile } from './download.js';
   import { runtime as extensions } from './extension-runtime.js';
-  import { mountExtensionManager, looksLikeExtension, looksLikeLibrary } from './extension-manager.js';
+  import { looksLikeExtension, looksLikeLibrary } from './extensions.js';
   import { mountMonsterTool } from './monster/picker.js';
   import { normalizeHex, readableOn } from './tracker-style.js';
   import { esc } from './html-escape.js';
@@ -774,7 +774,7 @@
     if (/\.json$/i.test(file.name || '')) {
       let doc = null;
       try { doc = JSON.parse(await file.text()); } catch { /* the sheet's importer will say why */ }
-      if (looksLikeExtension(doc) || looksLikeLibrary(doc)) { extManager.importDoc(doc); return; }
+      if (looksLikeExtension(doc) || looksLikeLibrary(doc)) { extManager().then((m) => m.importDoc(doc), () => {}); return; }
     }
     if (/\.xls[xm]$/i.test(file.name || '')) {
       say('info', `Converting ${file.name} — this runs in your browser; the workbook is not uploaded anywhere.`);
@@ -795,7 +795,7 @@
   // up here so it survives a reload and joins the picker.
   sheet.addEventListener('character-import', (e) => add(e.detail.character, e.detail.warnings));
   // …and an extension pack handed to the sheet's Import goes to the manager.
-  sheet.addEventListener('extension-import', (e) => { e.preventDefault(); extManager.importDoc(e.detail.extension); });
+  sheet.addEventListener('extension-import', (e) => { e.preventDefault(); extManager().then((m) => m.importDoc(e.detail.extension), () => {}); });
 
   // Drop a file anywhere on the page.
   document.addEventListener('dragover', (e) => {
@@ -918,12 +918,23 @@
    * is loaded here as well as by the sheet (both keep the one promise), so the
    * dialog can list the bundled packs before any character has opened.
    */
-  const extManager = mountExtensionManager(document.getElementById('extDialog'), {
-    say,
-    currentCharacter: () => (sheet.hidden ? null : sheet.character),
-  });
+  // The dialog's code, with the paste and PDF readers it brings, is fetched
+  // the first time it is wanted: most visits never open it.
+  let managerLoading = null;
+  const extManager = () => (managerLoading ??= import('./extension-manager.js')
+    .then((m) => m.mountExtensionManager(document.getElementById('extDialog'), {
+      say,
+      currentCharacter: () => (sheet.hidden ? null : sheet.character),
+    }))
+    .catch((err) => {
+      managerLoading = null;
+      say('err', `Could not open Extensions: ${err.message}`);
+      throw err;
+    }));
   extensions.load(new URL('../', document.baseURI));
-  document.getElementById('extBtn').addEventListener('click', () => extManager.open());
+  document.getElementById('extBtn').addEventListener('click', () => extManager().then((m) => m.open(), () => {}));
+  // Fetched once the page is idle as well, so the offline copy (sw.js) has it.
+  (window.requestIdleCallback || ((f) => setTimeout(f, 3000)))(() => { import('./extension-manager.js').catch(() => {}); });
 
   // The GM's + Monster button and its dialog; see docs/monsters.md.
   mountMonsterTool({ picker, welcome: welcome.querySelector('.actions'), adminToggle, add });
