@@ -85,7 +85,7 @@ export function slotSpend({ pool, total, left, shape = 'pips', name = 'slot' }) 
  *
  * `ctx.armedRemove` is which ask-twice × is armed -- element state, handed in.
  */
-export function vancianPanel(model, ctx = {}) {
+export function renderVancianPanel(model, ctx = {}) {
     const v = model.data.vancian;
     if (!v) return '<div class="grid"><p class="empty">No casting data.</p></div>';
 

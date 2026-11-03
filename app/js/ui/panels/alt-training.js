@@ -32,8 +32,10 @@ import { miniStat } from '../rows.js';
    * The techniques themselves come from whatever pack supplies them (see
    * setAltTrainingTables): the panel draws the catalogue it is given, and an
    * empty one is a sentence saying so, never an error.
+   *
+   * It takes `ctx` as every tab does, though nothing here reads it yet.
    */
-export function altTrainingPanel(model) {
+export function renderAltTrainingPanel(model, ctx) {
     const c = model.data;
     const p = c.altTraining || {};
     const k = p.calc || {};

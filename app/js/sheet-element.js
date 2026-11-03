@@ -2902,23 +2902,23 @@ export class CharacterSheetElement extends HTMLElement {
 
   /* ---------------- modelled sub-systems ---------------- */
 
-  /** Every sub-system tab lives in ui/panels/subsystems.js. */
+  /** Every sub-system tab is in ui/panels/, one module each, gathered by subsystems.js. */
 
   #modelledSystems(...a) { return subsystems.modelledSystems(this.#model, ...a); }
 
-  #altTrainingPanel() { return subsystems.altTrainingPanel(this.#model); }
+  #altTrainingPanel() { return subsystems.renderAltTrainingPanel(this.#model, this.#ctx()); }
 
-  #akashicPanel() { return subsystems.akashicPanel(this.#model, this.#ctx()); }
+  #akashicPanel() { return subsystems.renderAkashicPanel(this.#model, this.#ctx()); }
 
-  #maneuversPanel() { return subsystems.maneuversPanel(this.#model, this.#ctx()); }
+  #maneuversPanel() { return subsystems.renderManeuversPanel(this.#model, this.#ctx()); }
 
-  #vancianPanel() { return subsystems.vancianPanel(this.#model, this.#ctx()); }
+  #vancianPanel() { return subsystems.renderVancianPanel(this.#model, this.#ctx()); }
 
-  #psionicsPanel() { return subsystems.psionicsPanel(this.#model, this.#ctx()); }
+  #psionicsPanel() { return subsystems.renderPsionicsPanel(this.#model, this.#ctx()); }
 
-  #cardcastingPanel() { return subsystems.cardcastingPanel(this.#model, this.#ctx()); }
+  #cardcastingPanel() { return subsystems.renderCardcastingPanel(this.#model, this.#ctx()); }
 
-  #companionPanel(kind) { return subsystems.companionPanel(this.#model, kind); }
+  #companionPanel(kind) { return subsystems.renderCompanionPanel(this.#model, this.#ctx(), kind); }
 
   /* ---------------- trackers ---------------- */
 

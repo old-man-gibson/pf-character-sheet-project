@@ -29,7 +29,7 @@ import { systemExtrasPanel } from './system-tabs.js';
    * veilweaver's base plus the essence invested, which is what the sheet's own
    * numbers always worked out to.
    */
-export function akashicPanel(model, ctx) {
+export function renderAkashicPanel(model, ctx) {
     const a = model.data.akashic;
     if (!a) return '<div class="grid"><p class="empty">No akashic data.</p></div>';
 

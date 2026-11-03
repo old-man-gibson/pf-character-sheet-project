@@ -3805,7 +3805,7 @@ console.log('an added veilweaving class row is shown until it is filled or remov
   const c = new Character(blankDocument({ name: 'Weaver' }));
   const before = (c.data.akashic.classes || []).length;
   c.listAdd('akashic.classes', { name: '', mod: null, levelOverride: null, essenceCap: 0, bonusCap: 0, added: true });
-  const shown = (m) => subsystemPanels.akashicPanel(m, {}).includes(`data-remove="akashic.classes|${before}"`);
+  const shown = (m) => subsystemPanels.renderAkashicPanel(m, {}).includes(`data-remove="akashic.classes|${before}"`);
   check('the blank row it adds is on the panel, with its ×', shown(c), true);
   check('and still after a save and reload', shown(new Character(JSON.parse(JSON.stringify(c.toJSON())))), true);
 }
@@ -3889,7 +3889,7 @@ console.log('maneuver names match however a pack spelled them');
   check('an edit writes the note it already had', Object.keys(d().notes), ['roar']);
   c.toggleManeuver('maneuvers.disciplines.0', 'Roar', false);
   check('unreadying takes it back', [d().known, c.data.maneuvers.calc.maneuvers], [[], 0]);
-  const html = subsystemPanels.maneuversPanel(c, {});
+  const html = subsystemPanels.renderManeuversPanel(c, {});
   check('a discipline already trained is not offered again in another case',
     [html.includes('<option value="Golden Lion"'), html.includes('Iron Tortoise')], [false, true]);
   setManeuverCatalogue(before);
@@ -13919,7 +13919,7 @@ console.log('\nTerrain Casting: every cast pays a point, a step, a blight, or a 
   const b3 = sp();
   c.tablePlay('0#1', 'cast', { terrain: 'blight' });
   check('blight costs nothing now and is written down for the map', [sp() - b3, /blighted: dead magic for you/.test(log())], [1, true]);
-  const html = subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set(), castPick: t().hand[0] || null });
+  const html = subsystemPanels.renderCardcastingPanel(c, { deckView: 'table', openCards: new Set(), castPick: t().hand[0] || null });
   check('the table says the drawback is in force', /Terrain Casting: every cast pays one spell point more/.test(html), true);
   check('and the tradition panel does too', /Terrain Casting is in force/.test(combatPanels.renderMagicPanel(c)), true);
   // Drawback Freedom (Terrain Casting) as a mythic path ability -- here the
@@ -13931,7 +13931,7 @@ console.log('\nTerrain Casting: every cast pays a point, a step, a blight, or a 
   c.tablePlay('0#2', 'cast');
   check('with Drawback Freedom for it, nothing pays the drawback', [c.terrainFreedom(), c.terrainDefault(cards[0]), c.castCheck('0#2').need, sp() - b4],
     ['Drawback Freedom (Terrain Casting), a mythic path ability', null, 1, 1]);
-  check('and both panels say the ability ignores it', [/ignores it: no cast pays it/.test(subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set() })), /ignores it/.test(combatPanels.renderMagicPanel(c))], [true, true]);
+  check('and both panels say the ability ignores it', [/ignores it: no cast pays it/.test(subsystemPanels.renderCardcastingPanel(c, { deckView: 'table', openCards: new Set() })), /ignores it/.test(combatPanels.renderMagicPanel(c))], [true, true]);
   check('a copy taken for another drawback does not', (c.data.mythic.abilities[0].featChoice = 'Drawback Freedom (Card Casting)', c.recompute(), c.terrainFreedom()), '');
   c.data.training.magic.tradition.boughtOff = ['Terrain Casting'];
   c.recompute();
@@ -13962,10 +13962,10 @@ console.log('\na card moves between the deck and the sideboard, or is copied acr
   const held = c.moveCard('cardcasting.cards', 0, 'cardcasting.sideboard');
   check('while the deck is in play nothing leaves it, and the reason is given', [held.ok, /end the encounter/.test(held.why), deck()], [false, true, ['Big Sky', 'Spare']]);
   check('but a copy, and a card joining the deck, are fine', [c.moveCard('cardcasting.cards', 0, 'cardcasting.sideboard', { copy: true }).ok, c.moveCard('cardcasting.sideboard', 0, 'cardcasting.cards').ok, deck()], [true, true, ['Big Sky', 'Spare', 'Desert']]);
-  const html = subsystemPanels.cardcastingPanel(c, { deckView: 'deck', openCards: new Set() });
+  const html = subsystemPanels.renderCardcastingPanel(c, { deckView: 'deck', openCards: new Set() });
   check('the face edits the subtitle and offers the move and the copy', [html.includes('data-item="cardcasting.cards|0|subtitle"'), html.includes('data-card-move="cardcasting.cards|0|cardcasting.sideboard|move" disabled'), html.includes('data-card-move="cardcasting.cards|0|cardcasting.sideboard|copy"'), html.includes('data-card-move="cardcasting.sideboard|0|cardcasting.cards|move" ')], [true, true, true, true]);
   c.data.cardcasting.table.hand = ['0#0'];
-  check('and the small face shows the subtitle under the name', subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set() }).includes('<div class="bar sub subtitle"><span>Explosive Orb (Fire Blast)</span></div>'), true);
+  check('and the small face shows the subtitle under the name', subsystemPanels.renderCardcastingPanel(c, { deckView: 'table', openCards: new Set() }).includes('<div class="bar sub subtitle"><span>Explosive Orb (Fire Blast)</span></div>'), true);
   c.tableEnd();
 }
 
@@ -13997,7 +13997,7 @@ console.log('\nthe decklist: each card under its subtitle with its copies, and t
     'Mana Points: 4× R', '', 'Talents', '6× Fire Blast (Destruction)', '3× Explosive Orb (Destruction)',
     'No card: Frost Blast', 'No talent of theirs: Desert (1)']);
   check('"Blast" alone is not Fire Blast', (c.data.cardcasting.cards[3].subtitle = 'Blast', c.recompute(), c.deckList().unmatched.map((x) => x.label)), ['Blast']);
-  const html = subsystemPanels.cardcastingPanel(c, { openCards: new Set(), openPosts: new Map() });
+  const html = subsystemPanels.renderCardcastingPanel(c, { openCards: new Set(), openPosts: new Map() });
   check('the deck panel carries the list in a Copy box', /data-post="decklist"/.test(html) && /data-copy="decklist"/.test(html), true);
   check('every face\'s colour field holds its pips, the Mana Point card wearing its mana\'s', [(html.match(/class="colorcell filled" style="--n:2"/g) || []).length, (html.match(/class="colorcell"/g) || []).length], [5, 0]);
 }
@@ -14017,7 +14017,7 @@ console.log('\nan ongoing card carries who it is affecting while it is in play')
   check('the targets are written beside it, trimmed', t().targets[id], 'the ogre and both guards');
   check('undo takes it back as one step, named for the card', [c.undo(), id in t().targets], ['Slow targets', false]);
   c.tableTargets(id, 'the ogre and both guards');
-  const tab = subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set() });
+  const tab = subsystemPanels.renderCardcastingPanel(c, { deckView: 'table', openCards: new Set() });
   check('the tab draws a field to type them in', tab.includes(`data-table-targets="${id}"`) && tab.includes('value="the ogre and both guards"'), true);
   const screen = subsystemPanels.cardTableView(c, { openCards: new Set() }, 'table');
   check('the shared screen reads them, with no field', screen.includes('<small>targets</small> the ogre and both guards') && !screen.includes('data-table-targets'), true);
@@ -14081,7 +14081,7 @@ console.log('\na card\'s stat line: save, DC, range, target and damage types, ea
   check('"alike" hands the stat line on with the dice', CARD_STAT_FIELDS.map((f) => cards[1][f]),
     ['Ref', '10 + floor(level/2) + int.mod', 'close', 'burst', '{level} rounds', 'standard action', 'fire, cold']);
   check('and leaves a card with another effect alone', cards[2].save, '');
-  const html = subsystemPanels.cardcastingPanel(c, { deckView: 'deck', openCards: new Set() });
+  const html = subsystemPanels.renderCardcastingPanel(c, { deckView: 'deck', openCards: new Set() });
   check('the face edits each field, with a pick list behind it',
     ['save', 'dc', 'range', 'target', 'duration', 'casting', 'damage'].map((f) => html.includes(`data-item="cardcasting.cards|0|${f}" data-kind="text" list="card-`)), [true, true, true, true, true, true, true]);
   check('and previews what differs from what was typed', [html.includes(`DC ${17 + intMod}</span>`), html.includes('Range close = ')], [true, true]);

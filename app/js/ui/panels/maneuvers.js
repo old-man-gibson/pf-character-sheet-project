@@ -42,7 +42,7 @@ export const shortType = (t) => {
    * full-width table: the useful width is a name and a tick box, and a dozen
    * disciplines want to be readable side by side.
    */
-export function maneuversPanel(model, ctx) {
+export function renderManeuversPanel(model, ctx) {
     const m = model.data.maneuvers;
     if (!m) return '<div class="grid"><p class="empty">No maneuver data.</p></div>';
     const k = m.calc || {};

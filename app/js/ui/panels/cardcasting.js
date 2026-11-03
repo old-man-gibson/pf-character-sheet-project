@@ -100,7 +100,7 @@ function manaChips(letters, none = '—') {
    * The live table -- drawing a hand, playing cards, cooldown and mana on the
    * table -- is not here yet; the deck is the data it will run on.
    */
-export function cardcastingPanel(model, ctx) {
+export function renderCardcastingPanel(model, ctx) {
     const p = model.data.cardcasting;
     if (!p) return '<div class="grid"><p class="empty">No card casting data.</p></div>';
     const k = p.calc || {};

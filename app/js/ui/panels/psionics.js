@@ -34,7 +34,7 @@ import { systemExtrasPanel } from './system-tabs.js';
    * name. That is how the workbook did it, and it means a homebrew manifesting
    * class needs nothing added anywhere: pick the curve it runs on.
    */
-export function psionicsPanel(model, ctx) {
+export function renderPsionicsPanel(model, ctx) {
     const p = model.data.psionics;
     if (!p) return '<div class="grid"><p class="empty">No psionic data.</p></div>';
 

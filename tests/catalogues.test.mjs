@@ -23,7 +23,7 @@ import {
   setSpellCatalogue, spellCatalogue, spellEntry, spellsAvailable, spellClasses, spellDetails,
   setPowerCatalogue, powerCatalogue, powerEntry, powersAvailable, powerDetails,
 } from '../app/js/model.js';
-import { vancianPanel, psionicsPanel } from '../app/js/ui/panels/subsystems.js';
+import { renderVancianPanel, renderPsionicsPanel } from '../app/js/ui/panels/subsystems.js';
 import { catalogueFace } from '../app/js/ui/html.js';
 import { itemText } from '../app/js/ui/rows.js';
 import { datalistOptions } from '../app/js/ui/datalist.js';
@@ -280,8 +280,8 @@ console.log('the pickers render');
     bonusPoints: 0,
   };
   const model = new Character(doc);
-  const v = vancianPanel(model);
-  const p = psionicsPanel(model, {});
+  const v = renderVancianPanel(model);
+  const p = renderPsionicsPanel(model, {});
 
   ok('the spell list carries its catalogue', v.includes('<datalist id="cat-spells"'));
   ok('and its name cells point at it', v.includes('list="cat-spells"'));
@@ -349,7 +349,7 @@ console.log('the pickers render');
     ...doc,
     uiPrefs: { ...(doc.uiPrefs || {}), collapsed: { 'catref:vancian.prepared|0': true } },
   });
-  const f = vancianPanel(folded);
+  const f = renderVancianPanel(folded);
   check('folding one row of a repeated entry leaves the other open',
     (f.match(/catface/g) || []).length, 1);
   ok('the folded row keeps its caret, so it can be opened again',
@@ -366,7 +366,7 @@ console.log('the pickers render');
       prepared: [{ prepUsed: '', classLevel: '', name: 'A spell I invented', uses: 1, used: 0, note: 'mine' }],
     },
   });
-  const l = vancianPanel(lone);
+  const l = renderVancianPanel(lone);
   ok('an entry no pack knows keeps the full-width box', !l.includes('notecell') && !l.includes('catfold'));
   ok('and still shows what was written in it', l.includes('mine'));
 
@@ -377,7 +377,7 @@ console.log('the pickers render');
   // A sheet with no packs at all must render exactly as it always did.
   setSpellCatalogue({ spells: [] });
   setPowerCatalogue({ powers: [] });
-  const bare = vancianPanel(model);
+  const bare = renderVancianPanel(model);
   ok('no pack, no datalist', !bare.includes('<datalist id="cat-spells"'));
   ok('no pack, no face', !bare.includes('catface'));
   ok('and the cell is the free-text box it has always been', bare.includes('data-item="vancian.prepared|0|name"'));

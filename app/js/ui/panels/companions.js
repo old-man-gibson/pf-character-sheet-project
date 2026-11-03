@@ -54,8 +54,11 @@ import {
    * under (the block's id: `eidolon` for the first of a kind, `eidolon2`
    * after), and `roll` the kind a d20 button reports (`eidolon:1`). One
    * companion, three spellings, all decided in one place.
+   *
+   * `kind` is which of the four companion lists the tab draws. It comes after
+   * `ctx`, which every tab takes and nothing here reads yet.
    */
-export function companionPanel(model, kind) {
+export function renderCompanionPanel(model, ctx, kind) {
     const list = model.data[kind] || [];
     if (!list.length) return '<div class="grid"><p class="empty">No companion data.</p></div>';
     const stored = Number(model.data.uiPrefs?.activeCompanion?.[kind]);
