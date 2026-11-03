@@ -12,7 +12,8 @@
  * currently armed. That is the whole reason they are arguments rather than
  * fields: it is what lets the rest of this file be plain functions.
  */
-import { esc, val, EXPR_HINT, abKeyAttr, abAttr, picksAbility } from './html.js';
+import { esc, val, EXPR_HINT } from './html.js';
+import { dropdown } from './fields.js';
 import { hasTokens, plainTokens } from '../inline.js';
 import { foldButton, isCollapsed } from './folds.js';
 
@@ -129,25 +130,11 @@ export function itemExpr(list, i, field, obj, { width = '5rem', placeholder = ''
 }
 
 /**
- * Options are `value`, `[value, label]` or `[value, label, tooltip]`.
- *
- * `abOf` colours a picker whose choices are not themselves ability names:
- * given a choice, it answers which ability that choice runs on. Each option
- * carries its own answer, so the open list is coded too and the select can
- * repaint from the option it lands on.
+ * A dropdown bound to a cell of a row. It is `fields.dropdown`, whose comment
+ * says what the options, `blank`, `abOf`, `kind` and `attrs` do.
  */
 export function itemSelect(list, i, field, value, options, blank = '—', abOf = null, { kind = 'text', attrs = '' } = {}) {
-  const pairs = options.map((o) => (Array.isArray(o) ? o : [o, o]));
-  const ab = picksAbility(pairs.map(([v]) => v));
-  if (value && !pairs.some(([v]) => String(v) === String(value))) {
-    pairs.push([value, `${value} *`]);
-  }
-  const mark = (v) => (abOf ? abKeyAttr(abOf(v)) : abAttr(ab, v));
-  const opts = (blank === null ? pairs : [['', blank], ...pairs])
-    .map(([v, label, hint]) => `<option value="${esc(v)}"${hint ? ` title="${esc(hint)}"` : ''}${mark(v)}${
-      String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
-    .join('');
-  return `<select data-item="${list}|${i}|${field}" data-kind="${kind}"${mark(value)}${attrs ? ` ${attrs}` : ''}>${opts}</select>`;
+  return dropdown(`data-item="${list}|${i}|${field}"`, value, options, blank, { kind, abOf, attrs });
 }
 
 /**

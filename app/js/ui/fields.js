@@ -10,7 +10,7 @@
  *
  * See ui/rows.js for the same idea applied to rows of a list (`data-item`).
  */
-import { esc, abAttr, picksAbility, ABILITY_LABELS_LIST } from './html.js';
+import { esc, abAttr, abKeyAttr, picksAbility, ABILITY_LABELS_LIST } from './html.js';
 import { fieldUrl, linkHtml } from './links.js';
 import { isPinned, numOrNull } from '../model/util.js';
 
@@ -96,11 +96,25 @@ export function check(path, value, label = '', title = '') {
 }
 
 /**
- * A dropdown bound to a path. `blank: null` for a choice that must be made --
- * no empty option at all. `attrs` is trusted markup for anything else the
- * select carries (a label, a second binding), never document text.
+ * A dropdown, whatever it writes to. `binding` is the attribute that
+ * addresses the value, as `autoNum` takes it: `select` below passes a path's
+ * `data-set`, and `rows.itemSelect` a row cell's `data-item`. Both are this,
+ * so the two kinds of dropdown cannot draw their choices differently.
+ *
+ * Options are `value`, `[value, label]` or `[value, label, tooltip]`.
+ * `blank: null` for a choice that must be made -- no empty option at all.
+ *
+ * A list of ability names colors itself (`data-ab`). `abOf` colors a picker
+ * whose choices are not themselves ability names: given a choice, it answers
+ * which ability that choice runs on. Each option carries its own answer, so
+ * the open list is coded too and the select can repaint from the option it
+ * lands on.
+ *
+ * `kind` is how the element reads the choice back (`data-kind`). `attrs` is
+ * trusted markup for anything else the select carries (a label, a second
+ * binding), never document text.
  */
-export function select(path, value, options, blank = '—', { attrs = '' } = {}) {
+export function dropdown(binding, value, options, blank = '—', { kind = 'text', abOf = null, attrs = '' } = {}) {
   const pairs = options.map((o) => (Array.isArray(o) ? o : [o, o]));
   const ab = picksAbility(pairs.map(([v]) => v));
   // Keep a value the option list doesn't know (e.g. a magic sphere recorded
@@ -108,10 +122,17 @@ export function select(path, value, options, blank = '—', { attrs = '' } = {})
   if (value && !pairs.some(([v]) => String(v) === String(value))) {
     pairs.push([value, `${value} *`]);
   }
+  const mark = (v) => (abOf ? abKeyAttr(abOf(v)) : abAttr(ab, v));
   const opts = (blank === null ? pairs : [['', blank], ...pairs])
-    .map(([v, label]) => `<option value="${esc(v)}"${abAttr(ab, v)}${String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
+    .map(([v, label, hint]) => `<option value="${esc(v)}"${hint ? ` title="${esc(hint)}"` : ''}${mark(v)}${
+      String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
     .join('');
-  return `<select data-set="${path}" data-kind="text"${abAttr(ab, value)}${attrs ? ` ${attrs}` : ''}>${opts}</select>`;
+  return `<select ${binding} data-kind="${kind}"${mark(value)}${attrs ? ` ${attrs}` : ''}>${opts}</select>`;
+}
+
+/** A dropdown bound to a path; `dropdown` says what the rest do. */
+export function select(path, value, options, blank = '—', { attrs = '' } = {}) {
+  return dropdown(`data-set="${path}"`, value, options, blank, { attrs });
 }
 
 /** Ability-stat picker, used by the AC / attack / save stat slots. */
