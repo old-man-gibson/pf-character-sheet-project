@@ -5,7 +5,7 @@
   "title": "Marnie Tallow (test workbook)",
   "fileId": "",
   "url": "",
-  "convertedAt": "2026-11-02T12:47:05"
+  "convertedAt": "2026-11-02T15:50:04"
  },
  "tabs": [
   {
@@ -46,6 +46,10 @@
   },
   {
    "name": "Akashic",
+   "hidden": false
+  },
+  {
+   "name": "Marnie's Maps",
    "hidden": false
   },
   {
@@ -105,7 +109,7 @@
    {
     "type": "Swim",
     "base": 10,
-    "bonus": 0,
+    "bonus": -2.5,
     "final": 10
    }
   ],
@@ -875,8 +879,8 @@
      }
     ],
     "others": [
-     null,
-     null,
+     "0.00005",
+     "1e+21",
      null,
      null
     ],
@@ -2294,7 +2298,8 @@
    ]
   ],
   "FirstPlannerLevel": 1,
-  "SheetThenLevel": 7
+  "SheetThenLevel": "７",
+  "FerryCopies": 3
  },
  "extraTabs": {
   "Akashic": {
@@ -2324,6 +2329,31 @@
       null,
       "Veil Essence",
       3
+     ]
+    }
+   ]
+  },
+  "Marnie's Maps": {
+   "hidden": false,
+   "rows": [
+    {
+     "r": 1,
+     "cells": [
+      "Map",
+      "Copies"
+     ]
+    },
+    {
+     "r": 2,
+     "cells": [
+      "Ferry crossing",
+      3
+     ]
+    },
+    {
+     "r": 3,
+     "cells": [
+      "Coast road, redrawn"
      ]
     }
    ]
@@ -2362,6 +2392,43 @@
       null,
       null,
       -3.25
+     ]
+    },
+    {
+     "r": 6,
+     "cells": [
+      "18:30:00",
+      "36:00:00",
+      "-12:00:00",
+      "18:30:00.002000",
+      "2023-03-15T18:30:14.062000"
+     ]
+    },
+    {
+     "r": 7,
+     "cells": [
+      "2026-10-03T18:30:00",
+      "2026-10-03",
+      "18:30:05.250000",
+      "2026-10-03T18:30:00",
+      "01:30:00"
+     ]
+    },
+    {
+     "r": 8,
+     "cells": [
+      2,
+      "Ferryman",
+      true,
+      null,
+      "Spell list"
+     ]
+    },
+    {
+     "r": 9,
+     "cells": [
+      "Tag _x0041_ kept",
+      "Ferry fare: 3 sp"
      ]
     }
    ]

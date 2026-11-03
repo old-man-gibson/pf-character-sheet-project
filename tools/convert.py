@@ -65,18 +65,49 @@ def slug(s):
     return re.sub(r"^_+|_+$", "", re.sub(r"[^a-z0-9]+", "_", str(s or "").lower())) or "x"
 
 
+# What both converters trim from text: whatever Python's strip() or
+# JavaScript's trim() takes, so a byte-order mark (U+FEFF) and a next-line
+# (U+0085) go as well as spaces and line breaks. EDGE_SPACE in
+# app/js/convert.js is the same set.
+WHITESPACE = ("\t\n\v\f\r\x1c\x1d\x1e\x1f \x85\xa0\u1680\u2000\u2001\u2002\u2003\u2004"
+              "\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff")
+
+# A number at the start of text ("+2", "1,150 lb."), in ASCII digits.
+NUMBER = re.compile(rf"^[+{WHITESPACE}]*(-?[0-9]+(?:\.[0-9]+)?)")
+
+# Full-width forms (U+FF01-FF5E), as a Japanese or Chinese keyboard types
+# them, read as the ASCII they stand for: a level typed "７" is 7.
+FULL_WIDTH = {c: c - 0xFEE0 for c in range(0xFF01, 0xFF5F)}
+
+
+def duration_text(td):
+    """A length of time as an [h]:mm:ss cell shows it: 36:00:00, not 1 day, 12:00:00."""
+    us = td // datetime.timedelta(microseconds=1)
+    sign = "-" if us < 0 else ""
+    seconds, us = divmod(abs(us), 1_000_000)
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    text = f"{sign}{hours:02d}:{minutes:02d}:{seconds:02d}"
+    return f"{text}.{us:06d}" if us else text
+
+
 def clean(v):
-    """Normalise a cell value: trim strings, collapse float-ints, drop blanks."""
+    """Normalise a cell value: trim strings, collapse float-ints, drop blanks,
+    and write dates and times as text."""
     if v is None:
         return None
     if isinstance(v, str):
-        v = v.strip()
+        v = v.strip(WHITESPACE)
         if v == "" or v.startswith("#"):  # #REF!, #NAME?, ...
             return None
         return v
     if isinstance(v, float) and v.is_integer():
         return int(v)
-    if isinstance(v, datetime.datetime):
+    if isinstance(v, datetime.timedelta):
+        return duration_text(v)
+    # A datetime is a date too. A time-of-day cell reads as a time, an ISO
+    # date-only cell (t="d") as a date.
+    if isinstance(v, (datetime.date, datetime.time)):
         return v.isoformat()
     return v
 
@@ -88,11 +119,60 @@ def num(v, default=0):
     if isinstance(v, (int, float)):
         return v
     if isinstance(v, str):
-        m = re.match(r"^[+\s]*(-?\d+(?:\.\d+)?)", v.replace(",", ""))
+        m = NUMBER.match(v.translate(FULL_WIDTH).replace(",", ""))
         if m:
             f = float(m.group(1))
             return int(f) if f.is_integer() else f
     return default
+
+
+def js_number(x):
+    """JavaScript's String(x) for a finite float: the shortest digits that read
+    back as x, plain from 1e-6 up to 1e21 and with an exponent outside that."""
+    if x == 0:
+        return "0"
+    sign = "-" if x < 0 else ""
+    mantissa, _, exp = repr(abs(x)).partition("e")
+    whole, _, frac = mantissa.partition(".")
+    digits = (whole + frac).lstrip("0")
+    # x is 0.<digits> times 10 to the n.
+    n = len(whole) + int(exp or 0) - (len(whole + frac) - len(digits))
+    digits = digits.rstrip("0")
+    k = len(digits)
+    if k <= n <= 21:
+        return sign + digits + "0" * (n - k)
+    if 0 < n <= 21:
+        return sign + digits[:n] + "." + digits[n:]
+    if -6 < n <= 0:
+        return sign + "0." + "0" * -n + digits
+    e = n - 1
+    return (sign + digits[0] + ("." + digits[1:] if k > 1 else "")
+            + ("e+" if e >= 0 else "e-") + str(abs(e)))
+
+
+def as_text(v):
+    """A cell value as text: True and False for booleans, and numbers spelt as
+    JavaScript spells them (0.00005, not 5e-05)."""
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return js_number(float(v))
+    return str(v)
+
+
+# A defined name that points at cells: one sheet range, or several joined by
+# commas. A name holding anything else (a constant, a formula over cells, a
+# LAMBDA) has no cell of its own to read. A sheet name with a space or
+# punctuation is quoted, and an apostrophe inside the quotes is doubled.
+# `destinations` in app/js/xlsx.js is the same rule.
+SHEET_RANGE = r"(?:'((?:[^']|'')+)'|([^' ^!,]+))!(\$?[A-Z]+\$?[0-9]+(?::\$?[A-Z]+\$?[0-9]+)?)"
+RANGE_LIST = re.compile(rf"(?:{SHEET_RANGE})(?:,(?:{SHEET_RANGE}))*")
+
+
+def destinations(value):
+    """The (sheet, range) pairs a defined name's value points at."""
+    if not RANGE_LIST.fullmatch(value):
+        return []
+    return [(quoted.replace("''", "'") if quoted else bare, ref)
+            for quoted, bare, ref in re.findall(SHEET_RANGE, value)]
 
 
 class Book:
@@ -150,15 +230,10 @@ class Book:
         """Resolve every defined name to a scalar or small 2D block."""
         out = {}
         for name in self.wb.defined_names:
-            dn = self.wb.defined_names[name]
-            val = dn.value
-            if not isinstance(val, str) or val.startswith("LAMBDA"):
+            val = self.wb.defined_names[name].value
+            if not isinstance(val, str):
                 continue
-            try:
-                dests = list(dn.destinations)
-            except Exception:
-                continue
-            for tab, ref in dests:
+            for tab, ref in destinations(val):
                 if tab not in self.grids or tab in REF_TABS:
                     continue
                 m = re.match(r"^\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$", ref)
@@ -202,7 +277,7 @@ def table(bk, tab, header_row, start_row, col_start, col_end, stop_blank=3):
     headers = []
     for c in range(col_start, col_end + 1):
         h = bk.cell(tab, header_row, c)
-        headers.append(str(h) if h is not None else f"col{c}")
+        headers.append(as_text(h) if h is not None else f"col{c}")
     rows = []
     blanks = 0
     r = start_row
@@ -233,7 +308,7 @@ def extract_identity(bk):
         if t is None:
             continue
         speeds.append({
-            "type": str(t),
+            "type": as_text(t),
             "base": num(bk.cell(CI, r, 14)),
             "bonus": num(bk.cell(CI, r, 15)),
             "final": num(bk.cell(CI, r, 16)),
@@ -298,7 +373,7 @@ def extract_abilities(bk):
                     continue
                 v = bk.cell(ST, 3 + i, 3 + j)
                 if v is not None and v is not False and v != 0:
-                    src[str(h)] = v
+                    src[as_text(h)] = v
             entry["sources"] = src
         out[ab.lower()] = entry
     return out
@@ -362,7 +437,9 @@ def extract_point_buy_table(bk):
     for r in range(22, 40):
         score = bk.cell("dataSheet", r, 11)   # K
         cost = bk.cell("dataSheet", r, 12)    # L
-        if isinstance(score, (int, float)) and isinstance(cost, (int, float)):
+        # A TRUE is not a score of 1, though bool is an int in Python.
+        if (isinstance(score, (int, float)) and isinstance(cost, (int, float))
+                and not isinstance(score, bool) and not isinstance(cost, bool)):
             table_[int(score)] = int(cost)
     return table_ or None
 
@@ -435,7 +512,7 @@ def extract_classes(bk):
     out = []
     for r in range(23, 41):
         name = bk.cell(CI, r, 2)
-        if not name or (isinstance(name, str) and re.match(r"^Class \d+$", name)):
+        if not name or (isinstance(name, str) and re.match(r"^Class [0-9]+$", name)):
             continue
         out.append({
             "name": name,
@@ -459,7 +536,7 @@ def extract_conditions(bk):
         for lbl_c, val_c in ((11, 12), (13, 14)):
             lbl = bk.cell(CI, r, lbl_c)
             if lbl:
-                out[str(lbl)] = num(bk.cell(CI, r, val_c))
+                out[as_text(lbl)] = num(bk.cell(CI, r, val_c))
     # The shared template has Helpless and Paralyzed at 1 in every workbook,
     # with nothing else on: a leftover, not a state. Cleared so a fresh import
     # does not open with the character paralysed.
@@ -541,7 +618,7 @@ def extract_traits(bk):
         desc = bk.cell(CI, r, 14)
         if kind is None and desc is None:
             continue
-        traits.append({"slot": str(label), "category": kind, "text": desc})
+        traits.append({"slot": as_text(label), "category": kind, "text": desc})
     race_traits = []
     for r in range(66, 74):
         v = bk.cell(CI, r, 3)
@@ -573,12 +650,12 @@ def extract_skills(bk):
             r += 1
             continue
         blanks = 0
-        if str(name) in ("Skills",):
+        if as_text(name) in ("Skills",):
             r += 1
             continue
         # The rank-budget metrics live directly under the skill rows; they are
         # not skills, and everything from there on belongs to other sections.
-        if str(name).startswith(("Bonus Skill points", "Int Bonus per",
+        if as_text(name).startswith(("Bonus Skill points", "Int Bonus per",
                                  "Total Skill Points", "Other Trackables",
                                  "Name, Info")):
             break
@@ -588,16 +665,16 @@ def extract_skills(bk):
                 continue
             v = num(bk.cell(CI, r, 7 + j), None)
             if v:
-                ranks[str(h)] = v
+                ranks[as_text(h)] = v
         abil = [bk.cell(CI, r, c) for c in (17, 18, 19)]
         out.append({
-            "name": str(name),
+            "name": as_text(name),
             "spec": bk.cell(CI, r, 3),
             "bonus": num(bk.cell(CI, r, 4)),
             "classSkill": bool(bk.cell(CI, r, 5)),
             "totalRanks": num(bk.cell(CI, r, 6)),
             "ranks": ranks,
-            "requiresTraining": str(bk.cell(CI, r, 15) or "").lower() == "yes",
+            "requiresTraining": as_text(bk.cell(CI, r, 15) or "").lower() == "yes",
             "armorPenalty": bool(bk.cell(CI, r, 16)),
             "abilities": [a for a in abil if a],
             "situational": bk.cell(CI, r, 20),
@@ -635,7 +712,7 @@ def extract_carry(bk):
     for r in range(44, 49):
         lbl = bk.cell(CI, r, 22)
         if lbl:
-            out["tiers"].append({"name": str(lbl), "limit": num(bk.cell(CI, r, 24))})
+            out["tiers"].append({"name": as_text(lbl), "limit": num(bk.cell(CI, r, 24))})
     out["antHaul"] = num(bk.cell(CI, 49, 23), 1)
     out["strBonus"] = num(bk.cell(CI, 50, 23))
     out["quadruped"] = bool(bk.cell(CI, 51, 23))
@@ -657,7 +734,7 @@ def extract_resources(bk):
         name = bk.cell(CI, r, c)
         if name:
             out.append({
-                "name": str(name),
+                "name": as_text(name),
                 "uses": num(bk.cell(CI, r, c + 1)),
                 "total": bk.cell(CI, r, c + 2),
                 "refresh": bk.cell(CI, r, c + 3),
@@ -732,7 +809,7 @@ def extract_planner(bk):
     for c in range(1, 60):
         h = bk.cell("Planner", 1, c)
         if h:
-            headers[c] = str(h)
+            headers[c] = as_text(h)
     out = []
     for r in range(2, 22):
         row = {}
@@ -757,12 +834,12 @@ def extract_feats(bk):
         entries = []
         for r in range(3, 25):
             name = bk.cell("Feats", r, c)
-            if not name or str(name) in ("Name",):
+            if not name or as_text(name) in ("Name",):
                 continue
             meta = bk.cell("Feats", r, c + 2)
-            entries.append({"name": str(name), "detail": meta})
+            entries.append({"name": as_text(name), "detail": meta})
         if entries:
-            key = str(cat)
+            key = as_text(cat)
             n = 2
             base = key
             while key in groups:
@@ -785,7 +862,7 @@ def extract_mythic(bk):
     }
     for r in range(6, 10):
         v = bk.cell("Mythic", r, 3)
-        if v and str(v) not in ("Base Path Ability", "Base Mythic Abilities"):
+        if v and as_text(v) not in ("Base Path Ability", "Base Mythic Abilities"):
             out["baseAbilities"].append(v)
     out["basePathAbility"] = bk.right_of("Mythic", "Base Path Ability")
 
@@ -851,7 +928,7 @@ def _gear_row(bk, tab, r, slot):
         "slot": slot,
         "name": bk.cell(tab, r, 2),
         "bonuses": bonuses,
-        "others": [o if isinstance(o, str) else (str(o) if o is not None else None) for o in others],
+        "others": [o if isinstance(o, str) else (as_text(o) if o is not None else None) for o in others],
         "weight": num(bk.cell(tab, r, 17)),
         "cost": num(bk.cell(tab, r, 18)),
     }
@@ -960,7 +1037,7 @@ def extract_equipment(bk):
     g = bk.grids[tab]
     for r_name in range(1, len(g) + 1):
         hdr = bk.cell(tab, r_name, 1)
-        if not (isinstance(hdr, str) and re.match(r"^Weapon Name \d+$", hdr)):
+        if not (isinstance(hdr, str) and re.match(r"^Weapon Name [0-9]+$", hdr)):
             continue
         row1, row2, row3 = r_name + 1, r_name + 3, r_name + 4
         col = _weapon_columns(bk, tab, r_name)
@@ -1020,7 +1097,7 @@ def extract_background(bk):
                 for rr in range(r + 1, min(r + 10, len(g) + 1)):
                     v = bk.cell("Background & Lore", rr, c)
                     if v:
-                        chunks.append(str(v))
+                        chunks.append(as_text(v))
                 out[lbl] = "\n".join(chunks) if chunks else None
     return out
 
@@ -1070,7 +1147,7 @@ def _training_classes(bk, tab):
                 "sphere": bk.cell(tab, r, c_sph),
             })
         classes.append({
-            "name": str(name),
+            "name": as_text(name),
             "type": bk.cell(tab, *ty),
             "talentsPerLevel": bk.cell(tab, *tpl),
             "mod1": bk.cell(tab, *m1),
@@ -1082,7 +1159,7 @@ def _training_classes(bk, tab):
         if not name:
             continue
         classes.append({
-            "name": str(name),
+            "name": as_text(name),
             "type": bk.cell(tab, *ty),
             "talentsPerLevel": bk.cell(tab, *tpl),
             "mod1": bk.cell(tab, *m1),
@@ -1149,7 +1226,7 @@ def extract_combat_training(bk):
             s = bk.cell(tab, r, 26)
             if s:
                 sphere_bonuses.append({
-                    "sphere": str(s),
+                    "sphere": as_text(s),
                     "rankBonus": num(bk.cell(tab, r, 27)),
                     "dcBonus": num(bk.cell(tab, r, 28)),
                     "sheetValue": bk.cell(tab, r, 29),
@@ -1162,7 +1239,7 @@ def extract_combat_training(bk):
             continue
         enabled = bk.cell(tab, r, V)
         skill_ranks.append({
-            "skill": str(s),
+            "skill": as_text(s),
             "enabled": True if enabled is None else bool(num(enabled, 0) or enabled is True),
             "multiplier": num(bk.cell(tab, r, 25), 1) or 1,
             "sheetCurrent": num(bk.cell(tab, r, W)),
@@ -1257,7 +1334,7 @@ def extract_magic_training(bk):
             s = bk.cell(tab, r, 25)
             if s:
                 sphere_bonuses.append({
-                    "sphere": str(s),
+                    "sphere": as_text(s),
                     "clBonus": num(bk.cell(tab, r, 26)),
                     "dcBonus": num(bk.cell(tab, r, 27)),
                     "sheetValue": bk.cell(tab, r, 28),
