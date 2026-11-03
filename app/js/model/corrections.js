@@ -24,7 +24,7 @@
 
 import { RULE_CORRECTIONS, SIZE_MODIFIERS, carryState, gestaltSaveBase } from '../rules.js';
 import { classPresence, saveProgressions } from './progression.js';
-import { weaponProficient } from './document.js';
+import { weaponProficient } from './stats/proficiency.js';
 
 /** The attack slots that take the size modifier the way AC does. */
 const SIZED_ATTACKS = new Set(['Melee', 'Alt Melee', 'Ranged', 'Alt Ranged']);

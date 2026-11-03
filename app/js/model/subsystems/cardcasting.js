@@ -11,7 +11,7 @@
 
 import { diceString, parseDiceExpr, statMod } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
-import { sheetReader } from '../document.js';
+import { sheetReader } from '../sheet-reader.js';
 import { evaluateAmount, normalizeName, splitTags } from '../util.js';
 import { ownTalentRows, sphereTally, talentKey } from '../spheres.js';
 import { splitVeilName } from './akashic.js';

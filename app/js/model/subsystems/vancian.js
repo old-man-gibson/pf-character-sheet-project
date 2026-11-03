@@ -10,7 +10,7 @@ import {
   CASTING_SOURCE_KEYS, PREP_STYLE_KEYS, SPELL_LEVELS, bonusSpellSlots, castableAt, castingNoun,
   prepStyle, spellDC, statMod, statScore,
 } from '../../rules.js';
-import { sheetReader } from '../document.js';
+import { sheetReader } from '../sheet-reader.js';
 import { levelFollowingPin } from '../progression.js';
 import { closestName, evaluateAmount, vancianForwardKey } from '../util.js';
 import { lazyScope } from '../scope.js';

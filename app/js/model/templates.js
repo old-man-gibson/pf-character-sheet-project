@@ -5,7 +5,7 @@
  * template -- laid out as a table of groups and children on its own tab.
  */
 
-import { sheetReader } from './document.js';
+import { sheetReader } from './sheet-reader.js';
 import { emit } from './events.js';
 import { getPath } from './util.js';
 import { markUndo, rowLabel } from './undo.js';

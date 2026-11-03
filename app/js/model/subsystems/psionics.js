@@ -7,7 +7,7 @@
  */
 
 import { statKeys, statMod } from '../../rules.js';
-import { sheetReader } from '../document.js';
+import { sheetReader } from '../sheet-reader.js';
 import { levelFollowingPin } from '../progression.js';
 import { closestName, manifesterForwardKey } from '../util.js';
 

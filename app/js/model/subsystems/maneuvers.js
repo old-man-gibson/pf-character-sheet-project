@@ -6,7 +6,7 @@
  */
 
 import { MANEUVER_FIELDS } from '../../rules.js';
-import { sheetReader } from '../document.js';
+import { sheetReader } from '../sheet-reader.js';
 import { emit } from '../events.js';
 import { getPath, normalizeName, packRows } from '../util.js';
 

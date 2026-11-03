@@ -11,7 +11,7 @@ import {
   seedSkills, withTypedNumbers,
 } from '../../companions.js';
 import { ABILITIES, abilityOf } from '../../rules.js';
-import { sheetReader } from '../document.js';
+import { sheetReader } from '../sheet-reader.js';
 import { classLevelCount } from '../progression.js';
 import { forwarded } from '../scope.js';
 import { restCompanion } from '../rest.js';

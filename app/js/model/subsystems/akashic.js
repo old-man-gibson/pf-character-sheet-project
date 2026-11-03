@@ -8,7 +8,7 @@
 import {
   ESSENCE_SOURCES, KHESHIG_VEILS, essenceInvested, statMod, tempEssence, tempEssenceCost, veilDC,
 } from '../../rules.js';
-import { sheetReader } from '../document.js';
+import { sheetReader } from '../sheet-reader.js';
 import { classPresence, tableSpelling } from '../progression.js';
 import { sphereTalent, sphereTalentKnowledge } from '../spheres.js';
 import { closestName, normalizeName, slug, splitTags } from '../util.js';

@@ -11,7 +11,7 @@ import {
   craftingFraction, craftingSpeed, fmt, skillLabel,
 } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
-import { sheetReader } from '../document.js';
+import { sheetReader } from '../sheet-reader.js';
 import { lazyScope } from '../scope.js';
 import { COMPANION_KINDS, COMPANION_LABELS, companionInUse } from '../../companions.js';
 

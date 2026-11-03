@@ -6,7 +6,7 @@
  */
 
 import { evaluateFormula } from '../../formula.js';
-import { sheetReader } from '../document.js';
+import { sheetReader } from '../sheet-reader.js';
 import { cleanText, pad } from '../util.js';
 
 export const COOKING_COURSES = [

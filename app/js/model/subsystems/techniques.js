@@ -7,7 +7,7 @@
  */
 
 import { altTrainingFor, grantCount, liveGrantsAt } from './alt-training.js';
-import { sheetReader } from '../document.js';
+import { sheetReader } from '../sheet-reader.js';
 import { emit } from '../events.js';
 import { positionedRows } from '../templates.js';
 import { cleanText, pad } from '../util.js';

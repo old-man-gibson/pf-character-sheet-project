@@ -17,7 +17,7 @@ import {
 } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import { parseQuery } from '../../inline.js';
-import { weaponProficient } from '../document.js';
+import { weaponProficient } from './proficiency.js';
 import { emit } from '../events.js';
 import { markUndo } from '../undo.js';
 import { forwarded } from '../scope.js';
