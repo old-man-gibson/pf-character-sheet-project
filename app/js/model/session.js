@@ -18,10 +18,9 @@ export const ACTION_POOLS = ACTION_TYPES.slice(0, 5);
 const count = v => Math.max(0, Math.floor(Number(v) || 0));
 
 export function sessionState(model) {
-  const raw = model.data.session || {};
-  return { turn: 1, onTurn: true, spent: {}, maxima: {}, cards: [], folded: {}, pendingSwift: 0,
-    ...raw, spent: { ...raw.spent }, maxima: { ...raw.maxima },
-    cards: Array.isArray(raw.cards) ? raw.cards : [], folded: { ...raw.folded } };
+  const { spent, maxima, cards, folded, ...rest } = model.data.session || {};
+  return { turn: 1, onTurn: true, spent: { ...spent }, maxima: { ...maxima },
+    cards: Array.isArray(cards) ? cards : [], folded: { ...folded }, pendingSwift: 0, ...rest };
 }
 
 export function actionBudget(model, state = sessionState(model)) {

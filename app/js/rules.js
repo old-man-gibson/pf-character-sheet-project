@@ -3448,7 +3448,7 @@ export function bonusParts(resolved, types, filter = null) {
   const pairs = new Map(ABP_DEFENCE_GROUPS.filter(([abp, typed]) => keys.has(abp) && keys.has(typed)));
   const paired = new Set(pairs.values());
   const out = [];
-  for (const [key, label, flags] of types) {
+  for (const [key, , flags] of types) {
     if (filter && flags && flags[filter] === false) continue;
     if (paired.has(key)) continue;                      // shown with its ABP partner
     const typed = pairs.get(key);

@@ -17,7 +17,7 @@ import { forwardedBadge } from '../badges.js';
 import {
   ABILITY_LABELS, EXPERTISE_TIERS, OPERATIVE_ABILITIES, EXPERTISE_CUSTOM, fmt, parseLadderRule, ABILITIES, CASTING_TYPES, PRACTITIONER_TYPES, TALENT_RATE_OPTIONS, statMod,
 } from '../../rules.js';
-import { autoNum, select, text, field } from '../fields.js';
+import { autoNum, select } from '../fields.js';
 import {
   addButton, itemCheck, itemSelect, itemText, removeButton, rowDrop, rowGrip, rowRemove, rowToolsDragged,
 } from '../rows.js';

@@ -13,10 +13,10 @@ import { diceString, parseDiceExpr, statMod } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import { sheetReader } from '../sheet-reader.js';
 import { evaluateAmount, normalizeName, splitTags } from '../util.js';
-import { ownTalentRows, sphereTally, talentKey } from '../spheres.js';
+import { ownTalentRows, talentKey } from '../spheres.js';
 import { splitVeilName } from './akashic.js';
 import { clampTracker, poolTracker } from '../trackers.js';
-import { companionById, companionEntries } from '../../companions.js';
+import { companionEntries } from '../../companions.js';
 import { featNames } from '../feats.js';
 
 /** The five mana colours, in the order the deck tab lists them. */
@@ -585,7 +585,7 @@ export function importCardcasting(tab, drawbacks = [], magicClasses = [], deckFe
   // ---- the deck ----
   const header = find('Suit');
   if (header) {
-    const [hr, hc] = header;
+    const [hr] = header;
     const col = {};
     for (let c = 0; c < (g.rows[hr] || []).length; c++) {
       const label = text(at(hr, c));

@@ -67,8 +67,7 @@ import {
   awardXp, campaignPreset, campaignRules, followsShared, levelUp, presetCampaign, sameCampaign, tierUp, specialtyInPlay,
 } from './model/campaign.js';
 import { readShared, sharedRules, writeShared } from './shared-rules.js';
-import { esc, val, abilityKey, nameDatalist, portraitCss, portraitHtml } from './ui/html.js';
-import * as fields from './ui/fields.js';
+import { esc, val, abilityKey, portraitCss, portraitHtml } from './ui/html.js';
 
 /*
  * How many suggestions a catalogue cell offers at once. A `<datalist>` is a
@@ -98,7 +97,6 @@ import { foldValue, isOpen } from './ui/folds.js';
 import { colorControl } from './ui/color-control.js';
 import { datalistOptions } from './ui/datalist.js';
 import * as badges from './ui/badges.js';
-import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
 import { formulaDrawerHtml, formulaDrawerResults } from './ui/formula-drawer.js';
 import * as overview from './ui/panels/overview.js';
@@ -118,7 +116,6 @@ import * as lore from './ui/panels/lore.js';
 import * as admin from './ui/panels/admin.js';
 import { renderGearPanel, renderCraftingPanel, targetChoices } from './ui/panels/gear.js';
 import * as trackerUi from './ui/panels/trackers.js';
-import { round, group, same } from './ui/format.js';
 import * as prose from './ui/prose.js';
 import { renderStatsPanel } from './ui/panels/stats.js';
 import * as feats from './ui/panels/feats.js';
@@ -210,13 +207,6 @@ const BREAKDOWN_GRACE = 140;
 
 /** The key the undo list's Clear is armed under (the view's `armedRemove`). */
 const PLAY_CLEAR_ARM = 'play-undo-clear';
-
-/** The modelled sub-systems: tabs whose visibility the ⚙ manager controls by key. */
-const MODELLED_TAB_IDS = new Set([
-  'akashic', 'maneuvers', 'vancian', 'psionics', 'cardcasting', 'template',
-  'techniques', 'autoTechnique', 'cooking',
-  ...COMPANION_KINDS,
-]);
 
 /**
  * Sub-systems odd enough to sit in their own corner of the manager: a deck a

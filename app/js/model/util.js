@@ -287,9 +287,6 @@ export function flatNames(obj, prefix = '') {
   return out;
 }
 
-/** The sheet leaves an unreadable glyph where its dashes were. */
-const isPlaceholder = (v) => v === null || v === undefined
-  || String(v).trim() === '' || /^[�–—-]+$/.test(String(v).trim());
 
 /* ------------------------------------------------------------------ *
  * The shared discipline catalogue.

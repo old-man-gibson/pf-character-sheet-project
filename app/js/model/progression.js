@@ -13,11 +13,10 @@ import {
 } from '../rules.js';
 import { FEATURE_GROUP_COLORS, normalizeHex } from '../tracker-style.js';
 import { campaignRules, fitPlannerRows } from './campaign.js';
-import { orphans } from './reconcile.js';
 import { forwarded, scopeIfFormulas } from './scope.js';
 import { TEMPLATE_TYPES } from './templates.js';
 import { markUndo, rowLabel } from './undo.js';
-import { classForwardKey, closestName, isPinned, normalizeName, resolveNumberFields, slug } from './util.js';
+import { classForwardKey, closestName, isPinned, normalizeName, resolveNumberFields } from './util.js';
 
 /**
  * The key a rule group's text is stored under within a feature cell.

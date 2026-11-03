@@ -261,7 +261,7 @@ export function renderProgressionPanel(model, ctx) {
       ${vmcPanel(model)}
     </div>
     <div class="featgroups">
-      ${classFeatureGroups(model, ctx, model, ctx)}
+      ${classFeatureGroups(model, ctx)}
     </div>`;
   }
 
@@ -306,7 +306,6 @@ function classFeatureGroups(model, ctx) {
       const saved = model.data.uiPrefs?.colWidths?.[tableKey] || {};
       const colW = (col) => Math.max(90, Number(saved[col]) || 260);
       const total = 46 + g.columns.reduce((t, col) => t + colW(col), 0);
-      const charLevel = Number(model.data.identity.level) || 0;
       const due = Object.values(model.classFeatureDue(name)).reduce((t, n) => t + n, 0);
 
       // Cells waiting on a class level the character has not got back yet.

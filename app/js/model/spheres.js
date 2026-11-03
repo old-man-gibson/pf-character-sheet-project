@@ -26,7 +26,7 @@ import { techniqueTalents } from './subsystems/techniques.js';
 import { veilGrantedSpheres, veilsNamedIn } from './subsystems/akashic.js';
 import { markUndo, rowLabel } from './undo.js';
 import {
-  classForwardKey, evaluateAmount, isPinned, normalizeName, splitTags, packRows, packWords, slug, sphereForwardKey,
+  classForwardKey, evaluateAmount, isPinned, normalizeName, splitTags, packRows, packWords, sphereForwardKey,
 } from './util.js';
 import { isAhead, rowLevel } from './feats.js';
 

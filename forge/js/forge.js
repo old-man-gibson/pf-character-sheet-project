@@ -8,7 +8,7 @@
  * sheet's own local extension store so the app next door reads it on its
  * next load.
  */
-import { TYPES, GROUPS, BASE, ELEMENT_BASE, esc, uid, slug, now, ord, str, newEntry, linksIn, sortEntries, applyCustomTypes, normalizeCustomTypes, withPlainIds } from './schema.js';
+import { TYPES, GROUPS, BASE, ELEMENT_BASE, esc, uid, slug, now, ord, newEntry, linksIn, sortEntries, applyCustomTypes, normalizeCustomTypes, withPlainIds } from './schema.js';
 import { forgeStore } from './store.js';
 import { forgeToPack, importPack, importWildTalents, looksLikeWildTalents } from './pack.js';
 import { extensionStore, isPackKey, packsWorthMoving } from '../../app/js/extensions.js';

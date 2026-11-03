@@ -229,7 +229,6 @@ function featGroupTable(model, ctx, group, g) {
 
 export function renderFeaturesPanel(model, ctx) {
     const c = model.data;
-    const feats = c.feats || {};
     const m = c.mythic || {};
     const tier = Number(c.identity.mythicTier) || 0;
     const rules = campaignRules(c);

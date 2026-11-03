@@ -103,7 +103,7 @@ import {
   ATTACK_MODE_LABELS, BONUS_TYPES, BUFF_MOD_KEYS, BUFF_TARGETS, CONDITIONS, CONDITION_CATS, GAME_SYSTEMS,
   SIZE_MODIFIERS, TRAIT_SLOTS, WEAPON_GROUPS, WEAPON_FAMILIARITY, WEAPON_HANDEDNESS,
   ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES, attackModeTotal, castingNoun,
-  conditionInfo, conditionTotals, fmt, prepStyle, skillConditionDelta, skillLabel, statModDelta,
+  conditionInfo, conditionTotals, fmt, prepStyle, skillConditionDelta, skillLabel,
 } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
 import { abilityCollapse, abilityHarm, blankClassRow, maneuverDetails } from '../../model.js';
@@ -370,7 +370,7 @@ function dashConditionsCard(model, ctx) {
         ${active.map(chip).join('') || '<span class="empty">None — all clear.</span>'}
       </div>
       ${dashCondNumbers(model)}
-      ${dashCondPicker(model, ctx, model, ctx)}
+      ${dashCondPicker(model, ctx)}
       ${cs.notes.length ? `<ul class="condnotes">${cs.notes.map((n) => `<li>${esc(n[0].toUpperCase() + n.slice(1))}.</li>`).join('')}</ul>` : ''}
     </section>`;
   }
@@ -1670,7 +1670,6 @@ function attackPanel(model) {
           // nothing but a finesse swap does not carry six rows to say three.
           if (alt && shut) return '';
           const total = attackModeTotal(c, k) ?? 0;
-          const delta = cs.changed && cs.delta[k] ? cs.delta[k] : 0;
           const altOf = ATTACK_MODES.find((m) => ALT_ATTACK_OF[m] === k);
           const altTotal = altOf ? attackModeTotal(c, altOf) ?? 0 : 0;
           const altStat = altOf ? (c.attack.modes[altOf]?.stat1 || '—') : '';

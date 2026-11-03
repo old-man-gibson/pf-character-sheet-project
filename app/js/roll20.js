@@ -42,7 +42,7 @@
  *     changes, multiplied on the crit lines where the answer multiplies.
  */
 import {
-  ABILITIES, ABILITY_LABELS, fmt, diceString, addDice, skillConditionDelta, skillLabel, statModDelta,
+  ABILITIES, ABILITY_LABELS, fmt, diceString, addDice, skillConditionDelta, skillLabel,
   ATTACK_TYPE_MODE, attackModeTotal, parseDiceExpr, readCrit, threatText, weaponMoves,
 } from './rules.js';
 import { COMPANION_LABELS } from './companions.js';

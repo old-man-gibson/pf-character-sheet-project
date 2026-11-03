@@ -10,9 +10,8 @@ import {
   companionSkillKey, computeCompanion, defaultCompanion, emptyCompanionFeat, LEGACY_SPEED_TYPES, legacySpeedRows,
   seedSkills, withTypedNumbers,
 } from '../../companions.js';
-import { ABILITIES, abilityOf } from '../../rules.js';
+import { abilityOf } from '../../rules.js';
 import { sheetReader } from '../sheet-reader.js';
-import { classLevelCount } from '../progression.js';
 import { forwarded } from '../scope.js';
 import { restCompanion } from '../rest.js';
 import { setPath, skillRanksNamed } from '../util.js';

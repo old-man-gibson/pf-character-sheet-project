@@ -12,7 +12,7 @@
  */
 import { esc } from '../html.js';
 import {
-  PIP_LIMIT, round, pct, signed,
+  PIP_LIMIT, signed,
 } from '../format.js';
 import { forwardedBadge } from '../badges.js';
 import { prose, renderedProse } from '../prose.js';

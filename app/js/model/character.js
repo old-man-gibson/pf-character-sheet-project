@@ -33,7 +33,7 @@
  */
 
 import {
-  DERIVED, FORWARD_BY_DERIVED, abilityMod, armorParts,
+  DERIVED, FORWARD_BY_DERIVED, armorParts,
   flatFootedCmd, iterativeAttacks, skillTotal, statMod,
 } from '../rules.js';
 import { freeBackgroundSkills, specialtyInPlay } from './campaign.js';
@@ -47,7 +47,7 @@ import { normalise, toDocument } from './document.js';
 import { migrateDocument } from './migrations.js';
 import {
   addSystemTab, addSystemTabColumn, hideTab, listAdd, listAt, listMove, listMoveInto, listMoveTo, listRemove,
-  moveTab, removeSystemTab, removeSystemTabColumn, renameSkill, renameSystemTab, resetTabOrder, sessionDefaultTabs,
+  moveTab, removeSystemTab, removeSystemTabColumn, renameSystemTab, resetTabOrder, sessionDefaultTabs,
   setItem, setTabColor, setTabName, setTabOrder, setValue, setViewMode, showTab, systemTabsInUse,
   tabColor, tabName, tabOrder,
   taggedSystemTabs, toggleClassSystem, toggleProficiency, viewMode,
@@ -63,8 +63,8 @@ import {
   classFeatureColumnOptionsChosen, classFeatureDue, classFeatureNoteLevel, classFeatureNotes,
   classFeatureNotesInCell, classFeatureNoteSuggestions, addClassFeatureNoteFromPack, classFeatureParked, moveClassFeatureNote,
   blockClassName, classFeatureRows,
-  classFeatureRuleGroups, classLevelAt, classLevelCount, classLevelsIn, classNames,
-  featureGroup, fillProgressionTrack, grantingGroups, plannerHasClass, progressionClasses,
+  classFeatureRuleGroups, classLevelCount, classLevelsIn, classNames,
+  fillProgressionTrack, progressionClasses,
   removeClassFeatureColumn, removeClassFeatureColumnOptions, removeClassFeatureNote,
   removeAligned, removeAlignedGain, removeClassFeatureGroup, removeClassFeatureRuleGroup, removeProgressionTrack,
   renameClassFeatureColumn, setAligned, setAlignedGain, setAlignedPick,
@@ -76,47 +76,45 @@ import {
   offsetSource, orphans, reconcile, resolveOffsets, setOffset,
 } from './reconcile.js';
 import {
-  characterScope, forwardTargets, forwarded, forwardedInto, forwardedSplit, forwardsEarly, gearItemBonuses,
+  characterScope, forwardTargets, forwarded, forwardedInto, forwardsEarly, gearItemBonuses,
   proseSources, renderProse, resolveInlineNames, scopeNames, secondPass, trackerScope,
 } from './scope.js';
 import {
-  addCustomization, applyBudget, blendedClasses, casterLevel, checkCustomizationBases, customizationFor,
-  ownClassLevels, pairBlended, recomputeCustomizations, recomputeSphereRows, recomputeTraining,
+  addCustomization, applyBudget, blendedClasses, casterLevel, customizationFor,
+  recomputeSphereRows, recomputeTraining,
   setTalentEntry, blankTalentNotes, fillTalentNotes, setAltTrainingPick, altTrainingLookup,
   removeCustomization, setBlended, setBlendedSkill, setCustomizationActive, setGuileBlend, setPoolReach, setCustomizationRule, setSphereBonus,
-  setCustomizationSpec, sphereRanksBySkill, sphereTalentKnowledge, sphereTally,
+  setCustomizationSpec, sphereRanksBySkill,
 } from './spheres.js';
 import {
   addGuileClass, addGuileSphere, guileRanksBySkill, recomputeGuile, recomputeGuileSpheres,
 } from './subsystems/guile.js';
 import {
-  recomputeEquipment, recomputeUnarmed, setGearColumns, weaponHandles,
+  recomputeEquipment, setGearColumns, weaponHandles,
 } from './stats/attacks.js';
 import {
   applyDamage, applyHealing, applyNonlethal, availableConditions, conditionState, flowingFree, flowingRound, grantTempHp,
-  healDamage, hpMax, hpState, meterSpec, meterStyle, mythicHp, resolveAcBonuses,
+  healDamage, hpMax, hpState, meterSpec, meterStyle, mythicHp,
   resolveDefenceBonuses, resolveDefenceText, setMeterStyle, sizeNow,
   takeDamage,
 } from './stats/defenses.js';
 import { rest } from './rest.js';
 import { addTrainingClass } from './training.js';
-import { resolveSaveBonuses } from './stats/saves.js';
 import {
-  addWealthEntry, makeOffering, removeWealthEntry, wealthView, wealthViewOf,
+  addWealthEntry, makeOffering, removeWealthEntry, wealthViewOf,
 } from './stats/wealth.js';
-import { essenceScope, recomputeAkashic, veilScope } from './subsystems/akashic.js';
+import { recomputeAkashic, veilScope } from './subsystems/akashic.js';
 import {
   cardAttuned, cardOwner, cardRef, cardRollFormulas, cardRollSpec, cardRolls, cardSiblings, cardStatLines, cardStats, castCheck, casterFor, casterInfo,
   terrainCasting, terrainDefault, terrainFreedom, moveCard, moveManipulationPick, tableTargets, deckList,
-  deckSquad, drawCards, hasDeckFeat, hasManipulation, manaPlayCheck,
-  recomputeCardcasting, recomputeTable, rollFor, shareCardDice, shuffle, spellPointTracker, spendSP,
+  deckSquad, recomputeCardcasting, shareCardDice, spellPointTracker,
   tableBoost, tableBury, tableCard, tableDraw, tableEnd, tableExileRandom, tableInstances,
-  tableKeywords, tableLog, tableMove, tableName, tableNextRound, tablePeek, tablePlay,
-  tableRedraw, tableResolve, tableRetrace, tableReveal, tableRoll, tableSettle,
-  tableShuffleDiscard, tableSpend, tableSquad, tableStart, tableTap, tableTrigger,
+  tableMove, tableName, tableNextRound, tablePeek, tablePlay,
+  tableRedraw, tableResolve, tableRetrace, tableReveal, tableRoll,
+  tableShuffleDiscard, tableSpend, tableSquad, tableStart, tableTap,
 } from './subsystems/cardcasting.js';
 import {
-  addCompanion, companionDamage, companionHeal, companionMaster, companionOpenSlot, companionRest,
+  addCompanion, companionDamage, companionHeal, companionOpenSlot, companionRest,
   recomputeCompanions,
 } from './subsystems/companions.js';
 import { cookingView } from './subsystems/cooking.js';
@@ -124,11 +122,11 @@ import { craftSkills, recomputeCrafting } from './subsystems/crafting.js';
 import {
   recomputeManeuvers, setManeuverField, setManeuverNote, toggleManeuver,
 } from './subsystems/maneuvers.js';
-import { altTrainingPrereq, altTrainingTalents, recomputeAltTraining } from './subsystems/alt-training.js';
+import { recomputeAltTraining } from './subsystems/alt-training.js';
 import { psionicsNewDay, recomputePsionics } from './subsystems/psionics.js';
 import {
   addDraftTechnique, draftFromTechnique, mergeTechniquesFrom, removeTechnique,
-  resetDraftTechnique, selectTechnique, techniqueByName, techniqueContext, techniqueTalents,
+  resetDraftTechnique, selectTechnique, techniqueByName, techniqueContext,
   techniqueView,
 } from './subsystems/techniques.js';
 import { recomputeVancian, vancianNewDay } from './subsystems/vancian.js';
@@ -137,8 +135,8 @@ import {
   nudgeTemplateChild, removeTemplateTableColumn,
 } from './templates.js';
 import {
-  addSystemPool, addTracker, ensureMythicPower, isProtectedTracker, loadTrackers, missingSystemPools,
-  recomputeBuffs, recomputeTrackers, removeTracker, seedTrackers, stepTracker, tierNow, updateTracker,
+  addSystemPool, addTracker, isProtectedTracker, loadTrackers, missingSystemPools,
+  recomputeBuffs, recomputeTrackers, removeTracker, stepTracker, updateTracker,
   endedText, tickBuffRounds,
 } from './trackers.js';
 import { featCount, recomputeLanguages, recomputeSpeeds } from './traits.js';
@@ -537,7 +535,6 @@ export class Character {
   listMoveTo(...a) { return listMoveTo(this, ...a); }
   listMoveInto(...a) { return listMoveInto(this, ...a); }
   setItem(...a) { return setItem(this, ...a); }
-  #renameSkill(...a) { return renameSkill(this, ...a); }
   addSystemTab(...a) { return addSystemTab(this, ...a); }
   renameSystemTab(...a) { return renameSystemTab(this, ...a); }
   removeSystemTab(...a) { return removeSystemTab(this, ...a); }
@@ -588,9 +585,6 @@ export class Character {
   addAlignedGain(...a) { return addAlignedGain(this, ...a); }
   setAlignedGain(...a) { return setAlignedGain(this, ...a); }
   removeAlignedGain(...a) { return removeAlignedGain(this, ...a); }
-  #featureGroup(...a) { return featureGroup(this, ...a); }
-  #classLevelAt(...a) { return classLevelAt(this, ...a); }
-  #grantingGroups(...a) { return grantingGroups(this, ...a); }
   setClassFeature(...a) { return setClassFeature(this, ...a); }
   addClassFeatureColumn(...a) { return addClassFeatureColumn(this, ...a); }
   renameClassFeatureColumn(...a) { return renameClassFeatureColumn(this, ...a); }
@@ -622,14 +616,12 @@ export class Character {
   setColumnWidth(...a) { return setColumnWidth(this, ...a); }
   removeClassFeatureColumn(...a) { return removeClassFeatureColumn(this, ...a); }
   #applyGestalt(...a) { return applyGestalt(this, ...a); }
-  #plannerHasClass(...a) { return plannerHasClass(this, ...a); }
 
   // scope.js
   scope(...a) { return characterScope(this, ...a); }
   scopeNames(...a) { return scopeNames(this, ...a); }
   forwardTargets(...a) { return forwardTargets(this, ...a); }
   #forwarded(...a) { return forwarded(this, ...a); }
-  #forwardedSplit(...a) { return forwardedSplit(this, ...a); }
   forwardedInto(...a) { return forwardedInto(this, ...a); }
   gearItemBonuses(...a) { return gearItemBonuses(this, ...a); }
   #resolveInlineNames(...a) { return resolveInlineNames(this, ...a); }
@@ -639,10 +631,7 @@ export class Character {
   #forwardsEarly(...a) { return forwardsEarly(this, ...a); }
 
   // trackers.js
-  #seedTrackers(...a) { return seedTrackers(this, ...a); }
-  #tierNow(...a) { return tierNow(this, ...a); }
   #loadTrackers(...a) { return loadTrackers(this, ...a); }
-  #ensureMythicPower(...a) { return ensureMythicPower(this, ...a); }
   #recomputeTrackers(...a) { return recomputeTrackers(this, ...a); }
   addTracker(...a) { return addTracker(this, ...a); }
   stepTracker(...a) { return stepTracker(this, ...a); }
@@ -670,9 +659,6 @@ export class Character {
 
   // spheres.js
   #applyBudget(...a) { return applyBudget(this, ...a); }
-  #ownClassLevels(...a) { return ownClassLevels(this, ...a); }
-  #recomputeCustomizations(...a) { return recomputeCustomizations(this, ...a); }
-  #checkCustomizationBases(...a) { return checkCustomizationBases(this, ...a); }
   addCustomization(...a) { return addCustomization(this, ...a); }
   customizationFor(...a) { return customizationFor(this, ...a); }
   setCustomizationSpec(...a) { return setCustomizationSpec(this, ...a); }
@@ -680,8 +666,6 @@ export class Character {
   setCustomizationRule(...a) { return setCustomizationRule(this, ...a); }
   setCustomizationActive(...a) { return setCustomizationActive(this, ...a); }
   setSphereBonus(...a) { return setSphereBonus(this, ...a); }
-  #sphereTally(...a) { return sphereTally(this, ...a); }
-  #pairBlended(...a) { return pairBlended(this, ...a); }
   setBlended(...a) { return setBlended(this, ...a); }
   setBlendedSkill(...a) { return setBlendedSkill(this, ...a); }
   setGuileBlend(...a) { return setGuileBlend(this, ...a); }
@@ -693,7 +677,6 @@ export class Character {
   altTrainingLookup(...a) { return altTrainingLookup(this, ...a); }
   blendedClasses(...a) { return blendedClasses(this, ...a); }
   #recomputeTraining(...a) { return recomputeTraining(this, ...a); }
-  #sphereTalentKnowledge(...a) { return sphereTalentKnowledge(this, ...a); }
   #sphereRanksBySkill(...a) { return sphereRanksBySkill(this, ...a); }
   #recomputeSphereRows(...a) { return recomputeSphereRows(this, ...a); }
 
@@ -706,12 +689,10 @@ export class Character {
   addGuileSphere(...a) { return addGuileSphere(this, ...a); }
 
   // stats/saves.js
-  #resolveSaveBonuses(...a) { return resolveSaveBonuses(this, ...a); }
 
   // stats/defenses.js
   #resolveDefenceBonuses(...a) { return resolveDefenceBonuses(this, ...a); }
   #resolveDefenceText(...a) { return resolveDefenceText(this, ...a); }
-  #resolveAcBonuses(...a) { return resolveAcBonuses(this, ...a); }
   sizeNow(...a) { return sizeNow(this, ...a); }
   get conditionState() { return conditionState(this); }
   availableConditions(...a) { return availableConditions(this, ...a); }
@@ -738,7 +719,6 @@ export class Character {
   weaponHandles(...a) { return weaponHandles(this, ...a); }
   setGearColumns(...a) { return setGearColumns(this, ...a); }
   #recomputeEquipment(...a) { return recomputeEquipment(this, ...a); }
-  #recomputeUnarmed(...a) { return recomputeUnarmed(this, ...a); }
 
   // stats/wealth.js
   get casterLevel() { return casterLevel(this); }
@@ -749,22 +729,13 @@ export class Character {
 
   // subsystems/akashic.js
   #recomputeAkashic(...a) { return recomputeAkashic(this, ...a); }
-  #essenceScope(...a) { return essenceScope(this, ...a); }
   veilScope(...a) { return veilScope(this, ...a); }
 
   // subsystems/cardcasting.js
   #recomputeCardcasting(...a) { return recomputeCardcasting(this, ...a); }
-  #recomputeTable(...a) { return recomputeTable(this, ...a); }
-  #hasDeckFeat(...a) { return hasDeckFeat(this, ...a); }
-  #hasManipulation(...a) { return hasManipulation(this, ...a); }
-  #manaPlayCheck(...a) { return manaPlayCheck(this, ...a); }
   tableInstances(...a) { return tableInstances(this, ...a); }
   tableCard(...a) { return tableCard(this, ...a); }
   castCheck(...a) { return castCheck(this, ...a); }
-  #shuffle(...a) { return shuffle(this, ...a); }
-  #tableLog(...a) { return tableLog(this, ...a); }
-  #tableName(...a) { return tableName(this, ...a); }
-  #tableDraw(...a) { return drawCards(this, ...a); }
   tableStart(...a) { return this.play('Start encounter', () => tableStart(this, ...a)); }
   tableRedraw(...a) { return this.play('Redraw hand', () => tableRedraw(this, ...a)); }
   tableNextRound(...a) { return this.play('Next round', () => tableNextRound(this, ...a)); }
@@ -772,13 +743,8 @@ export class Character {
   tablePlay(id, mode = 'cast', opts = {}) { return this.play(PLAY_MODES[mode]?.(tableName(this, id)) ?? `Play ${tableName(this, id)}`, () => tablePlay(this, id, mode, opts)); }
   tableRetrace(id) { return this.play(`Retrace ${tableName(this, id)}`, () => tableRetrace(this, id)); }
   tableBury(id) { return this.play(`Bury ${tableName(this, id)}`, () => tableBury(this, id)); }
-  #rollFor(...a) { return rollFor(this, ...a); }
-  #tableKeywords(...a) { return tableKeywords(this, ...a); }
-  #tableTrigger(...a) { return tableTrigger(this, ...a); }
-  #tableSettle(...a) { return tableSettle(this, ...a); }
   tableResolve(id) { return this.play(`Resolve ${tableName(this, id)}`, () => tableResolve(this, id)); }
   spellPointTracker(...a) { return spellPointTracker(this, ...a); }
-  #spendSP(...a) { return spendSP(this, ...a); }
   tableSpend(id, n = 1) { return this.play(`${n} SP${id ? ` on ${tableName(this, id)}` : ''}`, () => tableSpend(this, id, n)); }
   tableReveal(id) { return this.play(`Reveal ${tableName(this, id)}`, () => tableReveal(this, id)); }
   cardRolls(...a) { return cardRolls(this, ...a); }
@@ -846,15 +812,11 @@ export class Character {
   draftFromTechnique(...a) { return draftFromTechnique(this, ...a); }
   mergeTechniquesFrom(...a) { return mergeTechniquesFrom(this, ...a); }
   removeTechnique(...a) { return removeTechnique(this, ...a); }
-  #techniqueTalents(...a) { return techniqueTalents(this, ...a); }
 
   // subsystems/alt-training.js
-  #altTrainingPrereq(...a) { return altTrainingPrereq(this, ...a); }
   #recomputeAltTraining(...a) { return recomputeAltTraining(this, ...a); }
-  #altTrainingTalents(...a) { return altTrainingTalents(this, ...a); }
 
   // subsystems/companions.js
-  #companionMaster(...a) { return companionMaster(this, ...a); }
   #recomputeCompanions(...a) { return recomputeCompanions(this, ...a); }
   addCompanion(...a) { return addCompanion(this, ...a); }
   // edit.js setItem: the row a write past a list's end grows it by.
