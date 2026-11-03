@@ -9,13 +9,7 @@
  *  Run: node tests/pdf-import.test.mjs */
 import { outlineOf, sectionText, sectionOptions, readSections, guessKind, guessSphere } from '../app/js/pdf-import.js';
 import { readStructured, parsePaste } from '../app/js/paste-import.js';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else { fail++; console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`); }
-};
+import { check, finish } from './check.mjs';
 
 /* A page is 600 wide: left column from x=40, right from x=320, 11pt body in
    two cuts of one face (as a justified book is), 16pt entry headings, 24pt
@@ -131,5 +125,4 @@ const viaSections = readSections({ sections: [artSection] }, [{ kind: 'options',
 check('and it comes through the whole-book reader as a block, with a line in the report',
   [viaSections.blocks.map((b) => b.kind), viaSections.report.length], [['options'], 1]);
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

@@ -3,16 +3,7 @@
  *  Run: node tests/sheet-theme.test.mjs */
 import { SheetTheme } from '../app/js/sheet/theme.js';
 import { THEME_KEY } from '../app/js/themes.js';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
+import { check, finish } from './check.mjs';
 
 const store = new Map();
 globalThis.localStorage = {
@@ -104,5 +95,4 @@ const attrs = (el, ...names) => names.map((n) => el.getAttribute(n));
   check('the selects show the choice', [/<option value="slate" selected>/.test(html), /<option value="side" selected>/.test(html)], [true, true]);
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

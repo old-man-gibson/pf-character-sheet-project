@@ -7,17 +7,10 @@ import {
   NEST_COLOURS,
 } from '../app/js/formula-format.js';
 import { scanBrackets, pairAtCaret, mirrorHtml } from '../app/js/ui/brackets.js';
+import { checkWith, finish } from './check.mjs';
 
-let pass = 0;
-let fail = 0;
-
-function check(label, actual, expected) {
-  const ok = JSON.stringify(actual) === JSON.stringify(expected);
-  if (ok) { pass++; } else {
-    fail++;
-    console.log(`  FAIL ${label}\n       expected ${JSON.stringify(expected)}\n            got ${JSON.stringify(actual)}`);
-  }
-}
+const check = checkWith((label, actual, expected) =>
+  `  FAIL ${label}\n       expected ${JSON.stringify(expected)}\n            got ${JSON.stringify(actual)}`);
 
 const scope = {
   level: 20,
@@ -244,5 +237,4 @@ check('with no pair there is nothing to mark',
 check('and the text is escaped on the way out',
   mirrorHtml('a<b(c)', pairAtCaret('a<b(c)', 4)).startsWith('a&lt;b'), true);
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

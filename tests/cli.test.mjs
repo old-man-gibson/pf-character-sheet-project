@@ -6,16 +6,7 @@
  *
  *  Run: node tests/cli.test.mjs */
 import { readArgs } from '../tools/lib/cli.mjs';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
+import { check, finish } from './check.mjs';
 
 console.log('a tool\'s command line');
 {
@@ -50,5 +41,4 @@ console.log('a tool\'s command line');
   check('an unknown option is a flag', [a.flag('verbose'), a.inputs], [true, ['in.txt']]);
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

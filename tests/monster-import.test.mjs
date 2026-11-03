@@ -10,17 +10,7 @@ import { Character, inspectDocument } from '../app/js/model.js';
 import { emptyMonster, normalizeMonster } from '../app/js/monster/block.js';
 import { blankDocument } from '../app/js/convert.js';
 import { renderStatBlockPanel } from '../app/js/monster/panel.js';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
-const ok = (label, cond) => { if (cond) pass++; else { fail++; console.log(`  FAIL ${label}`); } };
+import { check, ok, finish } from './check.mjs';
 
 /*
  * An archdevil's numbers, with the prose cut to a sentence apiece: what is
@@ -258,5 +248,4 @@ console.log('the stat block AC line caps ABP with its typed partner, as the tota
   check('ABP deflection +5 and a typed +4 print as the +5 the AC counts', /\+5 deflection/.test(line), true);
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

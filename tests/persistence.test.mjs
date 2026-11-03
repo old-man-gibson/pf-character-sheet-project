@@ -5,16 +5,8 @@
 import { SheetStore } from '../app/js/sheet/persistence.js';
 import { SCHEMA_VERSION } from '../app/js/schema.js';
 import { workingKey } from '../app/js/history.js';
+import { check, finish } from './check.mjs';
 
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function fakeStorage() {
@@ -269,5 +261,4 @@ const storeOver = (history, attrs) => {
   check('a save elsewhere is picked up', [store.savedDoc?.identity.name, store.changes], ['B', 0]);
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

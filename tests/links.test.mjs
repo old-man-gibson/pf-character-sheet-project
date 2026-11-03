@@ -9,16 +9,8 @@ import { prose, renderedProse } from '../app/js/ui/prose.js';
 import { linkField, text } from '../app/js/ui/fields.js';
 import { itemText } from '../app/js/ui/rows.js';
 import { noteField, richText } from '../app/js/ui/talents.js';
+import { check, finish } from './check.mjs';
 
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
 const urls = (s) => findUrls(s).map((u) => u.url);
 /** The hrefs a piece of markup links to, as written in the attribute. */
 const hrefs = (html) => [...html.matchAll(/<a\b[^>]*\shref="([^"]*)"/g)].map((m) => m[1]);
@@ -198,5 +190,4 @@ console.log('\nonly http and https addresses become links; images take a narrow 
   check('a portrait with a refused address is an empty box', portraitHtml('javascript:alert(1)'), '<div class="portrait"></div>');
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

@@ -17,16 +17,8 @@ import {
   abilityRollSpec, saveRollSpec, attackRollSpec, skillRollSpec, weaponRollSpec,
   initiativeRollSpec, concentrationRollSpec, companionRollSpec, vitalStrikeTiers, weaponStrikes, hasMythicVitalStrike,
 } from '../app/js/roll20.js';
+import { check, finish } from './check.mjs';
 
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
 const ok = (label, actual) => check(label, !!actual, true);
 
 console.log('names are made safe -- chat resolves these before it prints');
@@ -714,5 +706,4 @@ console.log('a chat button posts its roll when clicked, and nothing of it resolv
   check('no buttons, no message', branchesText('Blender', [{ label: 'On hit', buttons: [] }]), '');
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

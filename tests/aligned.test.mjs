@@ -12,16 +12,8 @@ import { blankDocument } from '../app/js/convert.js';
 import { Character } from '../app/js/model.js';
 import * as M from '../app/js/model.js';
 import { renderProgressionPanel } from '../app/js/ui/panels/lore.js';
+import { check, finish, summary } from './check.mjs';
 
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
 const reopen = (m) => new Character(JSON.parse(JSON.stringify(m.toJSON())));
 const classRow = (name, extra = {}) => ({
   name, hd: 6, bab: 0.5, babOverride: null, goodFort: false, goodRef: false, goodWill: true,
@@ -243,5 +235,4 @@ console.log('\nthe panel');
   check('the block can be removed', h.includes('data-action="remove-aligned"'), true);
 }
 
-console.log(`${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish(summary());

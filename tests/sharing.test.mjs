@@ -5,16 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { Character } from '../app/js/model.js';
 import { Sharing, UNPUBLISH_ARM } from '../app/js/sheet/sharing.js';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
+import { check, finish } from './check.mjs';
 
 const vesna = JSON.parse(readFileSync(new URL('./fixtures/public/characters/vesna.json', import.meta.url), 'utf8'));
 const APP = 'https://sheet.example/app/';
@@ -221,5 +212,4 @@ const model = new Character(structuredClone(vesna));
   check('a published sheet loads no grants', s.grantsForCtx(), {});
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

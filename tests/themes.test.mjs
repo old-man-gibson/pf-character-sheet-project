@@ -24,16 +24,8 @@ import {
 } from '../app/js/themes.js';
 import { contrastRatio, normalizeHex } from '../app/js/tracker-style.js';
 import { paletteRules } from '../app/js/theme-css.js';
+import { check, finish, summary } from './check.mjs';
 
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
 const ok = (label, actual) => check(label, !!actual, true);
 
 const css = fs.readFileSync(fileURLToPath(new URL('../app/css/sheet.css', import.meta.url)), 'utf8');
@@ -268,5 +260,4 @@ check('blocked storage reads as nothing', readThemePrefs(broken), null);
 check('blocked storage still returns the clean choice', writeThemePrefs({ layout: 'side' }, broken), { layout: 'side' });
 check('no storage at all', readThemePrefs(undefined), null);
 
-console.log(`${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish(summary());

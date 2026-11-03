@@ -5,20 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { CHARACTERS_DIR, hasFixtures } from './fixtures.mjs';
 import { zip, deflateRaw, safeName } from '../app/js/zip.js';
 import { openZip } from '../app/js/xlsx.js';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
-const ok = (label, cond) => {
-  if (cond) pass++;
-  else { fail++; console.log(`  FAIL ${label}`); }
-};
+import { check, ok, finish } from './check.mjs';
 
 const text = (bytes) => new TextDecoder().decode(bytes);
 
@@ -127,5 +114,4 @@ if (hasFixtures()) {
     + ` -> ${(archive.length / 1024).toFixed(0)} KB of ZIP`);
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

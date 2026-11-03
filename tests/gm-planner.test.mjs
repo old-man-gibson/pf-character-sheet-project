@@ -31,16 +31,10 @@ import { Character } from '../app/js/model.js';
 import { fakeIndexedDb } from './fake-indexeddb.mjs';
 import { blockHtml, checkLabel, hiddenLabel, layout } from '../gm-module/planner/timeline.js';
 import { createPlan, currentVersion, listPlans, readPlan, readPlayerView, removePlan, validName, writePlan } from '../gm-module/planner/store.mjs';
+import { checkWith, finish } from './check.mjs';
 
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`FAIL ${label}\n  expected ${JSON.stringify(expected)}\n  got      ${JSON.stringify(actual)}`);
-  }
-};
+const check = checkWith((label, actual, expected) =>
+  `FAIL ${label}\n  expected ${JSON.stringify(expected)}\n  got      ${JSON.stringify(actual)}`);
 
 // Four players and the three activities of the planning example: a 5-minute,
 // a 15-minute and a shared 10-minute activity, all starting together.
@@ -848,5 +842,4 @@ try {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

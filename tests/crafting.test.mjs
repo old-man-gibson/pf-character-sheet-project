@@ -6,16 +6,7 @@ import { Character } from '../app/js/model.js';
 import { craftCrafter, craftCrafters, craftSkills } from '../app/js/model/subsystems/crafting.js';
 import { renderCraftingPanel } from '../app/js/ui/panels/gear.js';
 import { fixtureIds, loadCharacter } from './fixtures.mjs';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
+import { check, finish, summary } from './check.mjs';
 
 console.log('the character crafts by default, with a Craft skill');
 {
@@ -62,5 +53,4 @@ for (const id of fixtureIds()) {
   check(`${id}: no crafter written`, 'crafter' in (m.data.crafting?.calc || {}), false);
 }
 
-console.log(`${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish(summary());

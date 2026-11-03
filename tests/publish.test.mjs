@@ -22,17 +22,7 @@ import { setAltTrainingTables } from '../app/js/model/subsystems/alt-training.js
 import { blankDocument } from '../app/js/convert.js';
 import { COMPANION_KINDS, companionAbilityText as companionText } from '../app/js/companions.js';
 import { fixtureIds, hasFixtures, loadCharacter } from './fixtures.mjs';
-
-let pass = 0;
-let fail = 0;
-
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
+import { check, finish } from './check.mjs';
 
 /** Every pack a deployment carries, from either folder the app reads. */
 function bundledPacks() {
@@ -235,8 +225,7 @@ for (const d of published.maneuvers?.disciplines || []) {
 if (richest.weight === 0) {
   console.log('\npublish: no character in this roster references a pack, so what a stranger\n'
     + '  sees is not checked here. It needs a roster with veils or maneuvers on it.');
-  console.log(`\n${pass} passed, ${fail} failed`);
-  process.exit(fail ? 1 : 0);
+  finish();
 }
 
 const APP = pathToFileURL(resolve('app', 'js')).href;
@@ -322,5 +311,4 @@ console.log('publish: the numbers and texts a reader with no packs could not get
   check('which keeps its text', notes['low sweep'], { text: 'Kept in lower case.' });
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

@@ -7,17 +7,10 @@ import {
   scratchpadHtml, referenceHtml, problemsHtml, forwardedHtml, VALUE_SECTIONS,
   classifyTarget, targetGroups, targetsHtml, TARGET_SECTIONS,
 } from '../app/js/formula-guide.js';
+import { checkWith, finish } from './check.mjs';
 
-let pass = 0;
-let fail = 0;
-
-function check(label, actual, expected) {
-  const ok = JSON.stringify(actual) === JSON.stringify(expected);
-  if (ok) { pass++; } else {
-    fail++;
-    console.log(`  FAIL ${label}\n       expected ${JSON.stringify(expected)}\n            got ${JSON.stringify(actual)}`);
-  }
-}
+const check = checkWith((label, actual, expected) =>
+  `  FAIL ${label}\n       expected ${JSON.stringify(expected)}\n            got ${JSON.stringify(actual)}`);
 
 const scope = {
   level: 20,
@@ -568,5 +561,4 @@ const inserts = [...panel.matchAll(/data-fx-insert="([^"]*)"/g)].map((m) => m[1]
 check('there are some', inserts.length > 10, true);
 check('none is empty', inserts.every((s) => s.trim().length > 0), true);
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

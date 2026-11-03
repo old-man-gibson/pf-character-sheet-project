@@ -16,17 +16,7 @@ import { Character, SCHEMA_VERSION, inspectDocument } from '../app/js/model.js';
 import { MIGRATIONS, migrateDocument, migrationPath, readableSchema } from '../app/js/model/migrations.js';
 import { RULE_CORRECTIONS } from '../app/js/rules.js';
 import { PUBLIC_FIXTURES } from './fixtures.mjs';
-
-let pass = 0;
-let fail = 0;
-
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
+import { check, finish } from './check.mjs';
 
 const threw = (fn) => {
   try { fn(); return null; } catch (err) { return err; }
@@ -219,5 +209,4 @@ for (const [file, [shape, isShape]] of Object.entries(OLD)) {
   }
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

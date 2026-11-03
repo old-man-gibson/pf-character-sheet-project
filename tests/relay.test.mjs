@@ -9,18 +9,12 @@
  *  Run: node tests/relay.test.mjs */
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { checkWith, finish } from './check.mjs';
 
 const { RelayCore, relayRequest, validMember } = await import(pathToFileURL(resolve('functions/api/c/relay.js')).href);
 
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`FAIL ${label}\n  expected ${JSON.stringify(expected)}\n  got      ${JSON.stringify(actual)}`);
-  }
-};
+const check = checkWith((label, actual, expected) =>
+  `FAIL ${label}\n  expected ${JSON.stringify(expected)}\n  got      ${JSON.stringify(actual)}`);
 
 function fakeStorage() {
   const m = new Map();
@@ -156,5 +150,4 @@ console.log('\nthe Worker routes the relay calls');
   void api;
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

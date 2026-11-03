@@ -9,19 +9,11 @@ import {
   trackPos, trackBand, dyingFraction,
   contrastRatio, readableOn,
 } from '../app/js/tracker-style.js';
+import { check, pass, fail, finish } from './check.mjs';
 
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
 const near = (label, actual, expected, eps = 1e-6) => {
-  if (Math.abs(actual - expected) <= eps) pass++;
-  else { fail++; console.log(`  FAIL ${label}: expected ~${expected}, got ${actual}`); }
+  if (Math.abs(actual - expected) <= eps) pass();
+  else fail(`  FAIL ${label}: expected ~${expected}, got ${actual}`);
 };
 
 console.log('palette');
@@ -374,5 +366,4 @@ console.log('readable colour -- a hue a player picked, made legible where it is 
   check('an unreadable background is not guessed at', readableOn('#f07f3c', 'nope'), '#f07f3c');
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

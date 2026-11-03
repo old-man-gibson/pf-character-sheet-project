@@ -5,10 +5,10 @@
 import { forgeToPack, plainText } from '../tools/forge-pack.mjs';
 import { inspectExtension, normalizeExtension } from '../app/js/extensions.js';
 import { setFeatCatalogue, featEntry, setSpellCatalogue, spellEntry, setReferenceCatalogue, referenceEntry } from '../app/js/model/subsystems/catalogues.js';
+import { pass, fail, summary, finish } from './check.mjs';
 
-let pass = 0;
-let fail = 0;
-const ok = (cond, what) => { if (cond) pass++; else { fail++; console.error(`FAIL: ${what}`); } };
+// The Forge's own failure line, on stderr.
+const ok = (cond, what) => { if (cond) pass(); else { fail(); console.error(`FAIL: ${what}`); } };
 const eq = (a, b, what) => ok(JSON.stringify(a) === JSON.stringify(b), `${what}\n  got      ${JSON.stringify(a)}\n  expected ${JSON.stringify(b)}`);
 
 const entry = (id, type, name, fields = {}, body = '', parent = '', tags = []) => ({ id, type, name, parent, tags, fields, body });
@@ -108,5 +108,4 @@ ok(!referenceEntry('Aerial Impaler'), 'a maneuver under a discipline is not doub
   ok(kin.provides.catalogues.catalogues.find((g) => g.kind === 'element')?.entries[0].fields.some(([l, v]) => l === 'Class skills' && v === 'Fly, Perception'), 'the element itself is a reference entry with its cells');
 }
 
-console.log(`forge-pack: ${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish(`forge-pack: ${summary()}`);

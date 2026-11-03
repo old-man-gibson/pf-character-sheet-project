@@ -28,17 +28,7 @@ import { convertPack, liftClassAccess } from '../tools/veils-to-table.mjs';
 import { isBasePick } from '../app/js/rules.js';
 import { splitBaseAbilities } from '../app/js/paste-import.js';
 import { blankDocument } from '../app/js/convert.js';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
-const ok = (label, cond) => { if (cond) pass++; else { fail++; console.log(`  FAIL ${label}`); } };
+import { check, ok, finish } from './check.mjs';
 
 /** A Storage the tests own. */
 const fakeStorage = () => {
@@ -2130,5 +2120,4 @@ console.log('library -- every local pack and the switches as one file, imported 
   check('not a library, no plan', planLibrary({ format: 'x' }).add, []);
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

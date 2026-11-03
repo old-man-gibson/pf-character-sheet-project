@@ -13,16 +13,8 @@ import { Character, blankClassRow } from '../app/js/model.js';
 import { fixtureIds, loadCharacter } from './fixtures.mjs';
 import { hasTokens } from '../app/js/inline.js';
 import { mythWeaversBackup, mwSkillName, textWidth, MW_CELLS, FEAT_COLUMNS } from '../app/js/myth-weavers.js';
+import { check, finish } from './check.mjs';
 
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
 const n = (f, k) => Number(f[k]) || 0;
 const spellNames = (f) => Array.from({ length: 132 }, (_, i) => f[`Spell${String(i + 1).padStart(2, '0')}`]).filter(Boolean);
 
@@ -158,5 +150,4 @@ console.log('\nan invented character: feat slots, class columns and Spells & Pow
 console.log('\nthe roster');
 for (const id of fixtureIds()) sweep(id, new Character(loadCharacter(id)));
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

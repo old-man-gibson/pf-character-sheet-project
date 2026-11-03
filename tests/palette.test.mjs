@@ -17,16 +17,8 @@ import { blankDocument } from '../app/js/convert.js';
 import { Character } from '../app/js/model.js';
 import { buildIndex, searchIndex, kindLabel } from '../app/js/ui/palette.js';
 import { hasFixtures, fixtureIds, loadCharacter } from './fixtures.mjs';
+import { check, finish } from './check.mjs';
 
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
 const ok = (label, actual) => check(label, !!actual, true);
 
 /** The tab list the element passes in, as far as these tests care. */
@@ -228,5 +220,4 @@ if (hasFixtures()) {
   }
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

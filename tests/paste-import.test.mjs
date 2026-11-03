@@ -7,17 +7,7 @@ import {
   SPHERE_KIND,
 } from '../app/js/paste-import.js';
 import { TEXT_STEPS, cleanText } from '../app/js/text.js';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
-const ok = (label, cond) => { if (cond) pass++; else { fail++; console.log(`  FAIL ${label}`); } };
+import { check, ok, finish } from './check.mjs';
 
 /* Compact samples in the shapes the sites copy as. Structure is what matters,
  * so the rules text is abbreviated. */
@@ -1895,5 +1885,4 @@ console.log('the clean-up both importers share');
     'Str +2, AC -1, bold');
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

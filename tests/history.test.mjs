@@ -7,20 +7,7 @@ import {
   countChanges, pack, unpack, evictable, workingKey, AUTO_KEEP, SNAPSHOT_EVERY,
 } from '../app/js/history.js';
 import { Character, SCHEMA_VERSION } from '../app/js/model.js';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
-const ok = (label, cond) => {
-  if (cond) pass++;
-  else { fail++; console.log(`  FAIL ${label}`); }
-};
+import { check, ok, finish } from './check.mjs';
 
 const doc = loadCharacter;
 // The checks against real characters need the private fixtures (see fixtures.mjs).
@@ -268,5 +255,4 @@ check('the working key is the one the app already used',
 ok('five snapshots deep', AUTO_KEEP === 5);
 ok('a snapshot every twenty changes', SNAPSHOT_EVERY === 20);
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

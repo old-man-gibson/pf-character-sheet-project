@@ -2,16 +2,7 @@
  *  fake sessionStorage with a size limit. No fixtures, no DOM.
  *  Run: node tests/undo-store.test.mjs */
 import { readUndo, writeUndo } from '../app/js/undo-store.js';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
+import { check, finish } from './check.mjs';
 
 /** A sessionStorage that holds at most `limit` characters, and counts its writes. */
 function fakeSession(limit = Infinity) {
@@ -71,5 +62,4 @@ console.log('then the oldest snapshots, keeping play actions');
   check('one try per dropped entry and no more', session.writes, 1 + (20 - kept.undo.length));
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

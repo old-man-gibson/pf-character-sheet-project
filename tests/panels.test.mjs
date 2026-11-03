@@ -51,16 +51,8 @@ import { hasTokens } from '../app/js/inline.js';
 import { hasLink } from '../app/js/ui/links.js';
 import { portraitCss, portraitFrame, portraitHtml } from '../app/js/ui/html.js';
 import { setPath } from '../app/js/model/util.js';
+import { check, pass, fail, finish } from './check.mjs';
 
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
 const ok = (label, actual) => check(label, !!actual, true);
 
 /**
@@ -194,20 +186,17 @@ function renders(who, name, draw, model) {
   try {
     html = draw(model);
   } catch (err) {
-    fail++;
-    console.log(`  FAIL ${who} — ${name} threw ${err.constructor.name}: ${err.message.slice(0, 90)}`);
+    fail(`  FAIL ${who} — ${name} threw ${err.constructor.name}: ${err.message.slice(0, 90)}`);
     return null;
   }
   if (typeof html !== 'string') {
-    fail++;
-    console.log(`  FAIL ${who} — ${name} returned ${typeof html}, not markup`);
+    fail(`  FAIL ${who} — ${name} returned ${typeof html}, not markup`);
     return null;
   }
   // Every gold badge is forwardedBadge's, which is what makes it open the
   // hover panel; one written by hand has the class and not the names.
   if (/<span class="fwd[^"]*"(?! data-fwd=)/.test(html)) {
-    fail++;
-    console.log(`  FAIL ${who} — ${name} draws a forwarded-bonus badge by hand`);
+    fail(`  FAIL ${who} — ${name} draws a forwarded-bonus badge by hand`);
     return html;
   }
   // Every control that only changes how the sheet is read says so with
@@ -217,8 +206,7 @@ function renders(who, name, draw, model) {
   const viewless = (html.match(/<button[^>]*>/g) || []).filter((b) => !/sdata-view[s=>]/.test(b)
     && /sdata-(?:collapse|tab|gearopen|mopen|mclose|textopen|deck-view|copy|cfpeek|ladderfocus|buildcol|veilcols|cells)=/.test(b));
   if (viewless.length) {
-    fail++;
-    console.log(`  FAIL ${who} — ${name} has a view control a reader would lose: ${viewless[0].slice(0, 120)}`);
+    fail(`  FAIL ${who} — ${name} has a view control a reader would lose: ${viewless[0].slice(0, 120)}`);
     return html;
   }
   // A list dropped into a template without `.join('')` comes out with a
@@ -229,8 +217,7 @@ function renders(who, name, draw, model) {
   // comma follows its word and is followed by a space or a line break.
   const stray = /<\/[a-z0-9]+>(?:,<|\s*\n\s*,\s*<)/i.exec(html);
   if (stray) {
-    fail++;
-    console.log(`  FAIL ${who} — ${name} has a stray comma between tags (a list not joined): `
+    fail(`  FAIL ${who} — ${name} has a stray comma between tags (a list not joined): `
       + `${html.slice(Math.max(0, stray.index - 80), stray.index + 40).replace(/\s+/g, ' ')}`);
     return html;
   }
@@ -239,16 +226,14 @@ function renders(who, name, draw, model) {
   const bare = (html.match(/<button[^>]*\sdata-remove(?:-armed)?="[^"]*"[^>]*>/g) || [])
     .filter((b) => !/aria-label="Remove/.test(b));
   if (bare.length) {
-    fail++;
-    console.log(`  FAIL ${who} — ${name} draws a × by hand: ${bare[0].slice(0, 120)}`);
+    fail(`  FAIL ${who} — ${name} draws a × by hand: ${bare[0].slice(0, 120)}`);
     return html;
   }
   // Every ↗ is fields.linkField's, which opens only an http or https address
   // and tells the page it opens nothing about the sheet.
   const arrow = /<a\b(?![^>]*\bclass="weblink")[^>]*>↗<\/a>/.exec(html);
   if (arrow) {
-    fail++;
-    console.log(`  FAIL ${who} — ${name} draws a link's ↗ by hand: ${arrow[0].slice(0, 120)}`);
+    fail(`  FAIL ${who} — ${name} draws a link's ↗ by hand: ${arrow[0].slice(0, 120)}`);
     return html;
   }
   // Every cell of a workbook grid is rows.gridCell's, which draws one that
@@ -259,8 +244,7 @@ function renders(who, name, draw, model) {
     return hasTokens(value) || hasLink(value);
   });
   if (sourceBox) {
-    fail++;
-    console.log(`  FAIL ${who} — ${name} draws a grid cell with a formula or an address as a box: ${sourceBox.slice(0, 120)}`);
+    fail(`  FAIL ${who} — ${name} draws a grid cell with a formula or an address as a box: ${sourceBox.slice(0, 120)}`);
     return html;
   }
   // Every checkbox sits in a label (`rows.itemCheck`, `fields.check`): a
@@ -268,11 +252,10 @@ function renders(who, name, draw, model) {
   // stops at the 24px it is drawn.
   const loose = looseCheckbox(html);
   if (loose) {
-    fail++;
-    console.log(`  FAIL ${who} — ${name} has a checkbox outside a label: ${loose.slice(0, 120)}`);
+    fail(`  FAIL ${who} — ${name} has a checkbox outside a label: ${loose.slice(0, 120)}`);
     return html;
   }
-  pass++;
+  pass();
   return html;
 }
 
@@ -310,8 +293,7 @@ const sweep = (who, model) => {
     const html = renders(`${who} (folds shut)`, name, draw, model);
     // A fold that ate its own header is the failure this is here to catch.
     if (html && html.includes('class="panel') && !/<h[34]/.test(html) && html.length > 40) {
-      fail++;
-      console.log(`  FAIL ${who} — ${name} collapsed to a body with no heading`);
+      fail(`  FAIL ${who} — ${name} collapsed to a body with no heading`);
     }
   }
   model.data.uiPrefs.collapsed = realCollapsed;
@@ -354,9 +336,8 @@ console.log('a casting companion draws its pool and its tradition');
     ['its last open feat slot', 'data-item="conjured.0.feats|3|name"'], ['a slot’s Hit Die', 'placeholder="7 HD"'],
     ['the bonus feats box', 'data-set="conjured.0.bonusFeats"']]) {
     if (html && !html.includes(needle)) {
-      fail++;
-      console.log(`  FAIL a casting companion — the Casting panel does not draw ${what}`);
-    } else pass++;
+      fail(`  FAIL a casting companion — the Casting panel does not draw ${what}`);
+    } else pass();
   }
 }
 
@@ -388,9 +369,8 @@ console.log('a conjured companion\'s talents are drawn in two groups');
       && !shape.includes('&quot;group&quot;')],
   ]) {
     if (!ok) {
-      fail++;
-      console.log(`  FAIL talent groups — ${what}`);
-    } else pass++;
+      fail(`  FAIL talent groups — ${what}`);
+    } else pass();
   }
 }
 
@@ -410,9 +390,8 @@ console.log('a tradition\'s boons are split in a table of their own');
       && /<td class="steps"><input[^>]*\|essence\|[\s\S]*?<\/td>\s*<td class="gives total">/.test(table)],
   ]) {
     if (!ok) {
-      fail++;
-      console.log(`  FAIL boon split — ${what}`);
-    } else pass++;
+      fail(`  FAIL boon split — ${what}`);
+    } else pass();
   }
 }
 
@@ -429,15 +408,13 @@ console.log('a minionmancer\'s tab draws its chips and the companion selected');
   const first = renders('a minionmancer', 'Eidolon (first selected)',
     (x) => subsystems.renderCompanionPanel(x, {}, 'eidolon'), m);
   if (first && !(first.includes('Alpha') && first.includes('Brutus') && first.includes('companion-select'))) {
-    fail++;
-    console.log('  FAIL a minionmancer — the chip strip is missing a companion');
+    fail('  FAIL a minionmancer — the chip strip is missing a companion');
   }
   m.data.uiPrefs.activeCompanion = { eidolon: 1 };
   const second = renders('a minionmancer', 'Eidolon (second selected)',
     (x) => subsystems.renderCompanionPanel(x, {}, 'eidolon'), m);
   if (second && !(second.includes('>eidolon2<') && second.includes('eidolon.1.name') && !second.includes('companion.'))) {
-    fail++;
-    console.log('  FAIL a minionmancer — the second companion does not draw under its own names');
+    fail('  FAIL a minionmancer — the second companion does not draw under its own names');
   }
 }
 
@@ -495,11 +472,10 @@ for (const [what, text] of [
   try {
     html = renderedProse(proseModel, text);
   } catch (err) {
-    fail++;
-    console.log(`  FAIL ${what} threw ${err.constructor.name}: ${err.message.slice(0, 60)}`);
+    fail(`  FAIL ${what} threw ${err.constructor.name}: ${err.message.slice(0, 60)}`);
     continue;
   }
-  pass++;
+  pass();
   check(`${what} renders something`, html.length > 0, true);
 }
 // The tooltip is the part the shadowed helper was reaching for, so its
@@ -510,8 +486,7 @@ const drew = (label, draw) => {
   try {
     return draw();
   } catch (err) {
-    fail++;
-    console.log(`  FAIL ${label} threw ${err.constructor.name}: ${err.message.slice(0, 60)}`);
+    fail(`  FAIL ${label} threw ${err.constructor.name}: ${err.message.slice(0, 60)}`);
     return '';
   }
 };
@@ -1467,5 +1442,4 @@ console.log('\na name with a __proto__ part defines nothing and writes nothing')
   setPath({ a: {} }, 'a.constructor.prototype.polluted', 1);
   check('a binding path through __proto__ or constructor writes nothing', keys(), before);
 }
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

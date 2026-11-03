@@ -11,18 +11,12 @@
  *  Run: node tests/publish-api.test.mjs */
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { checkWith, finish, summary } from './check.mjs';
 
 const api = await import(pathToFileURL(resolve('functions/api/c/[[path]].js')).href);
 
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`FAIL ${label}\n  expected ${JSON.stringify(expected)}\n  got      ${JSON.stringify(actual)}`);
-  }
-};
+const check = checkWith((label, actual, expected) =>
+  `FAIL ${label}\n  expected ${JSON.stringify(expected)}\n  got      ${JSON.stringify(actual)}`);
 
 /** The three KV calls the handlers make. */
 function fakeKv() {
@@ -151,5 +145,4 @@ check('worker: unpublish goes through', (await wfetch('DELETE', `/api/c/${viaWor
 check('worker: everything else is an asset', await (await wfetch('GET', '/app/published.html')).text(), 'asset /app/published.html');
 check('worker: /api alone is an asset miss', await (await wfetch('GET', '/api')).text(), 'asset /api');
 
-console.log(`${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish(summary());

@@ -4,16 +4,7 @@
  *  Run: node tests/doc-store.test.mjs */
 import { DOC_DB, DOC_STORE, docKey, documentStore } from '../app/js/doc-store.js';
 import { fakeIndexedDb } from './fake-indexeddb.mjs';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
+import { check, finish } from './check.mjs';
 
 /** A Storage over a Map; `full` names keys whose writes throw as a full browser does. */
 function fakeStorage(full = new Set()) {
@@ -149,5 +140,4 @@ console.log('a database some other script created without the store');
   check('so localStorage is used', storage.getItem(docKey('a')), '{}');
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

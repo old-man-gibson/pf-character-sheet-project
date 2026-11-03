@@ -1,27 +1,18 @@
 /** Tests for the sandboxed formula engine. Run: node tests/formula.test.mjs */
 import { evaluateFormula, analyse, validate, resolvePath, NameIndex, FormulaError } from '../app/js/formula.js';
+import { checkWith, pass, fail, finish } from './check.mjs';
 
-let pass = 0;
-let fail = 0;
-
-function check(label, actual, expected) {
-  const ok = JSON.stringify(actual) === JSON.stringify(expected);
-  if (ok) { pass++; } else {
-    fail++;
-    console.log(`  FAIL ${label}\n       expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-}
+const check = checkWith((label, actual, expected) =>
+  `  FAIL ${label}\n       expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
 
 function throws(label, fn, matcher) {
   try {
     fn();
-    fail++;
-    console.log(`  FAIL ${label} -- expected a throw`);
+    fail(`  FAIL ${label} -- expected a throw`);
   } catch (err) {
     if (matcher && !String(err.message).match(matcher)) {
-      fail++;
-      console.log(`  FAIL ${label} -- message "${err.message}" did not match ${matcher}`);
-    } else pass++;
+      fail(`  FAIL ${label} -- message "${err.message}" did not match ${matcher}`);
+    } else pass();
   }
 }
 
@@ -184,5 +175,4 @@ check('valid', validate('level + bab', known).ok, true);
 check('invalid name', validate('level + wat', known).ok, false);
 check('invalid reports', validate('level + wat', known).error, 'Unknown value(s): wat');
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

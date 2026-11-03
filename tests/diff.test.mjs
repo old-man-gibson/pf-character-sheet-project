@@ -17,17 +17,7 @@ import {
   Character, AUDIT_GROUPS, AUDIT_VERDICTS, auditSummary, changesByGroup, compareRevisions,
 } from '../app/js/model.js';
 import { fixtureIds, hasFixtures, loadCharacter } from './fixtures.mjs';
-
-let pass = 0;
-let fail = 0;
-
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
+import { check, finish } from './check.mjs';
 
 if (!hasFixtures()) {
   console.log('diff: skipped -- no roster to read.');
@@ -181,5 +171,4 @@ check('every change carries a verdict the view knows',
 check('the tally adds up to the changes',
   AUDIT_VERDICTS.reduce((n, v) => n + dex.counts[v], 0), dex.counts.total);
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

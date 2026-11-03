@@ -11,16 +11,7 @@ import {
   headerRow, columnCount, headingLabels, tableKey, keyedTables,
   setWidths, clearWidths, applyColumnWidths,
 } from '../app/js/ui/column-widths.js';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
+import { check, finish } from './check.mjs';
 
 /* ---- a stand-in DOM, just wide enough ---- */
 const el = (tag, props = {}) => {
@@ -153,5 +144,4 @@ console.log('apply');
   check('MIN_COLUMN is a sane floor', MIN_COLUMN >= 20 && MIN_COLUMN <= 40, true);
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

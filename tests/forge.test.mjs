@@ -5,10 +5,10 @@
 import { importPack, forgeToPack } from '../forge/js/pack.js';
 import { forgeStore } from '../forge/js/store.js';
 import { TYPES, GROUPS, newEntry, linksIn, sortEntries, normalizeCustomTypes, applyCustomTypes, plainId, withPlainIds } from '../forge/js/schema.js';
+import { pass, fail, summary, finish } from './check.mjs';
 
-let pass = 0;
-let fail = 0;
-const ok = (cond, what) => { if (cond) pass++; else { fail++; console.error(`FAIL: ${what}`); } };
+// The Forge's own failure line, on stderr.
+const ok = (cond, what) => { if (cond) pass(); else { fail(); console.error(`FAIL: ${what}`); } };
 const eq = (a, b, what) => ok(JSON.stringify(a) === JSON.stringify(b), `${what}\n  got      ${JSON.stringify(a)}\n  expected ${JSON.stringify(b)}`);
 
 const entry = (id, type, name, fields = {}, body = '', parent = '', tags = []) => ({ ...newEntry(type, name, parent), id, tags, fields, body });
@@ -196,5 +196,4 @@ eq(Object.keys(TYPES).length, builtinCount, 'none applied is the built-in set');
   eq(importWildTalents(wiki, got).length, 0, 'importing the list again adds nothing');
 }
 
-console.log(`forge: ${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish(`forge: ${summary()}`);

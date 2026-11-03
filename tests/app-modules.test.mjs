@@ -11,9 +11,7 @@
 import { readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
-
-let pass = 0;
-let fail = 0;
+import { pass, fail, summary, finish } from './check.mjs';
 
 const ROOTS = ['app/js', 'forge/js', 'gm-module/planner', 'gm-module/screen'];
 const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory()
@@ -27,14 +25,11 @@ console.warn = () => {};
 for (const file of files) {
   try {
     await import(pathToFileURL(file).href);
-    pass++;
+    pass();
   } catch (err) {
-    if (err instanceof SyntaxError) {
-      fail++;
-      console.log(`  FAIL ${relative('.', file)}: ${err.message}`);
-    } else pass++;
+    if (err instanceof SyntaxError) fail(`  FAIL ${relative('.', file)}: ${err.message}`);
+    else pass();
   }
 }
 
-console.log(`\n${pass} passed, ${fail} failed (${files.length} modules)`);
-process.exit(fail ? 1 : 0);
+finish(`\n${summary()} (${files.length} modules)`);

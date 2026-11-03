@@ -28,17 +28,7 @@ import { catalogueFace } from '../app/js/ui/html.js';
 import { itemText } from '../app/js/ui/rows.js';
 import { datalistOptions } from '../app/js/ui/datalist.js';
 import { text as fieldText } from '../app/js/ui/fields.js';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
-const ok = (label, cond) => { if (cond) pass++; else { fail++; console.log(`  FAIL ${label}`); } };
+import { check, ok, finish } from './check.mjs';
 
 /* ---------------- the document a scraper writes ---------------- */
 
@@ -475,5 +465,4 @@ console.log('a veil applied from a block');
     JSON.stringify(alone.toJSON()).includes(TEXT));
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

@@ -6,13 +6,7 @@
  *
  *  Run: node tests/wikitext.test.mjs */
 import { unwrapTemplates } from '../tools/wikitext.mjs';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else { fail++; console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`); }
-};
+import { check, finish } from './check.mjs';
 
 console.log('link templates');
 check('the default is the last argument, which is the label', unwrapTemplates('cast {{AON|Spell|Magic Missile|magic missiles}}'), 'cast magic missiles');
@@ -27,5 +21,4 @@ check('the blasts an infusion goes with are a labelled line, each blast named in
   'Associated Blasts: Earth Blast, Wood Blast\n\nYour blasts are sharp.');
 check('furniture leaves nothing', unwrapTemplates('{{Header AON|x.aspx|X}}Text'), 'Text');
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

@@ -17,16 +17,7 @@ import { HERO_POINTS_ID, MYTHIC_POWER_ID } from '../app/js/model/trackers.js';
 import { abpDefence, tierAtLevel } from '../app/js/rules.js';
 import { fixtureIds, loadCharacter } from './fixtures.mjs';
 import { renderStatsPanel } from '../app/js/ui/panels/stats.js';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
+import { check, finish, summary } from './check.mjs';
 
 /** A value as text with its keys sorted, so the order a reload writes them in does not count. */
 const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x)
@@ -718,5 +709,4 @@ console.log('\na new character opens on its rules first');
   check('the flag is not saved once continued', 'rulesFirst' in JSON.parse(JSON.stringify(c.toJSON())).uiPrefs, false);
 }
 
-console.log(`${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish(summary());

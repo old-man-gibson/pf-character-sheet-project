@@ -32,16 +32,7 @@ import { renderSkillsPanel } from '../app/js/ui/panels/skills.js';
 import * as statBlock from '../app/js/monster/panel.js';
 import { emptyMonster } from '../app/js/monster/block.js';
 import { normalizeStyle } from '../app/js/tracker-style.js';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
+import { check, pass, fail, finish } from './check.mjs';
 
 /**
  * The view state a panel is drawn with: everything shut, as a tab opens --
@@ -147,11 +138,10 @@ const htmlEscape = (s) => String(s).replace(/[&<>"']/g, (c) => (
 function checkPlace(model, place, label) {
   const entry = formulaPlace(model, place);
   if (!entry) {
-    fail++;
-    console.log(`  FAIL ${label} (${place}): no place to go to`);
+    fail(`  FAIL ${label} (${place}): no place to go to`);
     return;
   }
-  pass++;
+  pass();
   const draw = RENDER[entry.tab];
   if (!draw) return;       // drawn by the element itself; the browser checks it
   // Every place starts from the character as it is, and leaves it so: what
@@ -168,9 +158,8 @@ function checkPlace(model, place, label) {
   prefs.activeCompanion = saved.activeCompanion;
   weapons.forEach((w, i) => { if (w) w.collapsed = saved.weaponFolds[i]; });
   if (reached === null) return;
-  if (reached) { pass++; return; }
-  fail++;
-  console.log(`  FAIL ${label} (${place}): ${entry.tab} does not draw ${JSON.stringify(entry.sel)}`
+  if (reached) { pass(); return; }
+  fail(`  FAIL ${label} (${place}): ${entry.tab} does not draw ${JSON.stringify(entry.sel)}`
     + `${entry.open ? ` even after ${JSON.stringify(entry.open)}` : ''}`);
 }
 
@@ -199,8 +188,7 @@ function reach(model, entry, draw, label, place) {
       if (drawsField(html, entry)) return true;
     }
   } catch (err) {
-    fail++;
-    console.log(`  FAIL ${label} (${place}): the ${entry.tab} tab threw ${err.message.slice(0, 80)}`);
+    fail(`  FAIL ${label} (${place}): the ${entry.tab} tab threw ${err.message.slice(0, 80)}`);
     return null;
   }
   return false;
@@ -419,5 +407,4 @@ console.log('a place nobody can go to is not offered');
   check('nor does a blank one', formulaPlace(c, ''), null);
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

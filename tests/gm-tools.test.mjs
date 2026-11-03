@@ -14,16 +14,10 @@ import { isLocalRequest } from '../gm-module/lib/http.mjs';
 import { loadGmTools, mountGmTools, registeredFolders } from '../gm-module/lib/gm-tools.mjs';
 import { gmToolsList, menuEntries } from '../app/js/gm-tools.js';
 import { newPlan } from '../gm-module/planner/plan.js';
+import { checkWith, finish } from './check.mjs';
 
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`FAIL ${label}\n  expected ${JSON.stringify(expected)}\n  got      ${JSON.stringify(actual)}`);
-  }
-};
+const check = checkWith((label, actual, expected) =>
+  `FAIL ${label}\n  expected ${JSON.stringify(expected)}\n  got      ${JSON.stringify(actual)}`);
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gm-tools-'));
 const write = (rel, text) => {
@@ -196,5 +190,4 @@ try {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

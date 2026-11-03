@@ -16,16 +16,7 @@ import { CHARACTERS_DIR, characterPath, workbookPath, fixtureIds, requireFixture
 import { convertWorkbook, indexEntry, warningsFor, slug, blankDocument, weaponColumns } from '../app/js/convert.js';
 import { inspectDocument, SCHEMA_VERSION, Character } from '../app/js/model.js';
 import { STANDARD_SKILLS } from '../app/js/rules.js';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
+import { check, pass, fail, tally, finish } from './check.mjs';
 
 // Needs no fixture, so it runs before the check that stands the rest down.
 console.log('weapon columns are found by their labels, not their places');
@@ -60,10 +51,7 @@ console.log('weapon columns are found by their labels, not their places');
 
   check('with no labels at all the template columns stand', pick(weaponColumns(block([], [], []), 'Equipment', 1)), [9, 10, 11, 12, 13, 9, 13, 2, 10]);
 }
-if (fail) {
-  console.log(`\n${pass} passed, ${fail} failed`);
-  process.exit(1);
-}
+if (tally.fail) finish();
 
 requireFixtures(['saburo'], 'convert.test');
 const IDS = fixtureIds();
@@ -117,11 +105,10 @@ for (const id of IDS) {
 
   const diff = differences(actual, expected);
   if (diff.length) {
-    fail++;
-    console.log(`  FAIL ${id}: ${diff.length > 12 ? 'more than 12' : diff.length} differences`);
+    fail(`  FAIL ${id}: ${diff.length > 12 ? 'more than 12' : diff.length} differences`);
     for (const d of diff) console.log(`         ${d}`);
   } else {
-    pass++;
+    pass();
   }
 }
 
@@ -260,5 +247,4 @@ console.log('a blank character is the thinnest converted document there is');
   check('and it round-trips through export', [back.data.skills[acro].bonus, back.data.defenses.ac, back.data.identity.name], [7, 12, 'Kaito']);
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

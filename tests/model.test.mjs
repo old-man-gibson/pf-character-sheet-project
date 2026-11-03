@@ -93,16 +93,7 @@ import * as sessionPanels from '../app/js/ui/panels/session.js';
 import { formulaLookup, formulaDrawerResults } from '../app/js/ui/formula-drawer.js';
 import * as gearPanels from '../app/js/ui/panels/gear.js';
 import { talentPopHtml } from '../app/js/ui/talents.js';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
+import { check, pass, fail, tally, summary, finish } from './check.mjs';
 
 // The shared tables -- the discipline catalogue, the casting and manifesting
 // tables, the deck manipulations, the iron chef's ingredients -- are what a
@@ -4529,10 +4520,10 @@ console.log('only what the player wrote counts as a change');
 
 const missing = missingCharacters(REAL);
 if (missing.length) {
-console.log(`\n${pass} passed, ${fail} failed`);
+  console.log(`\n${summary()}`);
   console.log(`\nmodel.test: the roster sweeps above ran against ${CHARACTERS_DIR}.`);
   console.log(`  The rest of the suite is written against the real characters and is skipped -- ${missingNote(missing)}`);
-  process.exit(fail ? 1 : 0);
+  process.exit(tally.fail ? 1 : 0);
 }
 
 console.log('live recalculation moves the right numbers by the right amount');
@@ -4706,9 +4697,8 @@ console.log('carry capacity follows Strength');
   const c = new Character(load('bryva'));
   const light0 = c.data.carry.light;
   c.setBuild('str', 'untyped', 10);
-  if (!(c.data.carry.light > light0)) {
-    fail++; console.log('  FAIL carry capacity did not rise with Str');
-  } else pass++;
+  if (!(c.data.carry.light > light0)) fail('  FAIL carry capacity did not rise with Str');
+  else pass();
   // The heavy load is the table's figure; light and medium are a third and
   // two thirds of it, rounded down -- 33 / 66 / 100 at Str 10, not 99.
   const k = c.data.carry;
@@ -4831,7 +4821,7 @@ console.log('audit view for admins/inspectors');
   check('audit status error', broken.status, 'error');
 
   const sheetSeeded = c.trackers.filter((t) => t.source === 'sheet');
-  if (sheetSeeded.length === 0) { fail++; console.log('  FAIL sheet resources were not seeded'); } else pass++;
+  if (sheetSeeded.length === 0) fail('  FAIL sheet resources were not seeded'); else pass();
 }
 
 console.log('ability build reproduces the Stats tab');
@@ -5024,9 +5014,9 @@ console.log('scope exposes usable names');
   const c = shared('angou');
   const names = c.scopeNames();
   for (const want of ['level', 'bab', 'str.mod', 'con.mod', 'wis.tempMod', 'saves.will', 'ac.total', 'attack.melee', 'mythic.tier']) {
-    if (!names.includes(want)) { fail++; console.log(`  FAIL scope missing "${want}"`); } else pass++;
+    if (!names.includes(want)) fail(`  FAIL scope missing "${want}"`); else pass();
   }
-  if (!names.some((n) => n.startsWith('skill.'))) { fail++; console.log('  FAIL no skills in scope'); } else pass++;
+  if (!names.some((n) => n.startsWith('skill.'))) fail('  FAIL no skills in scope'); else pass();
 }
 
 console.log('ABP levels 11 and 12 follow the level 6 and 7 picks');
@@ -5226,7 +5216,7 @@ console.log('list editing');
   check('weapon field edited', c.data.weapons[0].bonus, 5);
 
   // feat groups survive normalisation and stay editable
-  if (!Array.isArray(c.data.featGroups)) { fail++; console.log('  FAIL featGroups not normalised'); } else pass++;
+  if (!Array.isArray(c.data.featGroups)) fail('  FAIL featGroups not normalised'); else pass();
   const g0 = c.data.featGroups.length;
   c.listAdd('featGroups', { name: 'Story Feats', entries: [] });
   check('feat group added', c.data.featGroups.length, g0 + 1);
@@ -5869,7 +5859,7 @@ console.log('editing flows into derived stats');
   check('size lowers AC', c.data.defenses.ac, ac1 - 1);
   check('size raises CMD', c.data.defenses.cmd, cmd0 + 1);
   check('and lowers melee attack, as it does AC', c.data.attack.totalMelee, melee0 - 1);
-  if (!(c.data.carry.light > light0)) { fail++; console.log('  FAIL size did not change carry capacity'); } else pass++;
+  if (!(c.data.carry.light > light0)) fail('  FAIL size did not change carry capacity'); else pass();
 }
 
 console.log('spheres training reproduces the sheet');
@@ -14425,5 +14415,4 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   check('a GM\'s cast is the member\'s cast', remotePlayArg('cast?mode=big&sp=1', cc.id), `cast?mode=big&sp=1&who=${cc.id}`);
   check('even with no argument, and whoever the page named', [remotePlayArg('', cc.id), remotePlayArg('ongoing?who=', cc.id)], [`cast?who=${cc.id}`, `ongoing?who=${cc.id}`]);
 }
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+finish();

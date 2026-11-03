@@ -8,16 +8,7 @@ import {
 import { blankDocument } from '../app/js/convert.js';
 import { slotSpend } from '../app/js/ui/panels/subsystems.js';
 import { meterVisual, poolStepper, trackerLine } from '../app/js/ui/panels/trackers.js';
-
-let pass = 0;
-let fail = 0;
-const check = (label, actual, expected) => {
-  if (JSON.stringify(actual) === JSON.stringify(expected)) pass++;
-  else {
-    fail++;
-    console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
-};
+import { check, finish } from './check.mjs';
 
 const fresh = () => new Character(blankDocument({ name: 'Pools', level: 5 }));
 const labels = (c) => c.playActions.map((a) => a.label);
@@ -185,5 +176,4 @@ console.log('the controls carry the pool they spend');
     .match(/data-pool-(step|value)="pp"/g) || []).length, 3);
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exitCode = fail ? 1 : 0;
+finish();
