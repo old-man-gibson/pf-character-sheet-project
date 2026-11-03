@@ -228,6 +228,9 @@ const BREAKDOWN_GRACE = 140;
 /** The key the undo list's Clear is armed under (the view's `armedRemove`). */
 const PLAY_CLEAR_ARM = 'play-undo-clear';
 
+/** The key Unpublish is armed under, beside the share link. */
+const UNPUBLISH_ARM = 'unpublish';
+
 /** The modelled sub-systems: tabs whose visibility the ⚙ manager controls by key. */
 const MODELLED_TAB_IDS = new Set([
   'akashic', 'maneuvers', 'vancian', 'psionics', 'cardcasting', 'template',
@@ -1530,14 +1533,64 @@ export class CharacterSheetElement extends HTMLElement {
       if (!res.ok) throw new Error(answer?.error || `the server answered ${res.status}`);
       const link = { id: answer.id, token: answer.token || kept?.token || '', rev: answer.rev };
       try { localStorage.setItem(linkKey, JSON.stringify(link)); } catch { /* private window: the link still works; the next publish makes a new one */ }
-      const url = new URL('../published.html', import.meta.url);
-      url.searchParams.set('s', link.id);
-      this.#publishedLink = { url: url.href, rev: answer.rev, summary, copied: null };
+      this.#publishedLink = { url: this.#publishedUrl(link.id), rev: answer.rev, summary, copied: null };
       this.#historyNote = null;
     } catch (err) {
       this.#historyNote = `Could not publish — ${err.message.replace(/\.$/, '')}.`;
     }
     this.#renderHeader();
+  }
+
+  /** The share link for a published id. */
+  #publishedUrl(id) {
+    const url = new URL('../published.html', import.meta.url);
+    url.searchParams.set('s', id);
+    return url.href;
+  }
+
+  /** Open the share link's notice with its Unpublish armed, so the next press takes the link down. */
+  #armUnpublish() {
+    const kept = this.#readPublishLink();
+    if (!kept?.id || !kept?.token) return;
+    this.#publishedLink ??= { url: this.#publishedUrl(kept.id), rev: kept.rev, summary: '', copied: null };
+    this.#view.armedRemove = UNPUBLISH_ARM;
+    this.#renderHeader();
+    this.shadowRoot.querySelector(`[data-arm="${UNPUBLISH_ARM}"]`)?.focus();
+  }
+
+  /**
+   * Take the link down. The GM's control links go first, because the relay
+   * checks them against the publish token and that token stops opening
+   * anything once the store forgets the character. Then the published copy
+   * and its revisions are deleted. A 404 means the store already has none.
+   */
+  async #unpublish() {
+    const kept = this.#readPublishLink();
+    if (!kept?.id || !kept?.token) return;
+    const headers = { authorization: `Bearer ${kept.token}` };
+    this.#historyNote = 'Unpublishing…';
+    this.#renderHeader();
+    try {
+      for (const member of Object.keys(this.#relay.members)) {
+        await fetch(this.#relayApi(kept.id, `grant/${encodeURIComponent(member)}`), { method: 'DELETE', credentials: 'omit', headers })
+          .catch(() => null);
+      }
+      this.#relay.members = {};
+      this.#closeRelay();
+      this.#writePublishLink({ ...kept, grants: {} });
+      const res = await fetch(new URL(`../../api/c/${kept.id}`, import.meta.url), { method: 'DELETE', credentials: 'omit', headers });
+      if (res.status === 405) throw new Error('this copy of the app has no publishing server');
+      if (!res.ok && res.status !== 404) {
+        const answer = await res.json().catch(() => null);
+        throw new Error(answer?.error || `the server answered ${res.status}`);
+      }
+      try { localStorage.removeItem(this.#publishLinkKey()); } catch { /* private window */ }
+      this.#publishedLink = null;
+      this.#historyNote = 'Unpublished. The link no longer opens this character.';
+    } catch (err) {
+      this.#historyNote = `Could not unpublish — ${err.message.replace(/\.$/, '')}.`;
+    }
+    this.#render();
   }
 
   /** The share link to the clipboard, or selected where the clipboard is refused. */
@@ -3304,6 +3357,8 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.isPublished ? '' : `
         <button data-action="publish"
           title="Upload this character and get a read-only link. Publishing again updates the same link.">Publish</button>
+        ${this.#readPublishLink()?.token ? `<button data-action="unpublish" class="danger unpublish"
+          title="Delete the published copy. The link stops working for everyone who has it.">Unpublish</button>` : ''}
         <button data-action="preview-published"
           title="Open the read-only view a link shows: only the pack entries the character carries, no local packs, nothing saved">Preview published</button>
         <button data-action="import" title="Load a character this app exported, or convert a .xlsx workbook">Import…</button>
@@ -3351,6 +3406,7 @@ export class CharacterSheetElement extends HTMLElement {
           <a href="${esc(this.#publishedLink.url)}" target="_blank" rel="noopener">Open</a>
           <button data-view data-action="copy-published-link">${this.#publishedLink.copied === true ? 'Copied'
             : this.#publishedLink.copied === false ? 'Select it and copy' : 'Copy link'}</button>
+          ${this.#unpublishButton()}
           <button data-view data-action="dismiss-published-link" aria-label="Dismiss">×</button>
         </div>` : ''}
         ${this.#showHistory ? this.#historyPanel() : ''}
@@ -3379,6 +3435,15 @@ export class CharacterSheetElement extends HTMLElement {
    * action this size should never ride on one click landing an inch left of
    * History.
    */
+  /** Unpublish beside the share link: red, and it asks twice. Only where this browser holds the link's token. */
+  #unpublishButton() {
+    if (!this.#readPublishLink()?.token) return '';
+    const on = this.#view.armedRemove === UNPUBLISH_ARM;
+    return `<button class="danger unpublish${on ? ' armed' : ''}" data-action="unpublish-confirm" data-arm="${UNPUBLISH_ARM}"
+      title="${on ? 'Press again to delete the published copy' : 'Delete the published copy. The link stops working for everyone who has it.'}">${
+      on ? 'Unpublish — sure?' : 'Unpublish'}</button>`;
+  }
+
   #resetConfirmHtml() {
     const checkpoints = (this.#snapshots || []).filter((s) => s.kind === 'checkpoint').length;
     return `<div class="resetconfirm" role="alertdialog" aria-label="Confirm reset">
@@ -7685,12 +7750,7 @@ export class CharacterSheetElement extends HTMLElement {
         // The share link goes in the sheet's notes: this page when it is the
         // published view, else the link this browser last published.
         const kept = this.isPublished ? null : this.#readPublishLink();
-        let publishedUrl = this.isPublished ? location.href : null;
-        if (kept?.id) {
-          const url = new URL('../published.html', import.meta.url);
-          url.searchParams.set('s', kept.id);
-          publishedUrl = url.href;
-        }
+        const publishedUrl = kept?.id ? this.#publishedUrl(kept.id) : this.isPublished ? location.href : null;
         const { fields } = mythWeaversBackup(this.#model, { publishedUrl });
         downloadFile(`${this.#model.data.id}.mw.json`, JSON.stringify(fields, null, 1));
         break;
@@ -7700,6 +7760,13 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       case 'publish':
         this.#publish();
+        break;
+      case 'unpublish':
+        this.#armUnpublish();
+        break;
+      case 'unpublish-confirm':
+        // Reached on the second press: the first only armed it (`data-arm`).
+        this.#unpublish();
         break;
       case 'hand-over':
         this.#handOver(String(button?.dataset.member || ''));
