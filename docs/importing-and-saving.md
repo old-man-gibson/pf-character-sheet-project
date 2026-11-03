@@ -87,8 +87,8 @@ Under the hood it is not a second document shape: `blankDocument()` in
 `app/js/convert.js` runs the converter's own `build()` over a workbook whose structured
 tabs all exist and are empty, so every extractor returns its empty structure rather than
 the `null` it returns for a tab that is missing, and then fills in the seeds above. The
-result passes the same `inspectDocument` gate an import does, is stored in
-`localStorage` the same way, and shows in the picker tagged *new* rather than
+result passes the same `inspectDocument` gate an import does, is stored in the
+browser the same way, and shows in the picker tagged *new* rather than
 *imported*. Its imported AC/touch/flat-footed/CMD totals are set to the 10 the model will
 compute, so the reconciliation offsets come out at zero — a blank character reads as
 having drifted from nothing. `tests/convert.test.mjs` checks the shape, the seeds, the
@@ -109,7 +109,7 @@ the page.
 
 The workbook is read and transcribed **in the browser**. It is not uploaded, there
 is nothing to upload it to, and the file itself is discarded once its contents have
-been read; only the resulting character document is kept, in `localStorage`, exactly
+been read; only the resulting character document is kept, in the browser, exactly
 like an imported JSON. This is what makes a read-only deployment — GitHub Pages, or
 any static host — usable by testers rather than just browsable.
 
@@ -209,10 +209,14 @@ next free id. The copy starts with no history and no publish link of its own.
 The character already in the picker under the id the import would take (or under the same
 name) is the one preselected, because that is almost always the one meant.
 
-The page cannot write to `data/characters/`, so an imported character lives in
-`localStorage` and joins the picker marked *imported*, with an × to remove it. Each is
-~260 KB against a typical 5–10 MB budget, and a full store reports that rather than
-failing silently.
+The page cannot write to `data/characters/`, so an imported character lives in the
+browser and joins the picker marked *imported*, with an × to remove it. Its document is
+kept in IndexedDB, in a database of its own, and only its working sheet in
+`localStorage`, so the 5–10 MB a browser typically gives `localStorage` holds one copy
+of each character rather than two. Where there is no database the document is kept in
+`localStorage`, as it always was. A document an earlier version left in `localStorage`
+moves to the database on the next load, and leaves `localStorage` only once the database
+has it. A full store reports that rather than failing silently.
 
 **The × asks first, and can be taken back.** It opens a dialog naming the character;
 *Remove* takes it out of the picker and the banner offers **Undo**. Nothing is erased at
@@ -260,14 +264,16 @@ stacks, because a snapshot taken here would otherwise put that window's work bac
 the sheet opens on the saved version with unsaved work to resume, the stacks come back
 with the resume. The stores below are what keeps the character.
 
-Three things are kept per character, each in the store that suits it — and the
-extension packs a player has imported sit beside them, in a database of their own.
+Three things are kept per character, each in the store that suits it — and an imported
+character's document and the extension packs a player has imported sit beside them, each
+in a database of its own.
 
 | | Where | Written |
 |---|---|---|
 | The working sheet | `localStorage` | on every edit |
 | The saved version | IndexedDB | when you press **Save** |
 | Snapshots and checkpoints | IndexedDB, gzipped | every 20 changes, or on request |
+| An imported character's document | IndexedDB, in a database of its own | on import, **+ New** or **Duplicate** |
 | Imported extension packs | IndexedDB, in a database of their own | on import, edit or removal |
 
 **The sheet opens on the saved version.** That is what makes Save mean something: an
@@ -299,14 +305,17 @@ saved version and the history have the opposite shape, written on a button press
 every twenty edits but many documents deep, and there `localStorage`'s ~5 MB is the wrong
 budget. A document is ~250 KB of JSON and ~20 KB gzipped, so five snapshots and a saved
 version cost ~120 KB per character against a quota measured in hundreds of megabytes.
-Imported packs moved for the same reason and more sharply: a 4.2 MB catalogue that one
+Imported documents moved for the same reason: kept beside the working sheet, every
+character was in `localStorage` twice. Imported packs moved for the same reason and more
+sharply: a 4.2 MB catalogue that one
 Brave profile would not take in localStorage at all goes into the database with a quota in
 the gigabytes behind it. See [Extensions](extensions.md) for where a pack a *deployment*
 carries lives instead, which is nowhere — those are fetched every load and never stored.
 
 If IndexedDB is unavailable — private browsing, a blocked frame, a zero quota — there is
-no saved version and no history, and the sheet behaves as it did before any of this
-existed: edits are kept continuously and it reopens where you left off.
+no saved version and no history, imported documents are kept in `localStorage`, and the
+sheet behaves as it did before any of this existed: edits are kept continuously and it
+reopens where you left off.
 
 **If `localStorage` will not take the write either**, that fallback is gone too, and the
 sheet says so rather than letting you find out when you close the tab: a red **"Not being

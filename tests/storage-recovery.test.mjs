@@ -68,6 +68,26 @@ try {
   assert.equal(custom.writeWorking(current), true);
   assert.deepEqual(custom.readWorking().data, current);
   assert.deepEqual(custom.readRecoveries(), [], 'embedded storage keys stay isolated');
+
+  // An edit after an edit does not parse its own last write again; anything
+  // else in the slot still is, and is archived when it cannot be read.
+  rows.clear();
+  const own = historyFor('own-writes');
+  const parse = JSON.parse;
+  let parses = 0;
+  JSON.parse = (...args) => { parses++; return parse(...args); };
+  try {
+    own.writeWorking(current);
+    parses = 0;
+    own.writeWorking(current);
+    assert.equal(parses, 0, 'a write after its own write parses nothing');
+    rows.set(workingKey('own-writes'), '{written by something else');
+    own.writeWorking(current);
+    assert.ok(parses > 0, 'a copy it did not write is read before it is replaced');
+  } finally {
+    JSON.parse = parse;
+  }
+  assert.equal(own.readRecoveries()[0]?.raw, '{written by something else', 'and kept when it cannot be read');
   console.log('storage recovery: all checks passed');
 } finally {
   if (previous) Object.defineProperty(globalThis, 'localStorage', previous);

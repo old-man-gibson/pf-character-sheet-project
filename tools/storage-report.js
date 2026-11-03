@@ -15,11 +15,13 @@
  *                   is measured rather than quoted: filled with 256 KB chunks
  *                   until it throws, then every one of them removed again.
  *
- *   IndexedDB       saved characters and their snapshots (`character-sheets`)
- *                   and the packs you have imported (`character-sheet-
- *                   extensions`). Measured against a fraction of free disk
- *                   instead, which is the difference between a 4 MB catalogue
- *                   fitting and not, and why the packs moved here.
+ *   IndexedDB       saved characters and their snapshots (`character-sheets`),
+ *                   the documents imported characters were added as
+ *                   (`character-sheet-documents`) and the packs you have
+ *                   imported (`character-sheet-extensions`). Measured against
+ *                   a fraction of free disk instead, which is the difference
+ *                   between a 4 MB catalogue fitting and not, and why the
+ *                   documents and the packs moved here.
  *
  *   nowhere         a pack the deployment carries in `data/extensions/` or
  *                   `private/extensions/` is fetched into memory every load
@@ -37,11 +39,18 @@
  *                   that hit the old bug still holds whatever it left. This
  *                   finds it and prints the one line that clears it.
  *
- *   not yet moved   packs still in localStorage. They move on the first load
- *                   with a working database; seeing them here means that load
- *                   has not happened, or there is no database to be had.
+ *   not yet moved   packs and documents still in localStorage. They move on
+ *                   the first load with a working database; seeing them here
+ *                   means that load has not happened, or there is no database
+ *                   to be had.
  *
- * Nothing here writes anything it does not remove again before it returns.
+ * And a character document neither the picker nor the trash lists, which the
+ * picker cannot show. It may be the only copy of a character, so it is named
+ * and left where it is.
+ *
+ * Nothing here writes anything it does not remove again before it returns,
+ * and it opens no database that is not already there: one made here would be
+ * empty, and the page would take it for no database at all.
  */
 (async () => {
   const INDEX = 'character-sheet:extensions';
@@ -50,8 +59,28 @@
   const CHUNK = 262144;
   const PACK_DB = 'character-sheet-extensions';
   const PACK_STORE = 'packs';
+  const DOC = 'character-sheet:doc:';
+  const DOC_DB = 'character-sheet-documents';
+  const DOC_STORE = 'documents';
+  const LIBRARY = 'character-sheet:library';
+  const TRASH = 'character-sheet:trash';
 
   const mb = (n) => `${(n / 1048576).toFixed(2)} MB`;
+
+  // Everything in one store of a database, or null when the database is not
+  // there. An open that would create it is called off, which leaves none.
+  const readAll = (name, store) => new Promise((resolve) => {
+    const req = indexedDB.open(name);
+    req.onupgradeneeded = () => req.transaction.abort();
+    req.onerror = () => resolve(null);
+    req.onsuccess = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(store)) { db.close(); resolve([]); return; }
+      const all = db.transaction(store, 'readonly').objectStore(store).getAll();
+      all.onerror = () => { db.close(); resolve(null); };
+      all.onsuccess = () => { db.close(); resolve(all.result); };
+    };
+  });
 
   /* ---- localStorage ---- */
 
@@ -71,17 +100,7 @@
 
   /* ---- IndexedDB ---- */
 
-  const packs = await new Promise((resolve) => {
-    const req = indexedDB.open(PACK_DB);
-    req.onerror = () => resolve(null);
-    req.onsuccess = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(PACK_STORE)) { db.close(); resolve([]); return; }
-      const all = db.transaction(PACK_STORE, 'readonly').objectStore(PACK_STORE).getAll();
-      all.onerror = () => { db.close(); resolve(null); };
-      all.onsuccess = () => { db.close(); resolve(all.result); };
-    };
-  });
+  const packs = await readAll(PACK_DB, PACK_STORE);
 
   console.log('%cIndexedDB', 'font-weight:bold');
   if (navigator.storage?.estimate) {
@@ -109,6 +128,45 @@
     if (stray.length) {
       console.warn(`${stray.length} pack document in the database that the index does not list.`);
       console.warn(`  Clear with: indexedDB.open('${PACK_DB}').onsuccess = (e) => ${JSON.stringify(stray)}.forEach((k) => e.target.result.transaction('${PACK_STORE}', 'readwrite').objectStore('${PACK_STORE}').delete(k))`);
+    }
+  }
+
+  /* ---- imported characters' documents ---- */
+
+  const docs = await readAll(DOC_DB, DOC_STORE);
+  const idsIn = (key) => {
+    try { return new Set((JSON.parse(localStorage.getItem(key) || '{}').characters || []).map((c) => c.id)); } catch { return new Set(); }
+  };
+  const inPicker = idsIn(LIBRARY);
+  const inTrash = idsIn(TRASH);
+  const nameOf = (json) => { try { return JSON.parse(json)?.identity?.name ?? ''; } catch { return '(unreadable)'; } };
+  // A copy in localStorage is the newer one, and the one the picker reads.
+  const documents = [
+    ...(docs || []).map((r) => ({ id: r.id, json: r.json, where: 'database' })),
+    ...Object.keys(localStorage).filter((k) => k.startsWith(DOC)).map((k) => ({
+      id: k.slice(DOC.length),
+      json: localStorage.getItem(k),
+      where: docs === null ? 'localStorage' : 'localStorage -- not moved to the database yet',
+    })),
+  ];
+
+  console.log('%cimported characters', 'font-weight:bold');
+  if (docs === null) console.log('  no document database -- documents are in localStorage, and move on the first load that can open one');
+  if (!documents.length) {
+    console.log('  none stored');
+  } else {
+    const listed = (id) => (inPicker.has(id) ? 'in the picker' : inTrash.has(id) ? 'in the trash' : 'unlisted');
+    console.table(documents.map((d) => ({
+      character: d.id,
+      name: nameOf(d.json),
+      size: mb((d.json || '').length),
+      where: d.where,
+      listed: listed(d.id),
+    })));
+    const unlisted = documents.filter((d) => listed(d.id) === 'unlisted');
+    if (unlisted.length) {
+      console.warn(`${unlisted.length} character document${unlisted.length === 1 ? '' : 's'} holding ${mb(unlisted.reduce((s, d) => s + (d.json || '').length, 0))} that neither the picker nor the trash lists.`);
+      console.warn('The picker cannot show these. Each may be the only copy of a character, so they are left where they are.');
     }
   }
 

@@ -27,8 +27,12 @@ import { rollSpec } from '../../app/js/roll20.js';
 import { skillLabel } from '../../app/js/rules.js';
 import { normalizeName } from '../../app/js/model/util.js';
 import { buildIndex, kindLabel } from '../../app/js/ui/palette.js';
-import { LIBRARY_KEY, docKey } from '../../app/js/roster.js';
+import { LIBRARY_KEY } from '../../app/js/roster.js';
+import { documentStore } from '../../app/js/doc-store.js';
 const bundled = file => new URL(`../../data/characters/${file}`, import.meta.url);
+// Made on first use, with the page's storage as it is then. Read from, never
+// moved: the sheet's own page moves the documents into the database.
+let documents = null;
 
 export async function roster() {
   const list = [];
@@ -64,7 +68,7 @@ export async function loadCharacter(entry) {
   try { doc = (await history.readSaved())?.data ?? null; } catch { /* no saved version */ }
   doc ??= history.readWorking()?.data ?? null;
   if (!doc) {
-    try { doc = JSON.parse(localStorage.getItem(docKey(entry.id)) ?? 'null'); } catch { /* unreadable */ }
+    try { doc = JSON.parse(await (documents ??= documentStore()).read(entry.id) ?? 'null'); } catch { /* unreadable */ }
   }
   if (!doc && entry.file) {
     const res = await fetch(bundled(entry.file));

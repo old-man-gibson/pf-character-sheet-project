@@ -274,9 +274,15 @@ export function historyFor(id, { storageKey = null } = {}) {
     } catch { return []; }
   }
 
+  // The text this store last wrote. A working copy that still reads back as
+  // exactly that is this app's own and readable, so the write after it need
+  // not parse the whole document again to know it may be replaced. Another
+  // window's write, or anything else, is checked as before.
+  let written = null;
+
   function preserveWorking() {
     const raw = localStorage.getItem(wKey);
-    if (raw === null || readableWorking(raw)) return;
+    if (raw === null || raw === written || readableWorking(raw)) return;
     const rows = archivedRecoveries();
     if (rows.some((row) => row.raw === raw)) return;
     rows.push({ raw, savedAt: stamp() });
@@ -310,7 +316,9 @@ export function historyFor(id, { storageKey = null } = {}) {
   function writeWorking(doc, by) {
     try {
       preserveWorking();
-      localStorage.setItem(wKey, JSON.stringify({ savedAt: stamp(), ...(by ? { by } : {}), data: doc }));
+      const text = JSON.stringify({ savedAt: stamp(), ...(by ? { by } : {}), data: doc });
+      localStorage.setItem(wKey, text);
+      written = text;
       return true;
     } catch {
       return false;                      // full or blocked: in-session only
@@ -318,7 +326,7 @@ export function historyFor(id, { storageKey = null } = {}) {
   }
 
   function clearWorking() {
-    try { preserveWorking(); localStorage.removeItem(wKey); } catch { /* keep the original */ }
+    try { preserveWorking(); localStorage.removeItem(wKey); written = null; } catch { /* keep the original */ }
   }
 
   /* ---- canonical version and history: IndexedDB ---- */

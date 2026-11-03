@@ -21,7 +21,8 @@ import {
   setVeilCatalogue, veilCatalogue, veilEntry, veilClasses, veilSlots, veilsAvailable,
   veilDetails, veilOwn, veilIsWritten,
 } from '../app/js/model.js';
-import { storageMedium, indexedDbMedium, packMedium, PACK_STORE } from '../app/js/pack-storage.js';
+import { storageMedium, indexedDbMedium, packMedium } from '../app/js/pack-storage.js';
+import { fakeIndexedDb } from './fake-indexeddb.mjs';
 import { LIBRARY_FORMAT, buildLibrary, looksLikeLibrary, planLibrary } from '../app/js/extensions.js';
 import { convertPack, liftClassAccess } from '../tools/veils-to-table.mjs';
 import { isBasePick } from '../app/js/rules.js';
@@ -389,61 +390,8 @@ console.log('store -- a save that runs out of room leaves nothing behind');
     s2.read('keep').blocks.length, 1);
 }
 
-/**
- * The smallest IndexedDB that answers what `pack-storage.js` asks of one:
- * open with an upgrade, a transaction per call, `getAll`, `put`, `delete`.
- *
- * Writes are staged and applied on complete, which is not fake politeness --
- * it is the property being tested. A transaction that aborts must leave the
- * store exactly as it found it, and a fake that wrote through would pass a
- * test the real thing would fail.
- */
-function fakeIndexedDb({ limit = Infinity } = {}) {
-  const rows = new Map();
-  const later = (fn) => queueMicrotask(fn);
-  const weight = (m) => [...m.values()].reduce((n, r) => n + r.key.length + r.value.length, 0);
-
-  const db = {
-    objectStoreNames: { contains: (n) => n === PACK_STORE },
-    createObjectStore: () => ({}),
-    close: () => {},
-    transaction() {
-      const staged = new Map(rows);
-      const tx = { oncomplete: null, onerror: null, onabort: null, error: null };
-      let failed = null;
-      tx.objectStore = () => ({
-        getAll() {
-          const req = { result: null, onsuccess: null, onerror: null };
-          later(() => { req.result = [...staged.values()]; req.onsuccess?.(); });
-          return req;
-        },
-        put(record) { staged.set(record.key, record); },
-        delete(key) { staged.delete(key); },
-      });
-      later(() => {
-        if (weight(staged) > limit) {
-          failed = new Error('quota');
-          failed.name = 'QuotaExceededError';
-        }
-        if (failed) { tx.error = failed; tx.onabort?.(); return; }
-        rows.clear();
-        for (const [k, v] of staged) rows.set(k, v);
-        tx.oncomplete?.();
-      });
-      return tx;
-    },
-  };
-
-  return {
-    rows,
-    open() {
-      const req = { result: db, onsuccess: null, onerror: null, onupgradeneeded: null, onblocked: null };
-      later(() => { req.onupgradeneeded?.(); req.onsuccess?.(); });
-      return req;
-    },
-  };
-}
-
+// The IndexedDB these use is tests/fake-indexeddb.mjs: writes staged until
+// commit, so an aborted transaction leaves the store as it found it.
 console.log('pack storage -- two mediums, the same two questions');
 {
   for (const [where, make] of [
@@ -546,8 +494,7 @@ console.log('pack storage -- no database is not an error, only a smaller budget'
   check('and the packs are still readable where they are', [...(await none.medium.all())].length, 2);
 
   // A database that will not open reads the same as no database at all.
-  const refuses = { open: () => { const req = { onerror: null, onsuccess: null, error: new Error('blocked') }; queueMicrotask(() => req.onerror?.()); return req; } };
-  const blocked = await packMedium({ storage, factory: refuses, holds: isPackKey, keep: packsWorthMoving });
+  const blocked = await packMedium({ storage, factory: fakeIndexedDb({ refuse: true }), holds: isPackKey, keep: packsWorthMoving });
   check('a database that refuses to open reads the same', blocked.medium.name, 'localStorage');
   check('and takes nothing with it', storage.keys().length, 2);
 }

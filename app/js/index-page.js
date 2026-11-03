@@ -16,7 +16,8 @@
   import { CAMPAIGN_DEFAULTS, campaignRules } from './model/campaign.js';
   import { readShared, writeShared } from './shared-rules.js';
   import * as roster from './roster.js';
-  import { LAST_KEY, docKey, editsKey } from './roster.js';
+  import { LAST_KEY, editsKey } from './roster.js';
+  import { documentStore } from './doc-store.js';
 
   const sheet = document.getElementById('sheet');
   const picker = document.getElementById('picker');
@@ -147,12 +148,16 @@
    * -- the published app ships none, so the roster there is empty, but a
    * deployment that wants to pre-load characters drops their JSON in and lists
    * them. Imported ones exist only in this browser: the page cannot write to
-   * data/, so an imported document lives in localStorage and the list kept by
-   * roster.js is what makes it show up again after a reload.
+   * data/, so an imported document is kept by doc-store.js and the list kept
+   * by roster.js is what makes it show up again after a reload.
    */
   // A private window can throw on any touch of localStorage; roster.js reads
   // a null storage as empty and refuses to write to it.
   const storage = (() => { try { return localStorage; } catch { return null; } })();
+  // Documents an earlier version kept in localStorage move to the database
+  // before anything reads or writes one, so no write can race the move.
+  const docs = documentStore({ storage });
+  await docs.moveIn();
 
   let bundled = [];
   try {
@@ -175,7 +180,7 @@
   const readTrash = () => roster.readTrash(storage);
   const writeTrash = (list) => roster.writeTrash(storage, list);
 
-  const read = roster.readLibrary(storage, inspectDocument);
+  const read = await roster.readLibrary(storage, inspectDocument, docs);
   let library = read.list;
   if (read.rebuilt && writeLibrary(library)) {
     say('info', `The character list in this browser could not be read. It was rebuilt from the ${library.length} `
@@ -194,10 +199,11 @@
    * or sooner when the browser runs out of room for a new character.
    */
   const TRASH_TTL = 24 * 60 * 60 * 1000;
-  /** Erase for real: the document, the edits and every history record. */
+  /** Erase for real: the document, the edits and every history record. False when the document stayed. */
   async function erase(id) {
-    localStorage.removeItem(docKey(id));
+    if (!(await docs.remove(id))) return false;
     await forget(id, { storageKey: editsKey(id) });
+    return true;
   }
   /** Empty the trash of what is older than `age`; everything, with 0. */
   async function emptyTrash(age = TRASH_TTL) {
@@ -207,8 +213,8 @@
     const listed = new Set(library.map((c) => c.id));
     for (const c of readTrash()) {
       if (listed.has(c.id)) continue;
-      if (now - (c.removedAt || 0) >= age) await erase(c.id);
-      else keep.push(c);
+      // One whose document could not be erased stays, to be tried again.
+      if (now - (c.removedAt || 0) < age || !(await erase(c.id))) keep.push(c);
     }
     writeTrash(keep);
     return keep;
@@ -316,6 +322,7 @@
       b.addEventListener('contextmenu', async (e) => {
         e.preventDefault();
         if (b.dataset.id !== current) { current = b.dataset.id; rememberOpen(); select(); draw(); }
+        await opening;
         await sheet.whenReady();
         sheet.openCharacterColor(e.clientX, e.clientY);
       });
@@ -386,7 +393,7 @@
    * A character from nothing. `blankDocument` is the converter's own output for
    * a template with every cell empty, with a name and level filled in -- so it
    * takes exactly the path an imported document takes from here on: vetted by
-   * inspectDocument, stored in localStorage, listed in the library.
+   * inspectDocument, stored in this browser, listed in the library.
    */
   newForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -473,7 +480,7 @@
     const working = store.readWorking();
     if (working?.data) return working.data;
     if (entry.local) {
-      const raw = localStorage.getItem(docKey(entry.id));
+      const raw = await docs.read(entry.id);
       return raw ? JSON.parse(raw) : null;
     }
     try {
@@ -492,7 +499,21 @@
     } catch { /* a private window keeps nothing; the picker still works */ }
   }
 
+  /*
+   * Show the current character. An imported one's document is read from the
+   * database first, so the last select() is kept in `opening` for whatever
+   * needs the sheet to be showing it (a right-click's color panel,
+   * Duplicate), and a read that lands after another character was picked is
+   * dropped.
+   */
+  let opening = Promise.resolve();
+  let selected = 0;
   function select() {
+    const ticket = ++selected;
+    opening = show(ticket);
+    return opening;
+  }
+  async function show(ticket) {
     const entry = all().find((c) => c.id === current);
     // Nothing in the picker at all: a fresh visitor, or the last character
     // removed. Show the welcome instead of a sheet stuck on "Loading…".
@@ -505,10 +526,18 @@
     }
     // An imported character has no URL to fetch: hand the document over
     // directly, and drop any src so the element does not re-fetch over it.
-    const raw = localStorage.getItem(docKey(entry.id));
-    if (!raw) { say('err', `${entry.name} is listed but its data is missing.`); return; }
+    let doc = null;
+    try {
+      const raw = await docs.read(entry.id);
+      doc = raw === null ? null : JSON.parse(raw);
+    } catch (err) {
+      if (ticket === selected) say('err', `Could not open ${entry.name}: ${err.message}`);
+      return;
+    }
+    if (ticket !== selected) return;
+    if (!doc) { say('err', `${entry.name} is listed but its data is missing.`); return; }
     sheet.removeAttribute('src');
-    sheet.character = JSON.parse(raw);
+    sheet.character = doc;
   }
 
   /** A character already in the picker keeps its id; a clash gets the next free one. */
@@ -591,7 +620,7 @@
         return null;
       }
     }
-    if (!(await store(docKey(id), stored, verdict.summary.name))) return null;
+    if (!(await store(id, stored, verdict.summary.name))) return null;
     try {
       revisions.clearWorking();
       await revisions.save(stored);
@@ -618,6 +647,7 @@
    * no history and no publish link of its own; both are keyed by id.
    */
   async function duplicateOpen() {
+    await opening;
     await sheet.whenReady();
     const doc = sheet.character;
     if (!doc) { say('err', 'There is no open character to copy.'); return; }
@@ -644,11 +674,11 @@
     if (!verdict.ok) { say('err', verdict.error); return null; }
     const id = freeId(verdict.summary.id);
     const stored = { ...doc, id };
-    if (!(await store(docKey(id), stored, verdict.summary.name))) return null;
+    if (!(await store(id, stored, verdict.summary.name))) return null;
     const grown = [...library, { ...verdict.summary, color: doc.identity?.color || null, id, origin, local: true }];
     if (!writeLibrary(grown)) {
       // Not in the list, the document would sit in storage where nothing can reach it.
-      try { localStorage.removeItem(docKey(id)); } catch { /* nothing more to undo */ }
+      await docs.remove(id);
       return null;
     }
     library = grown;
@@ -674,11 +704,11 @@
    * and the alternative is refusing the character that is being added now.
    * Says why on failure; true on success.
    */
-  async function store(key, stored, name) {
+  async function store(id, stored, name) {
     const json = JSON.stringify(stored);
     for (const attempt of [0, 1]) {
       try {
-        localStorage.setItem(key, json);
+        await docs.write(id, json);
         return true;
       } catch (err) {
         if (err.name === 'QuotaExceededError' && attempt === 0 && readTrash().length) {

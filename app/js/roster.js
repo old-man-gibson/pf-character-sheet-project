@@ -2,8 +2,8 @@
  * roster.js -- the list of characters this browser keeps, and its trash.
  *
  * Bundled characters are files under data/characters/; imported ones exist
- * only in this browser. An imported character's document sits under
- * `docKey(id)`, its working edits under `editsKey(id)` (history.js), and the
+ * only in this browser. An imported character's document is kept by
+ * doc-store.js, its working edits under `editsKey(id)` (history.js), and the
  * list below is what makes it show in the picker after a reload. Removed
  * characters move from the list to the trash and keep everything else, so
  * Undo is moving the entry back.
@@ -13,20 +13,23 @@
  * refuses writes.
  */
 
+import { documentStore } from './doc-store.js';
+
+export { docKey } from './doc-store.js';
 export const LIBRARY_KEY = 'character-sheet:library';
 export const LAST_KEY = 'character-sheet:last';
 export const TRASH_KEY = 'character-sheet:trash';
 /** Where an unreadable list is kept when it is rebuilt. */
 export const LIBRARY_BACKUP_KEY = 'character-sheet:library-unreadable';
-export const docKey = (id) => `character-sheet:doc:${id}`;
 export const editsKey = (id) => `character-sheet:${id}`;
 
 /**
  * The list, each entry marked `local`. `rebuilt` is true when the stored list
  * could not be read and was rebuilt from the documents (see rebuildLibrary);
- * the caller writes it back and says so.
+ * the caller writes it back and says so. `docs` is the page's documentStore;
+ * left out, the documents are looked for in `storage` alone.
  */
-export function readLibrary(storage, inspect) {
+export async function readLibrary(storage, inspect, docs = documentStore({ storage, factory: null })) {
   let text = null;
   try {
     text = storage.getItem(LIBRARY_KEY);
@@ -37,27 +40,33 @@ export function readLibrary(storage, inspect) {
     }
   } catch { /* unreadable: rebuilt below */ }
   if (text === null) return { list: [], rebuilt: false };
-  return { list: rebuildLibrary(storage, text, inspect), rebuilt: true };
+  try { storage.setItem(LIBRARY_BACKUP_KEY, text); } catch { /* the rebuild still lists every document */ }
+  let documents;
+  try {
+    documents = await docs.entries();
+  } catch {
+    // Neither the list nor the documents can be read. Not marked rebuilt, the
+    // empty list is not written back, and the next load tries again.
+    return { list: [], rebuilt: false };
+  }
+  return { list: rebuildLibrary(storage, documents, inspect), rebuilt: true };
 }
 
 /**
  * A list that cannot be read, rebuilt from the documents stored here.
  *
  * Reading it as empty made the next write drop every character from the
- * picker while their documents stayed in storage. The unreadable text is
- * kept under LIBRARY_BACKUP_KEY. `inspect` is model.js inspectDocument.
+ * picker while their documents stayed in storage. readLibrary keeps the
+ * unreadable text under LIBRARY_BACKUP_KEY first. `documents` is [id, text]
+ * pairs (documentStore's entries); `inspect` is model.js inspectDocument.
  */
-export function rebuildLibrary(storage, text, inspect) {
-  try { storage.setItem(LIBRARY_BACKUP_KEY, text); } catch { /* the rebuild still lists every document */ }
-  const prefix = docKey('');
+export function rebuildLibrary(storage, documents, inspect) {
   const trashed = new Set(readTrash(storage).map((c) => c.id));
   const list = [];
-  for (let i = 0; i < storage.length; i++) {
-    const key = storage.key(i);
-    const id = key?.startsWith(prefix) ? key.slice(prefix.length) : '';
+  for (const [id, text] of documents) {
     if (!id || trashed.has(id)) continue;
     try {
-      const doc = JSON.parse(storage.getItem(key));
+      const doc = JSON.parse(text);
       const verdict = inspect(doc);
       if (verdict.ok) list.push({ ...verdict.summary, color: doc.identity?.color || null, id, origin: 'import', local: true });
     } catch { /* a document that cannot be read stays where it is, unlisted */ }

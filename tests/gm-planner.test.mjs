@@ -26,7 +26,9 @@ import {
 import { browserStore, fileStore } from '../gm-module/planner/stores.js';
 import { runSheetHtml } from '../gm-module/planner/runsheet.js';
 import { chance, checkBonus, hasNeeds, loadCharacter } from '../gm-module/planner/characters.js';
+import { documentStore } from '../app/js/doc-store.js';
 import { Character } from '../app/js/model.js';
+import { fakeIndexedDb } from './fake-indexeddb.mjs';
 import { blockHtml, checkLabel, hiddenLabel, layout } from '../gm-module/planner/timeline.js';
 import { createPlan, currentVersion, listPlans, readPlan, readPlayerView, removePlan, validName, writePlan } from '../gm-module/planner/store.mjs';
 
@@ -39,56 +41,6 @@ const check = (label, actual, expected) => {
     console.log(`FAIL ${label}\n  expected ${JSON.stringify(expected)}\n  got      ${JSON.stringify(actual)}`);
   }
 };
-
-// A stand-in for IndexedDB with what browserStore uses: one store keyed by
-// `name`, get/getAll/put/delete requests, and readwrite transactions that
-// commit when their last request has settled (so a put issued after a get's
-// result still lands, as in a browser) and are lost if anything throws.
-function fakeIndexedDb() {
-  const rows = new Map();
-  let made = false;
-  const db = {
-    objectStoreNames: { contains: () => made },
-    createObjectStore: () => { made = true; return {}; },
-    close() {},
-    transaction(_name, mode) {
-      const staged = new Map(rows);
-      const tx = { oncomplete: null, onerror: null, onabort: null, error: null };
-      let pending = 0;
-      let done = false;
-      const settle = () => setTimeout(() => {
-        if (done || pending) return;
-        done = true;
-        if (mode === 'readwrite') { rows.clear(); for (const [k, v] of staged) rows.set(k, v); }
-        tx.oncomplete?.();
-      }, 0);
-      const request = fn => {
-        if (done) throw new Error('TransactionInactiveError');
-        pending++;
-        const req = { result: undefined, onsuccess: null, onerror: null };
-        queueMicrotask(() => { req.result = fn(); pending--; req.onsuccess?.(); settle(); });
-        return req;
-      };
-      const writable = () => { if (mode !== 'readwrite') throw new Error('ReadOnlyError'); };
-      tx.objectStore = () => ({
-        get: key => request(() => structuredClone(staged.get(key))),
-        getAll: () => request(() => [...staged.values()].map(v => structuredClone(v))),
-        put: rec => { writable(); return request(() => { staged.set(rec.name, structuredClone(rec)); return rec.name; }); },
-        delete: key => { writable(); return request(() => { staged.delete(key); }); },
-      });
-      settle();
-      return tx;
-    },
-  };
-  return {
-    rows,
-    open() {
-      const req = { result: null, onsuccess: null, onerror: null, onupgradeneeded: null, onblocked: null };
-      queueMicrotask(() => { req.result = db; req.onupgradeneeded?.(); req.onsuccess?.(); });
-      return req;
-    },
-  };
-}
 
 // Four players and the three activities of the planning example: a 5-minute,
 // a 15-minute and a shared 10-minute activity, all starting together.
@@ -558,18 +510,23 @@ function table() {
   check('the chance is what a d20 gives', [chance(6, 15), chance(17, 15), chance(0, 25), chance(5, 5)], [0.6, 1, 0, 1]);
   check('a save fails on a 1 and succeeds on a 20', [chance(-5, 30, { save: true }), chance(30, 10, { save: true })], [0.05, 0.95]);
 
-  // A character the sheet keeps in this browser: its working copy, with no
-  // saved version (there is no IndexedDB in Node).
+  // Characters the sheet keeps in this browser: one by its working copy, with
+  // no saved version, and one only by the document it was imported as, which
+  // the sheet keeps in a database (app/js/doc-store.js).
   const stored = new Map([['character-sheet:zz-odds', JSON.stringify({ savedAt: 1, data: doc })]]);
   globalThis.localStorage = { getItem: k => stored.get(k) ?? null, setItem: (k, v) => stored.set(k, v), removeItem: k => stored.delete(k) };
+  globalThis.indexedDB = fakeIndexedDb();
   try {
+    await documentStore({ storage: null }).write('zz-imported', JSON.stringify(doc));
     const loaded = await loadCharacter({ id: 'zz-odds' });
     check('a character loads from the sheet\'s working copy', checkBonus(loaded, 'Perception').bonus, 17);
+    check('and one from its document in the database', checkBonus(await loadCharacter({ id: 'zz-imported' }), 'Perception').bonus, 17);
     let missing = null;
     try { await loadCharacter({ id: 'zz-missing' }); } catch (err) { missing = err.message; }
     check('one that is not there says so', missing, 'not in this browser');
   } finally {
     delete globalThis.localStorage;
+    delete globalThis.indexedDB;
   }
 }
 
