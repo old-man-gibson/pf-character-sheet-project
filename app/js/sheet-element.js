@@ -787,7 +787,7 @@ export class CharacterSheetElement extends HTMLElement {
     const shared = readShared();
     if (!followsShared(d, shared) || sameCampaign(d.campaign, shared.rules)) return false;
     this.#model.set('campaign', structuredClone(shared.rules));
-    this.#historyNote = 'Campaign rules: now the ones every character shares (Extensions and Rules).';
+    this.#historyNote = 'This character now uses the shared campaign rules.';
     return true;
   }
 
@@ -1166,16 +1166,16 @@ export class CharacterSheetElement extends HTMLElement {
     const custom = this.#themePref?.custom || customFromPalette(theme) || customFromPalette('dark');
     const customCard = `
         <button type="button" class="preset" data-action="set-theme" data-palette="${CUSTOM}"
-          aria-pressed="${pref === CUSTOM}" title="Custom: your own colours">
+          aria-pressed="${pref === CUSTOM}" title="Use your own colors.">
           <span class="swatches" aria-hidden="true">${customPalette(custom).swatch.map((c) => `<i style="background:${c}"></i>`).join('')}</span>
           <span class="pname">Custom</span>
-          <span class="pblurb">Pick your own background, panel, text and accent colours.</span>
+          <span class="pblurb">Pick your own background, panel, text and accent colors.</span>
         </button>`;
     const picks = pref !== CUSTOM ? '' : `
-        <div class="mix custompicks" role="group" aria-label="Custom colours">
+        <div class="mix custompicks" role="group" aria-label="Custom colors">
           ${CUSTOM_COLORS.map((c) => `<label>${esc(c.name)}
             <input type="color" data-customcolor="${c.id}" value="${custom[c.id]}"></label>`).join('')}
-          <p class="hint">Colours are made lighter or darker where needed so text stays readable.</p>
+          <p class="hint">Colors are made lighter or darker where needed so text stays readable.</p>
         </div>`;
     return `<section class="panel thememenu" aria-label="Theme and layout">
         <h3>Theme &amp; layout</h3>
@@ -1190,30 +1190,29 @@ export class CharacterSheetElement extends HTMLElement {
             </select>
           </label>
           <label>Tabs
-            <select data-themepick="layout" aria-label="Where the tabs go">
+            <select data-themepick="layout" aria-label="Tab position">
               ${LAYOUTS.map((l) => opt(l.id, l.name, layout === l.id)).join('')}
             </select>
           </label>
           <label>Width
-            <select data-themepick="width" aria-label="How wide the sheet is">
+            <select data-themepick="width" aria-label="Sheet width">
               ${WIDTHS.map((w) => opt(w.id, w.name, width === w.id)).join('')}
             </select>
           </label>
           <label>Action cards
-            <select data-themepick="actionMarks" aria-label="How a session card shows its action type">
+            <select data-themepick="actionMarks" aria-label="Action card type marker">
               ${ACTION_MARKS.map((m) => opt(m.id, m.name, marks === m.id)).join('')}
             </select>
           </label>
-          <label>Card colour
-            <select data-themepick="actionTint" aria-label="How much of a session card takes its action's colour">
+          <label>Card color
+            <select data-themepick="actionTint" aria-label="Action card color">
               ${ACTION_TINTS.map((t) => opt(t.id, t.name, tint === t.id)).join('')}
             </select>
           </label>
           <button type="button" class="close" data-action="theme-close">Done</button>
         </div>
-        <p class="hint">Remembered in this browser, for every character. The side rail needs a wide window
-          and falls back to the bar on a narrow one. Action cards can show their type as a tag, as colour,
-          both or neither. The colour can be a left edge or a wash across the card.</p>
+        <p class="hint">These settings apply to every character in this browser. On a narrow window,
+          side tabs move to the top.</p>
       </section>`;
   }
 
@@ -1480,7 +1479,7 @@ export class CharacterSheetElement extends HTMLElement {
     try {
       localStorage.setItem(key, JSON.stringify({ doc, summary: describePublish(report) }));
     } catch (err) {
-      this.#historyNote = `Could not open the preview — ${err.message}`;
+      this.#historyNote = `Could not open the preview: ${err.message}`;
       this.#render();
       return;
     }
@@ -1535,7 +1534,7 @@ export class CharacterSheetElement extends HTMLElement {
       this.#publishedLink = { url: url.href, rev: answer.rev, summary, copied: null };
       this.#historyNote = null;
     } catch (err) {
-      this.#historyNote = `Could not publish — ${err.message.replace(/\.$/, '')}.`;
+      this.#historyNote = `Could not publish: ${err.message.replace(/\.$/, '')}.`;
     }
     this.#renderHeader();
   }
@@ -1649,10 +1648,10 @@ export class CharacterSheetElement extends HTMLElement {
       if (!res.ok) throw new Error(answer?.error || `the server answered ${res.status}`);
       this.#relay.members[member] = { name: m.name, token: answer.token, url: this.#grantUrl(kept.id, member, answer.token), since: new Date().toLocaleString() };
       this.#writePublishLink({ ...kept, grants: this.#relay.members });
-      this.#historyNote = `${m.name} is handed to the GM — copy the control link from the Squad panel. Keep this sheet open: the GM's presses run here.`;
+      this.#historyNote = `The GM now controls ${m.name}. Copy the control link from the Squad panel. Keep this sheet open while the GM uses it.`;
       this.#openRelay();
     } catch (err) {
-      this.#historyNote = `Could not hand ${m.name} over — ${err.message.replace(/\.$/, '')}.`;
+      this.#historyNote = `Could not hand ${m.name} to the GM: ${err.message.replace(/\.$/, '')}.`;
     }
     this.#render();
   }
@@ -1670,7 +1669,7 @@ export class CharacterSheetElement extends HTMLElement {
         await fetch(this.#relayApi(kept.id, `grant/${encodeURIComponent(member)}`), { method: 'DELETE', credentials: 'omit', headers: { authorization: `Bearer ${kept.token}` } });
       } catch { /* the link is gone from this sheet either way */ }
     }
-    this.#historyNote = `${g.name || 'The companion'} is yours again.`;
+    this.#historyNote = `You control ${g.name || 'the companion'} again.`;
     if (!Object.keys(this.#relay.members).length) this.#closeRelay();
     this.#render();
   }
@@ -1680,7 +1679,7 @@ export class CharacterSheetElement extends HTMLElement {
     if (!g) return;
     let ok = true;
     try { await navigator.clipboard.writeText(g.url); } catch { ok = false; }
-    this.#historyNote = ok ? 'Control link copied — send it to the GM.' : 'The clipboard is not available here: select the link in the Squad panel and copy it.';
+    this.#historyNote = ok ? 'Control link copied. Send it to the GM.' : 'The clipboard is not available. Select the link in the Squad panel and copy it.';
     this.#renderHeader();
   }
 
@@ -1739,7 +1738,7 @@ export class CharacterSheetElement extends HTMLElement {
       const msg = {
         type: 'render',
         member,
-        title: `${m?.name || r.members[member].name || 'Companion'} — handed to the GM`,
+        title: `${m?.name || r.members[member].name || 'Companion'} (GM control)`,
         html: subsystems.cardTableView(this.#model, this.#ctx(), 'control', member),
         features: m ? subsystems.companionFace(this.#model, m.kind, member) : '',
         theme: this.getAttribute('theme') || '',
@@ -1888,7 +1887,7 @@ export class CharacterSheetElement extends HTMLElement {
       this.#cardChannel.postMessage({
         type: 'cards:render',
         view,
-        title: `${this.#model.data.identity?.name || this.#model.data.name || 'Character'} — ${view === 'table' ? 'the table' : 'your hand'}`,
+        title: `${this.#model.data.identity?.name || this.#model.data.name || 'Character'}: ${view === 'table' ? 'table' : 'hand'}`,
         html: subsystems.cardTableView(this.#model, this.#ctx(), view),
         theme: this.getAttribute('theme') || '',
         scheme: this.getAttribute('scheme') || '',
@@ -2089,7 +2088,7 @@ export class CharacterSheetElement extends HTMLElement {
     const viewers = new Set(this.#cardViewers);
     this.#adoptDocument(data);
     for (const v of viewers) this.#cardViewers.add(v);
-    this.#historyNote = `Picked up ${changes >= 500 ? 'the' : changes} change${changes === 1 ? '' : 's'} made in another window.`;
+    this.#historyNote = `Loaded ${changes >= 500 ? 'the' : changes} change${changes === 1 ? '' : 's'} made in another window.`;
     this.#render();
   }
 
@@ -2173,8 +2172,8 @@ export class CharacterSheetElement extends HTMLElement {
       this.#markHistory();
     } catch (err) {
       if (this.#model !== model) return;
-      this.#historyNote = `Could not save — ${err.message}.`
-        + ' Your edits are still here and still restored on reload.';
+      this.#historyNote = `Could not save: ${err.message}.`
+        + ' Your edits are kept and will be restored on reload.';
     }
     // Nothing outside the header depends on the saved version, and the body may
     // be several thousand inputs.
@@ -2188,11 +2187,11 @@ export class CharacterSheetElement extends HTMLElement {
     try {
       await this.#history.checkpoint(this.#model.toJSON(), label, this.#changes);
       this.#checkpointDraft = '';
-      this.#historyNote = `Checkpoint “${label}” kept. Automatic snapshots will not evict it.`;
+      this.#historyNote = `Saved checkpoint “${label}”. It is kept until you delete it.`;
       await this.#refreshSnapshots();
       this.#markHistory();
     } catch (err) {
-      this.#historyNote = `Could not keep that checkpoint — ${err.message}.`;
+      this.#historyNote = `Could not save the checkpoint: ${err.message}.`;
     }
     this.#renderHeader();
   }
@@ -2222,7 +2221,7 @@ export class CharacterSheetElement extends HTMLElement {
         + ' Press Save to make it the version this sheet opens on.';
       await this.#refreshSnapshots();
     } catch (err) {
-      this.#historyNote = `Could not restore that — ${err.message}.`;
+      this.#historyNote = `Could not restore it: ${err.message}.`;
     }
     this.#render();
   }
@@ -2638,7 +2637,7 @@ export class CharacterSheetElement extends HTMLElement {
       const renamed = this.#model.tabName(e.key);
       if (!renamed) return { ...e, base: e.label };
       return this.isAdmin
-        ? { ...e, base: e.label, renamed, title: `The player calls this “${renamed}”` }
+        ? { ...e, base: e.label, renamed, title: `Renamed by the player to “${renamed}”` }
         : {
           ...e, base: e.label, label: renamed, renamed, title: `Originally “${e.label}”`,
         };
@@ -2717,7 +2716,7 @@ export class CharacterSheetElement extends HTMLElement {
               aria-selected="${this.#tab === e.id}" aria-controls="sheet-panel"
               tabindex="${this.#tab === e.id ? '0' : '-1'}"
               ${cls ? `class="${cls}"` : ''}${tint ? ` style="${tint}"` : ''}
-              ${e.kind === 'visiting' ? 'title="Not on this view’s bar — search took you here"'
+              ${e.kind === 'visiting' ? 'title="This tab is not on this view’s bar. You opened it from search."'
     : e.title ? `title="${esc(e.title)}"` : ''}
               ${FIXED_TABS.has(e.key) || e.kind === 'visiting' ? '' : 'data-tabdrag'}>${esc(e.label)}</button>`;
   }).join('')}
@@ -3229,7 +3228,7 @@ export class CharacterSheetElement extends HTMLElement {
             ${diff.length ? `<span class="dirty"> &middot; <span title="${esc(diff.map((d) => `${d.label}: ${d.was} → ${d.now}`).join('\n'))}"
               >${diff.length} value${diff.length === 1 ? '' : 's'} changed from source sheet</span>
               <button class="linkish" data-action="accept-source"
-                title="Take the sheet as it stands as the one to compare with, so the count starts again from here">clear</button></span>` : ''}
+                title="Reset the count of values changed from the source sheet.">clear</button></span>` : ''}
           </div>
         </div>
       </header>`;
@@ -3260,8 +3259,8 @@ export class CharacterSheetElement extends HTMLElement {
         <button data-action="save" class="${this.#changes ? 'primary' : ''}"
           ${this.#changes ? '' : 'disabled'}
           title="${this.#changes
-            ? 'Make this the version the sheet opens on (Ctrl+S)'
-            : 'Nothing has changed since the last save'}">
+            ? 'Save this as the version the sheet opens on (Ctrl+S).'
+            : 'No changes since the last save.'}">
           Save${this.#changes ? ` (${this.#changes})` : ''}
         </button>`}
         <button data-view class="railmore" data-action="chrome-menu" aria-haspopup="menu"
@@ -3282,25 +3281,25 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.#formulaButton()}
         ${monster.menuButton(this.#model, this.isAdmin)}
         <button data-view data-action="campaign-rules" aria-pressed="${this.#tab === 'systabs'}"
-          title="Rules for this character (⚙ tab)">Campaign rules…</button>
+          title="Open this character's campaign rules.">Campaign rules…</button>
         <button data-view data-action="theme" aria-pressed="${this.#themeMenu}"
-          title="Palettes, and where the tabs go">Theme &amp; layout…</button>
+          title="Change the colors and tab position.">Theme &amp; layout…</button>
         <button data-view data-action="print-menu" aria-pressed="${this.#printMenu}"
           title="Print several tabs at once. Ctrl+P prints the tab that is open.">Print tabs…</button>
         ${this.isPublished ? '' : `
         <button data-action="history" aria-pressed="${this.#showHistory}"
-          title="Earlier states of this sheet">History${this.#snapshots.length ? ` (${this.#snapshots.length})` : ''}</button>`}
+          title="Snapshots and checkpoints of this character.">History${this.#snapshots.length ? ` (${this.#snapshots.length})` : ''}</button>`}
         <button data-view data-action="export">Export JSON</button>
         <button data-view data-action="export-mw"
-          title="A backup file for the Myth-Weavers Pathfinder sheet. Load it there with Actions, Restore JSON Backup: it replaces every field on that sheet.">Export for Myth-Weavers (EXPERIMENTAL)</button>
+          title="Download a backup file for a Myth-Weavers Pathfinder sheet. Load it there with Actions, Restore JSON Backup, which replaces every field on that sheet.">Export for Myth-Weavers (EXPERIMENTAL)</button>
         ${this.isPublished ? '' : `
         <button data-action="publish"
           title="Upload this character and get a read-only link. Publishing again updates the same link.">Publish</button>
         <button data-action="preview-published"
           title="Open the read-only view a link shows: only the pack entries the character carries, no local packs, nothing saved">Preview published</button>
-        <button data-action="import" title="Load a character this app exported, or convert a .xlsx workbook">Import…</button>
+        <button data-action="import" title="Import an .xlsx workbook or a .json file this app exported.">Import…</button>
         <button data-action="reset" class="danger" aria-expanded="${this.#confirmReset}"
-          title="Back to the character as imported. Asks first, and named checkpoints are kept.">Reset</button>`}
+          title="Return the character to how it was imported. Named checkpoints are kept.">Reset</button>`}
         <p class="menukeys"><kbd>Ctrl</kbd><kbd>K</kbd> search
           &middot; <kbd>Ctrl</kbd><kbd>S</kbd> save
           &middot; <kbd>←</kbd><kbd>→</kbd> tabs</p>
@@ -3357,9 +3356,9 @@ export class CharacterSheetElement extends HTMLElement {
            * happening, and this one reports something that is still the case.
            */''}
         <div class="savefail" role="alert" ${this.#storageFailed ? '' : 'hidden'}>
-          <strong>Not being saved.</strong> This browser refused to store the sheet —
-          a private window, or storage that is full. Your edits are here on screen but
-          will not survive closing the tab.
+          <strong>Not being saved.</strong> This browser cannot store the sheet. This can
+          happen in a private window or when storage is full. Your edits will be lost when
+          you close the tab.
           <button data-view data-action="export" class="primary">Export JSON</button>
         </div>
       </div>`;
@@ -3377,15 +3376,14 @@ export class CharacterSheetElement extends HTMLElement {
       <span>
         <strong>Reset to the character as imported?</strong>
         This discards the saved version, any unsaved edits${this.#changes ? ` (${this.#changes} right now)` : ''}
-        and the automatic snapshots. Named checkpoints are kept${checkpoints
-    ? ` — you have ${checkpoints}` : ' (you have none; History can name one first)'}.
-        Type <code>RESET</code> to arm the button.
+        and the automatic snapshots. Named checkpoints are kept (you have ${checkpoints}).
+        Type <code>RESET</code> to enable the button.
       </span>
       <span class="pair">
         <input type="text" data-reset-word placeholder="RESET" autocomplete="off" spellcheck="false"
-          aria-label="Type RESET to arm the reset button" style="width:6.5rem">
+          aria-label="Type RESET to enable the reset button" style="width:6.5rem">
         <button class="danger" data-action="reset-confirm" disabled>Reset</button>
-        <button data-action="reset-cancel">Keep everything</button>
+        <button data-action="reset-cancel">Cancel</button>
       </span>
     </div>`;
   }
@@ -3396,7 +3394,7 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #searchButton() {
     return `<button data-view class="searchbtn" data-action="palette"
-      title="Search this character — skills, feats, gear, spells, anything (Ctrl+K)">
+      title="Search this character (Ctrl+K).">
       <svg class="cmdk-glass" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/>
       </svg><span class="searchlabel">Search</span><kbd>Ctrl K</kbd></button>`;
@@ -3411,8 +3409,8 @@ export class CharacterSheetElement extends HTMLElement {
     // do. The `⚙` panel's own switch has said it this way all along.
     return `<button data-view data-action="view-mode"
       title="${session
-    ? 'Everything the sheet can show, including the build machinery'
-    : 'Only the tabs that come up at the table, and the Overview as a dashboard'}">
+    ? 'Show every tab, including the build tabs.'
+    : 'Show only the tabs used in play, with the Overview as a dashboard.'}">
       Switch to ${session ? 'build' : 'session'} view</button>`;
   }
 
@@ -3438,7 +3436,7 @@ export class CharacterSheetElement extends HTMLElement {
     const maxNow = moved('hp', hp.baseMax);
     return `<div class="subtitle sessionstrip">
       HP <strong class="${hp.current < hp.max ? 'bad' : ''}"
-        title="${hp.shift ? esc(`Base ${hp.baseCurrent}/${hp.baseMax} — negative levels and buffs move current and total hit points alike`) : ''}"
+        title="${hp.shift ? esc(`Base ${hp.baseCurrent}/${hp.baseMax}. Negative levels and buffs change both current and maximum hit points.`) : ''}"
         >${hp.current}/${maxNow}</strong>${hp.temp > 0 ? `<span class="hptemp">+${hp.temp}</span>` : ''}
       &middot; AC ${shown('ac', d.ac, String)} <span class="dim">touch ${moved('touch', d.touch)} &middot; FF ${moved('flatFooted', d.flatFooted)}</span>
       &middot; Fort ${shown('fortitude', s.fortitude.total)}
@@ -3491,9 +3489,9 @@ export class CharacterSheetElement extends HTMLElement {
     return `<div class="resume" role="status">
       <span>
         <strong>${changes} unsaved change${changes === 1 ? '' : 's'}</strong>
-        from ${esc(whenText(savedAt))} were not part of the saved version.
+        from ${esc(whenText(savedAt))} are not in the saved version.
       </span>
-      <button class="primary" data-action="resume">Pick them up</button>
+      <button class="primary" data-action="resume">Restore</button>
       <button data-action="discard-resume">Discard</button>
     </div>`;
   }
@@ -3541,27 +3539,27 @@ export class CharacterSheetElement extends HTMLElement {
         <span class="histsize">
           ${this.#savedDoc
             ? `saved version is ${this.#changes} change${this.#changes === 1 ? '' : 's'} behind the sheet`
-            : 'nothing saved yet — press Save to set the version this sheet opens on'}
+            : 'nothing saved yet. Press Save to set the version this sheet opens on.'}
         </span>
       </div>
 
       <div class="histmake">
         <input data-hfield="checkpoint" value="${esc(this.#checkpointDraft)}"
-          placeholder="Name a checkpoint — “before respec”, “end of session 12”"
+          placeholder="Checkpoint name, e.g. “before respec”"
           aria-label="Checkpoint name">
         <button class="primary" data-action="save-checkpoint"
-          ${this.#checkpointDraft.trim() ? '' : 'disabled'}>Keep checkpoint</button>
+          ${this.#checkpointDraft.trim() ? '' : 'disabled'}>Save checkpoint</button>
       </div>
 
-      ${kept.length ? `<div class="histgroup">Checkpoints — kept until you delete them</div>
+      ${kept.length ? `<div class="histgroup">Checkpoints (kept until you delete them)</div>
         <ul class="histlist">${kept.map(row).join('')}</ul>` : ''}
 
       ${autos.length ? `<div class="histgroup">
-          Automatic — one every ${this.#snapshotEvery} changes, ${AUTO_KEEP} kept
+          Automatic (one every ${this.#snapshotEvery} changes, last ${AUTO_KEEP} kept)
         </div>
         <ul class="histlist">${autos.map(row).join('')}</ul>`
         : `<div class="histgroup">
-            No automatic snapshots yet — one is taken every ${this.#snapshotEvery} changes.
+            No automatic snapshots yet. One is taken every ${this.#snapshotEvery} changes.
           </div>`}
     </div>`;
   }
@@ -3587,12 +3585,11 @@ export class CharacterSheetElement extends HTMLElement {
       console.error(`character-sheet: the ${this.#tab} tab failed to draw`, err);
       return `<div class="grid"><section class="panel span2">
         <h3>This tab could not be drawn</h3>
-        <p class="empty">Something in the <strong>${esc(this.#tabLabel())}</strong> tab threw
-          while it was being drawn, so the sheet is showing this instead of nothing.
-          Your character is untouched — every other tab still works, and so does Export JSON.</p>
+        <p class="empty">The <strong>${esc(this.#tabLabel())}</strong> tab failed to draw because
+          of an error. Your character is not changed, and the other tabs still work.</p>
         <p class="hint"><code>${esc(err?.message || String(err))}</code></p>
-        <p class="hint">If a formula on this tab is the cause, the <strong>ƒx Formulas</strong>
-          tab lists every one on the character. The browser console has the full trace.</p>
+        <p class="hint">If a formula caused this, the <strong>ƒx Formulas</strong> tab lists every
+          formula on the character. The browser console has the full error.</p>
       </section></div>`;
     }
   }
@@ -3609,7 +3606,7 @@ export class CharacterSheetElement extends HTMLElement {
         <p class="hint">Each tab starts on a new page. Wide tables shrink to the page width.</p>
         <div class="printpicks">${tabs.map((e) => `<label class="chk"><input type="checkbox" data-printtab="${esc(e.id)}"
           ${e.id === this.#tab ? 'checked' : ''}><span>${esc(e.label)}</span></label>`).join('')}</div>
-        <label class="chk" style="margin-top:8px" title="Turns the page and fits wide tables to its width">
+        <label class="chk" style="margin-top:8px" title="Print in landscape orientation.">
           <input type="checkbox" data-printlandscape><span>Landscape</span></label>
         <div class="pair" style="margin-top:8px">
           <button class="primary" data-action="print-go">Print</button>
@@ -4012,8 +4009,8 @@ export class CharacterSheetElement extends HTMLElement {
           </span>
         </h3>
         <p class="hint">${tab.hidden ? 'This worksheet was hidden in the source workbook. ' : ''}
-          ${tab.custom ? 'Custom tab: a free grid for anything the sheet doesn\'t model. '
-    : 'Cell-for-cell from the workbook. '}Every cell is editable. Rows and columns can be added and removed.
+          ${tab.custom ? 'A free grid for anything the sheet does not track. '
+    : 'A copy of this tab from the workbook. '}You can edit every cell and add or remove rows and columns.
           Cells accept inline formulas like <code>{name = expr}</code>.</p>
       </section>
       ${this.#gridTab(index, tab)}
@@ -4065,15 +4062,14 @@ export class CharacterSheetElement extends HTMLElement {
         <span class="rollformats">${ROLL_FORMATS.map(([key, label]) => `
           <button data-rollformat="${key}" aria-pressed="${this.#rollFormat === key}"
             title="${key === 'template'
-    ? 'A titled box with a row per roll, using Roll20’s built-in default template'
-    : 'One bare /roll line, for a game that wants no template'}">${esc(label)}</button>`).join('')}</span>
+    ? 'Use Roll20’s default template: a titled box with one row per roll.'
+    : 'Use a plain /roll line with no template.'}">${esc(label)}</button>`).join('')}</span>
         <button class="rollclose" data-rollclose aria-label="Dismiss">×</button>
       </div>
       <textarea class="rolltext" readonly rows="2" spellcheck="false"
         aria-label="The copied roll">${esc(t.text)}</textarea>
-      ${t.failed ? `<p class="hint warn">The clipboard is not available here. This happens on a page
-        served over plain <code>http://</code> or in an embed without permission. The text is selected.
-        <kbd>Ctrl</kbd>+<kbd>C</kbd> copies it.</p>` : ''}
+      ${t.failed ? `<p class="hint warn">The clipboard is not available on this page. The text is
+        selected. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to copy it.</p>` : ''}
     </div>`;
   }
 
@@ -4217,7 +4213,7 @@ export class CharacterSheetElement extends HTMLElement {
         ${strikes.map((s, i) => `<label class="askrow"><input type="radio" name="strike" value="${esc(s.kind)}"${i === 0 ? ' checked' : ''}>
           <span>${esc(s.label)}</span></label>`).join('')}
       </fieldset>` : ''}
-      ${queries.length ? '<p class="hint">This roll asks something the sheet cannot answer for you.</p>' : ''}
+      ${queries.length ? '<p class="hint">This roll has questions the sheet cannot answer.</p>' : ''}
       ${queries.map((q, i) => `<label class="askrow">
         <span>${esc(q.label)}</span>
         ${q.free
@@ -4228,7 +4224,7 @@ export class CharacterSheetElement extends HTMLElement {
       <menu>
         <button value="cancel" data-askcancel>Cancel</button>
         ${queries.length ? `<button value="table" data-asktable
-          title="Copy the questions themselves, for Roll20 to ask at the table">Let Roll20 ask</button>` : ''}
+          title="Copy the roll with its questions, so Roll20 asks them.">Let Roll20 ask</button>` : ''}
         <button value="here" data-askhere class="primary">${queries.length ? 'Copy with these answers' : 'Copy'}</button>
       </menu>
     </form>`;
@@ -4353,12 +4349,12 @@ export class CharacterSheetElement extends HTMLElement {
     const count = `${list.length} action${list.length === 1 ? '' : 's'}`;
     const clear = rows.removeControl(`role="menuitem" data-action="undo-play-clear" data-arm="${PLAY_CLEAR_ARM}"`, {
       what: `${list.length === 1 ? 'this action' : `these ${count}`} from the undo list`,
-      title: `Clear the undo list (${count}); the play log keeps them`,
-      text: 'Clear list', armedText: `Clear ${count} — sure?`, arm: PLAY_CLEAR_ARM, armed: this.#view.armedRemove,
+      title: `Clear the undo list (${count}). They remain in the play log.`,
+      text: 'Clear list', armedText: `Clear ${count}?`, arm: PLAY_CLEAR_ARM, armed: this.#view.armedRemove,
     });
     return `<span class="playundo">
       <button data-action="undo-play" data-seq="${last.seq}"
-        title="Undo ${esc(last.label)} — only that: whatever happened since stays">↶ Undo ${esc(last.label)}</button><button
+        title="Undo ${esc(last.label)} only. Later actions are kept.">↶ Undo ${esc(last.label)}</button><button
         class="playundomore" data-action="undo-play-menu" aria-haspopup="menu" aria-expanded="${this.#playMenu}"
         aria-label="Undo an earlier action" title="Undo an earlier action">▾</button>
       ${this.#playMenu ? `<div class="playundomenu" role="menu" aria-label="Undo an earlier action">
@@ -4974,7 +4970,7 @@ export class CharacterSheetElement extends HTMLElement {
     // followed the keystrokes would be the field said twice.
     const renamable = !forCharacter && !FIXED_TABS.has(m.key);
     return `<div class="tabmenu" style="left:${m.x}px;top:${m.y}px" role="dialog"
-      aria-label="${forCharacter ? 'Character colour' : 'Tab name and colour'}">
+      aria-label="${forCharacter ? 'Character color' : 'Tab name and color'}">
       <div class="tabmenu-head">
         <span class="tabmenu-name">${esc(m.base || m.label)}</span>
         <button data-action="tabcolor-close" title="Close" aria-label="Close">×</button>
@@ -4982,12 +4978,12 @@ export class CharacterSheetElement extends HTMLElement {
       ${renamable ? `<div class="pair" style="margin-bottom:6px">
         <input class="tabname" data-tabrename value="${esc(this.#model.tabName(m.key) || '')}"
           placeholder="${esc(m.base || m.label)}" maxlength="40" aria-label="Tab name"
-          title="What this tab is called on your sheet. Blank gives its own name back; the GM’s inspector view always shows the original.">
+          title="Rename this tab. Leave it blank to use the original name.">
       </div>` : ''}
       ${/* The character's own key when it is the character being coloured,
            so the Details panel's control, if it is on screen, follows. */''}
       ${colorControl(forCharacter ? 'character' : 'tab', cur, {
-    label: forCharacter ? 'Character colour' : 'Tab colour', pair: true,
+    label: forCharacter ? 'Character color' : 'Tab color', pair: true,
   })}
     </div>`;
   }
@@ -5647,9 +5643,9 @@ export class CharacterSheetElement extends HTMLElement {
           this.#model.markUndo(`Took the campaign rules from ${file.name}`);
           this.#model.set('campaign', rules);
           this.#shareCampaignEdit();
-          this.#historyNote = `Campaign rules from ${file.name}.`;
+          this.#historyNote = `Loaded campaign rules from ${file.name}.`;
         } catch (err) {
-          this.#historyNote = `Could not read ${file.name} — ${err.message}`;
+          this.#historyNote = `Could not read ${file.name}: ${err.message}`;
         }
         this.#render();
       });
@@ -5665,9 +5661,9 @@ export class CharacterSheetElement extends HTMLElement {
           const { convertWorkbook } = await import('./convert.js');
           const doc = await convertWorkbook(await file.arrayBuffer(), { id: 'techniques' });
           const { added, replaced, total } = this.#model.mergeTechniquesFrom(doc);
-          this.#historyNote = `Techniques from ${file.name}: ${added} added, ${replaced} updated — ${total} on the list.`;
+          this.#historyNote = `Techniques from ${file.name}: ${added} added, ${replaced} updated. The list has ${total}.`;
         } catch (err) {
-          this.#historyNote = `Could not read ${file.name} — ${err.message}`;
+          this.#historyNote = `Could not read ${file.name}: ${err.message}`;
         }
         this.#render();
       });
@@ -7603,7 +7599,7 @@ export class CharacterSheetElement extends HTMLElement {
           delete d.campaignOwn;
           writeShared({ on: true, rules: d.campaign || {} });
           this.#model.recompute();
-          this.#historyNote = 'Every character now follows these campaign rules, unless it is set to its own.';
+          this.#historyNote = 'Every character without its own rules now uses these campaign rules.';
         }
         this.#render();
         break;
@@ -8169,8 +8165,8 @@ export class CharacterSheetElement extends HTMLElement {
           // ones already there has to say so -- otherwise the button looks
           // broken every time a second casting does nothing.
           this.#historyNote = r.granted
-            ? `${r.granted} temporary hit points.`
-            : `Kept the ${r.kept} temporary hit points already there — they do not stack.`;
+            ? `Gained ${r.granted} temporary hit points.`
+            : `Temporary hit points do not stack. Kept the existing ${r.kept}.`;
         }
         this.#view.draft.quickHp = '';
         this.#render();
@@ -8220,16 +8216,16 @@ export class CharacterSheetElement extends HTMLElement {
       case 'rest-day':
       case 'rest-week': {
         const r = this.#model.rest(name.slice('rest-'.length));
-        const moved = r.trackers ? `, ${r.trackers} tracker${r.trackers === 1 ? '' : 's'} back` : '';
+        const moved = r.trackers ? `, ${r.trackers} tracker${r.trackers === 1 ? '' : 's'} reset` : '';
         this.#historyNote = r.span === 'encounter'
-          ? `${r.label}${moved || ' — nothing with an encounter refresh was spent'}.`
-          : `${r.label} — hit points, slots and pools back${moved}.`;
+          ? `${r.label}${moved || ': nothing with an encounter refresh was spent'}.`
+          : `${r.label}: hit points, slots and pools restored${moved}.`;
         this.#render();
         break;
       }
       case 'goto-trackers':
         if (this.#barEntries().some((x) => x.id === 'trackers')) this.#tab = 'trackers';
-        else this.#historyNote = 'The Trackers tab is hidden in this view — show it from the ⚙ manager.';
+        else this.#historyNote = 'The Trackers tab is hidden in this view. Show it from the ⚙ tab.';
         this.#render();
         break;
       case 'tech-select':
@@ -8267,7 +8263,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'wealth-record': {
         const amount = Number(this.#view.draft.wealthAmount);
         if (!Number.isFinite(amount) || amount === 0) {
-          this.#historyNote = 'Give the ledger line an amount.';
+          this.#historyNote = 'Enter an amount.';
           this.#render();
           break;
         }
@@ -8283,7 +8279,7 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       case 'wealth-offering': {
         const paid = this.#model.makeOffering();
-        if (paid) this.#historyNote = `Offering made: ${Math.abs(paid.amount).toLocaleString('en-US')} paid; the count starts over from today.`;
+        if (paid) this.#historyNote = `Offering made: ${Math.abs(paid.amount).toLocaleString('en-US')} paid. The count restarts today.`;
         this.#render();
         break;
       }
@@ -8332,7 +8328,7 @@ export class CharacterSheetElement extends HTMLElement {
         try {
           this.#historyNote = applyBlock(this.#model, block);
         } catch (err) {
-          this.#historyNote = `Could not add ${block.name || 'that block'} — ${err.message}`;
+          this.#historyNote = `Could not add ${block.name || 'that block'}: ${err.message}`;
         }
         this.#render();
         break;
