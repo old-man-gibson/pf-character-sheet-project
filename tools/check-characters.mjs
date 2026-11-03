@@ -4,8 +4,9 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { Character, inspectDocument } from '../app/js/model.js';
 import { countChanges } from '../app/js/history.js';
+import { readArgs } from './lib/cli.mjs';
 
-const inputs = process.argv.slice(2);
+const { inputs } = readArgs();
 if (!inputs.length) {
   console.error('Usage: node tools/check-characters.mjs <directory or JSON files>');
   process.exit(1);

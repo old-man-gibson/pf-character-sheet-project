@@ -9,7 +9,8 @@
  * the options that take a value are named once, and the inputs follow.
  *
  * Not node:util's parseArgs: that refuses an option it was not told about,
- * and these tools have always let an unknown flag through.
+ * and these tools have always let an unknown flag through. The one that does
+ * refuse one, convert.mjs, checks `names` itself.
  */
 
 /**
@@ -21,9 +22,13 @@
  *                the value given after `--name` (the first, if repeated);
  *                `fallback` when `--name` is not there, null when it is
  *                there with nothing after it
+ *   last(name, fallback = null)
+ *                the same for the last `--name`, for a tool where a repeated
+ *                option overrides the one before it
  *   all(name)    every value given for an option that may be repeated
  *                (`--drop a --drop b`)
  *   flag(name)   whether `--name` is there at all
+ *   names        the name of every option given, once each
  */
 export function readArgs(valued = [], argv = process.argv.slice(2)) {
   const takesValue = new Set(valued);
@@ -46,7 +51,9 @@ export function readArgs(valued = [], argv = process.argv.slice(2)) {
   return {
     inputs,
     opt: (name, fallback = null) => (values.has(name) ? values.get(name)[0] : fallback),
+    last: (name, fallback = null) => (values.has(name) ? values.get(name).at(-1) : fallback),
     all: (name) => (values.get(name) || []).filter((v) => v !== null),
     flag: (name) => given.has(name),
+    names: [...given],
   };
 }

@@ -23,17 +23,18 @@ import { stat, readdir, realpath } from 'node:fs/promises';
 import { join, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isLocalRequest } from '../gm-module/lib/http.mjs';
+import { readArgs } from './lib/cli.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const args = process.argv.slice(2);
-let port = Number(process.env.PORT ?? 8777);
-let gmData = null;
-let host = '127.0.0.1';
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === '--gm-data') gmData = resolve(args[++i]);
-  else if (args[i] === '--host') host = args[++i];
-  else if (/^\d+$/.test(args[i])) port = Number(args[i]);
-}
+// The port is the last bare number on the line, and a repeated option the last
+// one given, so a word added to the end of a saved command is the one that counts.
+const args = readArgs(['gm-data', 'host']);
+const port = Number(args.inputs.filter((word) => /^\d+$/.test(word)).at(-1) ?? process.env.PORT ?? 8777);
+const gmDataDir = args.last('gm-data');
+const gmData = gmDataDir === null ? null : resolve(gmDataDir);
+// `--host` with nothing after it names no address, and Node listens on every
+// address when given none; it serves this machine, as with no --host at all.
+const host = args.last('host') || '127.0.0.1';
 const localOnly = ['127.0.0.1', '::1', 'localhost'].includes(host);
 
 // GM tools, when the checkout has them. The sheet works the same without.

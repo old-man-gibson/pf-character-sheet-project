@@ -18,16 +18,16 @@ import { mkdtempSync, mkdirSync, rmSync, readdirSync, existsSync } from 'node:fs
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readArgs } from './lib/cli.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
-const args = process.argv.slice(2);
-const option = (name, fallback) => {
-  const at = args.indexOf(name);
-  return at >= 0 && args[at + 1] ? args[at + 1] : fallback;
-};
-const ref = option('--ref', 'HEAD');
-const dryRun = args.includes('--dry-run');
+const args = readArgs(['ref']);
+// `--ref` with nothing after it deploys HEAD, as no --ref does.
+const ref = args.opt('ref') || 'HEAD';
+// A dry run is the safe reading, so `--dry-run` counts wherever it is, even
+// where a --ref would take it for the ref (`--ref main --ref --dry-run`).
+const dryRun = args.flag('dry-run') || args.all('ref').includes('--dry-run');
 
 /** Run a command to completion, or throw with its exit status. */
 const run = (cmd, cmdArgs, opts = {}) => {

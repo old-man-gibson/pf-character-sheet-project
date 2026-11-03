@@ -23,6 +23,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from 'no
 import { basename, join } from 'node:path';
 import { EOL } from 'node:os';
 import { convertWorkbook, indexEntry, warningsFor, slug } from '../app/js/convert.js';
+import { readArgs } from './lib/cli.mjs';
 
 const RAW_DIR = 'data/raw';
 const OUT_DIR = 'data/characters';
@@ -42,26 +43,29 @@ With no workbook, rebuilds every character listed in <out>/index.json from
   --dry-run        report what would be written without writing it
   -h, --help       show this message`;
 
+/** The options that take a value, and the key each is kept under in `opts`. */
+const VALUED = { id: 'id', name: 'name', 'file-id': 'fileId', out: 'out', raw: 'raw' };
+const KNOWN = new Set([...Object.keys(VALUED), 'dry-run', 'help']);
+
 function parseArgs(argv) {
-  const opts = { out: OUT_DIR, raw: RAW_DIR, dryRun: false };
-  const rest = [];
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    const need = (name) => {
-      const v = argv[++i];
-      if (v === undefined) throw new Error(`${name} needs a value`);
-      return v;
-    };
-    if (a === '--id') opts.id = need('--id');
-    else if (a === '--name') opts.name = need('--name');
-    else if (a === '--file-id') opts.fileId = need('--file-id');
-    else if (a === '--out') opts.out = need('--out');
-    else if (a === '--raw') opts.raw = need('--raw');
-    else if (a === '--dry-run') opts.dryRun = true;
-    else if (a === '-h' || a === '--help') opts.help = true;
-    else if (a.startsWith('-')) throw new Error(`unknown option: ${a}`);
-    else rest.push(a);
+  const { inputs, last, flag, names } = readArgs(Object.keys(VALUED), argv);
+  // Unlike the other tools, this one refuses an option it does not know, a
+  // single-dash one included: a mistyped option would otherwise be ignored,
+  // and the workbook converted without it. `-h` is the one short option.
+  const unknown = new Set([
+    ...names.filter((name) => !KNOWN.has(name)).map((name) => `--${name}`),
+    ...inputs.filter((word) => word.startsWith('-') && word !== '-h'),
+  ]);
+  if (unknown.size) throw new Error(`unknown option: ${argv.find((word) => unknown.has(word))}`);
+  const opts = { out: OUT_DIR, raw: RAW_DIR, dryRun: flag('dry-run') };
+  if (flag('help') || inputs.includes('-h')) opts.help = true;
+  // A repeated option overrides the one before it.
+  for (const [name, key] of Object.entries(VALUED)) {
+    if (!flag(name)) continue;
+    if (last(name) === null) throw new Error(`--${name} needs a value`);
+    opts[key] = last(name);
   }
+  const rest = inputs.filter((word) => !word.startsWith('-'));
   if (rest.length > 1) throw new Error('only one workbook at a time');
   opts.workbook = rest[0];
   return opts;

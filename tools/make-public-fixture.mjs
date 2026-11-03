@@ -25,6 +25,7 @@ import { blankDocument, indexEntry } from '../app/js/convert.js';
 import { Character } from '../app/js/model.js';
 import { normalizeExtension } from '../app/js/extensions.js';
 import { registerPacks } from '../app/js/extension-runtime.js';
+import { readArgs } from './lib/cli.mjs';
 
 const OUT_DIR = join('tests', 'fixtures', 'public', 'characters');
 const ID = 'vesna';
@@ -331,7 +332,7 @@ const files = [
   [join(OUT_DIR, `${ID}.json`), `${JSON.stringify(character, null, 1)}\n`],
 ];
 
-if (process.argv.includes('--check')) {
+if (readArgs().flag('check')) {
   const stale = files.filter(([path, body]) => {
     try { return readFileSync(path, 'utf8') !== body; } catch { return true; }
   });
