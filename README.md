@@ -171,6 +171,8 @@ forge/                  Homebrew Workbench, the homebrew workbench: index.html, 
 app/js/forge-pack.js    a Forge project as an extension pack: the one mapping, shared by
                         the Forge page and tools/forge-pack.mjs
 app/js/sheet-element.js the <character-sheet> custom element
+app/js/sheet/           parts of the element in modules of their own: publishing and the GM
+                        relay, saving and history, the search palette's dialog, the theme
 app/js/ui/palette.js    the Ctrl+K search palette: the character as searchable rows
 app/js/styles.js        loads the stylesheet and shares it as one adopted sheet
 app/css/sheet.css       the component stylesheet itself (shadow-scoped)

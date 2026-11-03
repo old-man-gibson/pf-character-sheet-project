@@ -55,20 +55,14 @@
  */
 
 import {
-  Character, inspectDocument, deckManipulation, techniqueTitle, emptyDish,
-  poolAt, poolBar, poolPip, poolStep, poolTyped, remoteAllowed, remotePlayArg,
+  Character, inspectDocument, techniqueTitle, emptyDish,
+  poolAt, poolBar, poolPip, poolStep, poolTyped,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
 import { COMPANION_KINDS, COMPANION_LABELS } from './companions.js';
 import { applyBlock, looksLikeExtension, looksLikeLibrary, removeArchetype } from './extensions.js';
-import { describePublish, publishDocument } from './publish.js';
 import { SHEET_LINK, adoptSheetStyles } from './styles.js';
-import {
-  PALETTES, LAYOUTS, WIDTHS, DEFAULT_WIDTH, AUTO, isPalette, isLayout, isWidth, resolvePalette, schemeOf, flipped,
-  readThemePrefs, writeThemePrefs, CUSTOM, CUSTOM_COLORS, customPalette, customPaletteCss, customFromPalette,
-  normalizeCustom, ACTION_MARKS, ACTION_TINTS, DEFAULT_ACTION_MARKS,
-  DEFAULT_ACTION_TINT, isActionMarks, isActionTint,
-} from './themes.js';
+import { flipped } from './themes.js';
 import {
   awardXp, campaignPreset, campaignRules, followsShared, levelUp, presetCampaign, sameCampaign, tierUp, specialtyInPlay,
 } from './model/campaign.js';
@@ -112,8 +106,7 @@ import { bindSessionBoard } from './ui/panels/session.js';
 import { bindClassActions } from './ui/class-actions.js';
 import { bindChains } from './ui/session-chains.js';
 import { sessionRollSpec } from './model/session-rolls.js';
-import { appendDiceText, appendListText } from './model/subsystems/cardcasting.js';
-import { castPickArg, followCastPick } from './ui/cast-pick.js';
+import { bindCardTable } from './ui/card-table.js';
 import * as combat from './ui/panels/combat.js';
 import * as guile from './ui/panels/guile.js';
 import * as trainingPanels from './ui/panels/training.js';
@@ -138,13 +131,13 @@ import {
   workingHtml, browserHtml, myFormulasHtml, forwardedHtml, valueGroups, targetsHtml, targetGroups,
 } from './formula-guide.js';
 import { formulaPlace } from './ui/formula-places.js';
-import {
-  historyFor, countChanges, requestPersistence, workingKey, SNAPSHOT_EVERY, AUTO_KEEP,
-} from './history.js';
-import { SCHEMA_VERSION } from './model.js';
+import { AUTO_KEEP } from './history.js';
 import { downloadFile } from './download.js';
 import { mythWeaversBackup } from './myth-weavers.js';
-import { tabId, undoKey, readUndo, writeUndo } from './undo-store.js';
+import { Sharing, UNPUBLISH_ARM } from './sheet/sharing.js';
+import { SheetStore } from './sheet/persistence.js';
+import { PaletteDialog } from './sheet/palette-dialog.js';
+import { SheetTheme } from './sheet/theme.js';
 import {
   TRACKER_PALETTE, normalizeStyle, normalizeHex, isDefaultStyle, rgba, readableOn,
 } from './tracker-style.js';
@@ -165,18 +158,6 @@ function writeRollFormat(format) {
   try { globalThis.localStorage?.setItem(ROLL_FORMAT_KEY, format); } catch { /* not fatal */ }
 }
 
-
-/**
- * The palette's three numbers: how many rows a page of results is, what one
- * costs in pixels (for PageUp/PageDown, which have to guess), and how many
- * picks it remembers. The recent list is held for the session rather than
- * saved -- one browser holds many characters, and a palette that opens on
- * somebody else's last five choices would be worse than one that opens on the
- * character's own vitals.
- */
-const PALETTE_PAGE = 40;
-const PALETTE_ROW_PX = 46;
-const PALETTE_RECENT = 8;
 
 const TABS = [
   ['overview', 'Overview'],
@@ -227,9 +208,6 @@ const BREAKDOWN_GRACE = 140;
 
 /** The key the undo list's Clear is armed under (the view's `armedRemove`). */
 const PLAY_CLEAR_ARM = 'play-undo-clear';
-
-/** The key Unpublish is armed under, beside the share link. */
-const UNPUBLISH_ARM = 'unpublish';
 
 /** The modelled sub-systems: tabs whose visibility the ⚙ manager controls by key. */
 const MODELLED_TAB_IDS = new Set([
@@ -576,31 +554,45 @@ export class CharacterSheetElement extends HTMLElement {
   #sourceDoc = null;        // the document as loaded, before any local edits
   #importError = null;      // why the last offered file was refused
   /*
-   * Saving, and going back.
-   *
-   * `#history` is this character's store. `#savedDoc` is the canonical version
-   * it opened on, kept in memory because every change count is measured against
-   * it. `#changes` is that count; `#snapshotAt` is what it stood at when the
-   * last automatic snapshot was taken, so snapshots land every
-   * `SNAPSHOT_EVERY` changes rather than on every edit once the threshold is
-   * passed. `#resume` is an offer to pick up unsaved work found on load.
+   * Saving, and going back: the working copy, the saved version, snapshots,
+   * the undo kept for a reload, and the same character in another window
+   * (sheet/persistence.js). The sheet draws from its fields.
    */
-  #history = null;
-  #savedDoc = null;
-  #openedDoc = null;        // stands in for a saved version until there is one
-  #changes = 0;
-  #snapshotAt = 0;
-  #resume = null;
-  #recoveries = [];
-  #staleSaved = false;
+  #store = new SheetStore({
+    model: () => this.#model,
+    adoptDocument: (doc) => this.#adoptDocument(doc),
+    adoptSynced: (doc, changes) => this.#adoptSynced(doc, changes),
+    render: () => this.#render(),
+    renderHeader: (opts) => this.#renderHeader(opts),
+    note: (text) => { this.#historyNote = text; },
+    isPublished: () => this.isPublished,
+    attr: (name) => this.getAttribute(name),
+    typingIn: () => {
+      const active = this.shadowRoot?.activeElement;
+      return active?.matches?.('input, textarea, select, [contenteditable="true"]') ? active : null;
+    },
+    saveFailed: (failed) => {
+      const banner = this.shadowRoot?.querySelector('.savefail');
+      if (banner) banner.hidden = !failed;
+    },
+  });
   #showHistory = false;
-  #snapshots = [];
   #historyNote = null;      // "Saved", "Restored ..." -- clears on the next action
   // "Every character" pressed once on the Campaign rules panel, where nothing
   // is shared yet: the second press shares this character's rules with all.
   #campaignShareArmed = false;
-  #publishedLink = null;    // { url, rev, summary, copied } after Publish, until dismissed
-  #storageFailed = false;   // the working state is not being written -- see #writeWorking
+  /** The published link, the card table's windows and the GM relay (sheet/sharing.js). */
+  #sharing = new Sharing({
+    model: () => this.#model,
+    ctx: () => this.#ctx(),
+    render: () => this.#render(),
+    renderHeader: () => this.#renderHeader(),
+    note: (text) => { this.#historyNote = text; },
+    tableAction: (...args) => this.#tableAction(...args),
+    look: () => ({ theme: this.getAttribute('theme') || '', scheme: this.getAttribute('scheme') || '' }),
+    isPublished: () => this.isPublished,
+    root: () => this.shadowRoot,
+  });
   #changePending = false;   // an edit has announced itself and its one write is queued
   #tabColorFor = null;      // { key, label, x, y } while the tab colour panel is open
   #roBoxObserver = null;    // watches the width of the self-sizing read-only boxes
@@ -609,7 +601,6 @@ export class CharacterSheetElement extends HTMLElement {
   #widthObserver = null;    // redraws when the sheet's width crosses 620px
   #checkpointDraft = '';
   #renameDraft = null;      // { key, label } while a checkpoint is being renamed
-  #snapshotTimer = null;
   #adopting = null;
   #tab = 'overview';
   /* What was last written to the view store, so a render that changed nothing
@@ -656,17 +647,14 @@ export class CharacterSheetElement extends HTMLElement {
   #printStack = null;
   #printWidth = PRINT_WIDTH;
   #printPage = null;
-  /**
-   * What this browser asked for: `{ palette, layout }`, either half optional,
-   * or null when it never chose and the attributes are the host's. Kept apart
-   * from the attributes because `auto` is a preference and never an attribute:
-   * the element resolves it to a palette and writes that.
-   */
-  #themePref = null;
-  /** The custom palette's rule, adopted after the shared stylesheet; null until a custom palette is first put on. */
-  #customSheet = null;
-  /** The system's light/dark setting, watched while the preference is `auto`. */
-  #schemeQuery = null;
+  /** The look this browser chose, put on the element's attributes (sheet/theme.js). */
+  #theme = new SheetTheme({
+    el: this,
+    hasModel: () => !!this.#model,
+    render: () => this.#render(),
+    fitRail: () => this.#fitRail(),
+    surfacesMoved: () => { this.#surfaceCache = null; },
+  });
   /* Which of the narrow-screen help disclosures are open; see `#clampHints`. */
   #openHelp = new Set();
   /* The last id `#clampHints` gave a field so that its label could name it. */
@@ -689,10 +677,6 @@ export class CharacterSheetElement extends HTMLElement {
      only ever one last thing. */
   #undoToast = null;    // { label }
   #undoToastTimer = null;
-  /* The undo stacks kept across a reload (see undo-store.js): written shortly
-     after a change, and the ones found on open waiting for a resumed copy. */
-  #undoSaveTimer = null;
-  #undoKept = null;
   /* The list of earlier play actions under the rail's Undo button, open or not. */
   #playMenu = false;
   /**
@@ -702,17 +686,15 @@ export class CharacterSheetElement extends HTMLElement {
    * storage falls back to the field's own value for the session.
    */
   #rollFormat = readRollFormat();
-  /**
-   * The search palette (Ctrl+K).
-   *
-   * The <dialog> is built once per opening and kept here rather than looked up,
-   * because a render throws every node in the shadow root away and this one has
-   * to survive it: the reference keeps it alive with its listeners, and the
-   * render puts it back (see the end of #render). Everything else is what the
-   * open palette is showing -- the index it searched, the rows it found, and
-   * where the selection sits.
-   */
-  #palette = null;
+  /** The search palette (Ctrl+K): its dialog is sheet/palette-dialog.js, and choosing is #paletteChose. */
+  #palette = new PaletteDialog({
+    root: () => this.shadowRoot,
+    index: () => (this.#model
+      ? palette.buildIndex(this.#model, { tabs: this.#tabEntries(), isAdmin: this.isAdmin })
+      : null),
+    placeholder: () => `Search ${this.#model?.data.identity?.name || 'this character'}…`,
+    choose: (entry, opts) => this.#paletteChose(entry, opts),
+  });
   /* The live region, and the headline values it is watching. Both outlive
      every render; see `#announceChanges`. */
   #live = null;
@@ -729,15 +711,6 @@ export class CharacterSheetElement extends HTMLElement {
   // ladder cell's ⓘ does -- so that the mouse moving off it is not what closes
   // it. A click anywhere else, Escape, or the sheet scrolling still is.
   #bdPinned = false;
-  #paletteIndex = null;
-  #paletteRows = [];
-  #paletteAt = 0;
-  #paletteShown = 0;
-  #paletteTerms = [];
-  #paletteFrame = 0;
-  #paletteReturn = null;    // what had focus when it opened
-  /** The last few things picked, newest first: an empty box opens on them. */
-  #paletteRecent = [];
   /**
    * A tab reached from the palette that is not on the bar.
    *
@@ -840,7 +813,7 @@ export class CharacterSheetElement extends HTMLElement {
      * not having it.
      */
     if (key === 's') {
-      if (!inside || this.isPublished || !this.#changes) return;
+      if (!inside || this.isPublished || !this.#store.changes) return;
       e.preventDefault();
       this.#action('save');
       return;
@@ -865,7 +838,7 @@ export class CharacterSheetElement extends HTMLElement {
     // Typing somewhere else on the page: leave the key to whoever is typing.
     if (!inside && isTypingIn(path[0] ?? e.target)) return;
     e.preventDefault();
-    this.#togglePalette();
+    this.#palette.toggle();
   };
 
   /**
@@ -950,7 +923,7 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   connectedCallback() {
-    this.#applyThemePrefs();
+    this.#theme.apply();
     this.#bindBracketMatching();
     this.#bindBreakdowns();
     this.#renderShell();
@@ -976,26 +949,25 @@ export class CharacterSheetElement extends HTMLElement {
       this.#widthObserver.observe(this);
     }
     // The card table's pop-out windows are told when the sheet goes.
-    window.addEventListener('pagehide', this.#closeCardWindows);
+    window.addEventListener('pagehide', this.#sharing.closeAll);
     // A reload straight after an action still finds its undo kept.
-    window.addEventListener('pagehide', this.#keepUndoNow);
+    window.addEventListener('pagehide', this.#store.keepUndoNow);
     window.addEventListener('beforeprint', this.#onBeforePrint);
     // The same character open in another window: its writes are picked up here.
-    window.addEventListener('storage', this.#onStorage);
-    if (this.#model && !this.#cardChannel) this.#openCardChannel();
+    window.addEventListener('storage', this.#store.onStorage);
+    if (this.#model && !this.#sharing.channelOpen) this.#sharing.openChannel();
     const src = this.getAttribute('src');
     if (src && !this.#model) this.load(src);
   }
 
   disconnectedCallback() {
-    window.removeEventListener('pagehide', this.#closeCardWindows);
-    window.removeEventListener('pagehide', this.#keepUndoNow);
+    window.removeEventListener('pagehide', this.#sharing.closeAll);
+    window.removeEventListener('pagehide', this.#store.keepUndoNow);
     window.removeEventListener('beforeprint', this.#onBeforePrint);
-    this.#keepUndoNow();
-    window.removeEventListener('storage', this.#onStorage);
-    clearTimeout(this.#syncTimer);
-    this.#pendingSync = null;
-    this.#closeCardWindows();
+    this.#store.keepUndoNow();
+    window.removeEventListener('storage', this.#store.onStorage);
+    this.#store.close();
+    this.#sharing.closeAll();
     extensionRuntime.removeEventListener('change', this.#onExtensionsChange);
     sharedRules.removeEventListener('change', this.#onSharedRules);
     this.ownerDocument.removeEventListener('keydown', this.#onDocumentKey);
@@ -1008,216 +980,17 @@ export class CharacterSheetElement extends HTMLElement {
     window.removeEventListener('resize', this.#onViewportChange);
     this.#widthObserver?.disconnect();
     this.#closeBreakdown();
-    this.#closePalette();
-    this.#schemeQuery?.removeEventListener('change', this.#onSchemeChange);
-    this.#schemeQuery = null;
+    this.#palette.close();
+    this.#theme.disconnect();
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
     if (oldValue === newValue) return;
     // The scheme rides beside the theme, always: a host that writes
     // theme="parchment" gets scheme="light" without knowing the word.
-    if (name === 'theme') this.setAttribute('scheme', this.#schemeOf(newValue));
+    if (name === 'theme') this.setAttribute('scheme', this.#theme.schemeOf(newValue));
     if (name === 'src' && newValue) this.load(newValue);
     else if (this.#model) this.#render();
-  }
-
-  /* ---------------- themes ---------------- */
-
-  /**
-   * Put the browser's remembered look on, or leave the host's attributes as
-   * they are when nothing was remembered. Runs once, on connect.
-   *
-   * The preference beats the attribute on purpose: the attribute is what the
-   * page's author chose for everyone, the preference is what this person
-   * chose for themselves, and the second is the later and more specific word.
-   * An embed that must look one way can leave the picker out of reach --
-   * the roll format works the same way.
-   */
-  #applyThemePrefs() {
-    this.#themePref = readThemePrefs();
-    this.#putCustomPalette(this.#themePref?.custom);
-    if (!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
-    if (!this.hasAttribute('layout')) this.setAttribute('layout', 'top');
-    if (this.#themePref?.palette) this.setAttribute('theme', this.#resolvedPalette());
-    if (this.#themePref?.layout) this.setAttribute('layout', this.#themePref.layout);
-    if (this.#themePref?.width) this.setAttribute('width', this.#themePref.width);
-    this.setAttribute('action-marks', this.#themePref?.actionMarks || DEFAULT_ACTION_MARKS);
-    this.setAttribute('action-tint', this.#themePref?.actionTint || DEFAULT_ACTION_TINT);
-    // Whatever the theme came from, the scheme has to match it.
-    this.setAttribute('scheme', this.#schemeOf(this.getAttribute('theme')));
-    if (typeof matchMedia === 'function' && !this.#schemeQuery) {
-      this.#schemeQuery = matchMedia('(prefers-color-scheme: dark)');
-      this.#schemeQuery.addEventListener('change', this.#onSchemeChange);
-    }
-  }
-
-  /** The palette the preference stands for right now (`auto` asks the system). */
-  #resolvedPalette() {
-    return resolvePalette(this.#themePref?.palette, !!this.#schemeQuery?.matches);
-  }
-
-  /** `light` or `dark` for a theme; the custom one's comes from its colours. */
-  #schemeOf(theme) {
-    return schemeOf(theme, this.#themePref?.custom);
-  }
-
-  /**
-   * Put the custom palette's rule in the element's own stylesheet, adopted
-   * after the shared one so it is there for `theme="custom"`. Replaced whole on
-   * each change. The surface player colours are measured against is read again.
-   */
-  #putCustomPalette(colors) {
-    const css = customPaletteCss(colors);
-    if (!this.#customSheet) {
-      if (!css || typeof CSSStyleSheet === 'undefined') return;
-      this.#customSheet = new CSSStyleSheet();
-      this.shadowRoot.adoptedStyleSheets = [...this.shadowRoot.adoptedStyleSheets, this.#customSheet];
-    }
-    this.#customSheet.replaceSync(css);
-    this.#surfaceCache = null;
-  }
-
-  /** The custom colours as the picker holds them, for a preview while one is dragged. */
-  #previewCustom(colors) {
-    if (!customPalette(colors)) return;
-    this.#putCustomPalette(colors);
-    this.setAttribute('scheme', schemeOf(CUSTOM, colors));
-  }
-
-  /** The system flipped its setting; only a sheet on `auto` follows it. */
-  #onSchemeChange = () => {
-    if (this.#themePref?.palette !== AUTO) return;
-    this.setAttribute('theme', this.#resolvedPalette());
-    this.#announceTheme();
-  };
-
-  /**
-   * Choose a look. Either half may be left out to keep what is there; the
-   * choice is remembered for this browser, put on the element, and told to
-   * the host page as a `theme-change` event so the page's own chrome can
-   * follow the sheet.
-   */
-  #setTheme({ palette, layout, width, actionMarks, actionTint, custom } = {}) {
-    const next = { ...(this.#themePref || {}) };
-    const before = this.getAttribute('theme');
-    if (isPalette(palette)) next.palette = palette;
-    if (isLayout(layout)) next.layout = layout;
-    if (isWidth(width)) next.width = String(width);
-    if (isActionMarks(actionMarks)) next.actionMarks = actionMarks;
-    if (isActionTint(actionTint)) next.actionTint = actionTint;
-    if (normalizeCustom(custom)) next.custom = normalizeCustom(custom);
-    // The first custom palette starts from the palette on screen.
-    if (next.palette === CUSTOM && !next.custom) next.custom = customFromPalette(before) || customFromPalette('dark');
-    this.#themePref = writeThemePrefs(next) || next;
-    this.#putCustomPalette(this.#themePref.custom);
-    if (next.palette) this.setAttribute('theme', this.#resolvedPalette());
-    // New custom colours can change the scheme without changing the theme.
-    this.setAttribute('scheme', this.#schemeOf(this.getAttribute('theme')));
-    // A theme change re-renders; new custom colours on the same theme have to
-    // ask, so player colours are measured against the new surfaces.
-    if (custom && before === CUSTOM && this.getAttribute('theme') === CUSTOM && this.#model) this.#render();
-    if (next.layout) this.setAttribute('layout', next.layout);
-    if (next.width) this.setAttribute('width', next.width);
-    if (next.actionMarks) this.setAttribute('action-marks', next.actionMarks);
-    if (next.actionTint) this.setAttribute('action-tint', next.actionTint);
-    // The rail's height follows the sheet's edges; a narrower sheet is not a
-    // re-render, so it is measured here.
-    this.#fitRail();
-    this.#announceTheme();
-  }
-
-  #announceTheme() {
-    this.dispatchEvent(new CustomEvent('theme-change', {
-      bubbles: true,
-      composed: true,
-      detail: {
-        palette: this.#themePref?.palette ?? this.getAttribute('theme'),
-        theme: this.getAttribute('theme'),
-        scheme: this.getAttribute('scheme'),
-        layout: this.getAttribute('layout'),
-        width: this.getAttribute('width') || DEFAULT_WIDTH,
-      },
-    }));
-  }
-
-  /**
-   * The picker. A card per palette -- its four colours as a strip, its name,
-   * a line on what it is for -- and under them the two halves separately, for
-   * putting one palette with the other rail. Pressing a card sets both halves
-   * to what that palette was designed with; the selects change one.
-   */
-  #themeMenuHtml() {
-    const theme = this.getAttribute('theme');
-    const pref = this.#themePref?.palette ?? theme;
-    const layout = this.getAttribute('layout') || 'top';
-    const width = this.getAttribute('width') || DEFAULT_WIDTH;
-    const marks = this.getAttribute('action-marks') || DEFAULT_ACTION_MARKS;
-    const tint = this.getAttribute('action-tint') || DEFAULT_ACTION_TINT;
-    const card = (p) => `
-        <button type="button" class="preset" data-action="set-theme"
-          data-palette="${p.id}" data-layout="${p.layout}"
-          aria-pressed="${pref === p.id && layout === p.layout}"
-          title="${esc(p.name)}: ${p.layout === 'side' ? 'tabs down the side' : 'tabs across the top'}">
-          <span class="swatches" aria-hidden="true">${p.swatch.map((c) => `<i style="background:${c}"></i>`).join('')}</span>
-          <span class="pname">${esc(p.name)}<small>${p.layout === 'side' ? 'side rail' : 'top bar'}</small></span>
-          <span class="pblurb">${esc(p.blurb)}</span>
-        </button>`;
-    const opt = (id, name, on) => `<option value="${id}"${on ? ' selected' : ''}>${esc(name)}</option>`;
-    // The custom card shows the saved custom colours, or the palette on
-    // screen when there are none yet, since that is where a first one starts.
-    const custom = this.#themePref?.custom || customFromPalette(theme) || customFromPalette('dark');
-    const customCard = `
-        <button type="button" class="preset" data-action="set-theme" data-palette="${CUSTOM}"
-          aria-pressed="${pref === CUSTOM}" title="Custom: your own colours">
-          <span class="swatches" aria-hidden="true">${customPalette(custom).swatch.map((c) => `<i style="background:${c}"></i>`).join('')}</span>
-          <span class="pname">Custom</span>
-          <span class="pblurb">Pick your own background, panel, text and accent colours.</span>
-        </button>`;
-    const picks = pref !== CUSTOM ? '' : `
-        <div class="mix custompicks" role="group" aria-label="Custom colours">
-          ${CUSTOM_COLORS.map((c) => `<label>${esc(c.name)}
-            <input type="color" data-customcolor="${c.id}" value="${custom[c.id]}"></label>`).join('')}
-          <p class="hint">Colours are made lighter or darker where needed so text stays readable.</p>
-        </div>`;
-    return `<section class="panel thememenu" aria-label="Theme and layout">
-        <h3>Theme &amp; layout</h3>
-        <div class="presets">${PALETTES.map(card).join('')}${customCard}</div>
-        ${picks}
-        <div class="mix">
-          <label>Palette
-            <select data-themepick="palette" aria-label="Palette">
-              ${opt(AUTO, 'Follow the system (light / dark)', pref === AUTO)}
-              ${PALETTES.map((p) => opt(p.id, p.name, pref === p.id)).join('')}
-              ${opt(CUSTOM, 'Custom', pref === CUSTOM)}
-            </select>
-          </label>
-          <label>Tabs
-            <select data-themepick="layout" aria-label="Where the tabs go">
-              ${LAYOUTS.map((l) => opt(l.id, l.name, layout === l.id)).join('')}
-            </select>
-          </label>
-          <label>Width
-            <select data-themepick="width" aria-label="How wide the sheet is">
-              ${WIDTHS.map((w) => opt(w.id, w.name, width === w.id)).join('')}
-            </select>
-          </label>
-          <label>Action cards
-            <select data-themepick="actionMarks" aria-label="How a session card shows its action type">
-              ${ACTION_MARKS.map((m) => opt(m.id, m.name, marks === m.id)).join('')}
-            </select>
-          </label>
-          <label>Card colour
-            <select data-themepick="actionTint" aria-label="How much of a session card takes its action's colour">
-              ${ACTION_TINTS.map((t) => opt(t.id, t.name, tint === t.id)).join('')}
-            </select>
-          </label>
-          <button type="button" class="close" data-action="theme-close">Done</button>
-        </div>
-        <p class="hint">Remembered in this browser, for every character. The side rail needs a wide window
-          and falls back to the bar on a narrow one. Action cards can show their type as a tag, as colour,
-          both or neither. The colour can be a left edge or a wash across the card.</p>
-      </section>`;
   }
 
   /* ---------------- public API ---------------- */
@@ -1250,25 +1023,15 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
-   * Decide which version of this character to open, and show it.
-   *
-   * Three documents can be in play. `doc` is the sheet as converted or
-   * imported. The *working* state is where the player last left off, written on
-   * every edit. The *canonical* version is what they last pressed Save on, and
-   * that is what opens -- so Save means something, and so a session of
-   * experiments does not silently become the character.
-   *
-   * Unsaved work is never dropped on the floor for that. When the working state
-   * has drifted from the canonical one, it is filed as a snapshot before
-   * anything else happens, and the offer to pick it up points at that snapshot.
-   * So the recovery survives ignoring the banner, closing the tab, or a crash
-   * two minutes later -- it is in the history like any other earlier state.
+   * Decide which version of this character to open, and show it. Which one
+   * is the store's call (SheetStore.open): the saved version, with unsaved
+   * work filed as a snapshot and offered back.
    */
   async #adopt(doc) {
     // A palette left open over an import would be searching the character that
     // just left, and so would its list of recent picks.
-    this.#closePalette();
-    this.#paletteRecent = [];
+    this.#palette.close();
+    this.#palette.recent = [];
     // The shared tables -- the maneuver catalogue, casting and power-point
     // tables, deck manipulations, the iron chef's ingredients -- have to be in
     // place before the model is built, whichever way the document arrived. Once
@@ -1279,53 +1042,9 @@ export class CharacterSheetElement extends HTMLElement {
     // Kept pristine so Reset works for a document handed in directly, where
     // there is no src to re-fetch.
     this.#sourceDoc = structuredClone(doc);
-    this.#history = historyFor(doc?.id ?? 'character',
-      { storageKey: this.getAttribute('storage-key') });
-    // Ask once that this browser keep what it is about to be given. A published
-    // view is exempt: it writes nothing down, so asking a stranger's browser to
-    // set aside durable room for a sheet it will not keep is a prompt for
-    // nothing. Deliberately not awaited -- the answer changes no code path here.
-    if (!this.isPublished) requestPersistence();
-    this.#resume = null;
     this.#historyNote = null;
     this.#showHistory = false;
-    this.#snapshotAt = 0;
-
-    /*
-     * A published document is the whole truth and nothing stored here outranks
-     * it. What this browser holds under the same id is a different copy of the
-     * character -- and on a preview it is the author's own, which would quietly
-     * replace the document being previewed with the one it was made from. That
-     * is the single thing a preview must never do, and it is not only a preview
-     * problem: two people can each be sent a sheet whose id matches one they
-     * already have.
-     */
-    const working = this.isPublished ? null : this.#history.readWorking();
-    this.#recoveries = this.isPublished ? [] : this.#history.readRecoveries();
-    const canonical = this.isPublished ? null : await this.#history.readSaved();
-    this.#savedDoc = canonical?.data ?? null;
-    // The undo stacks this tab kept, if the working copy is still the one it
-    // wrote: another window's later write makes them someone else's past.
-    const mine = !!working && !!working.by && working.by === tabId();
-    const keptUndo = mine ? readUndo(this.#undoStoreKey(doc?.id)) : null;
-    this.#undoKept = null;
-    this.#staleSaved = !!canonical && !canonical.data;
-
-    const open = this.isPublished ? doc : (this.#savedDoc ?? working?.data ?? doc);
-    let drifted = false;
-    if (this.#savedDoc && working) {
-      const drift = countChanges(this.#savedDoc, working.data);
-      if (drift > 0) {
-        drifted = true;
-        this.#resume = { changes: drift, savedAt: working.savedAt, key: null, doc: working.data };
-        // Filed before the working slot is reconciled below, so the recovery
-        // outlives the banner rather than depending on it.
-        try {
-          const filed = await this.#history.snapshot(working.data, drift);
-          this.#resume.key = filed.key;
-        } catch { /* no room or no database: the offer stands for this session */ }
-      }
-    }
+    const { open, drifted, keptUndo } = await this.#store.open(doc);
 
     this.#adoptDocument(open);
     // Opened on the copy they were kept beside, the stacks come straight back;
@@ -1333,9 +1052,9 @@ export class CharacterSheetElement extends HTMLElement {
     // the resume.
     if (keptUndo && !drifted) {
       this.#model.adoptUndoState(keptUndo);
-      this.#keepUndoSoon();
+      this.#store.keepUndoSoon();
     } else if (keptUndo) {
-      this.#undoKept = keptUndo;
+      this.#store.undoKept = keptUndo;
     }
     // The model is what names the store, so the tab can only be read back once
     // there is one -- and it has to be read before the first render, or the
@@ -1351,8 +1070,8 @@ export class CharacterSheetElement extends HTMLElement {
      * that id before the picker renames it, and a write here would land on the
      * other character's state.
      */
-    if (drifted) this.#writeWorking();
-    if (!this.isPublished) await this.#refreshSnapshots();
+    if (drifted) this.#store.writeWorking();
+    if (!this.isPublished) await this.#store.refreshSnapshots();
     this.#render();
     // The shared campaign rules, once the character has opened under its own
     // copy -- after this task, and only if it is still the one on screen.
@@ -1372,13 +1091,13 @@ export class CharacterSheetElement extends HTMLElement {
     this.#model = new Character(structuredClone(doc));
     // A new model starts with empty stacks, and what was kept for the old one
     // must not come back over this document on the next reload.
-    this.#keepUndoSoon();
+    this.#store.keepUndoSoon();
     // The card table's windows listen on a channel named for the character.
-    this.#openCardChannel();
+    this.#sharing.openChannel();
     // A member handed to the GM stays handed over across a reload: the grants
     // ride with the publish link, and the relay is opened again for them.
-    this.#closeRelay();
-    this.#loadGrants();
+    this.#sharing.closeRelay();
+    this.#sharing.loadGrants();
     /*
      * Settle the play state before anything is measured.
      *
@@ -1390,13 +1109,7 @@ export class CharacterSheetElement extends HTMLElement {
      * much is undone.
      */
     void this.#model.hpState;
-    const normalized = this.#model.toJSON();
-    // Cloned, not kept: `toJSON()` spreads `this.data` shallowly, so the object
-    // it returns shares every nested branch with the live model. Holding it as
-    // the baseline would mean comparing the sheet against itself, and the change
-    // count would sit at zero forever.
-    if (!this.#savedDoc) this.#openedDoc = structuredClone(normalized);
-    this.#changes = this.#baseline ? countChanges(this.#baseline, normalized) : 0;
+    this.#store.settle(this.#model.toJSON());
     this.#trackerSeen = null;
     this.#announceTrackers();
     this.#model.subscribe((_model, detail) => {
@@ -1414,7 +1127,7 @@ export class CharacterSheetElement extends HTMLElement {
       // rail's button names it now. After the handler that did it has drawn,
       // because some of those redraw a panel and not the rail.
       if (detail?.type === 'play-mark') {
-        this.#keepUndoSoon();
+        this.#store.keepUndoSoon();
         this.#playMenu = false;
         if (this.#undoToast) { this.#undoToast = null; queueMicrotask(() => this.#renderRollToast()); }
         queueMicrotask(() => this.#refreshPlayUndo());
@@ -1431,7 +1144,7 @@ export class CharacterSheetElement extends HTMLElement {
       queueMicrotask(() => {
         this.#changePending = false;
         if (this.#model !== _model) return;   // another character has opened since
-        this.#persist();
+        this.#store.persist();
         this.dispatchEvent(new CustomEvent('character-change', {
           detail: { character: this.#model.toJSON(), diff: this.#model.diffFromSource() },
           bubbles: true,
@@ -1462,386 +1175,12 @@ export class CharacterSheetElement extends HTMLElement {
 
   audit() { return this.#model?.audit() ?? []; }
 
-  /**
-   * Open this character the way someone you sent it to would receive it.
-   *
-   * Two things make the preview honest rather than flattering. The document is
-   * put through `publishDocument` first, so it carries the pack entries this
-   * character actually has and none of the catalogues they came from; and the
-   * page it opens in mounts the sheet with `packs="none"`, so the reader's own
-   * packs -- which here are the author's own packs -- cannot quietly fill in
-   * the gaps a stranger would be left with.
-   *
-   * The handover goes through localStorage rather than sessionStorage, which
-   * is per-tab: a tab opened with `noopener` does not inherit the opener's
-   * session, and dropping `noopener` to make it would be a worse trade than
-   * one key written and removed on read.
-   */
-  #previewPublished() {
-    const { doc, report } = publishDocument(this.#model.toJSON());
-    const key = `published-preview:${doc?.id || 'character'}:${Date.now()}`;
-    try {
-      localStorage.setItem(key, JSON.stringify({ doc, summary: describePublish(report) }));
-    } catch (err) {
-      this.#historyNote = `Could not open the preview — ${err.message}`;
-      this.#render();
-      return;
-    }
-    const url = new URL('../published.html', import.meta.url);
-    url.searchParams.set('k', key);
-    const opened = window.open(url.href, '_blank', 'noopener');
-    this.#historyNote = opened
-      ? `Published preview opened — ${describePublish(report)}`
-      : 'The preview was blocked by the browser. Allow pop-ups for this page and try again.';
-    this.#render();
-  }
-
-  /**
-   * Put this character on the site the app is served from, and get a link.
-   *
-   * What leaves is exactly what the preview shows: the document through
-   * `publishDocument`, carrying its own entries and no catalogue. The store
-   * (functions/api/c) answers the first publish with an id and a token. The
-   * token is kept in this browser under the character's id, so the next
-   * publish moves the same link to a new revision instead of minting another
-   * -- and a link this browser has lost the token for, or the store no longer
-   * has, simply gets a fresh one. The link itself carries nothing but the id.
-   */
-  async #publish() {
-    const { doc, report } = publishDocument(this.#model.toJSON());
-    const summary = describePublish(report);
-    const body = JSON.stringify({ doc, summary });
-    const api = new URL('../../api/c', import.meta.url);   // this file is app/js/; the store is /api/c
-    const linkKey = `published-link:${doc?.id || 'character'}`;
-    let kept = null;
-    try { kept = JSON.parse(localStorage.getItem(linkKey) || 'null'); } catch { kept = null; }
-    const send = (method, url, extra = {}) => fetch(url, {
-      method, body, credentials: 'omit', headers: { 'content-type': 'application/json', ...extra },
-    });
-
-    this.#historyNote = 'Publishing…';
-    this.#renderHeader();
-    try {
-      let res = kept?.id && kept?.token
-        ? await send('PUT', `${api.href}/${kept.id}`, { authorization: `Bearer ${kept.token}` })
-        : null;
-      // The link is gone, or was made by another browser: start a new one.
-      if (res && (res.status === 403 || res.status === 404)) res = null;
-      if (!res) res = await send('POST', api.href);
-      if (res.status === 404 || res.status === 405) throw new Error('this copy of the app has no publishing server');
-      const answer = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(answer?.error || `the server answered ${res.status}`);
-      const link = { id: answer.id, token: answer.token || kept?.token || '', rev: answer.rev };
-      try { localStorage.setItem(linkKey, JSON.stringify(link)); } catch { /* private window: the link still works; the next publish makes a new one */ }
-      this.#publishedLink = { url: this.#publishedUrl(link.id), rev: answer.rev, summary, copied: null };
-      this.#historyNote = null;
-    } catch (err) {
-      this.#historyNote = `Could not publish — ${err.message.replace(/\.$/, '')}.`;
-    }
-    this.#renderHeader();
-  }
-
-  /** The share link for a published id. */
-  #publishedUrl(id) {
-    const url = new URL('../published.html', import.meta.url);
-    url.searchParams.set('s', id);
-    return url.href;
-  }
-
-  /** Open the share link's notice with its Unpublish armed, so the next press takes the link down. */
+  /** Unpublish from the menu: the link's notice opens with its Unpublish armed, so the next press takes the link down. */
   #armUnpublish() {
-    const kept = this.#readPublishLink();
-    if (!kept?.id || !kept?.token) return;
-    this.#publishedLink ??= { url: this.#publishedUrl(kept.id), rev: kept.rev, summary: '', copied: null };
+    if (!this.#sharing.showKept()) return;
     this.#view.armedRemove = UNPUBLISH_ARM;
     this.#renderHeader();
     this.shadowRoot.querySelector(`[data-arm="${UNPUBLISH_ARM}"]`)?.focus();
-  }
-
-  /**
-   * Take the link down. The GM's control links go first, because the relay
-   * checks them against the publish token and that token stops opening
-   * anything once the store forgets the character. Then the published copy
-   * and its revisions are deleted. A 404 means the store already has none.
-   */
-  async #unpublish() {
-    const kept = this.#readPublishLink();
-    if (!kept?.id || !kept?.token) return;
-    const headers = { authorization: `Bearer ${kept.token}` };
-    this.#historyNote = 'Unpublishing…';
-    this.#renderHeader();
-    try {
-      for (const member of Object.keys(this.#relay.members)) {
-        await fetch(this.#relayApi(kept.id, `grant/${encodeURIComponent(member)}`), { method: 'DELETE', credentials: 'omit', headers })
-          .catch(() => null);
-      }
-      this.#relay.members = {};
-      this.#closeRelay();
-      this.#writePublishLink({ ...kept, grants: {} });
-      const res = await fetch(new URL(`../../api/c/${kept.id}`, import.meta.url), { method: 'DELETE', credentials: 'omit', headers });
-      if (res.status === 405) throw new Error('this copy of the app has no publishing server');
-      if (!res.ok && res.status !== 404) {
-        const answer = await res.json().catch(() => null);
-        throw new Error(answer?.error || `the server answered ${res.status}`);
-      }
-      try { localStorage.removeItem(this.#publishLinkKey()); } catch { /* private window */ }
-      this.#publishedLink = null;
-      this.#historyNote = 'Unpublished. The link no longer opens this character.';
-    } catch (err) {
-      this.#historyNote = `Could not unpublish — ${err.message.replace(/\.$/, '')}.`;
-    }
-    this.#render();
-  }
-
-  /** The share link to the clipboard, or selected where the clipboard is refused. */
-  async #copyPublishedLink() {
-    if (!this.#publishedLink) return;
-    let ok = true;
-    try { await navigator.clipboard.writeText(this.#publishedLink.url); } catch { ok = false; }
-    this.#publishedLink.copied = ok;
-    this.#renderHeader();
-    if (!ok) this.shadowRoot.querySelector('.pubnote input')?.select();
-  }
-
-  /* ------------------------------------------------------------------ *
-   * The card table: its actions, and its two windows.
-   *
-   * A card caster who streams the game wants the table on the shared
-   * screen and the hand off it. So the table has two pop-out windows --
-   * `cards.html?view=table` and `?view=hand` -- that draw the same zones the
-   * tab draws (subsystems.cardTableView) and own nothing: this element
-   * renders them on every render of its own and posts the markup over, and
-   * a button pressed in one comes back as a message and runs through
-   * #tableAction exactly as a press on the tab would. One model, three
-   * faces.
-   *
-   * They talk over a BroadcastChannel named for the character rather than
-   * through the opener handle, because a browser may turn a pop-up into a
-   * tab, and a player may drag the window to another screen or open the
-   * address in a tab of their own: every one of those still reaches the
-   * sheet. The channel is open whenever a character is, and the markup is
-   * posted only while a window has said hello and not yet goodbye.
-   * ------------------------------------------------------------------ */
-
-  /** The channel the windows listen on, for the character open now. */
-  #cardChannel = null;
-  /** The windows that have said hello, by the name each gave itself. */
-  #cardViewers = new Set();
-  /** The windows this element opened, by view, so a second press focuses rather than reopens. */
-  #cardWindows = { table: null, hand: null };
-
-  /** The channel's name: this character's, so two sheets open side by side do not cross. */
-  #cardChannelName() { return `cs-cards:${this.#model?.data?.id || 'character'}`; }
-
-  /* ------------------------------------------------------------------ *
-   * The relay: a squad member handed to the GM.
-   *
-   * The GM is not on this origin, so the BroadcastChannel cannot reach
-   * them; the relay (functions/api/c/relay.js) carries the same messages
-   * over a WebSocket. This sheet stays the one copy of the character: it
-   * renders the GM's page for each member handed over, and a press from
-   * that page runs here, through #tableAction, if the allow-list in the
-   * model says the GM may make it on that card. The grants ride with the
-   * publish link in localStorage, so a reload picks them up again.
-   * ------------------------------------------------------------------ */
-
-  /** The relay's state: the socket, the grants by member id, and who is watching each. */
-  #relay = { socket: null, tries: 0, members: {}, viewers: {}, closing: false };
-
-  #publishLinkKey() { return `published-link:${this.#model?.data?.id || 'character'}`; }
-  #readPublishLink() { try { return JSON.parse(localStorage.getItem(this.#publishLinkKey()) || 'null'); } catch { return null; } }
-  #writePublishLink(link) { try { localStorage.setItem(this.#publishLinkKey(), JSON.stringify(link)); } catch { /* private window */ } }
-
-  /** The relay's address for one call: `/api/c/<id>/<what>` (this file is app/js/). */
-  #relayApi(id, what) { return new URL(`../../api/c/${id}/${what}`, import.meta.url); }
-
-  /** The grants kept with the publish link, loaded when a character is installed; the socket follows. */
-  #loadGrants() {
-    const kept = this.isPublished ? null : this.#readPublishLink();
-    this.#relay.members = kept?.grants && typeof kept.grants === 'object' ? kept.grants : {};
-    this.#relay.viewers = {};
-    if (Object.keys(this.#relay.members).length) this.#openRelay();
-  }
-
-  /** What the panels show of the grants: member id to { url, name, since, viewers }. */
-  #grantsForCtx() {
-    const out = {};
-    for (const [member, g] of Object.entries(this.#relay.members)) out[member] = { ...g, viewers: this.#relay.viewers[member] || 0 };
-    return out;
-  }
-
-  /** The control link for a member's grant: the GM's page on this app, with the published id, the member and the grant. */
-  #grantUrl(id, member, token) {
-    const url = new URL('../cards.html', import.meta.url);
-    url.searchParams.set('view', 'control');
-    url.searchParams.set('s', id);
-    url.searchParams.set('m', member);
-    url.hash = new URLSearchParams({ t: token }).toString();   // the fragment never reaches a server
-    return url.href;
-  }
-
-  /** Hand a member to the GM: publish first if need be, make the grant, open the relay. */
-  async #handOver(member) {
-    const m = (this.#model?.data?.cardcasting?.calc?.squad || []).find((x) => x.id === member);
-    if (!m) return;
-    let kept = this.#readPublishLink();
-    if (!kept?.id || !kept?.token) {
-      await this.#publish();
-      kept = this.#readPublishLink();
-      if (!kept?.id || !kept?.token) return;   // #publish said why
-    }
-    this.#historyNote = `Handing ${m.name} over…`;
-    this.#renderHeader();
-    try {
-      const res = await fetch(this.#relayApi(kept.id, 'grant'), {
-        method: 'POST', credentials: 'omit', headers: { 'content-type': 'application/json', authorization: `Bearer ${kept.token}` },
-        body: JSON.stringify({ member, name: m.name }),
-      });
-      if (res.status === 404 || res.status === 405) throw new Error('this copy of the app has no relay');
-      const answer = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(answer?.error || `the server answered ${res.status}`);
-      this.#relay.members[member] = { name: m.name, token: answer.token, url: this.#grantUrl(kept.id, member, answer.token), since: new Date().toLocaleString() };
-      this.#writePublishLink({ ...kept, grants: this.#relay.members });
-      this.#historyNote = `${m.name} is handed to the GM — copy the control link from the Squad panel. Keep this sheet open: the GM's presses run here.`;
-      this.#openRelay();
-    } catch (err) {
-      this.#historyNote = `Could not hand ${m.name} over — ${err.message.replace(/\.$/, '')}.`;
-    }
-    this.#render();
-  }
-
-  /** Take a member back: the GM's page is told and closed. */
-  async #takeBack(member) {
-    const kept = this.#readPublishLink();
-    const g = this.#relay.members[member];
-    if (!g) return;
-    delete this.#relay.members[member];
-    delete this.#relay.viewers[member];
-    this.#writePublishLink({ ...(kept || {}), grants: this.#relay.members });
-    if (kept?.id && kept?.token) {
-      try {
-        await fetch(this.#relayApi(kept.id, `grant/${encodeURIComponent(member)}`), { method: 'DELETE', credentials: 'omit', headers: { authorization: `Bearer ${kept.token}` } });
-      } catch { /* the link is gone from this sheet either way */ }
-    }
-    this.#historyNote = `${g.name || 'The companion'} is yours again.`;
-    if (!Object.keys(this.#relay.members).length) this.#closeRelay();
-    this.#render();
-  }
-
-  async #copyGrantLink(member) {
-    const g = this.#relay.members[member];
-    if (!g) return;
-    let ok = true;
-    try { await navigator.clipboard.writeText(g.url); } catch { ok = false; }
-    this.#historyNote = ok ? 'Control link copied — send it to the GM.' : 'The clipboard is not available here: select the link in the Squad panel and copy it.';
-    this.#renderHeader();
-  }
-
-  /** Open the socket to the relay: a ticket bought with the publish token, then the socket. */
-  async #openRelay() {
-    const r = this.#relay;
-    if (r.socket || r.closing || typeof WebSocket === 'undefined') return;
-    const kept = this.#readPublishLink();
-    if (!kept?.id || !kept?.token || !Object.keys(r.members).length) return;
-    let ticket;
-    try {
-      const res = await fetch(this.#relayApi(kept.id, 'ticket'), { method: 'POST', credentials: 'omit', headers: { authorization: `Bearer ${kept.token}` } });
-      ticket = (await res.json().catch(() => null))?.ticket;
-      if (!res.ok || !ticket) throw new Error('no ticket');
-    } catch {
-      this.#relayRetry();
-      return;
-    }
-    const url = this.#relayApi(kept.id, 'relay');
-    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    url.searchParams.set('owner', ticket);
-    let ws;
-    try { ws = new WebSocket(url.href); } catch { this.#relayRetry(); return; }
-    r.socket = ws;
-    ws.addEventListener('open', () => { r.tries = 0; this.#postRelay(); });
-    ws.addEventListener('message', this.#onRelayMessage);
-    ws.addEventListener('close', () => {
-      if (r.socket === ws) r.socket = null;
-      if (!r.closing && Object.keys(r.members).length) this.#relayRetry();
-    });
-  }
-
-  #relayRetry() {
-    const r = this.#relay;
-    const wait = Math.min(30000, 1000 * 2 ** Math.min(r.tries++, 5));
-    setTimeout(() => { if (!r.closing && !r.socket && Object.keys(r.members).length) this.#openRelay(); }, wait);
-  }
-
-  #closeRelay() {
-    const r = this.#relay;
-    r.closing = true;
-    const ws = r.socket;
-    r.socket = null;
-    try { ws?.close(); } catch { /* already closed */ }
-    r.viewers = {};
-    r.closing = false;
-  }
-
-  /** Draw the GM's page for every member handed over that someone is watching. */
-  #postRelay() {
-    const r = this.#relay;
-    if (!this.#model || !r.socket || r.socket.readyState !== WebSocket.OPEN) return;
-    for (const member of Object.keys(r.members)) {
-      if (!r.viewers[member]) continue;
-      const m = (this.#model.data.cardcasting?.calc?.squad || []).find((x) => x.id === member);
-      const msg = {
-        type: 'render',
-        member,
-        title: `${m?.name || r.members[member].name || 'Companion'} — handed to the GM`,
-        html: subsystems.cardTableView(this.#model, this.#ctx(), 'control', member),
-        features: m ? subsystems.companionFace(this.#model, m.kind, member) : '',
-        theme: this.getAttribute('theme') || '',
-        scheme: this.getAttribute('scheme') || '',
-      };
-      try { r.socket.send(JSON.stringify(msg)); } catch { /* closing */ }
-    }
-  }
-
-  /** A message from the relay: who is watching, or a press from the GM. */
-  #onRelayMessage = (e) => {
-    let msg;
-    try { msg = JSON.parse(e.data); } catch { return; }
-    if (!msg || typeof msg !== 'object' || !this.#model) return;
-    const r = this.#relay;
-    if (msg.type === 'grants') {
-      const before = JSON.stringify([r.viewers, Object.keys(r.members)]);
-      r.viewers = Object.fromEntries((msg.members || []).map((g) => [g.member, Number(g.viewers) || 0]));
-      // A grant the relay no longer holds -- taken back from another browser -- is dropped here too.
-      const known = new Set((msg.members || []).map((g) => g.member));
-      for (const member of Object.keys(r.members)) if (!known.has(member)) delete r.members[member];
-      if (JSON.stringify([r.viewers, Object.keys(r.members)]) !== before) this.#render();
-    } else if (msg.type === 'action') {
-      const member = String(msg.member || '');
-      const action = String(msg.action || '');
-      const id = String(msg.id || '');
-      let arg = String(msg.arg || '');
-      if (!r.members[member] || !remoteAllowed(this.#model, member, action, id)) return;
-      if (action === 'play') arg = remotePlayArg(arg, member);
-      if (this.#tableAction(action, id, arg, { fromWindow: true })) this.#render();
-    }
-  };
-
-  /** Open the channel for the character just installed, closing the last one's. */
-  #openCardChannel() {
-    this.#closeCardChannel();
-    if (!this.#model || typeof BroadcastChannel === 'undefined') return;
-    try {
-      this.#cardChannel = new BroadcastChannel(this.#cardChannelName());
-      this.#cardChannel.addEventListener('message', this.#onCardWindowMessage);
-    } catch { this.#cardChannel = null; }
-  }
-
-  #closeCardChannel() {
-    if (!this.#cardChannel) return;
-    this.#cardChannel.removeEventListener('message', this.#onCardWindowMessage);
-    this.#cardChannel.close();
-    this.#cardChannel = null;
-    this.#cardViewers.clear();
   }
 
   /**
@@ -1855,7 +1194,7 @@ export class CharacterSheetElement extends HTMLElement {
   #tableAction(action, id, arg, { fromWindow = false } = {}) {
     const m = this.#model;
     if (!m) return false;
-    if (action === 'window') { this.#openCardWindow(id); return false; }
+    if (action === 'window') { this.#sharing.openWindow(id); return false; }
     // The mode chooser opening on a card, or closing.
     if (action === 'pick') { this.#view.castPick = id || null; return true; }
     // A card opened out to read or edit, or folded back. A way of looking,
@@ -1905,75 +1244,6 @@ export class CharacterSheetElement extends HTMLElement {
     return true;
   }
 
-  /** The address of one of the two windows, on this character's channel. */
-  #cardWindowUrl(view) {
-    const url = new URL('../cards.html', import.meta.url);
-    url.searchParams.set('view', view);
-    url.searchParams.set('ch', this.#cardChannelName());
-    return url.href;
-  }
-
-  /** Open one of the two windows, or bring it forward if it is open. */
-  #openCardWindow(view) {
-    if (!(view in this.#cardWindows)) return;
-    if (!this.#cardChannel) this.#openCardChannel();
-    const open = this.#cardWindows[view];
-    if (open && !open.closed) { open.focus(); return; }
-    const size = view === 'table' ? 'width=1180,height=820' : 'width=1100,height=600';
-    const win = window.open(this.#cardWindowUrl(view), `cs-cards-${view}`, `popup=yes,${size}`);
-    if (!win) {
-      this.#historyNote = 'The window was blocked by the browser. Allow pop-ups for this page and try again.';
-      this.#render();
-      return;
-    }
-    // Drawn when the page says hello (#onCardWindowMessage), and on every
-    // render after that.
-    this.#cardWindows[view] = win;
-  }
-
-  /** Draw the windows from the character as it is now: one message per view with a viewer. */
-  #postCardWindows(only = null) {
-    if (!only) this.#postRelay();
-    if (!this.#model || !this.#cardChannel || !this.#cardViewers.size) return;
-    const views = only ? [only] : ['table', 'hand'];
-    for (const view of views) {
-      if (![...this.#cardViewers].some((name) => name.startsWith(`${view}-`))) continue;
-      this.#cardChannel.postMessage({
-        type: 'cards:render',
-        view,
-        title: `${this.#model.data.identity?.name || this.#model.data.name || 'Character'} — ${view === 'table' ? 'the table' : 'your hand'}`,
-        html: subsystems.cardTableView(this.#model, this.#ctx(), view),
-        theme: this.getAttribute('theme') || '',
-        scheme: this.getAttribute('scheme') || '',
-      });
-    }
-  }
-
-  /** A message from a window: hello, goodbye, or a press. */
-  #onCardWindowMessage = (e) => {
-    const msg = e.data;
-    if (!msg || typeof msg !== 'object' || typeof msg.from !== 'string') return;
-    const view = msg.view === 'hand' ? 'hand' : 'table';
-    if (msg.type === 'cards:hello') { this.#cardViewers.add(msg.from); this.#postCardWindows(view); }
-    else if (msg.type === 'cards:bye') this.#cardViewers.delete(msg.from);
-    else if (msg.type === 'cards:action') {
-      const done = this.#tableAction(String(msg.action ?? ''), String(msg.id ?? ''), String(msg.arg ?? ''), { fromWindow: true });
-      if (done) this.#render();
-    }
-  };
-
-  /** The sheet is going: tell the windows, close the ones this element opened, and hang up. */
-  #closeCardWindows = () => {
-    try { this.#cardChannel?.postMessage({ type: 'cards:close' }); } catch { /* already closed */ }
-    for (const view of Object.keys(this.#cardWindows)) {
-      const win = this.#cardWindows[view];
-      this.#cardWindows[view] = null;
-      try { if (win && !win.closed) win.close(); } catch { /* already gone */ }
-    }
-    this.#closeCardChannel();
-    this.#closeRelay();
-  };
-
   get isAdmin() { return this.getAttribute('role') === 'admin'; }
 
   /**
@@ -1988,303 +1258,19 @@ export class CharacterSheetElement extends HTMLElement {
    */
   get isPublished() { return this.hasAttribute('published'); }
 
-  /* ---------------- persistence ---------------- */
-
-  /** How far the sheet may drift from the saved version before a snapshot. */
-  get #snapshotEvery() {
-    const n = Number(this.getAttribute('snapshot-every'));
-    return Number.isFinite(n) && n > 0 ? Math.floor(n) : SNAPSHOT_EVERY;
-  }
+  /* ---------------- persistence (sheet/persistence.js) ---------------- */
 
   /** Changes between the canonical version and what is on screen. */
-  get changeCount() { return this.#changes; }
+  get changeCount() { return this.#store.changes; }
 
-  /**
-   * What the change count is counted from.
-   *
-   * The saved version once there is one. Until then it is the sheet as this page
-   * opened it, because there is no other fixed point: a character that has never
-   * been saved has to count from somewhere, or the Save button would sit
-   * disabled at zero changes and the first save could never be made.
-   *
-   * Not `#sourceDoc`, which is the document as converted or imported. That is
-   * the right thing for Reset to restore but the wrong thing to count against --
-   * `toJSON()` normalises a document on the way out, adding tracker state and
-   * dropping derived values, so an untouched sheet would open reporting dozens
-   * of changes it has not made.
-   */
-  get #baseline() { return this.#savedDoc ?? this.#openedDoc; }
-
-  /**
-   * Every edit lands here.
-   *
-   * The working state is written straight away and synchronously, which is the
-   * whole reason it lives in localStorage: this is the write that has to have
-   * happened if the tab is closed a moment later. Counting changes and taking a
-   * snapshot are neither cheap nor urgent, so they wait for the typing to stop.
-   */
-  #persist() {
-    if (!this.#model || !this.#history) return;
-    this.#writeWorking();
-    this.#keepUndoSoon();
-
-    clearTimeout(this.#snapshotTimer);
-    this.#snapshotTimer = setTimeout(() => this.#considerSnapshot(), 800);
-  }
-
-  /**
-   * Write the working state, and say so when it does not land.
-   *
-   * `writeWorking` has always returned whether the write happened, and until
-   * now every caller threw the answer away -- so a player whose localStorage
-   * was full, or who was in a private window that gives none, kept editing a
-   * sheet that had quietly stopped being written down and found out when they
-   * closed the tab. Silence is the one wrong answer here: the sheet cannot fix
-   * it, but it can stop the player from spending an evening on a character
-   * that is not going to be there.
-   *
-   * The banner is toggled in place rather than through `#render()`, because
-   * this is called on every edit and a wholesale re-render mid-word takes the
-   * caret out of whatever is being typed. It is only touched when the state
-   * actually turns over, so the ordinary path costs one boolean compare.
-   */
-  #writeWorking() {
-    const ok = this.#history.writeWorking(this.#model.toJSON(), tabId()) !== false;
-    if (ok === !this.#storageFailed) return ok;   // nothing has changed
-    this.#storageFailed = !ok;
-    const banner = this.shadowRoot?.querySelector('.savefail');
-    if (banner) banner.hidden = ok;
-    return ok;
-  }
-
-  /* ------------------------------------------------------------------ *
-   * The same character in two windows.
-   *
-   * Each window keeps its own model and writes the working copy on every
-   * change; nothing used to listen, so a deck built in one window and a
-   * Save pressed there left the other window on the old state until a
-   * reload. Every write to localStorage fires `storage` in the other
-   * windows of the origin, so the working copy is the live channel: a
-   * window whose copy changed under it adopts the new one. The canonical
-   * version and the checkpoints live in IndexedDB, which fires nothing, so
-   * a save stamps a marker key as well, and the other windows read their
-   * saved version and their list again.
-   *
-   * A window being typed in waits until the field is left, since adopting
-   * is a wholesale render and would take the caret; the latest copy wins
-   * then. Two windows edited at once settle on whichever wrote last, which
-   * is what one player with two windows means.
-   * ------------------------------------------------------------------ */
-
-  /** A copy from another window waiting for the field being typed in to be left. */
-  #pendingSync = null;
-  #syncTimer = null;
-
-  /** Where this character's undo stacks are kept for a reload of this tab. */
-  #undoStoreKey(id = this.#model?.data?.id) {
-    return undoKey(this.getAttribute('storage-key') || workingKey(id || 'character'));
-  }
-
-  /** Keep the undo stacks a moment after the change that moved them. */
-  #keepUndoSoon() {
-    if (this.isPublished) return;
-    clearTimeout(this.#undoSaveTimer);
-    this.#undoSaveTimer = setTimeout(this.#keepUndoNow, 400);
-  }
-
-  #keepUndoNow = () => {
-    if (this.#undoSaveTimer === null) return;
-    clearTimeout(this.#undoSaveTimer);
-    this.#undoSaveTimer = null;
-    if (!this.#model || this.isPublished) return;
-    // The stacks hold up to twenty whole documents, so they are written only
-    // when they moved: any push, pop or trim changes a length or an end entry.
-    const key = this.#undoStoreKey();
-    const state = this.#model.undoState();
-    const shape = [key, ...['undo', 'play', 'redo'].flatMap((k) => [state[k].length, state[k][0], state[k].at(-1)])];
-    if (this.#undoWritten?.every((v, i) => v === shape[i])) return;
-    this.#undoWritten = writeUndo(key, state) ? shape : null;
-  };
-  /** The key and each stack's length and end entries when the stacks were last written. */
-  #undoWritten = null;
-
-  /** The marker a save or a checkpoint stamps for the other windows. */
-  #historyMarkKey() { return `${workingKey(this.#model?.data?.id || 'character')}:history`; }
-
-  #markHistory() {
-    try { localStorage.setItem(this.#historyMarkKey(), new Date().toISOString()); } catch { /* the other windows will see it on reload */ }
-  }
-
-  #onStorage = (e) => {
-    if (!this.#model || this.isPublished || !e.key) return;
-    const id = this.#model.data.id;
-    if (e.key === workingKey(id)) {
-      if (!e.newValue) return;
-      let copy;
-      try { copy = JSON.parse(e.newValue); } catch { return; }
-      if (!copy?.data || copy.data.schemaVersion !== SCHEMA_VERSION) return;
-      this.#pendingSync = copy.data;
-      // Typing in the other window writes on every keystroke; settle first.
-      clearTimeout(this.#syncTimer);
-      this.#syncTimer = setTimeout(() => this.#applySync(), 250);
-    } else if (e.key === this.#historyMarkKey()) {
-      this.#syncHistory();
-    }
-  };
-
-  /** Adopt the other window's working copy, unless a field here is being typed in. */
-  #applySync() {
-    const data = this.#pendingSync;
-    if (!data || !this.#model) return;
-    const active = this.shadowRoot?.activeElement;
-    if (active?.matches?.('input, textarea, select, [contenteditable="true"]')) {
-      active.addEventListener('blur', () => this.#applySync(), { once: true });
-      return;
-    }
-    this.#pendingSync = null;
-    const mine = this.#model.toJSON();
-    if (JSON.stringify(data) === JSON.stringify(mine)) return;
-    const changes = countChanges(mine, data, 500);
+  /** Another window's copy of this character, `changes` away from this one: adopt it. */
+  #adoptSynced(data, changes) {
     // The pop-out windows listening to this sheet stay listening: adopting
     // reopens the channel, which forgets who said hello.
-    const viewers = new Set(this.#cardViewers);
+    const viewers = new Set(this.#sharing.viewers);
     this.#adoptDocument(data);
-    for (const v of viewers) this.#cardViewers.add(v);
+    for (const v of viewers) this.#sharing.viewers.add(v);
     this.#historyNote = `Picked up ${changes >= 500 ? 'the' : changes} change${changes === 1 ? '' : 's'} made in another window.`;
-    this.#render();
-  }
-
-  /** Another window saved, or kept a checkpoint: the saved version and the list are read again. */
-  async #syncHistory() {
-    if (!this.#model || !this.#history) return;
-    const model = this.#model;
-    const canonical = await this.#history.readSaved();
-    if (this.#model !== model) return;
-    if (canonical?.data) this.#savedDoc = canonical.data;
-    this.#staleSaved = !!canonical && !canonical.data;
-    await this.#refreshSnapshots();
-    if (this.#model !== model) return;
-    this.#changes = this.#baseline ? countChanges(this.#baseline, this.#model.toJSON()) : 0;
-    if (this.#changes < this.#snapshotAt) this.#snapshotAt = this.#changes;
-    this.#renderHeader();
-  }
-
-  /**
-   * Recount the drift from the saved version, and snapshot if it has gone far
-   * enough.
-   *
-   * The trigger is measured from `#snapshotAt` rather than from zero, so
-   * snapshots fall every `snapshot-every` changes -- at 20, 40, 60 -- instead of
-   * on every edit once the sheet is 20 changes out.
-   */
-  async #considerSnapshot() {
-    if (!this.#model || !this.#history || !this.#baseline) return;
-    const before = this.#changes;
-    const live = this.#model.toJSON();
-    this.#changes = countChanges(this.#baseline, live);
-
-    // Drifting back towards the saved version moves the next trigger back with
-    // it, or undoing twenty edits would earn a snapshot for standing still.
-    if (this.#changes < this.#snapshotAt) this.#snapshotAt = this.#changes;
-
-    if (this.#changes - this.#snapshotAt >= this.#snapshotEvery) {
-      this.#snapshotAt = this.#changes;
-      try {
-        await this.#history.snapshot(live, this.#changes);
-        await this.#refreshSnapshots();
-      } catch { /* no database or no room: editing carries on regardless */ }
-    }
-    // The header shows the count, so it only needs redrawing when it moved.
-    if (this.#changes !== before) this.#renderHeader({ gentle: true });
-  }
-
-  /** Re-read the stored history, for the panel and the button's count. */
-  async #refreshSnapshots() {
-    this.#snapshots = this.#history ? await this.#history.list() : [];
-  }
-
-  /**
-   * Make what is on screen the canonical version.
-   *
-   * The change count returns to zero and the snapshot trigger resets with it, so
-   * the next twenty edits are measured from here.
-   */
-  async #save() {
-    if (!this.#model || !this.#history) return;
-    const model = this.#model;
-    const history = this.#history;
-    // Snapshot before the asynchronous write: later typing must not mutate
-    // the baseline of the version that actually reached the database.
-    const doc = structuredClone(model.toJSON());
-    try {
-      await history.save(doc);
-      if (this.#model !== model) return;
-      // Cloned for the same reason as in `#adoptDocument`: what `toJSON()`
-      // returns still points into the live model.
-      this.#savedDoc = structuredClone(doc);
-      this.#staleSaved = false;
-      await this.#refreshSnapshots();
-      if (this.#model !== model) return;
-      this.#changes = countChanges(doc, model.toJSON());
-      this.#snapshotAt = 0;
-      this.#resume = null;
-      this.#historyNote = this.#changes
-        ? 'Saved. Newer edits are still unsaved.'
-        : 'Saved. This is the version the sheet will open on.';
-      this.#markHistory();
-    } catch (err) {
-      if (this.#model !== model) return;
-      this.#historyNote = `Could not save — ${err.message}.`
-        + ' Your edits are still here and still restored on reload.';
-    }
-    // Nothing outside the header depends on the saved version, and the body may
-    // be several thousand inputs.
-    this.#renderHeader();
-  }
-
-  /** Store the current state under a name, where nothing will evict it. */
-  async #saveCheckpoint() {
-    const label = this.#checkpointDraft.trim();
-    if (!label || !this.#model || !this.#history) return;
-    try {
-      await this.#history.checkpoint(this.#model.toJSON(), label, this.#changes);
-      this.#checkpointDraft = '';
-      this.#historyNote = `Checkpoint “${label}” kept. Automatic snapshots will not evict it.`;
-      await this.#refreshSnapshots();
-      this.#markHistory();
-    } catch (err) {
-      this.#historyNote = `Could not keep that checkpoint — ${err.message}.`;
-    }
-    this.#renderHeader();
-  }
-
-  /**
-   * Open an earlier state.
-   *
-   * The restored document becomes the working state, not the canonical one --
-   * looking at an old state is not the same as declaring it current, and the
-   * player still has to press Save to mean that. The state being left behind is
-   * filed first, so a restore is itself undoable.
-   */
-  async #restoreSnapshot(key) {
-    if (!this.#history) return;
-    try {
-      const doc = await this.#history.load(key);
-      const current = this.#model?.toJSON();
-      if (current && this.#changes > 0) {
-        try { await this.#history.snapshot(current, this.#changes); } catch { /* best effort */ }
-      }
-      this.#adoptDocument(doc);
-      this.#writeWorking();
-      this.#snapshotAt = this.#changes;
-      this.#resume = null;
-      const when = this.#snapshots.find((s) => s.key === key);
-      this.#historyNote = `Restored ${when?.label ? `“${when.label}”` : 'that snapshot'}.`
-        + ' Press Save to make it the version this sheet opens on.';
-      await this.#refreshSnapshots();
-    } catch (err) {
-      this.#historyNote = `Could not restore that — ${err.message}.`;
-    }
     this.#render();
   }
 
@@ -2296,11 +1282,7 @@ export class CharacterSheetElement extends HTMLElement {
    * mistake should not be the one action a player cannot walk back.
    */
   async resetToSource() {
-    if (this.#history) await this.#history.resetKeepingCheckpoints();
-    this.#savedDoc = null;
-    this.#changes = 0;
-    this.#snapshotAt = 0;
-    this.#resume = null;
+    await this.#store.reset();
     const src = this.getAttribute('src');
     if (src) await this.load(src);
     else if (this.#sourceDoc) await this.#adopt(structuredClone(this.#sourceDoc));
@@ -2824,7 +1806,7 @@ export class CharacterSheetElement extends HTMLElement {
     if (this.isPublished) this.#lockPublished();
     // The palette outlives the markup around it: innerHTML dropped it, and the
     // node (with its listeners) is still here to be put back.
-    if (this.#palette) this.shadowRoot.append(this.#palette);
+    this.#palette.reattach();
     // Same trick, and for a stronger reason: a live region that is replaced is
     // a live region a reader has stopped watching.
     this.shadowRoot.append(this.#liveRegion());
@@ -2833,7 +1815,7 @@ export class CharacterSheetElement extends HTMLElement {
     this.shadowRoot.append(this.#formulaDrawer());
     if (this.#fxOpen) this.#fxRefresh();
     this.#announceChanges();
-    this.#postCardWindows();
+    this.#sharing.postWindows();
   }
 
   /**
@@ -3318,12 +2300,12 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.#playUndoHtml()}
         ${this.#searchButton()}
         ${this.isPublished ? '' : `
-        <button data-action="save" class="${this.#changes ? 'primary' : ''}"
-          ${this.#changes ? '' : 'disabled'}
-          title="${this.#changes
+        <button data-action="save" class="${this.#store.changes ? 'primary' : ''}"
+          ${this.#store.changes ? '' : 'disabled'}
+          title="${this.#store.changes
             ? 'Make this the version the sheet opens on (Ctrl+S)'
             : 'Nothing has changed since the last save'}">
-          Save${this.#changes ? ` (${this.#changes})` : ''}
+          Save${this.#store.changes ? ` (${this.#store.changes})` : ''}
         </button>`}
         <button data-view class="railmore" data-action="chrome-menu" aria-haspopup="menu"
           aria-expanded="${this.#chromeMenu}" aria-label="More"
@@ -3350,17 +2332,12 @@ export class CharacterSheetElement extends HTMLElement {
           title="Print several tabs at once. Ctrl+P prints the tab that is open.">Print tabs…</button>
         ${this.isPublished ? '' : `
         <button data-action="history" aria-pressed="${this.#showHistory}"
-          title="Earlier states of this sheet">History${this.#snapshots.length ? ` (${this.#snapshots.length})` : ''}</button>`}
+          title="Earlier states of this sheet">History${this.#store.snapshots.length ? ` (${this.#store.snapshots.length})` : ''}</button>`}
         <button data-view data-action="export">Export JSON</button>
         <button data-view data-action="export-mw"
           title="A backup file for the Myth-Weavers Pathfinder sheet. Load it there with Actions, Restore JSON Backup: it replaces every field on that sheet.">Export for Myth-Weavers (EXPERIMENTAL)</button>
         ${this.isPublished ? '' : `
-        <button data-action="publish"
-          title="Upload this character and get a read-only link. Publishing again updates the same link.">Publish</button>
-        ${this.#readPublishLink()?.token ? `<button data-action="unpublish" class="danger unpublish"
-          title="Delete the published copy. The link stops working for everyone who has it.">Unpublish</button>` : ''}
-        <button data-action="preview-published"
-          title="Open the read-only view a link shows: only the pack entries the character carries, no local packs, nothing saved">Preview published</button>
+        ${this.#sharing.menuHtml()}
         <button data-action="import" title="Load a character this app exported, or convert a .xlsx workbook">Import…</button>
         <button data-action="reset" class="danger" aria-expanded="${this.#confirmReset}"
           title="Back to the character as imported. Asks first, and named checkpoints are kept.">Reset</button>`}
@@ -3381,46 +2358,37 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #notices() {
     return `<div class="notices">
-        ${this.#themeMenu ? this.#themeMenuHtml() : ''}
+        ${this.#themeMenu ? this.#theme.menuHtml() : ''}
         ${this.#printMenu ? this.#printMenuHtml() : ''}
         ${this.#resumeBanner()}
-        ${this.#staleSaved ? `<div class="histnote" role="status">
+        ${this.#store.staleSaved ? `<div class="histnote" role="status">
           <span><strong>Saved version kept for recovery.</strong>
           This build cannot open it. Download it here, or find it in History after saving again.</span>
           <button data-action="export-saved-recovery">Download saved version</button>
         </div>` : ''}
-        ${this.#recoveries.length ? `<div class="histnote" role="status">
+        ${this.#store.recoveries.length ? `<div class="histnote" role="status">
           <span><strong>Earlier edits kept for recovery.</strong>
           This build could not read them. Download a copy before continuing in another version.</span>
-          ${this.#recoveries.map((_, i) => `<button data-action="export-recovery" data-index="${i}">Download recovery${this.#recoveries.length > 1 ? ` ${i + 1}` : ''}</button>`).join('')}
+          ${this.#store.recoveries.map((_, i) => `<button data-action="export-recovery" data-index="${i}">Download recovery${this.#store.recoveries.length > 1 ? ` ${i + 1}` : ''}</button>`).join('')}
         </div>` : ''}
         ${this.#confirmReset ? this.#resetConfirmHtml() : ''}
         ${this.#historyNote ? `<div class="histnote" role="status">
           ${esc(this.#historyNote)}
           <button data-view data-action="dismiss-history-note" aria-label="Dismiss">×</button>
         </div>` : ''}
-        ${this.#publishedLink ? `<div class="histnote pubnote" role="status">
-          <span><strong>Published</strong> (revision ${this.#publishedLink.rev}). ${this.#publishedLink.summary ? `${esc(this.#publishedLink.summary)} ` : ''}
-            Anyone with the link can open it. Publishing again updates the same link.</span>
-          <input readonly value="${esc(this.#publishedLink.url)}" aria-label="Share link">
-          <a href="${esc(this.#publishedLink.url)}" target="_blank" rel="noopener">Open</a>
-          <button data-view data-action="copy-published-link">${this.#publishedLink.copied === true ? 'Copied'
-            : this.#publishedLink.copied === false ? 'Select it and copy' : 'Copy link'}</button>
-          ${this.#unpublishButton()}
-          <button data-view data-action="dismiss-published-link" aria-label="Dismiss">×</button>
-        </div>` : ''}
+        ${this.#sharing.noticeHtml(this.#view.armedRemove)}
         ${this.#showHistory ? this.#historyPanel() : ''}
         ${this.#importError ? `<div class="importerr" role="alert">
           ${esc(this.#importError)}
           <button data-view data-action="dismiss-import-error" aria-label="Dismiss">×</button>
         </div>` : ''}
         ${/*
-           * Always in the markup, hidden until it is true, so `#writeWorking`
+           * Always in the markup, hidden until it is true, so the store's `writeWorking`
            * can turn it on without a re-render (see there). There is no dismiss
            * on it: every other notice here reports something that has finished
            * happening, and this one reports something that is still the case.
            */''}
-        <div class="savefail" role="alert" ${this.#storageFailed ? '' : 'hidden'}>
+        <div class="savefail" role="alert" ${this.#store.storageFailed ? '' : 'hidden'}>
           <strong>Not being saved.</strong> This browser refused to store the sheet —
           a private window, or storage that is full. Your edits are here on screen but
           will not survive closing the tab.
@@ -3435,21 +2403,12 @@ export class CharacterSheetElement extends HTMLElement {
    * action this size should never ride on one click landing an inch left of
    * History.
    */
-  /** Unpublish beside the share link: red, and it asks twice. Only where this browser holds the link's token. */
-  #unpublishButton() {
-    if (!this.#readPublishLink()?.token) return '';
-    const on = this.#view.armedRemove === UNPUBLISH_ARM;
-    return `<button class="danger unpublish${on ? ' armed' : ''}" data-action="unpublish-confirm" data-arm="${UNPUBLISH_ARM}"
-      title="${on ? 'Press again to delete the published copy' : 'Delete the published copy. The link stops working for everyone who has it.'}">${
-      on ? 'Unpublish — sure?' : 'Unpublish'}</button>`;
-  }
-
   #resetConfirmHtml() {
-    const checkpoints = (this.#snapshots || []).filter((s) => s.kind === 'checkpoint').length;
+    const checkpoints = (this.#store.snapshots || []).filter((s) => s.kind === 'checkpoint').length;
     return `<div class="resetconfirm" role="alertdialog" aria-label="Confirm reset">
       <span>
         <strong>Reset to the character as imported?</strong>
-        This discards the saved version, any unsaved edits${this.#changes ? ` (${this.#changes} right now)` : ''}
+        This discards the saved version, any unsaved edits${this.#store.changes ? ` (${this.#store.changes} right now)` : ''}
         and the automatic snapshots. Named checkpoints are kept${checkpoints
     ? ` — you have ${checkpoints}` : ' (you have none; History can name one first)'}.
         Type <code>RESET</code> to arm the button.
@@ -3559,8 +2518,8 @@ export class CharacterSheetElement extends HTMLElement {
    * the last Save would otherwise be somewhere the player has no reason to look.
    */
   #resumeBanner() {
-    if (!this.#resume) return '';
-    const { changes, savedAt } = this.#resume;
+    if (!this.#store.resume) return '';
+    const { changes, savedAt } = this.#store.resume;
     return `<div class="resume" role="status">
       <span>
         <strong>${changes} unsaved change${changes === 1 ? '' : 's'}</strong>
@@ -3580,8 +2539,8 @@ export class CharacterSheetElement extends HTMLElement {
    * and a checkpoint is kept until it is deleted.
    */
   #historyPanel() {
-    const autos = this.#snapshots.filter((s) => s.kind === 'auto');
-    const kept = this.#snapshots.filter((s) => s.kind === 'checkpoint');
+    const autos = this.#store.snapshots.filter((s) => s.kind === 'auto');
+    const kept = this.#store.snapshots.filter((s) => s.kind === 'checkpoint');
 
     const row = (s) => {
       const renaming = this.#renameDraft?.key === s.key;
@@ -3612,8 +2571,8 @@ export class CharacterSheetElement extends HTMLElement {
       <div class="histhead">
         <strong>Earlier states</strong>
         <span class="histsize">
-          ${this.#savedDoc
-            ? `saved version is ${this.#changes} change${this.#changes === 1 ? '' : 's'} behind the sheet`
+          ${this.#store.savedDoc
+            ? `saved version is ${this.#store.changes} change${this.#store.changes === 1 ? '' : 's'} behind the sheet`
             : 'nothing saved yet — press Save to set the version this sheet opens on'}
         </span>
       </div>
@@ -3630,11 +2589,11 @@ export class CharacterSheetElement extends HTMLElement {
         <ul class="histlist">${kept.map(row).join('')}</ul>` : ''}
 
       ${autos.length ? `<div class="histgroup">
-          Automatic — one every ${this.#snapshotEvery} changes, ${AUTO_KEEP} kept
+          Automatic — one every ${this.#store.snapshotEvery} changes, ${AUTO_KEEP} kept
         </div>
         <ul class="histlist">${autos.map(row).join('')}</ul>`
         : `<div class="histgroup">
-            No automatic snapshots yet — one is taken every ${this.#snapshotEvery} changes.
+            No automatic snapshots yet — one is taken every ${this.#store.snapshotEvery} changes.
           </div>`}
     </div>`;
   }
@@ -3840,7 +2799,7 @@ export class CharacterSheetElement extends HTMLElement {
    * scratch on its ctx -- the Lore tab collects its option menus there --
    * leaves the view as it found it.
    */
-  #ctx(extra = {}) { return { ...this.#view, tab: this.#tab, rollFormat: this.#rollFormat, grants: this.#grantsForCtx(), faceHeights: this.#faceHeights, ...extra }; }
+  #ctx(extra = {}) { return { ...this.#view, tab: this.#tab, rollFormat: this.#rollFormat, grants: this.#sharing.grantsForCtx(), faceHeights: this.#faceHeights, ...extra }; }
 
   #overviewPanel() { return overview.renderOverviewPanel(this.#model, this.#ctx()); }
 
@@ -4503,213 +3462,8 @@ export class CharacterSheetElement extends HTMLElement {
 
   /* ---------------- the search palette ---------------- */
 
-  /**
-   * Open the palette, or shut it if it is already up.
-   *
-   * The index is built here, on the way in: a couple of milliseconds on the
-   * heaviest character in the roster, against the certainty that what it holds
-   * is what the sheet holds right now. Keeping one in step with every edit
-   * would cost more and could still be wrong.
-   */
-  #openPalette() {
-    if (!this.#model) return;
-    if (this.#palette) {
-      if (this.#palette.open) return;
-      // The browser shut it without us hearing about it (Esc reaches the
-      // dialog directly). Tidy the node away before putting up another.
-      this.#closePalette();
-    }
-    const dlg = this.ownerDocument.createElement('dialog');
-    dlg.className = 'cmdk';
-    dlg.innerHTML = palette.paletteHtml({
-      placeholder: `Search ${this.#model.data.identity?.name || 'this character'}…`,
-    });
-    this.#palette = dlg;
-    this.#paletteIndex = palette.buildIndex(this.#model, {
-      tabs: this.#tabEntries(), isAdmin: this.isAdmin,
-    });
-    this.#paletteReturn = this.shadowRoot.activeElement;
-    this.shadowRoot.append(dlg);
-    this.#bindPalette(dlg);
-    dlg.showModal();
-    this.#paletteSearch('');
-    const input = dlg.querySelector('.cmdk-input');
-    input?.focus();
-    input?.select();
-  }
-
-  #closePalette() {
-    const dlg = this.#palette;
-    if (!dlg) return;
-    // Cleared first: closing the dialog fires `close`, which comes back here.
-    this.#palette = null;
-    this.#paletteIndex = null;
-    this.#paletteRows = [];
-    this.#paletteTerms = [];
-    cancelAnimationFrame(this.#paletteFrame);
-    if (dlg.open) dlg.close();
-    dlg.remove();
-    const back = this.#paletteReturn;
-    this.#paletteReturn = null;
-    if (back?.isConnected) back.focus?.();
-  }
-
-  #togglePalette() {
-    if (this.#palette?.open) this.#closePalette();
-    else this.#openPalette();
-  }
-
-  /**
-   * Everything the open palette listens to.
-   *
-   * All of it hangs off the dialog, which is thrown away when it closes, so
-   * nothing here has to be taken down and nothing accumulates over a session's
-   * worth of openings.
-   */
-  #bindPalette(dlg) {
-    const input = dlg.querySelector('.cmdk-input');
-    const list = dlg.querySelector('.cmdk-list');
-
-    // Typing redraws the list and nothing else -- not the panel behind it, not
-    // even the input -- and does it once per frame however fast the typing is.
-    input.addEventListener('input', () => {
-      cancelAnimationFrame(this.#paletteFrame);
-      this.#paletteFrame = requestAnimationFrame(() => this.#paletteSearch(input.value));
-    });
-
-    input.addEventListener('keydown', (e) => {
-      const page = Math.max(1, Math.floor(list.clientHeight / PALETTE_ROW_PX) - 1);
-      switch (e.key) {
-        case 'ArrowDown': e.preventDefault(); this.#paletteMove(1, true); break;
-        case 'ArrowUp': e.preventDefault(); this.#paletteMove(-1, true); break;
-        case 'PageDown': e.preventDefault(); this.#paletteMove(page, false); break;
-        case 'PageUp': e.preventDefault(); this.#paletteMove(-page, false); break;
-        case 'Home': e.preventDefault(); this.#paletteMove(-1e6, false); break;
-        case 'End': e.preventDefault(); this.#paletteMove(1e6, false); break;
-        case 'Enter':
-          e.preventDefault();
-          this.#paletteChoose(this.#paletteAt, { roll: e.ctrlKey || e.metaKey });
-          break;
-        default: break;
-      }
-    });
-
-    list.addEventListener('click', (e) => {
-      const row = e.target.closest?.('.cmdk-row');
-      if (!row) return;
-      this.#paletteChoose(Number(row.dataset.i), { roll: !!e.target.closest('.cmdk-roll') });
-    });
-
-    // Hover follows the mouse, but only once the mouse has actually moved:
-    // arrowing a row under a resting cursor must not hand the selection back.
-    let last = null;
-    list.addEventListener('pointermove', (e) => {
-      if (last && last[0] === e.clientX && last[1] === e.clientY) return;
-      last = [e.clientX, e.clientY];
-      const row = e.target.closest?.('.cmdk-row');
-      if (row) this.#paletteSelect(Number(row.dataset.i), { scroll: false });
-    });
-
-    // More rows arrive as you reach them; the first frame draws one screenful.
-    list.addEventListener('scroll', () => {
-      if (list.scrollTop + list.clientHeight > list.scrollHeight - PALETTE_ROW_PX * 4) {
-        this.#paletteGrow();
-      }
-    });
-
-    dlg.querySelector('[data-cmdk-close]')?.addEventListener('click', () => this.#closePalette());
-    // A click on the backdrop lands on the dialog itself, never on its box.
-    dlg.addEventListener('click', (e) => { if (e.target === dlg) this.#closePalette(); });
-    // Esc is the browser's to handle, and it fires both of these on the way
-    // out. Either one is enough; taking both means a browser that skips the
-    // second still leaves the sheet in a state that knows the palette is gone.
-    dlg.addEventListener('cancel', () => this.#closePalette());
-    dlg.addEventListener('close', () => this.#closePalette());
-  }
-
-  /** Run the query and redraw the list under the box. */
-  #paletteSearch(query) {
-    if (!this.#palette) return;
-    const found = palette.searchIndex(this.#paletteIndex, query, { recent: this.#paletteRecent });
-    this.#paletteRows = found.rows;
-    this.#paletteTerms = found.terms;
-    this.#paletteAt = 0;
-    this.#paletteShown = Math.min(found.rows.length, PALETTE_PAGE);
-    const list = this.#palette.querySelector('.cmdk-list');
-    list.innerHTML = found.rows.length
-      ? palette.resultsHtml(found.rows.slice(0, this.#paletteShown), found.terms, { at: 0 })
-      : palette.emptyHtml(found.query, found.scope);
-    list.scrollTop = 0;
-    this.#paletteFoot(found.total);
-  }
-
-  /** Draw the next page of a long result list. */
-  #paletteGrow() {
-    const rows = this.#paletteRows;
-    if (!this.#palette || this.#paletteShown >= rows.length) return;
-    const from = this.#paletteShown;
-    const to = Math.min(rows.length, from + PALETTE_PAGE);
-    this.#palette.querySelector('.cmdk-list')
-      .insertAdjacentHTML('beforeend', palette.resultsHtml(
-        rows.slice(from, to), this.#paletteTerms, { at: this.#paletteAt, from },
-      ));
-    this.#paletteShown = to;
-    this.#paletteFoot();
-  }
-
-  /**
-   * Move the selection.
-   *
-   * Rows are not redrawn to move it -- two class changes are -- which is what
-   * keeps holding an arrow key down smooth on a list of hundreds.
-   */
-  #paletteMove(delta, wrap) {
-    const n = this.#paletteRows.length;
-    if (!n) return;
-    let next = this.#paletteAt + delta;
-    if (wrap) next = (next + n) % n;
-    this.#paletteSelect(Math.max(0, Math.min(n - 1, next)));
-  }
-
-  #paletteSelect(i, { scroll = true } = {}) {
-    if (!this.#palette || i === this.#paletteAt || !this.#paletteRows[i]) return;
-    while (i >= this.#paletteShown && this.#paletteShown < this.#paletteRows.length) this.#paletteGrow();
-    const list = this.#palette.querySelector('.cmdk-list');
-    list.querySelector(`.cmdk-row[data-i="${this.#paletteAt}"]`)?.setAttribute('aria-selected', 'false');
-    const row = list.querySelector(`.cmdk-row[data-i="${i}"]`);
-    row?.setAttribute('aria-selected', 'true');
-    this.#paletteAt = i;
-    if (scroll) row?.scrollIntoView({ block: 'nearest' });
-    this.#paletteFoot();
-  }
-
-  /** The line along the bottom: what Enter would do, and how much matched. */
-  #paletteFoot(total = null) {
-    const dlg = this.#palette;
-    if (!dlg) return;
-    if (total !== null) dlg.dataset.total = String(total);
-    const count = Number(dlg.dataset.total) || 0;
-    const entry = this.#paletteRows[this.#paletteAt] || null;
-    dlg.querySelector('[data-cmdk-count]').textContent = palette.countText(this.#paletteShown, count);
-    dlg.querySelector('[data-cmdk-primary]').textContent = entry?.action ? 'Run' : 'Jump';
-    dlg.classList.toggle('has-roll', !!entry?.roll);
-    dlg.querySelector('.cmdk-input')
-      ?.setAttribute('aria-activedescendant', entry ? `cmdk-o-${this.#paletteAt}` : '');
-  }
-
-  /**
-   * Take the row: jump to it, run it, or roll it.
-   *
-   * The palette always closes first. A roll's toast and a jump's landing are
-   * both behind the dialog, and showing neither of them is not much of an
-   * answer to having chosen.
-   */
-  #paletteChoose(i, { roll = false } = {}) {
-    const entry = this.#paletteRows[i];
-    if (!entry) return;
-    this.#paletteRecent = [entry.id, ...this.#paletteRecent.filter((id) => id !== entry.id)]
-      .slice(0, PALETTE_RECENT);
-    this.#closePalette();
+  /** A row taken in the palette, which has shut: copy its roll, run its action, or land on it. */
+  #paletteChose(entry, { roll = false } = {}) {
     if (roll && entry.roll) {
       this.#copyRoll(entry.roll.kind, entry.roll.ref, entry.roll.what);
       return;
@@ -4822,7 +3576,7 @@ export class CharacterSheetElement extends HTMLElement {
     });
 
     scope.querySelectorAll('select[data-themepick]').forEach((box) => {
-      box.addEventListener('change', () => this.#setTheme({ [box.dataset.themepick]: box.value }));
+      box.addEventListener('change', () => this.#theme.set({ [box.dataset.themepick]: box.value }));
     });
 
     // Custom colours show on the sheet while a picker is dragged, and are
@@ -4830,8 +3584,8 @@ export class CharacterSheetElement extends HTMLElement {
     const customPicks = () => Object.fromEntries([...scope.querySelectorAll('input[data-customcolor]')]
       .map((b) => [b.dataset.customcolor, b.value]));
     scope.querySelectorAll('input[data-customcolor]').forEach((box) => {
-      box.addEventListener('input', () => this.#previewCustom(customPicks()));
-      box.addEventListener('change', () => this.#setTheme({ custom: customPicks() }));
+      box.addEventListener('input', () => this.#theme.previewCustom(customPicks()));
+      box.addEventListener('change', () => this.#theme.set({ custom: customPicks() }));
     });
 
     scope.querySelectorAll('select.jumpto').forEach((box) => {
@@ -4910,9 +3664,9 @@ export class CharacterSheetElement extends HTMLElement {
     if (gentle && found.some((n) => n.contains(root.activeElement))) {
       const save = root.querySelector('[data-action="save"]');
       if (save) {
-        save.textContent = `Save${this.#changes ? ` (${this.#changes})` : ''}`;
-        save.disabled = !this.#changes;
-        save.classList.toggle('primary', !!this.#changes);
+        save.textContent = `Save${this.#store.changes ? ` (${this.#store.changes})` : ''}`;
+        save.disabled = !this.#store.changes;
+        save.classList.toggle('primary', !!this.#store.changes);
       }
       return;
     }
@@ -5925,98 +4679,13 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
-    // The Cardcasting tab's two faces.
-    root.querySelectorAll('[data-deck-view]').forEach((b) => {
-      b.addEventListener('click', () => { this.#view.deckView = b.dataset.deckView; this.#render(); });
-    });
-
-    // The table in play: every button carries its action, the card and an
-    // argument. The same three controls reach here from a pop-out window
-    // (see #onCardWindowMessage), so what they do lives in #tableAction.
-    root.querySelectorAll('[data-table]').forEach((b) => {
-      b.addEventListener('click', () => {
-        const [action, id, arg] = b.dataset.table.split('|');
-        if (this.#tableAction(action, id, castPickArg(b, arg))) this.#render();
-      });
-    });
-    // The mode chooser's points follow the mode picked, as its price.
-    root.querySelectorAll('.castpick select[name="mode"]').forEach((sel) => {
-      sel.addEventListener('change', () => followCastPick(sel));
-    });
-    // A named roll picked on a card: spends what its label says, then rolls.
-    root.querySelectorAll('[data-table-roll]').forEach((sel) => {
-      sel.addEventListener('change', () => {
-        if (!sel.value) return;
-        if (this.#tableAction('boost', sel.dataset.tableRoll, sel.value)) this.#render();
-      });
-    });
-    root.querySelectorAll('[data-table-move]').forEach((sel) => {
-      sel.addEventListener('change', () => {
-        if (!sel.value) return;
-        if (this.#tableAction('move', sel.dataset.tableMove, sel.value)) this.#render();
-      });
-    });
-    // Who an ongoing card is affecting, typed beside it; blank clears it.
-    root.querySelectorAll('[data-table-targets]').forEach((input) => {
-      input.addEventListener('change', () => {
-        if (this.#tableAction('targets', input.dataset.tableTargets, input.value)) this.#rerender(input);
-      });
-    });
-
-    // The picker beside a card's Dice field, or its damage types: what it
-    // picked joins the field -- as a roll, or as one more word in a list.
-    root.querySelectorAll('select[data-append]').forEach((sel) => {
-      sel.addEventListener('change', () => {
-        if (!sel.value) return;
-        const [list, index, field] = sel.dataset.append.split('|');
-        const current = this.#model.list(list)[Number(index)]?.[field];
-        const join = sel.dataset.join === ',' ? appendListText : appendDiceText;
-        this.#model.setItem(list, Number(index), field, join(current, sel.value));
-        this.#render();
-      });
-    });
-    // A card moved or copied between the deck and the sideboard.
-    root.querySelectorAll('[data-card-move]').forEach((b) => {
-      b.addEventListener('click', () => {
-        const [list, index, to, how] = b.dataset.cardMove.split('|');
-        this.#model.moveCard(list, Number(index), to, { copy: how === 'copy' });
-        this.#render();
-      });
-    });
-    // One card's dice handed to every card with the same effect.
-    root.querySelectorAll('[data-dice-share]').forEach((b) => {
-      b.addEventListener('click', () => {
-        const [list, index] = b.dataset.diceShare.split('|');
-        this.#model.shareCardDice(list, Number(index));
-        this.#render();
-      });
-    });
-
-    // A deck manipulation picked from the catalogue: it lands in its own group
-    // with a count of one, or bumps the count of the row that already has it
-    // -- for whoever's deck view the picker is on, since a squad member takes
-    // its own manipulations.
-    root.querySelectorAll('select.manip-pick').forEach((sel) => {
-      sel.addEventListener('change', () => {
-        const entry = deckManipulation(sel.value);
-        sel.value = '';
-        if (!entry) return;
-        const owner = sel.dataset.owner || '';
-        const list = this.#model.data.cardcasting?.manipulations || [];
-        const idx = list.findIndex((m) => deckManipulation(m.name) === entry && String(m.owner || '') === owner);
-        if (idx >= 0) this.#model.setItem('cardcasting.manipulations', idx, 'count', (Number(list[idx].count) || 0) + 1);
-        else this.#model.listAdd('cardcasting.manipulations', { group: entry.group, name: entry.name, note: '', count: 1, owner });
-        this.#render();
-      });
-    });
-    // One copy of a manipulation pick given to someone else: the row loses
-    // one and the new owner's row of the same name gains it, so each copy is
-    // moved on its own.
-    root.querySelectorAll('select[data-manip-owner]').forEach((sel) => {
-      sel.addEventListener('change', () => {
-        this.#model.moveManipulationPick(Number(sel.dataset.manipOwner), sel.value);
-        this.#render();
-      });
+    // The Card Casting tab's controls. A press on the table runs through
+    // #tableAction, which a pop-out window or the GM's page reaches as well.
+    bindCardTable(root, this.#model, {
+      deckView: (view) => { this.#view.deckView = view; this.#render(); },
+      tableAction: (...args) => this.#tableAction(...args),
+      render: () => this.#render(),
+      rerender: (el) => this.#rerender(el),
     });
 
     root.querySelectorAll('[data-add]').forEach((b) => {
@@ -6476,7 +5145,7 @@ export class CharacterSheetElement extends HTMLElement {
       if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
       if (isTypingIn(e.composedPath?.()[0] ?? e.target)) return;
       e.preventDefault();
-      this.#openPalette();
+      this.#palette.open();
     });
 
     /*
@@ -6602,7 +5271,7 @@ export class CharacterSheetElement extends HTMLElement {
         if (!prefs.ladderFocus || typeof prefs.ladderFocus !== 'object') prefs.ladderFocus = {};
         if (prefs.ladderFocus[key] === which) delete prefs.ladderFocus[key];
         else prefs.ladderFocus[key] = which;
-        this.#persist();
+        this.#store.persist();
         this.#render();
       });
     });
@@ -7626,13 +6295,13 @@ export class CharacterSheetElement extends HTMLElement {
       // The one-press switch: the same look on the other scheme. A sheet on
       // `auto` leaves auto behind, since a press is a choice.
       case 'theme-flip':
-        this.#setTheme({ palette: flipped(this.getAttribute('theme'), this.#themePref?.custom) });
+        this.#theme.set({ palette: flipped(this.getAttribute('theme'), this.#theme.pref?.custom) });
         break;
       case 'set-theme':
-        this.#setTheme({ palette: button?.dataset.palette, layout: button?.dataset.layout });
+        this.#theme.set({ palette: button?.dataset.palette, layout: button?.dataset.layout });
         break;
       case 'palette':
-        this.#togglePalette();
+        this.#palette.toggle();
         break;
       case 'palette-tabs':
         this.#tab = 'systabs';
@@ -7722,8 +6391,8 @@ export class CharacterSheetElement extends HTMLElement {
       case 'export-saved-recovery':
       case 'export-snapshot-recovery':
         (button.dataset.key
-          ? this.#history.load(button.dataset.key, { includeStale: true }).then((data) => ({ data }))
-          : this.#history.readSaved({ includeStale: true })).then((saved) => {
+          ? this.#store.history.load(button.dataset.key, { includeStale: true }).then((data) => ({ data }))
+          : this.#store.history.readSaved({ includeStale: true })).then((saved) => {
           if (!saved?.data) throw new Error('The saved version could not be read.');
           downloadFile(`${this.#model.data.id}-saved-recovery.json`, JSON.stringify(saved.data, null, 2));
         }).catch((error) => {
@@ -7732,7 +6401,7 @@ export class CharacterSheetElement extends HTMLElement {
         });
         break;
       case 'export-recovery': {
-        const recovery = this.#recoveries[Number(button.dataset.index)];
+        const recovery = this.#store.recoveries[Number(button.dataset.index)];
         if (!recovery) break;
         let content = recovery.raw;
         try {
@@ -7749,39 +6418,39 @@ export class CharacterSheetElement extends HTMLElement {
       case 'export-mw': {
         // The share link goes in the sheet's notes: this page when it is the
         // published view, else the link this browser last published.
-        const kept = this.isPublished ? null : this.#readPublishLink();
-        const publishedUrl = kept?.id ? this.#publishedUrl(kept.id) : this.isPublished ? location.href : null;
+        const kept = this.isPublished ? null : this.#sharing.kept();
+        const publishedUrl = kept?.id ? this.#sharing.shareUrl(kept.id) : this.isPublished ? location.href : null;
         const { fields } = mythWeaversBackup(this.#model, { publishedUrl });
         downloadFile(`${this.#model.data.id}.mw.json`, JSON.stringify(fields, null, 1));
         break;
       }
       case 'preview-published':
-        this.#previewPublished();
+        this.#sharing.preview();
         break;
       case 'publish':
-        this.#publish();
+        this.#sharing.publish();
         break;
       case 'unpublish':
         this.#armUnpublish();
         break;
       case 'unpublish-confirm':
         // Reached on the second press: the first only armed it (`data-arm`).
-        this.#unpublish();
+        this.#sharing.unpublish();
         break;
       case 'hand-over':
-        this.#handOver(String(button?.dataset.member || ''));
+        this.#sharing.handOver(String(button?.dataset.member || ''));
         break;
       case 'take-back':
-        this.#takeBack(String(button?.dataset.member || ''));
+        this.#sharing.takeBack(String(button?.dataset.member || ''));
         break;
       case 'copy-grant-link':
-        this.#copyGrantLink(String(button?.dataset.member || ''));
+        this.#sharing.copyGrantLink(String(button?.dataset.member || ''));
         break;
       case 'copy-published-link':
-        this.#copyPublishedLink();
+        this.#sharing.copyLink();
         break;
       case 'dismiss-published-link':
-        this.#publishedLink = null;
+        this.#sharing.link = null;
         this.#renderHeader();
         break;
       case 'chrome-menu':
@@ -7802,29 +6471,27 @@ export class CharacterSheetElement extends HTMLElement {
 
       /* ---- saving, and going back ---- */
       case 'save':
-        this.#save();
+        this.#store.save();
         break;
       case 'history':
         this.#showHistory = !this.#showHistory;
         this.#renameDraft = null;
         if (this.#showHistory) {
-          this.#refreshSnapshots().then(() => this.#renderHeader());
+          this.#store.refreshSnapshots().then(() => this.#renderHeader());
         }
         this.#renderHeader();
         break;
       case 'save-checkpoint':
-        this.#saveCheckpoint();
+        this.#store.checkpoint(this.#checkpointDraft.trim()).then((kept) => {
+          if (kept) this.#checkpointDraft = '';
+          this.#renderHeader();
+        });
         break;
       case 'restore':
-        if (button?.dataset.key) this.#restoreSnapshot(button.dataset.key);
+        if (button?.dataset.key) this.#store.restore(button.dataset.key);
         break;
       case 'forget-snapshot':
-        if (button?.dataset.key) {
-          this.#history?.remove(button.dataset.key)
-            .then(() => this.#refreshSnapshots())
-            .then(() => this.#renderHeader())
-            .catch(() => { /* already gone */ });
-        }
+        if (button?.dataset.key) this.#store.forget(button.dataset.key);
         break;
       case 'rename-start':
         this.#renameDraft = { key: button.dataset.key, label: button.dataset.label || '' };
@@ -7838,8 +6505,8 @@ export class CharacterSheetElement extends HTMLElement {
         const draft = this.#renameDraft;
         this.#renameDraft = null;
         if (draft?.label.trim()) {
-          this.#history?.rename(draft.key, draft.label.trim())
-            .then(() => this.#refreshSnapshots())
+          this.#store.history?.rename(draft.key, draft.label.trim())
+            .then(() => this.#store.refreshSnapshots())
             .then(() => this.#renderHeader())
             .catch(() => { /* gone while being renamed */ });
         } else {
@@ -7851,33 +6518,28 @@ export class CharacterSheetElement extends HTMLElement {
         // The unsaved work was filed as a snapshot on load, so picking it up is
         // an ordinary restore -- and one that is itself undoable. The undo kept
         // beside that work comes back with it.
-        const kept = this.#undoKept;
-        this.#undoKept = null;
+        const kept = this.#store.undoKept;
+        this.#store.undoKept = null;
         const adoptKept = () => {
           if (!kept || !this.#model) return;
           this.#model.adoptUndoState(kept);
-          this.#keepUndoSoon();
+          this.#store.keepUndoSoon();
           this.#render();
         };
-        if (this.#resume?.key) this.#restoreSnapshot(this.#resume.key).then(adoptKept);
-        else if (this.#resume?.doc) {
-          this.#adoptDocument(this.#resume.doc);
-          if (this.#history) this.#writeWorking();
-          this.#resume = null;
+        if (this.#store.resume?.key) this.#store.restore(this.#store.resume.key).then(adoptKept);
+        else if (this.#store.resume?.doc) {
+          this.#adoptDocument(this.#store.resume.doc);
+          if (this.#store.history) this.#store.writeWorking();
+          this.#store.resume = null;
           this.#render();
           adoptKept();
         }
         break;
       }
       case 'discard-resume': {
-        const key = this.#resume?.key;
-        this.#resume = null;
-        if (key) {
-          this.#history?.remove(key)
-            .then(() => this.#refreshSnapshots())
-            .then(() => this.#renderHeader())
-            .catch(() => { /* already gone */ });
-        }
+        const key = this.#store.resume?.key;
+        this.#store.resume = null;
+        if (key) this.#store.forget(key);
         this.#renderHeader();
         break;
       }
@@ -8285,7 +6947,7 @@ export class CharacterSheetElement extends HTMLElement {
         // Reached on the second press: the first only armed it (`data-arm`).
         const n = this.#model.clearPlayActions();
         this.#playMenu = false;
-        this.#keepUndoSoon();
+        this.#store.keepUndoSoon();
         this.#refreshPlayUndo();
         this.#showUndoToast(`Cleared the undo list (${n} action${n === 1 ? '' : 's'})`, { offer: false });
         break;

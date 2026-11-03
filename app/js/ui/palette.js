@@ -17,10 +17,11 @@
  *   searchIndex(index, query)   scores that index against what has been typed
  *                               and hands back the best of it in order.
  *
- * The element (sheet-element.js) owns everything else -- the overlay's node,
- * its listeners, and what "jump" and "roll" actually do. That is what keeps
- * the palette off the render path: `#render()` rewrites the whole shadow root,
- * and a search box rebuilt on every keystroke is not a search box. The
+ * The sheet owns everything else: sheet/palette-dialog.js the overlay's node
+ * and its listeners, sheet-element.js what "jump" and "roll" actually do.
+ * That is what keeps the palette off the render path: `#render()` rewrites
+ * the whole shadow root, and a search box rebuilt on every keystroke is not
+ * a search box. The
  * Formulas tab learned this first (see `#bindFormulas`), and this goes
  * further -- typing here touches the results list and nothing else.
  *
