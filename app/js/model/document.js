@@ -1,11 +1,13 @@
 /**
  * Reading a document in, and writing one back out.
  *
- * `#normalise` is the compatibility layer: it reshapes what the converter
+ * `normalise` is the compatibility layer: it reshapes what the converter
  * emits into forms the editor can address by path, and brings documents saved
- * by older schema versions up to date. It is long because every shape the
- * sheet has ever saved has to keep loading -- a character is somebody's
- * campaign, and a migration that drops a field loses their work.
+ * by older builds up to date, one named step per area. It is long because
+ * every shape the sheet has ever saved has to keep loading -- a character is
+ * somebody's campaign, and a migration that drops a field loses their work.
+ * A change that a saved shape cannot reveal goes in migrations.js instead,
+ * keyed on the document's schemaVersion.
  */
 
 import {
@@ -58,8 +60,10 @@ const MAGIC_DERIVED = ['sphereRows', 'clForwarded', 'dcForwarded', 'msbForwarded
 // The document shape this build understands: one number for the model and
 // the converter, kept in schema.js.
 import { SCHEMA_VERSION } from '../schema.js';
+import { readableSchema } from './migrations.js';
 
 export { SCHEMA_VERSION };
+export { migrateDocument, readableSchema } from './migrations.js';
 
 /**
  * The tabs a fresh sheet puts on its tab bar, in order. Everything else --
@@ -224,7 +228,9 @@ export function inspectDocument(doc) {
   if (doc.schemaVersion === undefined) {
     return fail('No schemaVersion — this does not look like a sheet export.');
   }
-  if (doc.schemaVersion !== SCHEMA_VERSION) {
+  // An older document is read when the steps in migrations.js reach from its
+  // version to this one. A newer one, or one with no path up, is not.
+  if (!readableSchema(doc.schemaVersion)) {
     return fail(`Built for schema ${doc.schemaVersion}, but this app reads schema ${SCHEMA_VERSION}.`
       + ' Re-run tools/convert.py on the workbook to bring it up to date.');
   }
@@ -354,15 +360,45 @@ function stripDerived(block, rules) {
 }
 
 /**
- * Reshape imported data into forms the editor can address by path.
+ * Bring a document to the shape the editor works on, whatever build saved it.
+ *
+ * The work is the steps below, one area of the document each, run in the
+ * order listed. A step reads what the converter or an older build left in its
+ * area and leaves the current shape behind; a document already in that shape
+ * goes through it unchanged. The order matters where one step reads what
+ * another wrote -- the granted feats take the drawback feat off the trait
+ * slots, and the tab bar, last, reads nearly everything -- so a new step goes
+ * after whatever it reads. A change that a saved shape cannot reveal is a
+ * migration instead (migrations.js), keyed on the document's schemaVersion.
+ */
+export function normalise(model) {
+  for (const step of NORMALISE_STEPS) step(model.data, model);
+}
+
+/** What `normalise` does, in order. Each step takes the document and the model. */
+const NORMALISE_STEPS = [
+  featGroups, backgroundSections, sheetTabs,
+  systemTabs, cardcastingTab, extrasNotesTab, companionTabs, vancianTabs, templateTabs,
+  techniqueAndCookingTabs,
+  wealth, maneuverPicks, veilDescriptions,
+  skills, traitSlots, grantedFeats, traitNames, skillBudget, typedBonuses,
+  uiPrefs, classSystems, effectsAndBuffs, hitPoints, meterStyles,
+  mythic, mythicStatPicks,
+  progressionFromPlanner, altTraining, progression,
+  equipment, classTextFromTemplates,
+  emptyLists, speedsAndProficiencies, raceTraits, specialtyPerks, languages,
+  training, conditions, defaultTabBar,
+];
+
+/**
+ * Feats, as an ordered list of groups.
  *
  * The converter emits feats as an object keyed by group name, but group
  * names contain spaces, slashes and dots, which cannot be used as path
  * segments. They become an ordered list instead, which also lets groups be
  * added, renamed and reordered.
  */
-export function normalise(model) {
-  const d = model.data;
+function featGroups(d) {
   if (!Array.isArray(d.featGroups)) {
     d.featGroups = Object.entries(d.feats || {}).map(([name, entries]) => ({
       name,
@@ -378,7 +414,10 @@ export function normalise(model) {
       if (e && typeof e === 'object' && e.note === undefined) e.note = '';
     }
   }
+}
 
+/** The Background & Lore sections, as an ordered list. */
+function backgroundSections(d) {
   // Background sections are keyed by prose labels ("Friends/Family",
   // "Ez'atian Certifications") which are not usable as path segments either.
   if (!Array.isArray(d.backgroundSections)) {
@@ -390,7 +429,10 @@ export function normalise(model) {
     d.backgroundSections = keys.map((label) => ({ label, text: seed[label] ?? '' }));
   }
   delete d.background;
+}
 
+/** The worksheets nothing models, as an ordered list of raw grids. */
+function sheetTabs(d) {
   // Tabs we did not model explicitly keep their raw cell grid, but the
   // object was keyed by tab title ("Combat Training", "Auto-Cooking"), which
   // is awkward to address. An ordered list keeps them editable.
@@ -413,22 +455,25 @@ export function normalise(model) {
     }));
   }
   delete d.extraTabs;
+}
 
-  /*
-   * Every modelled sub-system reads its worksheet the same way: take the
-   * workbook's grid once, then retire it so the structured block and the raw
-   * copy cannot drift apart. A document saved after this point no longer
-   * carries the grid at all, which is most of what these tabs weighed.
-   * `takeTab` is that move: the tab a name or test finds, taken off the list
-   * (null when there is none). The read only happens while the block is
-   * missing; the tab goes either way.
-   */
-  const takeTab = (match) => {
-    const test = typeof match === 'function' ? match : (t) => t.name === match;
-    const i = d.sheetTabs.findIndex(test);
-    return i < 0 ? null : d.sheetTabs.splice(i, 1)[0];
-  };
+/*
+ * Every modelled sub-system reads its worksheet the same way: take the
+ * workbook's grid once, then retire it so the structured block and the raw
+ * copy cannot drift apart. A document saved after this point no longer
+ * carries the grid at all, which is most of what these tabs weighed.
+ * `takeTab` is that move: the tab a name or test finds, taken off the list
+ * (null when there is none). The read only happens while the block is
+ * missing; the tab goes either way.
+ */
+const takeTab = (d, match) => {
+  const test = typeof match === 'function' ? match : (t) => t.name === match;
+  const i = d.sheetTabs.findIndex(test);
+  return i < 0 ? null : d.sheetTabs.splice(i, 1)[0];
+};
 
+/** Item Crafting, Akashic, Maneuvers and Psionics, read into their blocks. */
+function systemTabs(d) {
   // Item Crafting is a calculator rather than a grid, but it reads the same
   // way into the block the Crafting tab edits, beside the three that were
   // worth modelling.
@@ -438,38 +483,43 @@ export function normalise(model) {
     ['Maneuvers', 'maneuvers', importManeuvers],
     ['Psionics', 'psionics', importPsionics],
   ]) {
-    const tab = takeTab(name);
+    const tab = takeTab(d, name);
     if (!d[key]) d[key] = read(tab, d.identity);
   }
+}
 
+/** The card caster's deck, read into its block. */
+function cardcastingTab(d) {
   // The card caster's deck reads the same way. Its tab is one character's
   // own ("Cardcaster Deck"), so it is found by what it is called rather than
   // by an exact name, and the tradition's drawbacks seed the switches for a
   // caster who took Card Casting without ever building the tab.
-  {
-    const tab = takeTab((t) => /card\s*-?cast/i.test(String(t?.name || '')));
-    if (!d.cardcasting) {
-      d.cardcasting = importCardcasting(tab,
-        d.training?.magic?.tradition?.drawbacks || [], d.training?.magic?.classes || [], deckFeatNames(d));
-    }
+  const tab = takeTab(d, (t) => /card\s*-?cast/i.test(String(t?.name || '')));
+  if (!d.cardcasting) {
+    d.cardcasting = importCardcasting(tab,
+      d.training?.magic?.tradition?.drawbacks || [], d.training?.magic?.classes || [], deckFeatNames(d));
   }
+}
 
+/** ExtrasNotes, read into the Extras & Notes tab and the character's notes. */
+function extrasNotesTab(d) {
   /*
    * ExtrasNotes -- the workbook's scratch page -- reads into the Extras &
    * Notes tab: its Range columns join the character's notes, its Approvals
    * table becomes rows, and the grid is retired.
    */
-  {
-    const tab = takeTab('ExtrasNotes');
-    if (!d.extras) {
-      const got = importExtras(tab);
-      d.extras = { approvals: got.approvals, sourceExtras: got.sourceExtras };
-      if (!Array.isArray(d.notes)) d.notes = [];
-      d.notes.push(...got.notes);
-    }
-    if (!Array.isArray(d.extras.approvals)) d.extras.approvals = [];
+  const tab = takeTab(d, 'ExtrasNotes');
+  if (!d.extras) {
+    const got = importExtras(tab);
+    d.extras = { approvals: got.approvals, sourceExtras: got.sourceExtras };
+    if (!Array.isArray(d.notes)) d.notes = [];
+    d.notes.push(...got.notes);
   }
+  if (!Array.isArray(d.extras.approvals)) d.extras.approvals = [];
+}
 
+/** The companion worksheets, read into each kind's list of blocks. */
+function companionTabs(d) {
   /*
    * The companion sheets -- Familiar, Animal Companion, Eidolon on every
    * template workbook, and a Conjuration Companion tab built to the same
@@ -515,7 +565,10 @@ export function normalise(model) {
     }
   }
   uniqueCompanionIds(d);
+}
 
+/** Vancian casting, read from however many tabs the workbook spread it over. */
+function vancianTabs(d) {
   /*
    * Vancian is the one of them that can arrive on more than one tab. The
    * older template fits two casting classes per tab and puts the epic ones on
@@ -530,7 +583,10 @@ export function normalise(model) {
       .map((t) => importVancian(t, d.identity)));
   }
   d.sheetTabs = d.sheetTabs.filter((t) => !isVancianTab(t));
+}
 
+/** The Template tabs, read into the groups the Template tab edits. */
+function templateTabs(d) {
   /*
    * Templates read the same way, and for the same reason: the workbook's
    * Template tab is imported once into the groups the Template tab edits and
@@ -544,7 +600,7 @@ export function normalise(model) {
   // workbook carrying both tabs contributes both.
   const importedTemplates = d.templates.length > 0;
   for (const name of TEMPLATE_TABS) {
-    const grid = takeTab(name);
+    const grid = takeTab(d, name);
     if (grid && !importedTemplates) {
       const doc = importTemplateTab(grid, name);
       if (doc) d.templates.push(doc);
@@ -557,39 +613,53 @@ export function normalise(model) {
     approvalLink: tp.approvalLink ?? null,
     features: (Array.isArray(tp.features) ? tp.features : []).map((f) => templateEntry(f)),
   }));
+}
 
+/** The technique and Auto-Cooking worksheets, read into their blocks. */
+function techniqueAndCookingTabs(d) {
   /*
    * Custom techniques and the iron chef's dish read the same way as the
    * rest: the workbook's grids -- techRef, Technique List, AutoTechnique;
    * Auto-Cooking -- are imported once into their blocks and retired.
    */
-  {
-    const refTab = takeTab('techRef');
-    const listTab = takeTab('Technique List');
-    const autoTab = takeTab('AutoTechnique');
-    if (!d.techniques) d.techniques = importTechniques(refTab, listTab, autoTab);
-    d.techniques = normalizeTechniques(d.techniques);
-    const cookTab = takeTab('Auto-Cooking');
-    if (!d.cooking) d.cooking = importCooking(cookTab);
-    d.cooking = normalizeDish(d.cooking);
-  }
+  const refTab = takeTab(d, 'techRef');
+  const listTab = takeTab(d, 'Technique List');
+  const autoTab = takeTab(d, 'AutoTechnique');
+  if (!d.techniques) d.techniques = importTechniques(refTab, listTab, autoTab);
+  d.techniques = normalizeTechniques(d.techniques);
+  const cookTab = takeTab(d, 'Auto-Cooking');
+  if (!d.cooking) d.cooking = importCooking(cookTab);
+  d.cooking = normalizeDish(d.cooking);
+}
 
-  // The wallet: the converter's block when the workbook had one, else empty.
+/** The wallet: the converter's block when the workbook had one, else empty. */
+function wealth(d) {
   d.wealth = normalizeWealth(d.wealth);
+}
 
-  // A document saved before the catalogue existed carries every maneuver its
-  // disciplines grant. Reduce each one to the picks the character made.
+/**
+ * A document saved before the catalogue existed carries every maneuver its
+ * disciplines grant. Reduce each one to the picks the character made.
+ */
+function maneuverPicks(d) {
   if (d.maneuvers) {
     d.maneuvers.disciplines = (d.maneuvers.disciplines || []).map(shrinkDiscipline);
   }
+}
 
-  // A veil saved before the description had its own field keeps the effect
-  // bracketed inside the name.
+/**
+ * A veil saved before the description had its own field keeps the effect
+ * bracketed inside the name.
+ */
+function veilDescriptions(d) {
   for (const holder of [...(d.akashic?.slots || []), ...(d.akashic?.kheshig || [])]) {
     holder.veils = (holder.veils || []).map((v) => (v.desc === undefined
       ? { ...splitVeilName(v.name), essence: v.essence } : v));
   }
+}
 
+/** Skills: rank sources, the three specialty picks, and Perform's own spellings. */
+function skills(d) {
   // Skills: split the imported rank columns into their editable sources.
   // The sheet's rule: total ranks = MIN(level, bought + flags*level + spheres)
   // where Specialty / Gear / Other are flags worth full level ranks.
@@ -637,7 +707,10 @@ export function normalise(model) {
       if (d.specialtySkills[slot] === wasKey) d.specialtySkills[slot] = nowKey;
     }
   }
+}
 
+/** Traits and drawbacks, into their fixed slots. */
+function traitSlots(d) {
   // Structured trait/drawback slots: three mandatory traits, optional pairs
   // (Drawback 1 unlocks Trait 4, Drawback 2 unlocks Trait 5, a Major
   // Drawback buys a Drawback Feat), plus free additional traits.
@@ -657,7 +730,10 @@ export function normalise(model) {
   }
   delete d.traits;
   if (!Array.isArray(d.traitCategories)) d.traitCategories = [];
+}
 
+/** Feats that came with something rather than being picked at a level. */
+function grantedFeats(d) {
   /*
    * Feats that come with something rather than being picked at a level: the
    * one a Major Drawback buys, the mandatory Specialty feat, and the Oath and
@@ -700,7 +776,10 @@ export function normalise(model) {
   // After the Drawback, Oath and Attunement columns have left the groups, so
   // what is left first is the Level Up column the sheet always had.
   shapeLevelUpFeats(d, { create: true });
+}
 
+/** A name for every trait and drawback slot. */
+function traitNames(d) {
   /*
    * A trait's name, which the workbook had nowhere to put.
    *
@@ -719,52 +798,56 @@ export function normalise(model) {
    * do. A category on a drawback is dropped once its name is out: it was
    * never a category, and the column does not show one.
    */
-  {
-    // "Name (effect)", the shape every sheet writes a trait in. The name is
-    // short and paren-free; the effect is everything the brackets hold,
-    // which may itself contain brackets.
-    const shaped = /^([^()]{1,60}?)\s*\(([\s\S]+)\)\s*$/;
-    const bare = (s) => s.length <= 48 && !/[.;:!?]/.test(s);
-    const split = (text) => {
-      const t = String(text ?? '').trim();
-      const m = shaped.exec(t);
-      if (m) return { name: m[1].trim(), text: m[2].trim() };
-      if (t && bare(t)) return { name: t, text: '' };
-      return { name: '', text: t };
-    };
-    const kindOf = (key) => TRAIT_SLOTS.find((s) => s.key === key)?.kind || 'trait';
-    const name = (slot, kind) => {
-      if (!slot || typeof slot !== 'object' || typeof slot.name === 'string') return;
-      const drawback = kind !== 'trait';
-      const category = String(slot.category ?? '').trim();
-      const own = String(slot.text ?? '').trim();
-      // A drawback whose category cell holds something holds its name there:
-      // that cell is the only place the sheet had for it, and taking it
-      // beats guessing at the front of the effect. It carries the effect too
-      // when the effect column is empty, and then it is split like any other.
-      if (drawback && category && !/^drawbacks?$/i.test(category)) {
-        if (own) {
-          slot.name = category;
-        } else {
-          const inner = split(category);
-          slot.name = inner.name || category;
-          slot.text = inner.text;
-        }
+  // "Name (effect)", the shape every sheet writes a trait in. The name is
+  // short and paren-free; the effect is everything the brackets hold,
+  // which may itself contain brackets.
+  const shaped = /^([^()]{1,60}?)\s*\(([\s\S]+)\)\s*$/;
+  const bare = (s) => s.length <= 48 && !/[.;:!?]/.test(s);
+  const split = (text) => {
+    const t = String(text ?? '').trim();
+    const m = shaped.exec(t);
+    if (m) return { name: m[1].trim(), text: m[2].trim() };
+    if (t && bare(t)) return { name: t, text: '' };
+    return { name: '', text: t };
+  };
+  const kindOf = (key) => TRAIT_SLOTS.find((s) => s.key === key)?.kind || 'trait';
+  const name = (slot, kind) => {
+    if (!slot || typeof slot !== 'object' || typeof slot.name === 'string') return;
+    const drawback = kind !== 'trait';
+    const category = String(slot.category ?? '').trim();
+    const own = String(slot.text ?? '').trim();
+    // A drawback whose category cell holds something holds its name there:
+    // that cell is the only place the sheet had for it, and taking it
+    // beats guessing at the front of the effect. It carries the effect too
+    // when the effect column is empty, and then it is split like any other.
+    if (drawback && category && !/^drawbacks?$/i.test(category)) {
+      if (own) {
+        slot.name = category;
       } else {
-        const from = split(own);
-        slot.name = from.name;
-        slot.text = from.text;
+        const inner = split(category);
+        slot.name = inner.name || category;
+        slot.text = inner.text;
       }
-      if (drawback) slot.category = null;
-    };
-    for (const [key, slot] of Object.entries(d.traitSlots || {})) {
-      if (key === 'additional') (slot || []).forEach((s) => name(s, 'trait'));
-      else name(slot, kindOf(key));
+    } else {
+      const from = split(own);
+      slot.name = from.name;
+      slot.text = from.text;
     }
+    if (drawback) slot.category = null;
+  };
+  for (const [key, slot] of Object.entries(d.traitSlots || {})) {
+    if (key === 'additional') (slot || []).forEach((s) => name(s, 'trait'));
+    else name(slot, kindOf(key));
   }
+}
 
+/** The bonus skill points per level, none where the document gives no figure. */
+function skillBudget(d) {
   if (!d.skillBudget) d.skillBudget = { bonusPerLevel: 0, intPerLevel: 0 };
+}
 
+/** The typed save and AC bonuses, seeded from the workbook's named totals. */
+function typedBonuses(d) {
   /*
    * Typed save and AC bonuses -- the Stats tab's own breakdown, and the only
    * place a flat save or AC bonus is written down.
@@ -798,7 +881,10 @@ export function normalise(model) {
     };
     d.defenses.acBonuses.sheet = (Number(named.ACStatsTotal) || 0) - deflect - nat;
   }
+}
 
+/** Per-view preferences: hidden tabs, tab colors and order, the view, folds, column widths. */
+function uiPrefs(d) {
   // Per-view preferences: hidden system tabs and collapsed panels.
   if (!d.uiPrefs) d.uiPrefs = {};
   if (!d.uiPrefs.hiddenTabs) {
@@ -818,10 +904,10 @@ export function normalise(model) {
     if (hex) d.uiPrefs.tabColors[key] = hex;
     else delete d.uiPrefs.tabColors[key];        // anything unreadable is no colour
   }
-  // The tab bar itself is seeded at the *end* of this function rather than
-  // here: it now depends on which sub-systems the character uses, and the
-  // blocks that answer that -- training, the companions, the conditions --
-  // are normalised below. See `buildDefaultTabs`.
+  // The tab bar itself is seeded by the last step rather than here: it now
+  // depends on which sub-systems the character uses, and the blocks that
+  // answer that -- training, the companions, the conditions -- are normalised
+  // by later steps. See `buildDefaultTabs`.
   // Spheres & Magic became two tabs -- Martial Spheres and Magic Spheres --
   // so a bar saved with the old one carries both in its place, in that order
   // and where the old tab stood. Cheaper than a schema bump: the document is
@@ -840,18 +926,6 @@ export function normalise(model) {
   if (d.uiPrefs.sessionTabOrder !== undefined && !Array.isArray(d.uiPrefs.sessionTabOrder)) {
     delete d.uiPrefs.sessionTabOrder;
   }
-  // The sub-systems a class is marked with (GAME_SYSTEMS ids). An old save
-  // simply has none marked.
-  for (const cls of d.classes || []) {
-    if (cls && typeof cls === 'object' && !Array.isArray(cls.systems)) cls.systems = [];
-  }
-  // Active-effect reminders on the session dashboard: a name, a note and an
-  // on/off tick. They move no numbers -- a buff that should is a buff row --
-  // they just keep "watching the north door" in sight during play.
-  if (!Array.isArray(d.effects)) d.effects = [];
-  // Buffs: named, tickable bonuses whose dials (BUFF_MOD_KEYS) take a number
-  // or a formula, and ride the condition totals so every "now" figure moves.
-  if (!Array.isArray(d.buffs)) d.buffs = [];
   if (!d.uiPrefs.collapsed) d.uiPrefs.collapsed = {};
   // The Alternate Training tab was `primordia`; a saved bar, hidden-tab entry
   // or tab colour keyed by the old id follows the tab to its new name.
@@ -877,7 +951,32 @@ export function normalise(model) {
   // And the hit-point parts: the sum above them says what they come to, and
   // the ability is the only one most characters ever touch.
   if (d.uiPrefs.collapsed['hp:build'] === undefined) d.uiPrefs.collapsed['hp:build'] = true;
+  if (!d.uiPrefs.colWidths) d.uiPrefs.colWidths = {};
+}
 
+/**
+ * The sub-systems a class is marked with (GAME_SYSTEMS ids). An old save
+ * simply has none marked.
+ */
+function classSystems(d) {
+  for (const cls of d.classes || []) {
+    if (cls && typeof cls === 'object' && !Array.isArray(cls.systems)) cls.systems = [];
+  }
+}
+
+/** Active-effect reminders and buffs, the session dashboard's two lists. */
+function effectsAndBuffs(d) {
+  // Active-effect reminders on the session dashboard: a name, a note and an
+  // on/off tick. They move no numbers -- a buff that should is a buff row --
+  // they just keep "watching the north door" in sight during play.
+  if (!Array.isArray(d.effects)) d.effects = [];
+  // Buffs: named, tickable bonuses whose dials (BUFF_MOD_KEYS) take a number
+  // or a formula, and ride the condition totals so every "now" figure moves.
+  if (!Array.isArray(d.buffs)) d.buffs = [];
+}
+
+/** Hit points and their parts, and initiative's own row. */
+function hitPoints(d) {
   /*
    * Hit points. `total` used to be the whole of it -- a number the workbook
    * worked out and this sheet kept -- and is now what `applyHitPoints` arrives
@@ -900,11 +999,18 @@ export function normalise(model) {
   if (!d.hp.initAbility) d.hp.initAbility = 'Dex';
   if (d.hp.initAbility2 === undefined) d.hp.initAbility2 = null;
   if (d.hp.initMisc === undefined || d.hp.initMisc === null) d.hp.initMisc = 0;
-  if (!d.uiPrefs.colWidths) d.uiPrefs.colWidths = {};
-  // How the built-in meters are painted. Empty on a sheet nobody has
-  // restyled, and only the meters that differ from the default are in it.
-  if (!d.meterStyles || typeof d.meterStyles !== 'object') d.meterStyles = {};
+}
 
+/**
+ * How the built-in meters are painted. Empty on a sheet nobody has
+ * restyled, and only the meters that differ from the default are in it.
+ */
+function meterStyles(d) {
+  if (!d.meterStyles || typeof d.meterStyles !== 'object') d.meterStyles = {};
+}
+
+/** Mythic: the tier, further paths, Flowing Power, the tradition and the ten-tier ladder. */
+function mythic(d) {
   // Mythic: tier auto-derives from level (override kept when the imported
   // tier disagrees, e.g. a GM-granted extra tier), tradition slots, bonus
   // HP per tier, and even-tier stat picks seeded from the Stats-tab column.
@@ -974,7 +1080,10 @@ export function normalise(model) {
     a.effect ??= '';
     a.featEffect ??= '';
   }
+}
 
+/** The ability increases of the even mythic tiers. */
+function mythicStatPicks(d) {
   if (!Array.isArray(d.mythicStatPicks)) {
     const tier = Number(d.identity?.mythicTier) || 0;
     // Each even tier's row names the ability it raised. Where the sheet left
@@ -998,7 +1107,10 @@ export function normalise(model) {
   // The picks are where an increase lives now; the column it was read from
   // would only drift.
   for (const a of d.mythic.abilities) delete a.statBonus;
+}
 
+/** The Planner's rows, read into the level list and each class's features. */
+function progressionFromPlanner(d) {
   // Progression: the Planner's raw rows become a structured level list —
   // class tracks (dropdowns) plus per-class feature groups. In the source
   // sheet, feature columns sit inside a class's column block ("Class 2 HD"
@@ -1045,7 +1157,10 @@ export function normalise(model) {
     }
     d.progression = { tracks: Math.max(2, classKeys.length), levels, classFeatures };
   }
+}
 
+/** The Alternate Training block. */
+function altTraining(d) {
   /*
    * The Alternate Training ladder, off the Planner's own column.
    *
@@ -1097,7 +1212,11 @@ export function normalise(model) {
   if (!d.altTraining.rowNotes || typeof d.altTraining.rowNotes !== 'object') {
     d.altTraining.rowNotes = {};
   }
+}
 
+/** The progression: a level list on every document, column rules, class notes and menus. */
+function progression(d) {
+  // The two steps above have read the Planner's rows; they are not kept.
   delete d.planner;
   if (!d.progression) {
     d.progression = {
@@ -1146,7 +1265,10 @@ export function normalise(model) {
       g.optionsFrom[col] = list.length === 1 ? list[0] : list;
     }
   }
+}
 
+/** Equipment: gear, armor and shields, and weapon rows, from any shape a build has saved. */
+function equipment(d) {
   // Equipment: the structured shape (gear slots, armor & shields, weapon
   // blocks). Older saves carried a flat `slots` grid and a separate simple
   // weapons list; both fold into the new shape.
@@ -1190,6 +1312,23 @@ export function normalise(model) {
     w.baseWeapon = String(w.baseWeapon ?? '');
   }
 
+  // Legacy user-added simple weapons.
+  if (Array.isArray(d.weapons) && d.weapons.length) {
+    for (const w of d.weapons) {
+      e.weapons.push({
+        ...blankWeapon(),
+        name: w.name || '', attackType: w.type === 'ranged' ? 'Ranged' : w.type === 'cmb' ? 'CMB' : 'Melee',
+        dice: w.damage || '', critMult: w.crit || '', special: w.notes || '',
+        enhancement: 0, miscAttack: Number(w.bonus) || 0, miscDamage: 0,
+        abilityMult: 1, damageAbility: null, groups: [], weight: 0, price: 0,
+      });
+    }
+  }
+  delete d.weapons;
+}
+
+/** A class's feature text, off the Template tab an earlier version put it on. */
+function classTextFromTemplates(d) {
   // An earlier version put a class's feature text on the Template tab, which
   // is for templates. Such a group is recognised exactly -- named for a class
   // on this sheet, carrying no template link, every one of its features named
@@ -1211,30 +1350,26 @@ export function normalise(model) {
       return false;
     });
   }
+}
 
-  // Legacy user-added simple weapons.
-  if (Array.isArray(d.weapons) && d.weapons.length) {
-    for (const w of d.weapons) {
-      e.weapons.push({
-        ...blankWeapon(),
-        name: w.name || '', attackType: w.type === 'ranged' ? 'Ranged' : w.type === 'cmb' ? 'CMB' : 'Melee',
-        dice: w.damage || '', critMult: w.crit || '', special: w.notes || '',
-        enhancement: 0, miscAttack: Number(w.bonus) || 0, miscDamage: 0,
-        abilityMult: 1, damageAbility: null, groups: [], weight: 0, price: 0,
-      });
-    }
-  }
-  delete d.weapons;
-
+/** Lists a later reader takes for granted, empty where no step above made one. */
+function emptyLists(d) {
   if (!Array.isArray(d.notes)) d.notes = [];
   if (!d.mythic) d.mythic = {};
   if (!Array.isArray(d.mythic.abilities)) d.mythic.abilities = [];
   if (!Array.isArray(d.traits)) d.traits = [];
+}
+
+/** Movement rows and the proficiency lists. */
+function speedsAndProficiencies(d) {
   d.identity.speeds = Array.isArray(d.identity.speeds) ? d.identity.speeds.map(speedRow) : [];
   // Weapon and armor proficiencies: the workbook's three sentences become
   // lists (see parseProficiencyText); lists already saved are only tidied.
   d.identity.proficiencies = normalizeProficiencies(d.identity.proficiencies);
+}
 
+/** Race traits, each a name and its effect. */
+function raceTraits(d) {
   /*
    * Race traits: what the race hands you, which the sheets keep as a column
    * of sentences and every race has a different number of.
@@ -1271,7 +1406,10 @@ export function normalise(model) {
     }
     return { name: '', text: raw };
   }).filter(Boolean);
+}
 
+/** The specialty's perks, and its feat where the Drawbacks column named none. */
+function specialtyPerks(d) {
   /*
    * Specialty: the background the character came from, its feat and its
    * perks. The workbook has room for two perks; here it is a list.
@@ -1287,7 +1425,10 @@ export function normalise(model) {
       d.grantedFeats.specialty = { ...(d.grantedFeats.specialty || {}), name: guess };
     }
   }
+}
 
+/** Languages, as one list. */
+function languages(d) {
   /*
    * Languages: one list, seeded from the workbook's three cells (native,
    * bonus for Int, from Linguistics). Those cells were free text with any
@@ -1311,7 +1452,10 @@ export function normalise(model) {
   d.identity.languages = d.identity.languages.map((l) => (l && typeof l === 'object' ? String(l.name ?? '') : String(l ?? '')));
   if (d.identity.nativeLanguages === undefined) d.identity.nativeLanguages = null;
   if (d.identity.languageExtra === undefined) d.identity.languageExtra = 0;
+}
 
+/** The training sides: guile and unarmed always there, customized weapons out of the class lists. */
+function training(d) {
   // A workbook with nowhere to put its customized weapons put them where it
   // could. Bryva's has an "Armiger customization" block sitting among her
   // casting classes -- no casting type, no talent rate, not one talent on
@@ -1366,7 +1510,10 @@ export function normalise(model) {
       }
     }
   }
+}
 
+/** Conditions, as numbers, with the template's own two ticks cleared. */
+function conditions(d) {
   // Conditions. A character with none at all gets the standard list to tick;
   // an imported one keeps the workbook's own labels ("Fatigue", "Grapple")
   // because those are what its named ranges and its export use. Values are
@@ -1388,8 +1535,10 @@ export function normalise(model) {
   if (on.length === 2 && on[0] === 'helpless' && on[1] === 'paralyzed') {
     for (const name of Object.keys(d.conditions)) d.conditions[name] = 0;
   }
+}
 
-  // Last, because it reads everything above: the bar a character opens on.
+/** Last, because it reads every step before it: the bar a character opens on. */
+function defaultTabBar(d, model) {
   if (!Array.isArray(d.uiPrefs.tabOrder)) d.uiPrefs.tabOrder = buildDefaultTabs(model);
 }
 

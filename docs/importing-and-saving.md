@@ -337,13 +337,15 @@ imported character restores the document as imported, since there is no URL to r
 
 Local edits are unaffected by re-conversion until you press **Reset** on a character.
 Saved edits, saved versions, snapshots and imported files all carry the document's
-`schemaVersion` (currently 9, declared as `SCHEMA_VERSION` in `model.js` and written by
-the converter). If the schema changes, incompatible working state is kept and offered
-as a **Download recovery** file. Before newer edits replace that working slot, its
-original bytes are archived locally. If that archive cannot be written, the new working
-copy is not written either and the storage warning appears. Malformed working JSON is
-preserved in the same way. Recovery copies remain through Reset; removing the character
-and its history removes them too.
+`schemaVersion` (currently 9, declared as `SCHEMA_VERSION` in `schema.js` and written by
+the converter). A document from an older schema that has a migration step in
+`app/js/model/migrations.js` is brought up to this build's on load, and one from a newer
+schema is still refused; there are no steps yet. If the schema changes, incompatible
+working state is kept and offered as a **Download recovery** file. Before newer edits
+replace that working slot, its original bytes are archived locally. If that archive
+cannot be written, the new working copy is not written either and the storage warning
+appears. Malformed working JSON is preserved in the same way. Recovery copies remain
+through Reset; removing the character and its history removes them too.
 
 An incompatible saved version can be downloaded with **Download saved version**. Saving
 again preserves that earlier version as a named recovery checkpoint in the same database

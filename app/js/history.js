@@ -34,6 +34,7 @@
  */
 
 import { SCHEMA_VERSION } from './model.js';
+import { migrateDocument, readableSchema } from './model/migrations.js';
 import { isComputedPath } from './model/computed-paths.js';
 import { databaseOpener, finished, result } from './idb.js';
 import { undoKey } from './undo-store.js';
@@ -241,10 +242,14 @@ export function historyFor(id, { storageKey = null } = {}) {
   const recoveryKey = `${wKey}:recovery`;
   const stamp = () => new Date().toISOString();
 
+  // Readable means this build can open it: its schema has a way up, and the
+  // steps up do not fail on it. Anything else is archived before it is replaced.
   const readableWorking = (raw) => {
     try {
       const saved = JSON.parse(raw);
-      return saved?.data?.schemaVersion === SCHEMA_VERSION ? saved : null;
+      if (!readableSchema(saved?.data?.schemaVersion)) return null;
+      migrateDocument(saved.data);
+      return saved;
     } catch { return null; }
   };
 
@@ -288,7 +293,9 @@ export function historyFor(id, { storageKey = null } = {}) {
       if (!saved?.data) return null;
       // Preserve unsupported versions in place until a later write archives
       // them. A future app version's document must not be normalized by this one.
-      if (saved.data.schemaVersion !== SCHEMA_VERSION) return null;
+      // An older one is brought up to this build's schema (model/migrations.js).
+      if (!readableSchema(saved.data.schemaVersion)) return null;
+      migrateDocument(saved.data);
       return saved;
     } catch {
       return null;                       // corrupt entry: fall back to source
@@ -326,7 +333,7 @@ export function historyFor(id, { storageKey = null } = {}) {
     return rows.sort((a, b) => (b.seq || 0) - (a.seq || 0));
   }
 
-  const meta = ({ bytes, ...rest }) => ({ ...rest, size: bytes?.length ?? 0, stale: rest.schemaVersion !== SCHEMA_VERSION });
+  const meta = ({ bytes, ...rest }) => ({ ...rest, size: bytes?.length ?? 0, stale: !readableSchema(rest.schemaVersion) });
 
   /**
    * The canonical version, or null.
@@ -341,9 +348,11 @@ export function historyFor(id, { storageKey = null } = {}) {
       const store = db.transaction(STORE, 'readonly').objectStore(STORE);
       const row = await result(store.get(recordKey('saved')));
       if (!row) return null;
-      // includeStale is for downloading the original, never for adopting it.
-      if (row.schemaVersion !== SCHEMA_VERSION && !includeStale) return { ...meta(row), data: null };
-      return { ...meta(row), data: await unpack(row.bytes) };
+      // includeStale is for downloading the original, never for adopting it,
+      // so that copy is handed over as it was stored.
+      if (includeStale) return { ...meta(row), data: await unpack(row.bytes) };
+      if (!readableSchema(row.schemaVersion)) return { ...meta(row), data: null };
+      return { ...meta(row), data: migrateDocument(await unpack(row.bytes)) };
     } catch {
       return null;
     }
@@ -427,11 +436,12 @@ export function historyFor(id, { storageKey = null } = {}) {
       const store = db.transaction(STORE, 'readonly').objectStore(STORE);
       const row = await result(store.get(key));
       if (!row) throw new Error('that snapshot is no longer stored');
-      if (row.schemaVersion !== SCHEMA_VERSION && !includeStale) {
+      if (includeStale) return unpack(row.bytes);
+      if (!readableSchema(row.schemaVersion)) {
         throw new Error(`that snapshot was written for schema ${row.schemaVersion},`
           + ` and this app reads schema ${SCHEMA_VERSION}`);
       }
-      return unpack(row.bytes);
+      return migrateDocument(await unpack(row.bytes));
     },
 
     /** Rename a checkpoint. */

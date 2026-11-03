@@ -44,6 +44,7 @@ import {
 import { breakdown } from './breakdown.js';
 import { shapeLevelUpFeats } from './feats.js';
 import { normalise, toDocument } from './document.js';
+import { migrateDocument } from './migrations.js';
 import {
   addSystemTab, addSystemTabColumn, hideTab, listAdd, listAt, listMove, listMoveInto, listMoveTo, listRemove,
   moveTab, removeSystemTab, removeSystemTabColumn, renameSkill, renameSystemTab, resetTabOrder, sessionDefaultTabs,
@@ -160,7 +161,9 @@ const PLAY_MODES = {
 export class Character {
   /** @param {object} data  a document produced by tools/convert.py */
   constructor(data) {
-    this.data = structuredClone(data);
+    // A document saved under an older schema is brought up to this build's
+    // first, so the figures read below are read from where they now live.
+    this.data = migrateDocument(structuredClone(data));
     this.listeners = new Set();
 
     // Values as the Google Sheet had them, kept for reconciliation and for the

@@ -8,6 +8,7 @@
  *   model/character.js   the Character class: state, recompute, subscriptions
  *   model/reconcile.js   offsets against the source workbook, and the audit
  *   model/document.js    reading and normalising an imported document
+ *   model/migrations.js  a document saved under an older schema, brought up to this one
  *   model/scope.js       the flat scope formulas read, and forwarded bonuses
  *   model/stats/         saves, defences, attacks, wealth
  *   model/subsystems/    akashic, alt-training, cardcasting, catalogues, companions,
