@@ -3061,6 +3061,8 @@ export class CharacterSheetElement extends HTMLElement {
       // Whom the campaign rules are for: the rules the browser shares.
       sharedRules: this.isPublished ? null : readShared(),
       campaignShareArmed: this.#campaignShareArmed,
+      // A tab the player renamed shows the GM the player's name for it.
+      isAdmin: this.isAdmin,
     }));
   }
 

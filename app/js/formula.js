@@ -278,7 +278,15 @@ export function stepDice(die, steps = 0) {
 
 export const FUNCTIONS = {
   // Rounding -- floor() is the workhorse of Pathfinder maths.
-  floor: { arity: [1, 2], fn: (n, step = 1) => Math.floor(toNumber(n) / toNumber(step, 1)) * toNumber(step) },
+  // A step of 0 (or of text, which reads as 0) is the division by zero `/` refuses too.
+  floor: {
+    arity: [1, 2],
+    fn: (n, step = 1) => {
+      const s = toNumber(step);
+      if (s === 0) throw new FormulaError('Division by zero');
+      return Math.floor(toNumber(n) / s) * s;
+    },
+  },
   ceil: { arity: [1, 1], fn: (n) => Math.ceil(toNumber(n)) },
   round: { arity: [1, 2], fn: (n, d = 0) => { const p = 10 ** toNumber(d); return Math.round(toNumber(n) * p) / p; } },
   trunc: { arity: [1, 1], fn: (n) => Math.trunc(toNumber(n)) },

@@ -45,7 +45,7 @@ export function renderSystemManagerPanel(model, ctx) {
     const weird = off.filter((e) => e.weird);
 
     const badges = (e) => `${e.renamed ? `<span class="badge player" title="${esc(e.title || '')}">${
-      this.isAdmin ? `player: “${esc(e.renamed)}”` : `originally ${esc(e.base)}`}</span>` : ''}
+      ctx.isAdmin ? `player: “${esc(e.renamed)}”` : `originally ${esc(e.base)}`}</span>` : ''}
       ${e.kind === 'system' && e.tab.hidden ? '<span class="badge">hidden in source</span>' : ''}
       ${e.kind === 'system' && e.tab.custom ? '<span class="badge player">custom</span>' : ''}
       ${e.kind === 'system' ? `<span class="badge">${e.tab.rows.length} rows</span>` : ''}
