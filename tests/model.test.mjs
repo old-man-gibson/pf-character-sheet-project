@@ -133,8 +133,6 @@ registerTables(merged, {
   setAltTrainingTables,
 });
 const catalogue = merged.maneuvers;
-const castingTables = merged.vancian;
-const psionicTableDoc = merged.psionics;
 
 const load = loadCharacter;
 // Every character in the fixture roster, so one added to it is tested without
@@ -2697,7 +2695,7 @@ console.log('a bonus that reads power points or a caster level holds still acros
   }
   check('reopened and edited three times, Will stays where it was', seen, Array(6).fill(will));
   check('with no offset made up for it', c.offsets['saves.will.total'], 0);
-  check('the bonus is there, read off this pass’s pool', c.forwardedInto('saves.will') > 0 || c.data.saves.will.total > c.data.saves.will.base, true);
+  check('the bonus is there, read off this pass’s pool', (c.forwardedInto('saves.will')?.total ?? 0) > 0, true);
   check('a name reading a raised caster level reads it raised, as the class shows it',
     [c.inlineNames.my_cl, c.data.vancian.classes[0].casterLevel], [11, 11]);
 }
@@ -4730,19 +4728,21 @@ console.log('load -- the table, the worse of armour and load, quantities, coins,
   const str = c.data.carry.score;
   const { light, medium } = c.data.carry;
   const acAt = () => c.data.defenses.ac;
-  const stealth = () => c.data.skills.find((s) => s.name === 'Stealth');
+  const stealth = () => c.data.skills.find((s) => s.name === 'Stealth').bonus;
   const lightAc = acAt();
+  const lightStealth = stealth();
   c.listAdd('equipment.other', { slot: 'Other', name: 'Rations', qty: 1, weight: 1, cost: 0.5, note: '' });
   const rations = c.list('equipment.other').length - 1;
   c.setItem('equipment.other', rations, 'qty', medium - 15 - (light - 15) + light - 15);   // lands in the medium band
   check('a quantity multiplies the weight', c.data.carry.carried, 15 + (medium - 15));
   check('which is a medium load', c.data.carry.load, 'medium');
-  check('the load caps Dexterity at +3 and has a −3 check penalty, worse than the leather',
-    [armorParts(c.data).maxDex, armorParts(c.data).acp], [3, -3]);
+  check('the load caps Dexterity at +3 and has a −3 check penalty, worse than the leather, which Stealth takes',
+    [armorParts(c.data).maxDex, armorParts(c.data).acp, stealth() - lightStealth], [3, -3, -3]);
   check('AC follows the cap when Dex is over it',
     acAt(), lightAc - Math.max(0, statMod(c.data, 'dex') - 3));
   c.set('carry.applyLoad', false);
-  check('switched off, the leather alone applies', [armorParts(c.data).maxDex, armorParts(c.data).acp, acAt()], [6, 0, lightAc]);
+  check('switched off, the leather alone applies',
+    [armorParts(c.data).maxDex, armorParts(c.data).acp, acAt(), stealth()], [6, 0, lightAc, lightStealth]);
   c.set('carry.applyLoad', true);
 
   // A bag of holding carries what is in it for nothing; a store is not carried.
@@ -5921,14 +5921,12 @@ console.log('spheres training reproduces the sheet');
   // Editing flows: swapping a caster type moves CL (single-caster Bryva,
   // since global CL is the best across casters); drawbacks move SP.
   const b2 = new Character(load('bryva'));
-  c2check: {
-    check('bryva starts Mid at CL 12', b2.data.training.magic.globalCL, 12);
-    b2.setItem('training.magic.classes', 0, 'type', 'High');
-    check('promoting to High raises CL', b2.data.training.magic.globalCL, 16);
-    check('and DC follows', b2.data.training.magic.globalDC, 25);
-    b2.setItem('training.magic.classes', 0, 'type', 'Mid');
-    check('restoring', b2.data.training.magic.globalCL, 12);
-  }
+  check('bryva starts Mid at CL 12', b2.data.training.magic.globalCL, 12);
+  b2.setItem('training.magic.classes', 0, 'type', 'High');
+  check('promoting to High raises CL', b2.data.training.magic.globalCL, 16);
+  check('and DC follows', b2.data.training.magic.globalDC, 25);
+  b2.setItem('training.magic.classes', 0, 'type', 'Mid');
+  check('restoring', b2.data.training.magic.globalCL, 12);
   const c = new Character(load('angou'));
 
   const sp0 = c.data.training.magic.totalSP;
@@ -11515,8 +11513,10 @@ console.log('mythic tradition -- a note beside each slot');
     c.audit().find((r) => r.name === '{teeth.hp}').where, 'a mythic tradition note');
   // The notes map is a sibling of the slots, not an eighth slot: anything
   // walking the tradition by key has to see seven names, not seven and a map.
-  check('nothing reads the map as a slot',
-    c.scopeSources?.().some?.((s) => s.location === 'mythicTradition:notes') ?? false, false);
+  const paths = c.proseSources().map((s) => s.path);
+  check('nothing reads the map as a slot, and the note is read once, as its own',
+    [paths.includes('mythicTradition:notes'), paths.filter((p) => p.startsWith('mythicTraditionNote:'))],
+    [false, ['mythicTraditionNote:boon1']]);
 }
 
 console.log('feats -- every feat takes a note, and the note takes formulas');
@@ -12294,8 +12294,6 @@ console.log('card casting -- the table: an encounter played through');
   check('the opening hand is 1 + Int', t().hand.length, k().openingHand);
   check('and it is round one', t().round, 1);
   check('nothing that costs is castable with no mana in play', Object.values(t().calc.castable).every((x) => x.ok === (x.need === 0)), true);
-  const first = t().hand[0];
-  const firstName = c.tableCard(first).name;
   const inHand = t().hand.length;
 
   // Nico's cards are all fused: the mana half goes to the table.

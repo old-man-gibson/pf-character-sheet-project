@@ -103,6 +103,8 @@ console.log('errors are caught, not thrown at the page');
 throws('unknown variable', () => ev('nonsense + 1'), /Unknown value/);
 throws('unknown function', () => ev('hack(1)'), /Unknown function/);
 throws('divide by zero', () => ev('1 / 0'), /Division by zero/);
+throws('floor to a step of zero', () => ev('floor(7, 0)'), /Division by zero/);
+throws('floor to a step of text, which reads as zero', () => ev('floor(7, "x")'), /Division by zero/);
 throws('unbalanced parens', () => ev('(1 + 2'), /Expected/);
 throws('empty', () => ev(''), /empty/);
 throws('bad arity', () => ev('clamp(1)'), /argument/);

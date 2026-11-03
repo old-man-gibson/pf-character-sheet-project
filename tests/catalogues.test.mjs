@@ -20,8 +20,8 @@ import { blankDocument } from '../app/js/convert.js';
 import {
   Character, setVeilCatalogue, veilsAvailable,
   setFeatCatalogue, featCatalogue, featEntry, featsAvailable, featTypes, featDetails,
-  setSpellCatalogue, spellCatalogue, spellEntry, spellsAvailable, spellClasses, spellDetails,
-  setPowerCatalogue, powerCatalogue, powerEntry, powersAvailable, powerDetails,
+  setSpellCatalogue, spellCatalogue, spellEntry, spellsAvailable, spellClasses,
+  setPowerCatalogue, powerCatalogue, powerEntry, powersAvailable,
 } from '../app/js/model.js';
 import { renderVancianPanel, renderPsionicsPanel } from '../app/js/ui/panels/subsystems.js';
 import { catalogueFace } from '../app/js/ui/html.js';
