@@ -33,6 +33,8 @@ const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && 
   ? Object.fromEntries(Object.keys(x).sort().map((key) => [key, x[key]])) : x));
 /** What a character works out to, as one comparable value. */
 const numbers = (m) => canon({ data: m.toJSON(), offsets: m.offsets });
+/** The same, leaving out the campaign block: what a switch writes, rather than what it does. */
+const settled = (m) => canon({ data: { ...m.toJSON(), campaign: undefined }, offsets: m.offsets });
 const reopen = (m) => new Character(JSON.parse(JSON.stringify(m.toJSON())));
 
 console.log('the rules read back with the table\'s as the default');
@@ -49,30 +51,26 @@ for (const id of fixtureIds()) {
   const doc = loadCharacter(id);
   const plain = new Character(JSON.parse(JSON.stringify(doc)));
   const written = new Character({ ...JSON.parse(JSON.stringify(doc)), campaign: { ...CAMPAIGN_DEFAULTS } });
-  const a = JSON.parse(numbers(plain));
-  const b = JSON.parse(numbers(written));
-  delete b.data.campaign;
-  check(`${id}: same totals and adjustments`, canon(b), canon(a));
+  check(`${id}: same totals and adjustments`, settled(written), numbers(plain));
 }
 
 console.log('\na switch flipped in play survives a reload, and flipping it back restores everything');
 for (const id of fixtureIds()) {
+  // A character works out the same every time it is loaded, so what it works
+  // out to is measured once, not once per switch.
+  const loaded = numbers(new Character(loadCharacter(id)));
   for (const [key, value] of [['abp', false], ['mythic', false], ['heroPoints', false], ['pointBuy', 20], ['mythicTier', 'awarded'],
     ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false], ['antiheroes', true],
     ['maxLevel', 6], ['maxLevel', 25], ['maxTier', 5], ['maxTier', 12], ['gestalt', false], ['hitPoints', 'average'], ['hitPoints', 'rolled'],
     ['abpLadder', 'core'], ['mythicLadder', 'core'], ['pastColossal', true], ['minLevel', 1], ['minLevel', 8], ['maxLevel', 60],
     ['skillSystem', 'background'], ['backgroundUse', 'floating'], ['backgroundRanks', 3], ['agingEffects', true], ['vmc', true]]) {
     const m = new Character(loadCharacter(id));
-    const before = numbers(m);
     m.set(`campaign.${key}`, value);
     const flipped = numbers(m);
     const again = reopen(m);
     check(`${id} ${key}: nothing drifts on reopen`, numbers(again), flipped);
     again.set(`campaign.${key}`, CAMPAIGN_DEFAULTS[key]);
-    const back = JSON.parse(numbers(again));
-    const orig = JSON.parse(before);
-    delete back.data.campaign;
-    check(`${id} ${key}: back on, back where it was`, canon(back), canon(orig));
+    check(`${id} ${key}: back on, back where it was`, settled(again), loaded);
   }
 }
 

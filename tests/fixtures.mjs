@@ -64,8 +64,18 @@ export function fixtureIds() {
     .characters.map((c) => c.id);
 }
 
-/** Read one document from the roster in use. */
-export const loadCharacter = (id) => JSON.parse(readFileSync(characterPath(id), 'utf8'));
+/**
+ * Read one document from the roster in use, as a copy of its own.
+ *
+ * Each file is read once and its text kept: a suite may load the same
+ * character a few hundred times, and parsing kept text is about twice as
+ * quick as reading the file again (and quicker than structuredClone).
+ */
+const documentText = new Map();
+export const loadCharacter = (id) => {
+  if (!documentText.has(id)) documentText.set(id, readFileSync(characterPath(id), 'utf8'));
+  return JSON.parse(documentText.get(id));
+};
 
 /** Which of `ids` the roster in use does not have. */
 export const missingCharacters = (ids) => ids.filter((id) => !existsSync(characterPath(id)));

@@ -145,10 +145,23 @@ const IDS = fixtureIds();
 // checks that name a character stand down -- see the gate below.
 const REAL = ['angou', 'bryva', 'narockro', 'nico', 'saburo'];
 
+/**
+ * One Character per roster id, built the first time it is asked for and kept,
+ * for the checks that only read one. A real character takes about ten
+ * milliseconds to build, and the suite reads one this way over a hundred times.
+ * A check that edits, or that runs while a section has swapped a catalogue
+ * out, builds its own with `new Character(load(id))`.
+ */
+const sharedCharacters = new Map();
+const shared = (id) => {
+  if (!sharedCharacters.has(id)) sharedCharacters.set(id, new Character(load(id)));
+  return sharedCharacters.get(id);
+};
+
 console.log('import fidelity -- every derived stat must match the source sheet');
 for (const id of IDS) {
   const raw = load(id);
-  const c = new Character(raw);
+  const c = shared(id);
   const d = c.data;
   check(`${id} AC`, d.defenses.ac, raw.defenses.ac);
   check(`${id} touch`, d.defenses.touch, raw.defenses.touch);
@@ -167,7 +180,7 @@ for (const id of IDS) {
 console.log('skill totals reproduce the sheet');
 for (const id of IDS) {
   const raw = load(id);
-  const c = new Character(raw);
+  const c = shared(id);
   const mismatched = c.data.skills
     .filter((s, i) => s.bonus !== raw.skills[i].bonus)
     .map((s) => s.name);
@@ -176,7 +189,7 @@ for (const id of IDS) {
 
 console.log('every typed column publishes itself under its own name');
 for (const id of IDS) {
-  const c = new Character(load(id));
+  const c = shared(id);
   const s = c.scope();
   const names = c.scopeNames();
 
@@ -231,7 +244,7 @@ for (const id of IDS) {
 
 console.log('the workbook’s own names still read, and read the same number');
 for (const id of IDS) {
-  const c = new Character(load(id));
+  const c = shared(id);
   const s = c.scope();
   const names = new Set(c.scopeNames());
 
@@ -4497,9 +4510,10 @@ console.log('only what the player wrote counts as a change');
   const stray = [];
   const counts = [];
   for (const id of IDS) {
+    // Every edit starts from the character as loaded, which saves the same each time.
+    const before = JSON.parse(JSON.stringify(shared(id).toJSON()));
     for (const [name, edit, allowed] of EDITS) {
       const c = new Character(load(id));
-      const before = JSON.parse(JSON.stringify(c.toJSON()));
       edit(c);
       const after = JSON.parse(JSON.stringify(c.toJSON()));
       for (const p of diffPaths(before, after)) {
@@ -4582,13 +4596,13 @@ console.log('base attack bonus -- the class table, gestalt-style');
   // the sum is floored once. Every source workbook agrees with that to the
   // point, so an import needs no override to reproduce its own BAB.
   for (const [id, bab] of [['angou', 20], ['bryva', 16], ['narockro', 10], ['nico', 11], ['saburo', 9]]) {
-    const c = new Character(load(id));
+    const c = shared(id);
     check(`${id}: computed, not pinned`, [c.data.attack.babBase, c.data.attack.babOverride, c.data.attack.bab],
       [bab, null, bab]);
   }
-  const n = new Character(load('nico'));
+  const n = shared('nico');
   check('two 3/4 classes over 15 levels is 11.25, floored once', n.data.gestalt.babPerLevel, 11.25);
-  const r = new Character(load('narockro'));
+  const r = shared('narockro');
   check('a full class on 10 of 11 levels, 3/4 on the eleventh', r.data.gestalt.babPerLevel, 10.75);
 
   // A class row's own progression is a field, and the total follows it.
@@ -4606,7 +4620,7 @@ console.log('base attack bonus -- the class table, gestalt-style');
 
   // Being beaten is counted, because that is the only reason moving one of
   // these dropdowns can leave the sheet exactly as it was.
-  const s = new Character(load('saburo'));
+  const s = shared('saburo');
   const wizard = s.data.classes.findIndex((x) => /Wizard/.test(x.name || ''));
   check('the half-BAB Wizard is beaten at every level it runs',
     s.data.classes[wizard].gestaltBeaten.bab, s.data.classes[wizard].gestaltBeaten.levels);
@@ -4824,7 +4838,7 @@ console.log('ability build reproduces the Stats tab');
 {
   for (const id of IDS) {
     const raw = load(id);
-    const c = new Character(raw);
+    const c = shared(id);
     for (const k of ['str', 'dex', 'con', 'int', 'wis', 'cha']) {
       check(`${id} ${k} score`, c.data.abilities[k].score, raw.abilities[k].score);
       check(`${id} ${k} temp score`, c.data.abilities[k].tempScore, raw.abilities[k].tempScore);
@@ -4849,7 +4863,7 @@ console.log('point buy costs');
   check('dumping to 7 refunds 4', c.pointBuySummary().per.str, -4);
 }
 for (const id of IDS) {
-  const c = new Character(load(id));
+  const c = shared(id);
   check(`${id} point buy total is 30`, c.pointBuySummary().total, 30);
 }
 
@@ -5007,7 +5021,7 @@ console.log('build edits flow through to derived stats');
 
 console.log('scope exposes usable names');
 {
-  const c = new Character(load('angou'));
+  const c = shared('angou');
   const names = c.scopeNames();
   for (const want of ['level', 'bab', 'str.mod', 'con.mod', 'wis.tempMod', 'saves.will', 'ac.total', 'attack.melee', 'mythic.tier']) {
     if (!names.includes(want)) { fail++; console.log(`  FAIL scope missing "${want}"`); } else pass++;
@@ -5057,7 +5071,7 @@ console.log('the skill budget: Int follows the score, bonus points take a formul
   // source sheet stores exactly the modifier, so reading it changes no
   // character's budget -- it only stops the two ever parting.
   for (const id of IDS) {
-    const c = new Character(load(id));
+    const c = shared(id);
     check(`${id} Int per level is the Intelligence modifier`,
       c.data.skillBudget.intPerLevel, c.data.abilities.int.mod);
   }
@@ -5443,7 +5457,7 @@ console.log('which ability an attack mode is read as running on');
 
   // On a real character, the modes the import set.
   for (const id of IDS) {
-    const ch = new Character(load(id));
+    const ch = shared(id);
     check(`${id} every mode answers with an ability or nothing`,
       ATTACK_MODES.every((m) => {
         const ab = attackModeAbility(ch.data, m);
@@ -5862,7 +5876,7 @@ console.log('spheres training reproduces the sheet');
 {
   // Talent progressions and granted flags, against every cached sheet value.
   for (const id of IDS) {
-    const c = new Character(load(id));
+    const c = shared(id);
     let mismatches = 0;
     for (const sideKey of ['combat', 'magic']) {
       for (const cls of c.data.training?.[sideKey]?.classes || []) {
@@ -5878,7 +5892,7 @@ console.log('spheres training reproduces the sheet');
 }
 {
   // Angou's magic globals, all confirmed against his sheet's caches.
-  const c = new Character(load('angou'));
+  const c = shared('angou');
   const m = c.data.training.magic;
   check('angou global CL', m.globalCL, 20);
   check('angou global DC', m.globalDC, 36);
@@ -5896,7 +5910,7 @@ console.log('spheres training reproduces the sheet');
   check('angou total SP', m.totalSP, 79);
 
   // Bryva: the other internally-consistent workbook.
-  const b = new Character(load('bryva'));
+  const b = shared('bryva');
   const bm = b.data.training.magic;
   check('bryva global CL (Mid caster)', bm.globalCL, 12);
   check('bryva global DC', bm.globalDC, 23);
@@ -5927,7 +5941,7 @@ console.log('spheres training reproduces the sheet');
 }
 {
   // Talents/level vs type mismatch: Bryva's Blacksmith casts Mid, learns High.
-  const b = new Character(load('bryva'));
+  const b = shared('bryva');
   const cls = b.data.training.magic.classes[0];
   check('bryva mismatch imported', [cls.type, cls.talentsPerLevel], ['Mid', 'High Caster']);
   check('talents use the talent rate', cls.totalTalents, cls.classLevels);
@@ -6041,7 +6055,7 @@ console.log('sphere skill ranks -- a technique names most of what it grants');
 console.log('unarmed practitioner damage');
 {
   for (const id of IDS) {
-    const c = new Character(load(id));
+    const c = shared(id);
     const u = c.data.training?.combat?.unarmed;
     if (u?.sheetDice) check(`${id} unarmed matches sheet`, u.dice, u.sheetDice);
   }
@@ -6509,7 +6523,7 @@ console.log('skill variants -- only Craft, Lore, Profession and Perform have one
     ['S', null], ['instruments', null], ['Kazoo', null], ['', null], [null, null],
   ]) check(`performCategory ${JSON.stringify(typed)}`, performCategory(typed), want);
 
-  const n = new Character(load('narockro'));
+  const n = shared('narockro');
   check('an abbreviated Perform imports as the real category',
     n.data.skills.filter((s) => s.name === 'Perform' && s.spec).map((s) => s.spec),
     ['String instruments', 'Sing']);
@@ -6630,7 +6644,7 @@ console.log('templates -- an untouched template tab imports as nothing');
   // empty "Type:" slots. None of that is the character's, so none of it
   // arrives -- and the tab stays off until the ⚙ manager asks for it.
   for (const id of IDS.filter((x) => x !== 'bryva')) {
-    const c = new Character(load(id));
+    const c = shared(id);
     check(`${id} imports no template`, c.data.templates, []);
     check(`${id} keeps no raw Template grid`,
       (c.data.sheetTabs || []).some((t) => /Template/.test(t.name)), false);
@@ -6844,7 +6858,7 @@ console.log('templates -- table cells merge by what is written in them');
 
   // The real one: Bryva's spell-school table, whose first column pairs a
   // school with the ingredients it yields.
-  const c = new Character(load('bryva'));
+  const c = shared('bryva');
   const school = c.data.templates[0].features[5].tables[0];
   const rows = school.rows.map((r) => [...r.cells]);
   check('imports unmerged', mergeLayout(rows)[1].every((s) => s && s.colspan === 1), true);
@@ -6966,7 +6980,7 @@ console.log('training values reach the formula scope');
 console.log('gestalt classes drive save bases');
 {
   // Import fidelity already asserts totals; here, the bases themselves.
-  const c = new Character(load('angou'));
+  const c = shared('angou');
   check('angou fort base (20 good levels)', c.data.saves.fortitude.base, 12);
   check('angou ref base', c.data.saves.reflex.base, 12);
   check('angou will base', c.data.saves.will.base, 12);
@@ -7051,7 +7065,7 @@ console.log('trait slots');
 
   // The other place a name hid: the drawback rows whose "category" cell was
   // never a category, and was never shown.
-  const n = new Character(load('narockro'));
+  const n = shared('narockro');
   check('a drawback name taken out of the category cell', n.data.traitSlots.drawback1.name, 'Pride');
   check('with its effect left where it was',
     /^When someone threatens/.test(n.data.traitSlots.drawback1.text), true);
@@ -7063,7 +7077,7 @@ console.log('trait slots');
 
 console.log('granted feats -- each row names what handed it over');
 {
-  const c = new Character(load('narockro'));
+  const c = shared('narockro');
   const g = c.data.grantedFeats;
   check('drawback feat lifted out of the trait slot', g.drawback.name, 'Lingering Performance');
   check('with the description it came with', /bardic performance/.test(g.drawback.note), true);
@@ -7084,15 +7098,15 @@ console.log('granted feats -- each row names what handed it over');
 
   // Bryva's import put the feat's name in the other of the two fields.
   check('name found whichever field the sheet filled',
-    new Character(load('bryva')).data.grantedFeats.drawback.name, 'Apprentice Chef');
+    shared('bryva').data.grantedFeats.drawback.name, 'Apprentice Chef');
   // Angou's sheet never named a specialty feat, so the row waits to be filled.
   check('an unnamed specialty feat is simply empty',
-    new Character(load('angou')).data.grantedFeats.specialty.name, '');
+    shared('angou').data.grantedFeats.specialty.name, '');
 }
 
 console.log('drawback feats header is not a drawback feat');
 {
-  const n = new Character(load('nico'));
+  const n = shared('nico');
   const bo = n.data.training.magic.tradition.boughtOff;
   check('nico bought-off list has no header', bo.includes('Drawback Feats'), false);
   check('nico bought-off entries (three rows of feats)', bo.length, 7);
@@ -7166,7 +7180,7 @@ console.log('mythic tier, HP, tradition and stat picks');
   check('tradition rows out of the abilities list',
     (c.data.mythic.abilities || []).some((a) => /Radiant Power|When All Seems Lost/.test(a.name || '')), false);
 
-  const st = new Character(load('saburo'));
+  const st = shared('saburo');
   check('saburo old-layout tradition', st.data.mythic.tradition.drawback1, 'Relic-Bound (Katana)');
   check('saburo quality', st.data.mythic.tradition.quality, 'Flowing Power');
 
@@ -7259,7 +7273,7 @@ console.log('the mythic ladder -- ten tiers, a feat on the odd ones and an incre
     MYTHIC_TIER_LEVEL, { 1: 8, 2: 10, 3: 12, 4: 14, 5: 15, 6: 16, 7: 17, 8: 18, 9: 19, 10: 20 });
 
   for (const id of IDS) {
-    const c = new Character(load(id));
+    const c = shared(id);
     check(`${id} ladder is ten rows`, c.data.mythic.abilities.length, MYTHIC_TIERS.length);
     check(`${id} keeps the sheet's own grant labels in order`,
       c.data.mythic.abilities.every((a, i) => !a.feat || a.feat === mythicTierGrant(i + 1)), true);
@@ -7288,7 +7302,7 @@ console.log('the mythic ladder -- ten tiers, a feat on the odd ones and an incre
   // description -- and a tier the character has not reached is a plan, so a
   // bonus written there is not earned yet.
   for (const id of IDS) {
-    const c = new Character(load(id));
+    const c = shared(id);
     check(`${id} every tier has room for both effects`,
       c.data.mythic.abilities.every((a) => typeof a.effect === 'string' && typeof a.featEffect === 'string'),
       true);
@@ -7710,7 +7724,7 @@ console.log('armour and shields take an enhancement bonus');
   // Carried weight reconciles and follows item weights.
   for (const id of IDS) {
     const raw = load(id);
-    const c = new Character(raw);
+    const c = shared(id);
     check(`${id} carried matches import`, c.data.carry.carried, raw.carry.carried);
   }
   const c = new Character(load('angou'));
@@ -8179,7 +8193,7 @@ console.log('techniques -- techRef, Technique List and AutoTechnique read once, 
   check('removed', c.techniqueByName('Knucklebuster II'), null);
   check('every slot on a fresh technique', [emptyTechnique().combatSpheres.length, emptyTechnique().combatTalents.length, emptyTechnique().saves.length, emptyTechnique().descriptions.length],
     [TECHNIQUE_SLOTS.spheres, TECHNIQUE_SLOTS.talents, TECHNIQUE_SLOTS.saves, TECHNIQUE_SLOTS.descriptions]);
-  check('a character without the tabs has an empty block', new Character(load('saburo')).data.techniques, { catalogue: [], selected: '', draft: emptyTechnique() });
+  check('a character without the tabs has an empty block', shared('saburo').data.techniques, { catalogue: [], selected: '', draft: emptyTechnique() });
 }
 
 console.log('auto-cooking -- the iron chef dish maker, read from Bryva and cooked for anyone');
@@ -8278,12 +8292,12 @@ console.log('wealth -- the wallet in mana, the offering owed, and the ledger');
   c.set('wealth.oathOfOfferings', true); c.set('wealth.materialCasting', true);
 
   // Narockro's older block reads too; his own sheet halved the gains since the baseline instead.
-  const n = new Character(load('narockro'));
+  const n = shared('narockro');
   check('Narockro: baseline, current, 280 a day, no sessions cell', [n.data.wealth.baseline, n.data.wealth.current, n.data.wealth.manaPerDay, n.data.wealth.sessionMana], [38159, 38779, 280, 0]);
   check('gains since baseline', n.wealthView(today).gains, 620);
   // A wallet label with no figure, and no wallet at all.
-  check('Angou: label only -> empty wallet', new Character(load('angou')).data.wealth, emptyWealth());
-  check('Bryva: no block -> empty wallet', new Character(load('bryva')).data.wealth, emptyWealth());
+  check('Angou: label only -> empty wallet', shared('angou').data.wealth, emptyWealth());
+  check('Bryva: no block -> empty wallet', shared('bryva').data.wealth, emptyWealth());
 
   // The ledger, and the hooks.
   const e = c.addWealthEntry({ amount: 500, label: 'Session 12', kind: 'session', date: today });
@@ -9667,7 +9681,7 @@ console.log('sheet trackers can be styled without touching the sheet numbers');
   const mp2 = c2.trackers.find((t) => t.id === mp.id);
   check('style restored for the sheet tracker', [mp2.style.color, mp2.style.fill], ['#7b7fe6', 'remaining']);
   check('still from the sheet', mp2.source, 'sheet');
-  check('a style matching the seed saves no style key', 'style' in (JSON.parse(JSON.stringify(new Character(load('angou')).toJSON())).sheetTrackerState[0]), false);
+  check('a style matching the seed saves no style key', 'style' in (JSON.parse(JSON.stringify(shared('angou').toJSON())).sheetTrackerState[0]), false);
   const bry = new Character(load('bryva'));
   bry.updateTracker('spell_points', { style: { color: '#4cc3e0' } });
   const bryState = JSON.parse(JSON.stringify(bry.toJSON())).sheetTrackerState;
@@ -9679,7 +9693,7 @@ console.log('Mythic Power drains by default');
 {
   for (const id of IDS) {
     const raw = load(id);
-    const c = new Character(raw);
+    const c = shared(id);
     const mp = c.trackers.find((t) => t.id === 'mythic_power');
     check(`${id} mythic power drains`, mp.style?.fill, 'remaining');
     check(`${id} and the casting pools drain`, c.trackers.filter((t) => t.pool).every((t) => t.style?.fill === 'remaining'), true);
@@ -9731,7 +9745,7 @@ console.log('Mythic Power is the one required tracker; everything else is the pl
   // imports unchanged and now follows the tier.
   for (const id of IDS) {
     const raw = load(id);
-    const c = new Character(raw);
+    const c = shared(id);
     const mp = c.trackers.find((t) => t.id === 'mythic_power');
     const sheet = raw.resources.find((r) => /mythic power/i.test(r.name));
     check(`${id} mythic power matches the sheet`, mp.max, Number(sheet.total));
@@ -9817,7 +9831,7 @@ console.log('sheet-seeded trackers are fully editable and removable');
   check('and no overrides saved', Object.keys(clean).sort(), ['current', 'id']);
 
   // A fresh import brings everything back.
-  const fresh = new Character(load('bryva'));
+  const fresh = shared('bryva');
   check('reset restores the sheet\'s trackers, and the hero point pool', fresh.trackers.length, 6);
 }
 
@@ -10341,7 +10355,7 @@ console.log('the three modelled sub-systems replace their raw grids');
   // structured block, and the grid it came from is retired so the two cannot
   // drift apart.
   for (const id of IDS) {
-    const c = new Character(load(id));
+    const c = shared(id);
     const names = (c.data.sheetTabs || []).map((t) => t.name);
     check(`${id} keeps no raw Akashic grid`, names.includes('Akashic'), false);
     check(`${id} keeps no raw Maneuvers grid`, names.includes('Maneuvers'), false);
@@ -10354,7 +10368,7 @@ console.log('the three modelled sub-systems replace their raw grids');
   // Vancian Magic held no character data on any of these sheets: the one cell
   // that varied between them repeated identity.primordiaTechnique.
   for (const id of IDS) {
-    const c = new Character(load(id));
+    const c = shared(id);
     check(`${id} vancian imports empty`, c.data.vancian.classes.length, 0);
     check(`${id} vancian leaves no residue`, c.data.vancian.sourceExtras.length, 0);
   }
@@ -10419,7 +10433,7 @@ console.log('akashic -- essence spent reproduces every sheet');
   // Narockro's receptacles put an on/off tick between the name and the
   // essence, so the essence column is found by its heading rather than
   // assumed to be the next one along -- otherwise the tick reads as a point.
-  const n = new Character(load('narockro')).data.akashic;
+  const n = shared('narockro').data.akashic;
   const caged = n.otherReceptacles.find((r) => r.name === 'The Caged Sun');
   check('a ticked receptacle keeps its essence', [caged.essence, caged.active], [3, true]);
   check('and an unticked one holds none',
@@ -10514,7 +10528,7 @@ console.log('akashic -- invested essence is readable from a formula');
 
 console.log('akashic -- Kheshig receptacles name a slot instead of filling one');
 {
-  const c = new Character(load('saburo'));
+  const c = shared('saburo');
   const k = c.data.akashic.kheshig;
   check('both receptacles read', k.map((r) => r.label), KHESHIG_VEILS);
   check('weapon veil slot', [k[0].slot, k[0].bound], ['Hands', true]);
@@ -10578,7 +10592,7 @@ console.log('maneuvers -- a catalogue of ticks, counted rather than stored');
   // Narockro is the only character who uses the tab; the other five carry it
   // as an untouched blank template, which must import to nothing at all.
   for (const id of IDS.filter((x) => x !== 'narockro')) {
-    const c = new Character(load(id));
+    const c = shared(id);
     check(`${id} has no disciplines`, c.data.maneuvers.disciplines.length, 0);
     check(`${id} leaves no residue`, c.data.maneuvers.sourceExtras.length, 0);
   }
@@ -10945,7 +10959,7 @@ console.log('alternate training -- the ladder comes off the Planner column the i
   // technique the character took, and parks the technique's own name on the
   // level 2 row -- a level the ladder does not grant at, which is what tells
   // the two apart. Bryva is the only sheet that filled the rest in.
-  const b = new Character(load('bryva'));
+  const b = shared('bryva');
   check('bryva keeps every level she wrote', b.data.altTraining.picks, {
     1: 'Endurance, Armor Adept',
     3: 'Armor Trick',
@@ -10957,7 +10971,7 @@ console.log('alternate training -- the ladder comes off the Planner column the i
   check('and the level 2 label is not one of them', 2 in b.data.altTraining.picks, false);
 
   for (const id of IDS) {
-    const c = new Character(load(id));
+    const c = shared(id);
     const levels = c.data.altTraining.calc.rows.map((r) => r.level);
     check(`${id} grants at 1/3/5 then every other level`, levels,
       [1, 3, 5, 7, 9, 11, 13, 15, 17, 19]);
@@ -11005,7 +11019,7 @@ console.log('blended training -- one class, one pool, two progressions');
   check('caster level unmoved', a.data.training.magic.globalCL, 20);
   check('spell points unmoved', a.data.training.magic.totalSP, 79);
   check('practitioner DC unmoved', a.data.training.combat.practitionerDC, 36);
-  check('bryva too', [new Character(load('bryva')).blendedClasses().map((p) => p.name)],
+  check('bryva too', [shared('bryva').blendedClasses().map((p) => p.name)],
     [['Blacksmith']]);
 
   // Blending and splitting from the class head.
@@ -11332,7 +11346,7 @@ console.log('tradition boons -- one pool of steps, split between points and esse
     ['angou', 6, 8, 16], ['narockro', 6, 2, 9], ['saburo', 8, 5, 4],
     ['nico', 4, 0, 11], ['bryva', 0, 0, 0],
   ]) {
-    const x = new Character(load(id)).data.training.magic;
+    const x = shared(id).data.training.magic;
     check(`${id}: ${boons} boons -> ${sp} SP and ${essence} essence`,
       [x.boons, x.traditionSP, x.traditionEssence], [boons, sp, essence]);
   }
@@ -11343,7 +11357,7 @@ console.log('alternate training -- what a technique has granted so far, counted'
   // Light Body: the Athletics sphere at 1st, Wall Stunt at 3rd, Air Stunt at
   // 5th, then one Athletics talent every other level from 7th -- so ten at 20th
   // -- plus Unarmed Combatant.
-  const a = new Character(load('angou'));
+  const a = shared('angou');
   const k = () => a.data.altTraining.calc.counts;
   check('angou at 20 has ten Athletics talents', k().talent, 10);
   check('and the one bonus feat', k().feat, 1);
@@ -11356,13 +11370,13 @@ console.log('alternate training -- what a technique has granted so far, counted'
   check('levelling to 11 grants the next one', s.data.altTraining.calc.counts.talent, 6);
 
   // The magic side gets its own: Keen Mind (Spheres) is Divination talents.
-  const n = new Character(load('nico'));
+  const n = shared('nico');
   check('nico at 15 has eight Divination talents', n.data.altTraining.calc.counts.talent, 8);
   check('on the magic side', n.data.training.magic.tally.Divination, 8);
   check('and none on the combat side', n.data.training.combat.tally.Divination, undefined);
 
   // Armored Discipline grants feats and no talents at all.
-  const b = new Character(load('bryva'));
+  const b = shared('bryva');
   check('bryva at 16 has nine bonus feats', b.data.altTraining.calc.counts.feat, 9);
   check('and no sphere talents', b.data.altTraining.calc.counts.talent, 0);
   check('so nothing is added to either tally', b.data.altTraining.calc.talents, null);
@@ -11389,7 +11403,7 @@ console.log('alternate training -- a level reached with nothing written against 
 
 console.log('alternate training -- the prerequisite is checked, and says so when it cannot be');
 {
-  const state = (id) => new Character(load(id)).data.altTraining.calc.prereq.state;
+  const state = (id) => shared(id).data.altTraining.calc.prereq.state;
   check('angou has a full-BAB class, so Light Body is met', state('angou'), 'met');
   check("nico's Hedgewitch casts at Mid, so Keen Mind is met", state('nico'), 'met');
   // Bryva really does have Armored Discipline; her sheet just never imported an
@@ -11435,7 +11449,7 @@ console.log('alternate training -- the choice is one thing, the writing beside i
     return [k.technique, k.unknown, k.rows[0].grants.length, b.data.altTraining.picks[9]];
   })(), [null, true, 0, 'Armored Casting']);
 
-  const saved = new Character(load('bryva')).toJSON();
+  const saved = shared('bryva').toJSON();
   check('a save carries the writing', saved.altTraining.picks[13], 'Dodge');
   check('and none of the ladder', 'calc' in saved.altTraining, false);
 }
@@ -11672,7 +11686,7 @@ console.log('conditions -- the catalogue answers to the workbook\'s own labels')
 
 console.log('conditions -- the template\'s stray Helpless + Paralyzed is cleared, a real one is kept');
 {
-  const c = new Character(load('bryva'));
+  const c = shared('bryva');
   check('the workbook fingerprint clears', Object.values(c.data.conditions).some(Boolean), false);
   const raw = load('bryva');
   raw.conditions.Helpless = 1;
@@ -11838,22 +11852,22 @@ console.log('languages -- slots from Int and Linguistics, plus a rule; the list 
 
 console.log('proficiencies -- the workbook sentences become lists the sheet can read');
 {
-  const sab = new Character(load('saburo')).data.identity.proficiencies;
+  const sab = shared('saburo').data.identity.proficiencies;
   check('"all simple and …" is the simple familiarity', sab.familiarities, ['Simple']);
   check('and the rest of the sentence is the weapons, one by one',
     sab.weapons.slice(0, 3).concat(sab.weapons.slice(-1)), ['double-chained kama', 'double walking stick katana', 'dual blade', 'wakizashi']);
   check('"double" in a weapon name is not the Double group', sab.groups, []);
   check('nothing on armor is an empty list, not a note', [sab.armor, sab.notes], [[], '']);
 
-  const nar = new Character(load('narockro')).data.identity.proficiencies;
+  const nar = shared('narockro').data.identity.proficiencies;
   check('"light and medium armor" is the two weights', nar.armor, ['Light', 'Medium']);
   check('"none" on shields is None', nar.shields, ['None']);
   check('an instrument in parentheses stays one entry', nar.weapons[0], 'instruments (as the rockstar gonzo class)');
   check('the trailing "and whip" is a weapon', nar.weapons.at(-1), 'whip');
 
-  const nico = new Character(load('nico')).data.identity.proficiencies;
+  const nico = shared('nico').data.identity.proficiencies;
   check('"simple and martial weapons" is two familiarities and no weapons', [nico.familiarities, nico.weapons], [['Simple', 'Martial'], []]);
-  check('a document with all three null starts blank', new Character(load('bryva')).data.identity.proficiencies,
+  check('a document with all three null starts blank', shared('bryva').data.identity.proficiencies,
     { familiarities: [], handedness: [], groups: [], weapons: [], armor: [], shields: [], notes: '' });
 
   const barb = parseProficiencyText({
@@ -11927,7 +11941,7 @@ console.log('proficiencies -- a weapon on Gear is read against them');
   check("narockro's guitar axe is martial and unlisted, so it is flagged", nar.data.equipment.weapons[0].proficient, false);
   nar.listAdd('identity.proficiencies.weapons', 'guitar axe');
   check('until it is written in', nar.data.equipment.weapons[0].proficient, true);
-  check("bryva's sheet recorded nothing, so her weapons are not judged", new Character(load('bryva')).data.equipment.weapons.every((w) => w.proficient === null), true);
+  check("bryva's sheet recorded nothing, so her weapons are not judged", shared('bryva').data.equipment.weapons.every((w) => w.proficient === null), true);
   const sab = new Character(load('saburo'));
   check("saburo's veil blade is proficient by the veil rule, not refused", sab.data.equipment.weapons.map((w) => [w.proficient, w.proficiencySource]), [[true, 'veil'], [true, 'veil'], [true, 'veil']]);
   check('rows carry the three fields, blank', [sab.data.equipment.weapons[0].proficiency, sab.data.equipment.weapons[0].baseWeapon, sab.data.equipment.weapons[0].proficiencyNote], ['', '', '']);
@@ -11938,7 +11952,7 @@ console.log('proficiencies -- a weapon on Gear is read against them');
 
 console.log('specialty -- feat has one home, perks are a list');
 {
-  const c = new Character(load('bryva'));
+  const c = shared('bryva');
   check('the perks are strings', c.data.identity.specialtyPerks, ['Kitchen Magic', 'Neat Freak']);
   check('the feat is the granted one', c.data.grantedFeats.specialty.name, 'Master Chef');
   const guess = load('bryva');
@@ -11960,7 +11974,7 @@ console.log('conditions -- the temporary score column shows the conditioned scor
 console.log('a saved document carries no value the model recomputes');
 {
   for (const id of IDS) {
-    const c = new Character(load(id));
+    const c = shared(id);
     const saved = c.toJSON();
 
     // The DC beside every veil, the count beside every discipline and the DC
@@ -12011,7 +12025,7 @@ console.log('the three tabs weigh a fraction of the grids they replaced');
   // The other four sheets carry the empty template, which imports as a clean
   // calculator rather than a grid of blank cells.
   for (const id of ['angou', 'nico', 'narockro', 'saburo']) {
-    const c = new Character(load(id));
+    const c = shared(id);
     const cr = c.data.crafting;
     check(`${id} default speed`, cr.calc.speedPerDay, 1000);
     check(`${id} default ratio`, cr.calc.ratio, 0.5);
@@ -12235,7 +12249,7 @@ console.log('card casting -- the deck reads off the Cardcaster Deck tab');
   check('opening hand still reads', b.data.cardcasting.calc.openingHand, 14);
 
   // A character without the drawback carries an empty, disabled block.
-  const a = new Character(load('angou'));
+  const a = shared('angou');
   check('Angou has no deck', [a.data.cardcasting.enabled, a.data.cardcasting.cards.length], [false, 0]);
   check('and no issues from it', a.data.cardcasting.calc.issues, []);
 }
@@ -12527,13 +12541,13 @@ console.log('card casting -- the table: an encounter played through');
 console.log('extras & notes -- the ExtrasNotes worksheet becomes notes, approvals and extras');
 {
   for (const id of IDS) {
-    const c = new Character(load(id));
+    const c = shared(id);
     check(`${id} keeps no raw ExtrasNotes grid`, (c.data.sheetTabs || []).map((t) => t.name).includes('ExtrasNotes'), false);
     check(`${id} has an extras block`, Array.isArray(c.data.extras?.approvals), true);
     check(`${id} keeps none of the template's hint lines as notes`,
       c.data.notes.some((n) => /not referenced anywhere|Go ham/.test(n.body)), false);
   }
-  const angou = new Character(load('angou'));
+  const angou = shared('angou');
   check('angou: two Range columns become two notes', angou.data.notes.map((n) => n.title), ['Range 1', 'Range 2']);
   check('angou: the links column is one note, a line each', angou.data.notes[0].body.split(/\n/).length, 8);
   const saburo = new Character(load('saburo'));
@@ -12541,7 +12555,7 @@ console.log('extras & notes -- the ExtrasNotes worksheet becomes notes, approval
     ['Ronin custom archetype', 'Arcforge - Abnormal Interfacing feat', 'Ancestral Weapon', 'Collapse Manipulator - Dual Sphere Drawback']);
   check('saburo: with their links', saburo.data.extras.approvals[0].link, 'https://primordia.online/applications/6000120');
   check('saburo: the veils-to-consider table below is kept as extras, not lost', saburo.data.extras.sourceExtras.length > 0, true);
-  const nar = new Character(load('narockro'));
+  const nar = shared('narockro');
   check('narockro: only hint text in the columns, so no notes; the claim tallies stay as extras', [nar.data.notes.length, nar.data.extras.sourceExtras.length > 0], [0, true]);
   // Round trip: a saved document does not re-import.
   saburo.listAdd('extras.approvals', { name: 'New thing', approvedBy: 'GM', link: '' });
@@ -12551,7 +12565,7 @@ console.log('extras & notes -- the ExtrasNotes worksheet becomes notes, approval
 
 console.log('companions -- the three worksheets become blocks and the grids retire');
 for (const id of IDS) {
-  const c = new Character(load(id));
+  const c = shared(id);
   const names = (c.data.sheetTabs || []).map((t) => t.name);
   for (const [tab, key] of [['Familiar', 'familiar'], ['Animal Companion', 'animalCompanion'], ['Eidolon', 'eidolon']]) {
     check(`${id} keeps no raw ${tab} grid`, names.includes(tab), false);
@@ -12632,7 +12646,7 @@ console.log('companions -- what the table grants, and where its rules text comes
   check('one is one', splitAbilities('Evasion'), ['Evasion']);
   check('and an empty cell is none', splitAbilities('  '), []);
   check('a gain carries the names it is made of',
-    new Character(load('angou')).data.animalCompanion?.[0]?.calc?.gains?.every?.((g) => Array.isArray(g.abilities)) ?? true, true);
+    shared('angou').data.animalCompanion?.[0]?.calc?.gains?.every?.((g) => Array.isArray(g.abilities)) ?? true, true);
 
   /*
    * The engine ships no rules text -- that prose is a publisher's. A pack

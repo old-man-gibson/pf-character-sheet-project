@@ -839,16 +839,17 @@ console.log('\nno character text reaches the page as markup');
   };
 
   // The roster, and a character with both grids of workbook cells, which no
-  // roster character fills with formulas or addresses.
-  const subjects = [...(hasFixtures() ? fixtureIds() : []).map((id) => [id, () => loadCharacter(id)]),
-    ['workbook grids', () => gridsCharacter().toJSON()]];
+  // roster character fills with formulas or addresses. Each is read once:
+  // poisoning copies a document rather than changing it.
+  const subjects = [...(hasFixtures() ? fixtureIds() : []).map((id) => [id, loadCharacter(id)]),
+    ['workbook grids', gridsCharacter().toJSON()]];
   for (const [kind, picks] of Object.entries(KINDS)) {
     for (const [where, payload] of Object.entries(SHAPES)) {
       const poison = poisonWith(payload, picks);
       let leaked = 0;
       let drawn = 0;
-      for (const [id, load] of subjects) {
-        const model = new Character(poison(load()));
+      for (const [id, doc] of subjects) {
+        const model = new Character(poison(doc));
         for (const [name, draw] of [...PANELS, ...panelsWith(openCtx(model))]) {
           let html;
           try { html = String(draw(model) ?? ''); } catch { continue; }
