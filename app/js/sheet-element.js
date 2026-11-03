@@ -3833,10 +3833,9 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #fillDatalist(input) {
     const list = this.shadowRoot?.getElementById(input.getAttribute('list'));
-    // Only a list that asks to be filled (see FILLERS). The veil and
-    // class-feature menu lists are drawn whole by their panels and say
-    // nothing, and reading silence as "feats" swapped their options for feat
-    // names on focus.
+    // Only a list that asks to be filled (see FILLERS). The class-feature
+    // menu lists are drawn whole by their panels and say nothing, and reading
+    // silence as "feats" swapped their options for feat names on focus.
     const hits = list && datalistOptions(list.dataset.fill, {
       classes: (list.dataset.classes || '').split(',').filter(Boolean),
       query: input.value,

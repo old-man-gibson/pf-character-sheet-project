@@ -553,6 +553,9 @@ let VEIL_CATALOGUE = { veils: [] };
  */
 let VEIL_BY_NAME = null;
 
+/** veilsAvailable's answers by chakra and classes, emptied when the catalogue is set. */
+let VEILS_FOR = new Map();
+
 /**
  * One chakra however it is written: the slot picker says "Wrist" where a
  * page says "Wrists", so case and a trailing plural s are not part of it.
@@ -598,6 +601,7 @@ export function setVeilCatalogue(doc) {
     }).filter((v) => v.name),
   };
   VEIL_BY_NAME = null;
+  VEILS_FOR = new Map();
 }
 
 export function veilCatalogue() {
@@ -669,14 +673,22 @@ export function veilsAvailable({ slot = null, classes = [] } = {}) {
   const chakra = chakraKey(slot);
   const want = (Array.isArray(classes) ? classes : [classes])
     .map((c) => String(c ?? '').trim().toLowerCase()).filter(Boolean);
+  // The Akashic tab asks once per slot and card on every render, and the
+  // catalogue runs to some fifteen hundred veils: each answer is kept until
+  // the catalogue changes. Callers read the list and never change it.
+  const key = `${chakra}|${[...want].sort().join(',')}`;
+  const kept = VEILS_FOR.get(key);
+  if (kept) return kept;
   const anyClassKnown = want.length > 0 && VEIL_CATALOGUE.veils.some((v) => v.classes.length);
-  return VEIL_CATALOGUE.veils
+  const found = VEIL_CATALOGUE.veils
     .filter((v) => (!chakra || v.slots.some((s) => chakraKey(s) === chakra)))
     // A veil no page has placed on a list stays on offer: the class lists are
     // a second import, and a catalogue with only half of them must not hide
     // the half it cannot vouch for.
     .filter((v) => !anyClassKnown || !v.classes.length || v.classes.some((c) => want.includes(c.toLowerCase())))
     .sort((a, b) => a.name.localeCompare(b.name));
+  VEILS_FOR.set(key, found);
+  return found;
 }
 
 /**

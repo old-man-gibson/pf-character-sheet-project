@@ -18,7 +18,7 @@ import {
 } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
 import {
-  Character, setVeilCatalogue,
+  Character, setVeilCatalogue, veilsAvailable,
   setFeatCatalogue, featCatalogue, featEntry, featsAvailable, featTypes, featDetails,
   setSpellCatalogue, spellCatalogue, spellEntry, spellsAvailable, spellClasses, spellDetails,
   setPowerCatalogue, powerCatalogue, powerEntry, powersAvailable, powerDetails,
@@ -158,6 +158,22 @@ console.log('through a pack and into the catalogues');
   check('a list no filler serves is left alone, and the answer is capped',
     [datalistOptions('veils'), datalistOptions('constructor'), datalistOptions('powers', { max: 1 }).length],
     [null, null, 1]);
+
+  // A veil cell is filled as it is typed, from the slot it is in.
+  setVeilCatalogue({ veils: [
+    { name: 'Sigil of Blades', slot: 'Wrists', descriptor: 'Force' },
+    { name: 'Bracers of Ruin', slot: 'Wrists', classes: ['Daevic'] },
+    { name: 'Mantle of Wind', slot: 'Shoulders' },
+  ] });
+  check('a veil cell offers what its slot takes, with slot and descriptor',
+    datalistOptions('veil:Wrist', { classes: ['Vizier'] }), [{ value: 'Sigil of Blades', label: 'Wrists · Force' }]);
+  check('narrowed by class, and to what is typed',
+    [datalistOptions('veil:Wrists', { classes: ['Daevic'] }).map((o) => o.value), datalistOptions('veil:Wrists', { query: 'ruin' }).map((o) => o.value)],
+    [['Bracers of Ruin', 'Sigil of Blades'], ['Bracers of Ruin']]);
+  check('the same question twice is one answer',
+    veilsAvailable({ slot: 'Wrists' }) === veilsAvailable({ slot: 'wrist' }), true);
+  setVeilCatalogue({ veils: [] });
+  check('and a new catalogue clears it', datalistOptions('veil:Wrists'), []);
 
   // Found through an index built on the first lookup: a catalogue set again
   // answers from its own entries, not the last one's.

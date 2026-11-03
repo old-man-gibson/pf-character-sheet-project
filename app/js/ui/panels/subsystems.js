@@ -521,21 +521,18 @@ function veilweavingClasses(a) {
  * What a slot offers, as a `<datalist>` its cards point at.
  *
  * One per chakra rather than one per card: the list is the same for every
- * veil shaped in that slot, and the Hands chakra alone runs to a few hundred
- * entries. Nothing is emitted where no pack provides a catalogue, and the
- * name field is then the free-text box it has always been -- a player who
- * types a veil nobody has published is not doing anything wrong.
+ * veil shaped in that slot. It is drawn empty and filled as the name is typed
+ * (`veil:<slot>` in ui/datalist.js), because the Hands chakra alone runs to a
+ * few hundred entries and every render used to send them all. Nothing is
+ * emitted where no pack provides a catalogue, and the name field is then the
+ * free-text box it has always been -- a player who types a veil nobody has
+ * published is not doing anything wrong.
  */
 function veilOptions(a, slot) {
-  const veils = veilsAvailable({ slot, classes: veilweavingClasses(a) });
-  if (!veils.length) return { id: '', html: '' };
+  const classes = veilweavingClasses(a);
+  if (!veilsAvailable({ slot, classes }).length) return { id: '', html: '' };
   const id = `veils-${slug(slot || 'any')}`;
-  return {
-    id,
-    html: `<datalist id="${esc(id)}">${veils.map((v) => `<option value="${esc(v.name)}"${
-      v.slot || v.descriptor ? ` label="${esc([v.slot, v.descriptor].filter(Boolean).join(' · '))}"` : ''
-    }></option>`).join('')}</datalist>`,
-  };
+  return { id, html: nameDatalist(id, `veil:${slot || ''}`, { classes }) };
 }
 
 /**
