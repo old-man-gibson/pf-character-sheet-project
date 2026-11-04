@@ -1487,7 +1487,7 @@ export class CharacterSheetElement extends HTMLElement {
     url.searchParams.set('k', key);
     const opened = window.open(url.href, '_blank', 'noopener');
     this.#historyNote = opened
-      ? `Published preview opened — ${describePublish(report)}`
+      ? `Published preview opened. ${describePublish(report)}`
       : 'The preview was blocked by the browser. Allow pop-ups for this page and try again.';
     this.#render();
   }
@@ -3296,7 +3296,7 @@ export class CharacterSheetElement extends HTMLElement {
         <button data-action="publish"
           title="Upload this character and get a read-only link. Publishing again updates the same link.">Publish</button>
         <button data-action="preview-published"
-          title="Open the read-only view a link shows: only the pack entries the character carries, no local packs, nothing saved">Preview published</button>
+          title="Open the read-only view that the share link shows.">Preview published</button>
         <button data-action="import" title="Import an .xlsx workbook or a .json file this app exported.">Import…</button>
         <button data-action="reset" class="danger" aria-expanded="${this.#confirmReset}"
           title="Return the character to how it was imported. Named checkpoints are kept.">Reset</button>`}
