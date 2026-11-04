@@ -16,6 +16,7 @@ import { esc } from './html.js';
 import { fmt } from '../rules.js';
 import { hasTokens, formatValue, proseScope } from '../inline.js';
 import { workingLine } from '../formula-format.js';
+import { forwardedLine } from '../model/scope.js';
 import { hasLink, linkedText } from './links.js';
 
 const PROSE_HINT = 'Formulas work here: {= 2 + con.mod} shows a value, '
@@ -77,7 +78,7 @@ export function tokenTitle(model, seg, scope, local = null) {
   if (seg.kind === 'ref') {
     const def = (model.inlineDefinitions || []).find((d) => d.name === seg.name);
     return def
-      ? `{${seg.name}} — defined as ${workingLine(def.expr, scope)}`
+      ? `{${seg.name}} — defined as ${workingLine(def.expr, scope)}${sentTo(model, seg.name)}`
       : `{${seg.name}}`;
   }
   // A forwarded bonus says where it goes before it says how it was worked
@@ -92,7 +93,13 @@ export function tokenTitle(model, seg, scope, local = null) {
       + `${token} ${workingLine(seg.expr, scope)}`;
   }
   const label = seg.kind === 'define' ? `{${seg.name} = …}` : '{= …}';
-  return `${label} ${workingLine(seg.expr, scope)}`;
+  return `${label} ${workingLine(seg.expr, scope)}${seg.kind === 'define' ? sentTo(model, seg.name) : ''}`;
+}
+
+/** The bonuses sent to a defined name, as lines under its working, or ''. */
+function sentTo(model, name) {
+  const f = model.forwardedInto?.(name);
+  return f ? `\nForwarded here: ${fmt(f.total)}\n${f.from.map((x) => forwardedLine(x)).join('\n')}` : '';
 }
 
 /** Names as a reader would say them: "Bluff and Diplomacy". */

@@ -489,10 +489,15 @@ export const SCOPE_INFO = Symbol('what a scope\'s names are of');
  * mean the total coming to mean an object instead. `saves.will` is the save,
  * `saves.will.luck` is the part of it luck is worth, and neither had to be
  * renamed to make room for the other.
+ *
+ * A name the player defines can be a branch the same way: {kinetic.fist} is
+ * dice text and {kinetic.fist.maximized} a number under it, so the total may
+ * be text or true/false as well as a number.
  */
+const TOTAL_TYPES = new Set(['number', 'string', 'boolean']);
 export const carriesTotal = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
   && Object.prototype.hasOwnProperty.call(v, 'total')
-  && typeof v.total === 'number';
+  && TOTAL_TYPES.has(typeof v.total);
 
 /** One key of a path. `fold` is what makes the second pass ignore case. */
 function step(acc, key, fold) {
