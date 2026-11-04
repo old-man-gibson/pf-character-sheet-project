@@ -309,6 +309,9 @@ console.log('where a bonus can be sent -- the half a reader cannot see on the sh
     ['skill.bluff', 'saves.will', 'hp.total', 'str.score', 'initiative',
       'class.rogue.level', 'tracker.luck.max'].map(classifyTarget),
     ['skill', 'defence', 'defence', 'ability', 'character', 'character', 'tracker']);
+  check('essence capacity is filed under Akashic',
+    targetGroups([{ name: 'essence.cap', label: 'Essence capacity' }]).map((g) => [g.key, g.label, g.items.map((i) => i.name)]),
+    [['akashic', 'Akashic', ['essence.cap']]]);
 
   const groups = targetGroups(targets);
   check('weapons and damage come first, because they are the unguessable ones',

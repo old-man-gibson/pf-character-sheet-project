@@ -3060,6 +3060,68 @@ console.log('the veilweaving level and DCs are worked out, as the Veilweaving sp
   check('and a typed base DC pins that, lifting the veils', a().baseDC, 20);
 }
 
+console.log('a bonus raises the essence capacity');
+{
+  const c = new Character(blankDocument({ name: 'Weaver', level: 10 }));
+  c.data.classes = [
+    { name: 'Guru', hd: 8, bab: 0.75, goodFort: false, goodRef: false, goodWill: true, skillRanks: 4, levelsOverride: 10 },
+  ];
+  c.data.akashic.classes = [{ name: 'Guru', mod: 'Wis', essenceCap: 2, bonusCap: 1 }];
+  c.data.akashic.slots = [{ slot: 'Hands', veils: [{ name: 'Gloves', essence: 4 }] }];
+  c.recompute();
+  const k = () => c.data.akashic.calc;
+  const misdirected = () => c.formulaProblems().filter((p) => p.kind === 'misdirected');
+  check('essence cap 2 and bonus cap 1, with a veil of 4 over it', [k().totalCap, k().overCap], [3, ['Gloves']]);
+
+  c.listAdd('training.magic.classes', {
+    name: 'Incanter', type: 'High', talentsPerLevel: null, mod1: 'Int', mod2: null, classLevelsOverride: 10,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null })),
+  });
+  c.setItem('training.magic.classes.0.levels', 0, 'talent', 'Veilweaving Sphere');
+  c.setItem('training.magic.classes.0.levels', 0, 'sphere', 'Veilweaving');
+  c.setItem('training.magic.classes.0.levels', 2, 'talent', 'Capacity Increase');
+  c.setItem('training.magic.classes.0.levels', 2, 'sphere', 'Veilweaving');
+  c.setItem('training.magic.classes.0.levels', 2, 'notes', '{essence.cap += 1}');
+  check('a talent with {essence.cap += 1} raises the capacity by 1',
+    [k().totalCap, k().capForwarded, c.scope().essence.cap], [4, 1, 4]);
+  check('and the error is gone', [misdirected(), c.contributions.errors], [[], []]);
+  check('the veil of 4 is within it now', k().overCap, []);
+  check('the Formulas tab offers it on a character who uses the tab',
+    c.forwardTargets().list.find((t) => t.name === 'essence.cap'), { name: 'essence.cap', label: 'Essence capacity' });
+
+  c.setClassFeature('Guru', 6, 'Features', 'Improved capacity {essence.cap += 1} {cap_now = essence.cap}');
+  check('a class feature stacks with the talent', [k().totalCap, k().capForwarded], [5, 2]);
+  check('a name reading essence.cap sees both bonuses', c.inlineNames.cap_now, 5);
+  check('the workbook name takes a bonus too', (() => {
+    c.setClassFeature('Guru', 7, 'Features', '{EssenceCapTotal1 += 1}');
+    const cap = k().totalCap;
+    c.setClassFeature('Guru', 7, 'Features', '');
+    return cap;
+  })(), 6);
+  check('the Essence panel shows the bonus beside the cap',
+    subsystemPanels.akashicPanel(c, {}).includes('data-fwd="essence.cap"'), true);
+
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('reopening keeps the capacity', [back.data.akashic.calc.totalCap, back.inlineNames.cap_now], [5, 5]);
+  const again = new Character(JSON.parse(JSON.stringify(back.toJSON())));
+  check('and so does reopening the reopened one', again.data.akashic.calc.totalCap, 5);
+  check('the typed caps are saved as they were', again.data.akashic.classes[0].bonusCap, 1);
+
+  c.setItem('training.magic.classes.0.levels', 2, 'notes', '');
+  c.setClassFeature('Guru', 6, 'Features', '');
+  check('and it goes with the bonuses', [k().totalCap, k().capForwarded, k().overCap], [3, 0, ['Gloves']]);
+}
+
+console.log('essence.cap is a destination before the tab is in use');
+{
+  const c = new Character(blankDocument({ name: 'Unwoven', level: 5 }));
+  c.listAdd('notes', { title: 'Talent', body: '{essence.cap += 1}' });
+  check('the bonus lands and reports nothing',
+    [c.data.akashic.calc.totalCap, c.formulaProblems().filter((p) => p.kind === 'misdirected')], [1, []]);
+  check('but is not offered in the list',
+    c.forwardTargets().list.find((t) => t.name === 'essence.cap')?.unused, true);
+}
+
 console.log('the Lifebound piles hold until a rest to regain spell points');
 {
   // "When you rest to regain spell points, remove all cards from your Stun,
