@@ -603,7 +603,7 @@ console.log('\nthe unarmed practitioner table folds, and the shared increases do
   ok('a 🥊 weapon brings it, folded, with the dice still showing',
     /data-collapse="unarmed-setup"/.test(shut) && !/usesBoxing/.test(shut) && /class="unarmed-dice">1d3</.test(shut));
   ok('and a second one points at the first rather than repeating it',
-    shut.match(/data-collapse="unarmed-setup"/g).length === 1 && /worked out under\s+Fist/.test(shut));
+    shut.match(/data-collapse="unarmed-setup"/g).length === 1 && /set up under\s+Fist/.test(shut));
   c.data.uiPrefs.collapsed['unarmed-setup'] = false;
   const seen = () => {
     const html = gear.renderGearPanel(c, {});
@@ -657,7 +657,7 @@ console.log('\nthe gear table: three cells a bonus, and the card grows with its 
     /data-fill="targets"/.test(to) && (to.match(/<option/g) || []).length === 2
       && /<option value="ac\.total" selected title="ac\.total">AC</.test(to));
   ok('the rest is a grouped picker showing plain names',
-    /<optgroup label="Armour class">/.test(all) && /<option value="ac\.total" selected title="ac\.total">AC</.test(all)
+    /<optgroup label="Armor class">/.test(all) && /<option value="ac\.total" selected title="ac\.total">AC</.test(all)
       && /<optgroup label="Skills">[\s\S]*<option value="skill\.bluff"[^>]*>Bluff</.test(all));
   ok('the working scores stay off it', !/dex\.temp/.test(all));
   const bad = html.match(/<select class="target invalid"[^>]*bonuses\.1\.target[\s\S]*?<\/select>/)?.[0] || '';
