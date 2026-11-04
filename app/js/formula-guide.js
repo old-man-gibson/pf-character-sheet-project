@@ -128,6 +128,7 @@ export const VALUE_SECTIONS = [
  * as by weapon, and is the one thing here that has to be taught.
  */
 export const TARGET_SECTIONS = [
+  { key: 'mine', label: 'Named by you', blurb: 'Every {name = …} on this character. A bonus adds to the name’s value.' },
   { key: 'weapon', label: 'Weapons and damage', blurb: 'Attack and damage on the weapon rows — all of them, one kind of them, or one weapon.' },
   { key: 'attack', label: 'Attack', blurb: 'The three attack numbers on the Overview.' },
   { key: 'defence', label: 'Health, armour, saves', blurb: 'Hit points, the armour classes, the three saves, and the defence boxes — damage reduction, energy resistance, immunities.' },
@@ -299,12 +300,15 @@ export function targetGroups(list, query = '') {
   for (const t of list || []) {
     if (t.unused) continue;
     listed += 1;
-    const family = classifyTarget(t.name, t.system);
+    // A name the character defined is filed as theirs, whatever it starts with,
+    // and described by where it is defined: its label is only the name again.
+    const family = t.mine ? 'mine' : classifyTarget(t.name, t.system);
     const heading = targetHeading(t, family);
-    const hay = `${t.name}\n${t.label}\n${heading?.label || ''}`.toLowerCase();
+    const label = t.mine ? t.where || '' : t.label;
+    const hay = `${t.name}\n${label}\n${heading?.label || ''}`.toLowerCase();
     if (!terms.every((q) => hay.includes(q))) continue;
     buckets.get(family).push({
-      name: t.name, label: t.label, reaches: t.family ? t.family.length : 0, heading,
+      name: t.name, label, reaches: t.family ? t.family.length : 0, heading,
     });
   }
   const groups = TARGET_SECTIONS
@@ -623,7 +627,7 @@ export function targetsHtml(groups, total, query, own = '') {
     <p class="hint">Every destination <code>{… += …}</code> accepts on this character. Click one
       to copy the whole token — paste it into the feat, talent or feature that grants the bonus
       and it lands here, showing in gold beside the field. A destination is written to, not read:
-      these names are not values and will not resolve in the box above.</p>
+      apart from names you defined, these do not resolve in the box above.</p>
     <input class="fx-search" data-fx-target-query placeholder="Find a destination — will, damage, sphere.dark.cl, every skill"
       value="${esc(own)}" aria-label="Find a bonus you can send" spellcheck="false">
     ${shown ? groups.map((g) => `<details class="fx-group" ${searching ? 'open' : ''}>

@@ -57,7 +57,9 @@ export function formulaLookup(model, query) {
     try { value = evaluateFormula(name, scope); } catch { value = null; }
     return { name, value };
   });
-  const allTargets = (model.forwardTargets?.()?.list || []).filter((t) => matches(`${t.name} ${t.label}`, terms));
+  // The last recompute's list, which has the character's own names in it.
+  const allTargets = (model.forwardTargetList || model.forwardTargets?.()?.list || [])
+    .filter((t) => matches(`${t.name} ${t.label}`, terms));
   const functions = FUNCTION_HELP.filter((f) => matches(`${f.name} ${f.sig} ${f.what} ${f.group || ''}`, terms));
   return {
     terms,

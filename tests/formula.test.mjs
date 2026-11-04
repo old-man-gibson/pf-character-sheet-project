@@ -117,6 +117,7 @@ console.log('a branch carrying a total reads as that total');
     str: { score: 9, mod: -1 },
     parts: { luck: 2 },
     fake: { total: 'lots' },
+    empty: { total: null, part: 1 },
   };
   const t = (src) => evaluateFormula(src, totalled);
   check('the branch is the total', t('saves.will'), 13);
@@ -125,7 +126,10 @@ console.log('a branch carrying a total reads as that total');
   check('it is a number, not an object', t('saves.will + 2'), 15);
   check('one level up is untouched', t('ac'), 21);
   check('a branch with no total stays a branch', typeof resolvePath(totalled, 'str'), 'object');
-  check('so does one whose total is not a number', typeof resolvePath(totalled, 'fake'), 'object');
+  // A defined name can be a branch with text in it: {kinetic.fist} is dice,
+  // {kinetic.fist.maximized} a number under it.
+  check('a text total is the value too', resolvePath(totalled, 'fake'), 'lots');
+  check('one whose total is not a value stays a branch', typeof resolvePath(totalled, 'empty'), 'object');
   check('a branch with no total keeps its parts', t('parts.luck'), 2);
   check('the rule reaches only the end of the path', resolvePath(totalled, 'saves.will.base'), 6);
 }

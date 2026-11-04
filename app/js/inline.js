@@ -222,6 +222,9 @@ export const TARGET_OUTSIDE = '"target" is only defined inside a forwarded bonus
 /** Is this `target` or one of its parts? */
 export const isTargetName = (name) => TARGET_NAME_RE.test(String(name));
 
+/** What `target` reads on a defined name: its value before bonuses, as `target` or `target.total`. */
+export const nameTarget = (value) => ({ kind: 'a defined name', late: false, values: { total: value } });
+
 /**
  * Does a formula read `target`, and so need working out once per destination?
  * A formula that does not parse reads nothing; working it out says why.
@@ -317,10 +320,12 @@ function amount(expr, scope, sign) {
  * `value` is the amount shown inline: the most common non-zero amount, or 0
  * if every amount is 0.
  */
-export function amountsPerTarget(expr, sign, keys, scopeFor, targetOf) {
-  const values = {};
-  const failed = {};
+export function amountsPerTarget(expr, sign, keys, scopeFor, targetOf, settled = null) {
+  const values = { ...settled?.values };
+  const failed = { ...settled?.failed };
   for (const key of keys) {
+    // Worked out already: a name's bonuses are, where the name is (resolveDefinitions).
+    if (key in values || key in failed) continue;
     try {
       values[key] = amount(expr, scopeFor(targetOf(key)), sign);
     } catch (err) {
@@ -452,8 +457,19 @@ export function collectUses(sources) {
  * worth. Every definition of a duplicated name is flagged, on both sides, and
  * `duplicates` says which one is in force so a reader can be told where the
  * other one is rather than left to find it.
+ *
+ * **A name can take forwarded bonuses.** `bonuses` is `{ list, into }`: every
+ * forwarded bonus (collectContributions) and `into(target)`, the defined name
+ * a destination means, or null. A name's value is its definition plus the
+ * bonuses sent to it, stacked as anywhere else (stackAt), and it is worked
+ * out after whatever those bonuses read -- so a name that reads it gets the
+ * total, and a bonus that reads a name reading it back is a cycle. A bonus
+ * reading the name it is added to, by name or as `target`, gets the value
+ * before bonuses. The amounts come back as `bonuses` (bonus index ->
+ * `{ values, failed }` by name) for resolveContributions to list, and
+ * `before` holds each such name's value before them.
  */
-export function resolveDefinitions(defs, baseScope) {
+export function resolveDefinitions(defs, baseScope, bonuses = null) {
   const values = {};
   const errors = [];
   const byName = new Map();
@@ -463,6 +479,23 @@ export function resolveDefinitions(defs, baseScope) {
     if (!clashes.has(d.name)) clashes.set(d.name, []);
     clashes.get(d.name).push(d);
   }
+
+  const incoming = new Map();     // name -> [{ c, i }], every bonus sent to it
+  for (const [i, c] of (bonuses?.list || []).entries()) {
+    for (const t of c.targets) {
+      const name = bonuses.into(t);
+      if (!name || !byName.has(name)) continue;
+      if (!incoming.has(name)) incoming.set(name, []);
+      if (!incoming.get(name).some((x) => x.i === i)) incoming.get(name).push({ c, i });
+    }
+  }
+  const amounts = new Map();      // bonus index -> { values, failed }, by name
+  const before = {};
+  const settle = (i, name, value, error) => {
+    if (!amounts.has(i)) amounts.set(i, { values: {}, failed: {} });
+    if (error) amounts.get(i).failed[name] = error;
+    else amounts.get(i).values[name] = value;
+  };
 
   // A duplicated name is reported against every one of its definitions, so
   // neither of them looks fine while the other carries the warning.
@@ -514,6 +547,29 @@ export function resolveDefinitions(defs, baseScope) {
     }
   };
 
+  /**
+   * A name's value with the bonuses sent to it added, each read with the name
+   * still at `v` -- its own value as `target`, as a skill's ranks are.
+   */
+  const withBonuses = (name, v, arriving) => {
+    const landed = [];
+    for (const { c, i } of arriving) {
+      if (typeof v !== 'number') {
+        settle(i, name, 0, `"${name}" is not a number, so a bonus cannot be added to it.`);
+        continue;
+      }
+      const target = nameTarget(v);
+      try {
+        const value = amount(c.expr, proseScope(values, c.scope, baseScope, target), c.sign);
+        settle(i, name, value, null);
+        landed.push({ value, type: c.type || '' });
+      } catch (err) {
+        settle(i, name, 0, err.message);
+      }
+    }
+    return landed.length ? v + stackAt(landed, null).total : v;
+  };
+
   const evalOne = (name, stack) => {
     const st = state.get(name);
     if (st === 'done' || st === 'failed' || st === 'cycle') return;
@@ -528,6 +584,15 @@ export function resolveDefinitions(defs, baseScope) {
       fail(name, d.path, err.message);
       return;
     }
+    // What the bonuses sent to this name read has to be worked out first too.
+    const arriving = incoming.get(name) || [];
+    for (const { c } of arriving) {
+      try {
+        refs = [...refs, ...collectReferences(parse(c.expr)).variables];
+      } catch {
+        // A bonus that does not parse says so when it is worked out below.
+      }
+    }
     for (const r of refs) {
       if (byName.has(r) && r !== name) evalOne(r, [...stack, name]);
     }
@@ -537,6 +602,10 @@ export function resolveDefinitions(defs, baseScope) {
     try {
       const v = evaluateFormula(d.expr, d.scope ? scopeFor(d.scope) : scope);
       values[name] = v;
+      if (arriving.length) {
+        before[name] = v;
+        values[name] = withBonuses(name, v, arriving);
+      }
       state.set(name, 'done');
     } catch (err) {
       // "Unknown value X" where X is a definition that itself failed is a
@@ -550,12 +619,18 @@ export function resolveDefinitions(defs, baseScope) {
   };
   for (const name of byName.keys()) evalOne(name, []);
 
+  // A bonus sent to a name that did not work out has nothing to add to.
+  for (const [name, arriving] of incoming) {
+    if (state.get(name) === 'done') continue;
+    for (const { i } of arriving) settle(i, name, 0, `"${name}" is not working, so nothing can be added to it.`);
+  }
+
   // A duplicated name resolves to its first definition, and the ignored ones
   // must not publish a value of their own.
   const failed = [...state.entries()]
     .filter(([, st]) => st !== 'done')
     .map(([name]) => name);
-  return { values, errors, duplicates, failed };
+  return { values, errors, duplicates, failed, bonuses: amounts, before };
 }
 
 /**
@@ -600,8 +675,12 @@ export function resolveDefinitions(defs, baseScope) {
  *                       null to work it out. Only a bonus that landed is
  *                       kept, so a kept entry's error is its formula's. See
  *                       resolveInlineNames for the one caller.
+ * @param named          optional Map, bonus index -> `{ values, failed }`: the
+ *                       amounts resolveDefinitions gave the bonuses sent to
+ *                       defined names. They stand, so a name's bonuses are
+ *                       listed at the amounts its value was built from.
  */
-export function resolveContributions(contributions, names, baseScope, targets, keep = null) {
+export function resolveContributions(contributions, names, baseScope, targets, keep = null, named = null) {
   const expand = targets?.expand || (() => null);
   const known = targets?.known || (() => false);
   const targetOf = targets?.targetOf ? (key) => targets.targetOf(key, baseScope) : null;
@@ -641,14 +720,34 @@ export function resolveContributions(contributions, names, baseScope, targets, k
     let error = null;
     let each = null;
     const kept = keep ? keep(c, i) : null;
-    if (kept && !kept.values) {
+    const fixed = named?.get(i) || null;
+    const scopeFor = (target) => proseScope(names, c.scope, baseScope, target);
+    if (fixed) {
+      each = amountsPerTarget(c.expr, c.sign, keys, scopeFor, targetOf || (() => null),
+        settledAmounts(fixed, kept, keys));
+      // The same amount everywhere, as a bonus that does not read `target`
+      // usually is, lists as one amount.
+      const one = [...new Set(Object.values(each.values))];
+      if (!Object.keys(each.failed).length && one.length <= 1 && !readsTarget(c.expr)) {
+        value = one[0] ?? 0;
+        each = null;
+      }
+    } else if (kept && !kept.values) {
       value = kept.value;
       error = kept.error || null;
       if (error) errors.push({ path: c.path, error, source: c.raw });
     } else if (kept || (targetOf && readsTarget(c.expr))) {
       each = kept ? { value: kept.value, values: kept.values, failed: kept.failed || {} }
-        : amountsPerTarget(c.expr, c.sign, keys,
-          (target) => proseScope(names, c.scope, baseScope, target), targetOf);
+        : amountsPerTarget(c.expr, c.sign, keys, scopeFor, targetOf);
+    } else {
+      try {
+        value = amount(c.expr, scopeFor(null), c.sign);
+      } catch (err) {
+        error = err.message;
+        errors.push({ path: c.path, error, source: c.raw });
+      }
+    }
+    if (each) {
       value = each.value;
       // One complaint per thing wrong, not one per skill it was wrong on: a
       // misspelt part is misspelt forty times over and is one fix. Where it
@@ -656,13 +755,6 @@ export function resolveContributions(contributions, names, baseScope, targets, k
       const why = [...new Set(Object.values(each.failed))];
       if (why.length && !Object.keys(each.values).length) error = why[0];
       for (const w of why) errors.push({ path: c.path, error: w, source: c.raw });
-    } else {
-      try {
-        value = amount(c.expr, proseScope(names, c.scope, baseScope), c.sign);
-      } catch (err) {
-        error = err.message;
-        errors.push({ path: c.path, error, source: c.raw });
-      }
     }
 
     // A bonus with nowhere at all to go is not working, and must say so where
@@ -702,28 +794,10 @@ export function resolveContributions(contributions, names, baseScope, targets, k
   // is already there, and `overlapAt` says how much of one a column covered.
   const overlapAt = {};       // destination -> Map(entry -> { overlap, column })
   for (const [key, list] of Object.entries(by)) {
-    let total = 0;
-    const best = new Map();      // type -> the entry holding the largest bonus
-    const counts = new Set();
-    for (const e of list) {
-      if (e.value < 0 || stacksWithItself(e.type)) { total += e.value; counts.add(e); continue; }
-      const held = best.get(e.type);
-      // First one wins a tie, so the order a rule was written in decides which
-      // of two identical bonuses is shown as the one in force -- arbitrary
-      // either way, but stable, and it never changes under a later edit.
-      if (!held || e.value > held.value) best.set(e.type, e);
-    }
-    const columns = targets?.columnsOf ? targets.columnsOf(key) : null;
-    for (const e of best.values()) {
-      const column = Math.max(0, Number(columns?.[e.type] ?? columns?.[baseType(e.type)]) || 0);
-      const overlap = Math.min(column, e.value);
-      if (overlap) (overlapAt[key] ||= new Map()).set(e, { overlap, column });
-      if (overlap >= e.value) continue;
-      total += e.value - overlap;
-      counts.add(e);
-    }
-    totals[key] = total;
-    countedAt[key] = counts;
+    const s = stackAt(list, targets?.columnsOf ? targets.columnsOf(key) : null);
+    if (s.overlaps.size) overlapAt[key] = s.overlaps;
+    totals[key] = s.total;
+    countedAt[key] = s.counts;
   }
 
   // The destinations go back with the answers: a sentence showing one of these
@@ -731,6 +805,55 @@ export function resolveContributions(contributions, names, baseScope, targets, k
   // at each is remembered there (see forwardTargets), so it shows the amount
   // that arrived rather than one worked out against the sheet a pass later.
   return { totals, entries, errors, by, countedAt, overlapAt, absorbed, targets: targets || null };
+}
+
+/**
+ * The bonuses at one destination, stacked: `{ total, counts, overlaps }`.
+ * `counts` is the set of entries that add, `overlaps` maps an entry to how
+ * much of it a column of its type (`columns`, `{type: value}`) already gave.
+ */
+function stackAt(list, columns) {
+  let total = 0;
+  const best = new Map();      // type -> the entry holding the largest bonus
+  const counts = new Set();
+  const overlaps = new Map();
+  for (const e of list) {
+    if (e.value < 0 || stacksWithItself(e.type)) { total += e.value; counts.add(e); continue; }
+    const held = best.get(e.type);
+    // First one wins a tie, so the order a rule was written in decides which
+    // of two identical bonuses is shown as the one in force -- arbitrary
+    // either way, but stable, and it never changes under a later edit.
+    if (!held || e.value > held.value) best.set(e.type, e);
+  }
+  for (const e of best.values()) {
+    const column = Math.max(0, Number(columns?.[e.type] ?? columns?.[baseType(e.type)]) || 0);
+    const overlap = Math.min(column, e.value);
+    if (overlap) overlaps.set(e, { overlap, column });
+    if (overlap >= e.value) continue;
+    total += e.value - overlap;
+    counts.add(e);
+  }
+  return { total, counts, overlaps };
+}
+
+/**
+ * What is already known of a bonus sent to a defined name: the names' amounts
+ * (`fixed`), and for its other destinations what an earlier pass kept, if it
+ * kept anything. amountsPerTarget works out the rest.
+ */
+function settledAmounts(fixed, kept, keys) {
+  const values = { ...fixed.values };
+  const failed = { ...fixed.failed };
+  if (!kept) return { values, failed };
+  for (const k of keys) {
+    if (k in values || k in failed) continue;
+    if (kept.values) {
+      if (k in kept.values) values[k] = kept.values[k];
+      else if (k in (kept.failed || {})) failed[k] = kept.failed[k];
+    } else if (kept.error) failed[k] = kept.error;
+    else values[k] = kept.value;
+  }
+  return { values, failed };
 }
 
 // Which bonus types stack is a rule about bonuses, kept with the bonus
