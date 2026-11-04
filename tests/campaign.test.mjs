@@ -533,7 +533,7 @@ console.log('\nthe lowest level, and no ceiling on the highest');
   const box = () => renderOverviewPanel(c, { draft: {}, buildView: true }).match(/<input[^>]*data-set="identity\.level"[^>]*>/)?.[0] || '';
   check('the level box starts at the lowest', box().includes('min="3"'), true);
   c.set('campaign.minLevel', 5);
-  check('a level below it is kept and flagged', [c.data.identity.level, box().includes('min="5"'), box().includes('Below this campaign\'s lowest level, 5')],
+  check('a level below it is kept and flagged', [c.data.identity.level, box().includes('min="5"'), box().includes('Below the campaign\'s lowest level of 5.')],
     [3, true, true]);
   check('a new sheet: the table\'s 3rd to 20th unless asked', [blankDocument({ level: 1 }).identity.level, blankDocument({ level: 25 }).identity.level],
     [3, 20]);
