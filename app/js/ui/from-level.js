@@ -12,8 +12,8 @@ import { esc } from './html.js';
 import { rowLevel } from '../model/feats.js';
 
 /** What From lvl means, on its header. */
-export const FROM_LEVEL_TITLE = 'The character level this is gained at. Until then it is the plan: greyed, '
-  + 'not counted for requirements or tallies, and its {…} bonuses wait. Blank: from the start.';
+export const FROM_LEVEL_TITLE = 'The character level this is gained at. Until then it is grayed, does not count '
+  + 'for requirements or totals, and its {…} bonuses do not apply. Blank means from the start.';
 
 /** The column heading. */
 export const fromLevelHead = () => `<th class="num flvl" title="${esc(FROM_LEVEL_TITLE)}">From lvl</th>`;
@@ -27,11 +27,11 @@ export const fromLevelHead = () => `<th class="num flvl" title="${esc(FROM_LEVEL
 export function fromLevelField(list, i, row) {
   const at = rowLevel(row);
   return `<input type="text" inputmode="numeric" maxlength="2" value="${at ?? ''}" data-item="${list}|${i}|level"
-    data-kind="int-or-null" placeholder="—" aria-label="From level" title="The level this is gained at; blank for from the start"
+    data-kind="int-or-null" placeholder="—" aria-label="From level" title="The level this is gained at. Blank means from the start."
     style="width:3.6rem;max-width:100%;text-align:center">`;
 }
 
 /** A row waiting for a level: the `future` class every planned row wears, and why on hover. */
 export function plannedRow(ahead, at) {
-  return ahead ? ` class="future" title="Planned for level ${at}: not counted yet, and its bonuses wait until then"` : '';
+  return ahead ? ` class="future" title="Planned for level ${at}. It does not count yet, and its bonuses do not apply until then."` : '';
 }

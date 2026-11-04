@@ -83,7 +83,7 @@ const shown = (v) => {
 /** The results under the search box. A name is a button: pressing it copies the name. */
 export function formulaDrawerResults(model, query) {
   const r = formulaLookup(model, query);
-  const more = (n) => (n ? `<p class="hint">${n} more — keep typing to narrow it.</p>` : '');
+  const more = (n) => (n ? `<p class="hint">${n} more. Keep typing to narrow the list.</p>` : '');
   const section = (title, body) => (body ? `<section class="fxsec"><h4>${esc(title)}</h4>${body}</section>` : '');
   const names = r.names.map((n) => `<button type="button" class="fxname" data-fxcopy="${esc(n.name)}"
       title="Copy ${esc(n.name)}"><code>${esc(n.name)}</code><span class="fxval">${esc(shown(n.value))}</span></button>`).join('');
@@ -97,7 +97,7 @@ export function formulaDrawerResults(model, query) {
     return '<p class="empty">Nothing by that name. Try part of it: “will”, “ac”, “skill”.</p>';
   }
   return [
-    r.terms.length ? '' : '<p class="hint">Type part of a name — <code>will</code>, <code>ac.armor</code>, <code>essence</code> — to see what it reads now. Press one to copy it.</p>',
+    r.terms.length ? '' : '<p class="hint">Type part of a name, such as <code>will</code>, <code>ac.armor</code> or <code>essence</code>, to see its current value. Press one to copy it.</p>',
     section('Names, and what they read now', names + more(r.more.names)),
     section('Where a bonus can be sent', targets + more(r.more.targets)),
     section('Functions', fns + more(r.more.functions)),
@@ -108,7 +108,7 @@ export function formulaDrawerResults(model, query) {
 /** The drawer itself: its handle, and the panel the handle pulls out. */
 export function formulaDrawerHtml() {
   return `<button type="button" class="fxhandle" data-fxtoggle aria-expanded="false"
-      aria-controls="fxpanel" title="Formula lookup — names, values and functions (stays on this tab)">ƒx</button>
+      aria-controls="fxpanel" title="Look up formula names, values and functions.">ƒx</button>
     <aside id="fxpanel" class="fxpanel" aria-label="Formula lookup" hidden>
       <div class="fxhead">
         <input type="search" data-fxquery placeholder="Search names, bonuses, functions…" aria-label="Search formulas" spellcheck="false">

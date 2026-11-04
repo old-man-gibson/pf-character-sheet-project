@@ -20,7 +20,7 @@ import { hasLink, linkedText } from './links.js';
 
 const PROSE_HINT = 'Formulas work here: {= 2 + con.mod} shows a value, '
   + '{qi.max = wis.mod} names one, {qi.max} reuses it. '
-  + 'So do links: https://… on its own, or [words](https://…).';
+  + 'Links work too: https://… or [words](https://…).';
 
 export function itemArea(model, list, i, field, value, rows = 3, local = null, opts = {}) {
   return prose(model, `data-item="${list}|${i}|${field}"`, value, rows, '', local, opts);
@@ -213,7 +213,7 @@ export function renderedProse(model, text, local = null, { inactive = false, ina
     if (seg.error) {
       const label = seg.kind === 'define' ? `{${seg.name} = ${seg.expr}}`
         : seg.kind === 'ref' ? `{${seg.name}}` : `{= ${seg.expr}}`;
-      return `<span class="tok err" title="${esc(label)} — ${esc(seg.error)}">${esc(seg.raw)}</span>`;
+      return `<span class="tok err" title="${esc(label)}: ${esc(seg.error)}">${esc(seg.raw)}</span>`;
     }
     // A bonus always shows its sign. It is a change to a number somewhere
     // else, and a bare "2" in the middle of a sentence does not say whether

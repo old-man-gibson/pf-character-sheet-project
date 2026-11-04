@@ -44,11 +44,10 @@ const STYLE = `
 const DIALOG = `
   <form id="monsterForm" method="dialog">
     <h2>New monster from a stat block</h2>
-    <p class="hint">Paste a creature's stat block — Archives of Nethys, d20pfsrd, a PDF — from its
-      <em>Name CR n</em> line down through its description. The reader takes the scores, AC,
-      hit points, saves, attacks, feats, skills and special abilities onto a sheet whose
-      numbers come out exactly as pasted and still move when a score is edited. Lines it
-      cannot place are kept on the Stat Block tab to file by hand.</p>
+    <p class="hint">Paste a creature's stat block, from its <em>Name CR n</em> line through its
+      description. The scores, AC, hit points, saves, attacks, feats, skills and special
+      abilities become a sheet that matches the pasted numbers and updates when a score
+      changes. Lines that are not recognized are kept on the Stat Block tab.</p>
     <textarea name="block" spellcheck="false" placeholder="Baalzebul CR 30
 XP 9,830,400
 LE Large outsider (devil, evil, extraplanar, lawful)
@@ -117,7 +116,7 @@ export function mountMonsterTool({ picker, welcome, adminToggle, add }) {
     const { parseStatBlock, monsterDocument, describeBlock } = await loadReader();
     const block = parseStatBlock(form.elements.block.value);
     if (!describeBlock(block)) {
-      preview.textContent = 'Nothing here reads as a stat block — it wants a "Name CR n" line, then the AC, hp and ability-score lines.';
+      preview.textContent = 'This is not a stat block. It needs a "Name CR n" line, then the AC, hp and ability score lines.';
       preview.classList.add('err');
       return;
     }
@@ -154,7 +153,7 @@ export function mountMonsterTool({ picker, welcome, adminToggle, add }) {
     const b = doc.createElement('button');
     b.id = 'monsterBtn';
     b.className = after.className;
-    b.title = "Paste a stat block off a page and get it as a sheet: the GM's monster view";
+    b.title = 'Paste a stat block to create a monster sheet.';
     b.textContent = '+ Monster';
     b.addEventListener('click', open);
     after.after(b);

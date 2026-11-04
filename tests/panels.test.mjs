@@ -1096,7 +1096,7 @@ console.log('\nevery × is the one ×');
     '<button class="danger" data-remove="x|0" title="Remove" aria-label="Remove">×</button>');
   const ask = (armed) => removeButton('vancian.prepared', 1, { what: 'Fireball', armed });
   check('one that asks twice is armed under list|i', ask(null).includes('data-remove-armed="vancian.prepared|1"'), true);
-  check('and says so on the hover', ask(null).includes('title="Remove Fireball — asks twice"'), true);
+  check('and says so on the hover', ask(null).includes('title="Remove Fireball (click twice)"'), true);
   check('armed, it reads sure?', [ask('vancian.prepared|1').includes('class="danger armed"'),
     ask('vancian.prepared|1').endsWith('>sure?</button>')], [true, true]);
   check('another key armed leaves it a ×', ask('vancian.prepared|0').endsWith('>×</button>'), true);

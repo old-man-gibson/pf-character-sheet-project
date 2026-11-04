@@ -19,7 +19,7 @@ export const MONSTER_TAB = ['statblock', 'Stat Block'];
 /** The ⋯ menu's entry: for a GM on any sheet, and for anyone on a monster. */
 export function menuButton(model, isAdmin) {
   if (!isAdmin && !model?.data?.monster) return '';
-  return `<button data-action="statblock" title="This sheet as a Bestiary prints one: every number worked out now">Stat block</button>`;
+  return `<button data-action="statblock" title="Show this character as a stat block, with current numbers.">Stat block</button>`;
 }
 
 /**

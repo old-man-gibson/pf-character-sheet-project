@@ -115,7 +115,7 @@ export function foldingNote(model, binding, value, path, { name = '', below = ''
   const shut = said === undefined ? text.length > LONG_NOTE : !!said;
   const what = below ? 'the note and what the pack says' : 'the whole note';
   const caret = foldButton(model, key, {
-    open: !shut, cls: 'disclose catfold', title: shut ? `Show ${what}` : 'Fold it to one line',
+    open: !shut, cls: 'disclose catfold', title: shut ? `Show ${what}` : 'Collapse it to one line',
   });
   if (!shut) {
     return `<div class="notecell"><div class="noteline"><div class="notebox">${field}</div>${caret}</div>${below}</div>`;
@@ -197,8 +197,8 @@ function talentInfo(model, sphere, value) {
   const base = pick.base ? pick.entry : null;
   if (base) {
     return {
-      cls: 'base', head: base.label, sub: `${base.sphere} sphere — what taking it grants`, text: base.text,
-      aria: `${base.sphere} sphere — from the sphere catalogue`,
+      cls: 'base', head: base.label, sub: `${base.sphere} sphere: what taking it grants`, text: base.text,
+      aria: `${base.sphere} sphere, from the sphere catalog`,
     };
   }
   const hit = sphereTalent(sphere, value);
@@ -235,7 +235,7 @@ function talentInfo(model, sphere, value) {
     // The whole entry, because a talent's text is the reason to look it up at
     // all and there is nowhere in a four-column table to put it.
     text: pack ? pack.text : hit.text,
-    aria: `${hit.name} — from the sphere catalogue`,
+    aria: `${hit.name}, from the sphere catalog`,
   };
 }
 
@@ -330,7 +330,7 @@ export function talentPopHtml(model, spec) {
     return `<div class="peek">
       <div class="bdhead"><span class="bdname">${esc(name)}</span><span class="bdsphere">${esc(sphere || 'no sphere')}</span></div>
       ${warn ? `<div class="bdsub peekwarn">${esc(warn)}</div>` : ''}
-      <div class="peektext">${note || info?.text ? richText(note || info.text) : '<span class="empty">Nothing written — open the note with ▸ to add one.</span>'}</div>
+      <div class="peektext">${note || info?.text ? richText(note || info.text) : '<span class="empty">Nothing written. Open the note with ▸ to add one.</span>'}</div>
       ${!note && info?.source ? `<div class="bdsub peeksource">${esc(info.source)}</div>` : ''}
     </div>`;
   }
@@ -348,7 +348,7 @@ export function talentPopHtml(model, spec) {
     const needs = entry ? [...entry.requires.map((r) => MANIPULATION_NEEDS[r] || r), entry.needs].filter(Boolean).join(', ') : '';
     return panel(entry?.name || name, [row?.group, needs && `needs ${needs}`].filter(Boolean).join(' · '),
       [note ? 'Your note — open the row with ▸ to edit it' : ''],
-      note || entry?.text || '', note ? '' : (entry ? '' : 'Not in the catalogue'));
+      note || entry?.text || '', note ? '' : (entry ? '' : 'Not in the catalog'));
   }
   if (s?.k === 'note') {
     const where = String(s.p ?? '');

@@ -243,7 +243,7 @@ export function weaponProficient(prof, w) {
   if (groups.some((g) => eq(g, 'Veil')) || /\[\s*enhanced\b|\benhanced\s*\]|\benhanced veil\b/i.test(text)) {
     return {
       state: true, source: 'veil',
-      why: 'a veil weapon — a veilweaver is always proficient with the armor, shield or weapon an [Enhanced] veil creates',
+      why: 'a veil weapon: a veilweaver is always proficient with the armor, shield or weapon an [Enhanced] veil creates',
     };
   }
 

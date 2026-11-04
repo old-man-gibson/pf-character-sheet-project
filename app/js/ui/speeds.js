@@ -29,7 +29,7 @@ export function speedTable(list, rows, worked, {
 } = {}) {
   return `<div class="tablewrap"><table class="speeds stacked fitcols" data-fold="shut">
         <thead><tr><th>Type</th><th class="num">Base</th>
-          <th class="num" title="A number, or a formula — e.g. ${esc(example)}">Bonus</th>
+          <th class="num" title="A number or a formula, e.g. ${esc(example)}">Bonus</th>
           <th class="num">Final</th><th></th></tr></thead>
         <tbody>${(rows || []).map((sp, i) => {
     const w = worked?.[i] || {};
@@ -44,7 +44,7 @@ export function speedTable(list, rows, worked, {
       width: '5.6rem',
       value: typeof sp.bonus === 'string' && sp.bonus.trim() ? w.bonus : null,
       error: w.error,
-      title: `A number, or a formula — e.g. ${example}${exampleFor}`,
+      title: `A number or a formula, e.g. ${example}${exampleFor}`,
     })}</td>
           <td class="num total" data-stack="head">${final?.(i, w) ?? `${Number(w.final) || 0} ft.`}${
       // Under the total rather than beside it: the panel is one of the narrow

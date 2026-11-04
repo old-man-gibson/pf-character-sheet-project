@@ -27,7 +27,7 @@ export function countsTowardLine(model, name) {
   const button = (to, label, on, missing = false) => `<button class="tiny" data-action="counts-toward"
       data-source="${esc(name)}" data-target="${esc(to)}" aria-pressed="${on}"
       title="${esc(missing
-    ? `${label} is no longer on the sheet. Press to take the mark off.`
+    ? `${label} is no longer on the sheet. Press to remove the mark.`
     : on
       ? `${me.label} is added to ${label}, as {${to} += ${name}} would add it. Press to keep them separate.`
       : `Separate. Press to add ${me.label} to ${label}.`)}">${esc(label)}</button>`;
