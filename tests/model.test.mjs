@@ -13921,7 +13921,7 @@ console.log('\nTerrain Casting: every cast pays a point, a step, a blight, or a 
   check('blight costs nothing now and is written down for the map', [sp() - b3, /blighted: dead magic for you/.test(log())], [1, true]);
   const html = subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set(), castPick: t().hand[0] || null });
   check('the table says the drawback is in force', /Terrain Casting: every cast pays one spell point more/.test(html), true);
-  check('and the tradition panel does too', /Terrain Casting is in force/.test(combatPanels.renderMagicPanel(c)), true);
+  check('and the tradition panel does too', /Terrain Casting is active/.test(combatPanels.renderMagicPanel(c)), true);
   // Drawback Freedom (Terrain Casting) as a mythic path ability -- here the
   // pick of an Extra Mythic Path Ability -- switches the drawback off.
   c.data.mythic.abilities[0] = { ...c.data.mythic.abilities[0], name: 'Extra Mythic Path Ability', featChoice: 'Drawback Freedom (Terrain Casting)' };

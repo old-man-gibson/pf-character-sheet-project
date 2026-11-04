@@ -155,14 +155,14 @@ function trainingSide(model, sideKey, side) {
       <div style="margin-top:8px">
         <button class="primary" data-action="add-training-class" data-side="${sideKey}">+ Add class</button>
         ${sideKey !== 'combat' ? '' : `<button data-action="add-customization"
-          title="For a class whose talents arrive on several tracks at once, one of them live — an armiger's customized weapons">+ Customized weapons</button>`}
+          title="For a class whose talents are split across several tracks with one active at a time, such as an armiger's customized weapons.">+ Customized weapons</button>`}
         ${fillNotesButton(model, sideKey)}
       </div>
       ${talentLegend()}
       <p class="hint">
-        A level's talent fields unlock when that level grants a talent. That comes from the
-        class's levels in the Planner and the Talents/level rate. Type drives ${about.levelNoun}
-        separately, for classes where the two differ. Set Class levels to override a sparse Planner.
+        A level's talent fields unlock when that level grants a talent, based on the class's
+        levels in the Planner and the Talents/level rate. Type sets ${about.levelNoun}
+        separately, for classes where the two differ. Set Class levels to override the Planner.
       </p>
     </section>`;
   }
@@ -196,7 +196,7 @@ function customizationPanel(model, blocks) {
           <input type="text" value="${esc(block.spec?.[key]?.gainsAt ?? '')}" style="width:6.5rem"
             data-custrule="${bi}|${key}|gainsAt" placeholder="11, 19"
             aria-label="Levels ${esc(label.toLowerCase())} goes up at">
-          ${error ? '<span class="hint bad">not a rule — grants nothing</span>' : ''}
+          ${error ? '<span class="hint bad">not a rule; grants nothing</span>' : ''}
         </span></label>`;
     };
     // What one track is called, so a class that customizes something other
@@ -238,16 +238,15 @@ function customizationPanel(model, blocks) {
         <button class="primary" data-action="add-customization">+ Add customized weapons</button>
       </div>
       <p class="hint">
-        Only the drawn weapon's talents are live. They reach the sphere tables and the
-        sphere badges, and change when you draw another weapon. They never pay bonus
-        skill ranks and never answer a prerequisite. A customized weapon grants no skill
-        retraining, and its talents may not qualify for feats. Constant benefits are not
-        affected. Unarmed damage counts every weapon's talents, drawn or stowed. A talent
-        needs its sphere's base on the same weapon, unless the character has that sphere
-        in her own right. The <strong>Spheres</strong> setting above sets which spheres a
-        weapon may teach. The default is martial, unless an archetype widens it. A sphere
-        outside that list is marked in gold rather than dropped. It is nearly always an
-        archetype nobody has added yet.
+        Only the drawn weapon's talents are active. They count toward the sphere tables and
+        badges, and change when you draw another weapon. They never grant bonus skill ranks or
+        meet a prerequisite. A customized weapon grants no skill retraining, and its talents may
+        not qualify for feats. Constant benefits are not affected. Unarmed damage counts every
+        weapon's talents, drawn or stowed. A talent needs its sphere's base on the same weapon,
+        unless the character has that sphere separately. The <strong>Spheres</strong> setting
+        above sets which spheres a weapon may teach; the default is martial unless an archetype
+        widens it. A sphere outside that list is marked in gold, usually because an archetype
+        has not been added yet.
       </p>
     </section>`;
   }
@@ -259,7 +258,7 @@ function weaponSet(model, block, bi, si, set, list, spheres, Unit = 'Weapon') {
     const live = !set.spare && si === block.active;
     return `<div class="weaponset${live ? ' drawn' : ''}${set.spare ? ' spare' : ''}">
       <div class="weaponhead">
-        <label class="chk" title="${set.spare ? 'Past what this level customizes' : `Draw this ${esc(Unit.toLowerCase())} — its talents go live and the others stop`}">
+        <label class="chk" title="${set.spare ? 'Beyond what this level customizes.' : `Draw this ${esc(Unit.toLowerCase())}. Its talents become active and the others stop.`}">
           <input type="radio" name="cust-${bi}" data-custactive="${bi}|${si}"
             ${live ? 'checked' : ''}${set.spare ? ' disabled' : ''}>
           <span>${live ? 'Drawn' : set.spare ? 'Spare' : 'Stowed'}</span></label>
@@ -282,12 +281,12 @@ function weaponSet(model, block, bi, si, set, list, spheres, Unit = 'Weapon') {
     return `<tr>
           <td class="${state}${row.needsBase ? ' needsbase' : ''}"${named
       ? ` data-tpop="${esc(JSON.stringify({ k: 'wtalent', p: `${talents}|${ri}` }))}"` : ''}${row.needsBase
-      ? ` title="${esc(`No ${row.sphere} base on this weapon, and the character has none of her own — a customized weapon must possess a base sphere before talents of it.`)}"`
+      ? ` title="${esc(`No ${row.sphere} base on this weapon, and the character does not have one. A customized weapon needs the base sphere before its talents.`)}"`
       : bonus ? ' title="The extra talent this weapon\'s drawback bought"' : ''}>
             ${talentCell(model, `data-item="${talents}|${ri}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, row.talent, row.sphere,
     on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
           <td class="${state}${side ? ` side-${side}` : ''}${row.offList ? ' offlist' : ''}"${row.offList
-      ? ` title="${esc(`${row.sphere} is not one this ${Unit.toLowerCase()} may learn — it teaches `
+      ? ` title="${esc(`${row.sphere} is not a sphere this ${Unit.toLowerCase()} can learn; it teaches `
         + `${TRACK_SPHERE_NOUNS[block.spec?.spheres || 'combat']} spheres. `
         + 'Widen it above, or add the archetype that does.')}"` : ''}>
             ${on ? itemSelect(talents, ri, 'sphere', row.sphere, spheres)
@@ -295,7 +294,7 @@ function weaponSet(model, block, bi, si, set, list, spheres, Unit = 'Weapon') {
           <td class="tools">${on ? foldButton(model, noteKey, {
     open,
     cls: `disclose catfold${hasNote ? ' hasnote' : ''}`,
-    title: open ? 'Fold the note' : hasNote ? 'Show the note' : 'Add a note',
+    title: open ? 'Hide the note' : hasNote ? 'Show the note' : 'Add a note',
   }) : ''}</td>
         </tr>${open ? `<tr class="wnote"><td colspan="3">${noteField(model,
     `data-item="${talents}|${ri}|notes" placeholder="What this talent does…"`, String(row.notes ?? ''))}</td></tr>` : ''}`;
@@ -356,10 +355,10 @@ function magicTraditionPanel(model, m) {
         Formulas work here too, for example “Expensive Locus ({locus = 22500} mana)”.</p>
       ${model.terrainCasting() ? (model.terrainFreedom()
     ? `<p class="hint standing"><b>Terrain Casting is on the tradition, and ${esc(model.terrainFreedom())} ignores it.</b> No sphere effect pays it.</p>`
-    : `<p class="hint standing"><b>Terrain Casting is in force.</b> Every sphere talent or ability costs one spell point more,
-        or one casting-time step, or blights your square and the eight around it (dead magic for you, for about a year).
-        The card table charges it on each cast. Everywhere else you apply it yourself.
-        Drawback Freedom (Terrain Casting), as a mythic path ability or a feat, switches it off.</p>`) : ''}
+    : `<p class="hint standing"><b>Terrain Casting is active.</b> Every sphere talent or ability costs one more spell point,
+        one casting-time step, or blights your square and the eight around it (dead magic for you for about a year).
+        The card table charges it on each cast; elsewhere, apply it yourself.
+        Drawback Freedom (Terrain Casting), as a mythic path ability or a feat, turns it off.</p>`) : ''}
 
       <h4 class="subhead">Bought off with drawback feats <span class="badge">${m.boughtOffCount ?? 0}</span></h4>
       ${textList(blist, tr.boughtOff || [])}
@@ -373,7 +372,7 @@ function magicTraditionPanel(model, m) {
         The ladder is 1 → 1+level/6, 2 → 1+level/3, 3 → level/2, 4 → 1+level/1.5,
         5 → level. It stops at 5. Each boon grants the difference between its step and
         the one below it. Spell points are granted per casting class
-        (${m.castingClassCount ?? 0}). Essence is one pool. It lands on the Akashic
+        (${m.castingClassCount ?? 0}). Essence is one pool and appears on the Akashic
         tab as the Essence Boon.
       </p>
       <div class="statline"><span class="label">Advanced Magic Training</span>
@@ -392,8 +391,8 @@ function boonSplit(m) {
     const pools = m.traditionPools || [];
     if (!pools.length) {
       return `${line('Tradition SP granted', 0, true)}
-        <p class="hint">Nothing to spend yet. A tradition grants one boon per drawback
-          left after the drawback feats have bought theirs off.</p>`;
+        <p class="hint">Nothing to spend yet. A tradition grants one boon per drawback not
+          bought off by drawback feats.</p>`;
     }
     // The pool's label closes the key only so that two pools of one size are
     // two controls when focus is put back after a render; the handler reads
@@ -410,14 +409,14 @@ function boonSplit(m) {
           <th scope="colgroup" colspan="2" class="splithead">As spell points</th>
           <th scope="colgroup" colspan="2" class="splithead">As essence</th></tr></thead>
         <tbody>${pools.map((p) => `<tr>
-          <th scope="row">${esc(p.label)} <span class="badge" title="What this pool's ${p.steps} steps come to in all">${p.points}</span></th>
+          <th scope="row">${esc(p.label)} <span class="badge" title="Total of this pool's ${p.steps} steps.">${p.points}</span></th>
           <td class="steps">${steps(p, p.spSteps, 'sp')}</td>
           <td class="gives total">${p.sp} SP</td>
           <td class="steps">${steps(p, p.essenceSteps, 'essence')}</td>
           <td class="gives total">${p.essence}</td>
         </tr>`).join('')}</tbody>
       </table></div>
-      <p class="hint">Steps, not points: each pool's steps add back up to its ladder
+      <p class="hint">These are steps, not points. Each pool's steps add up to its ladder
         however they are split.</p>
       ${line('Tradition SP granted', m.traditionSP ?? 0, true)}
       ${line('Essence granted', m.traditionEssence ?? 0, true)}`;
@@ -430,7 +429,7 @@ function magicGlobalsPanel(model, m) {
     // comparing with them (undoable).
     const hint = (mine, sheet) => (sheet && mine !== sheet
       ? `<button class="badge err sheetfig" data-action="forget-sheet-casting"
-          title="${esc(`The Google Sheet had ${sheet} when it was imported. Press to stop comparing the casting numbers with the sheet's own once they have moved on.`)}">sheet: ${esc(sheet)} ×</button>` : '');
+          title="${esc(`The imported workbook had ${sheet}. Press to stop comparing the casting numbers with the workbook's.`)}">sheet: ${esc(sheet)} ×</button>` : '');
     const s = m.sheet || {};
     return `<section class="panel">
       <h3>Casting numbers</h3>
@@ -440,9 +439,9 @@ function magicGlobalsPanel(model, m) {
       ${editLine('CL bonus', 'training.magic.clBonus', m.clBonus)}
       ${countsTowardLine(model, 'spheres.cl')}
       ${m.clWaiting ? `<p class="hint">No casting class has a level yet, so ${fmt(m.clWaiting)} caster level
-        is held back until one does.</p>` : ''}
+        is not applied until one does.</p>` : ''}
       ${(m.classes || []).filter((x) => x.levelWaiting).map((x) => `<p class="hint">${fmt(x.levelWaiting)}
-        ${esc(x.name)} level${Math.abs(x.levelWaiting) === 1 ? '' : 's'} forwarded — held until the character has a
+        ${esc(x.name)} level${Math.abs(x.levelWaiting) === 1 ? '' : 's'} forwarded. They apply once the character has a
         level of ${esc(x.name)}.</p>`).join('')}
       <div class="statline"><span class="label">Global DC</span>
         <span class="value big">${m.globalDC} ${hint(m.globalDC, s.totalDC)}${forwardedBadge(model, 'spheres.dc')}</span></div>
@@ -468,7 +467,7 @@ function magicGlobalsPanel(model, m) {
         <span class="value big${m.spShort ? ' bad' : ''}">${m.availableSP}</span></div>
       <p class="hint${m.spShort ? ' warn' : ''}">
         ${m.spShort
-    ? `Condensing that much essence costs ${m.spOnEssence} points and there are only ${m.totalSP}: ${m.spShort} short. Edit it on the Akashic tab.`
+    ? `Condensing this much essence costs ${m.spOnEssence} points, but there are only ${m.totalSP} (${m.spShort} short). Change it on the Akashic tab.`
     : `${SP_PER_TEMP_ESSENCE} spell points make 1 temporary essence, set on the Akashic tab.`}
       </p>` : ''}
       <p class="hint">Class SP = class levels + casting ability modifier.</p>
@@ -501,7 +500,7 @@ function sphereBonusPanel(model, sideKey, side) {
         width: '4rem',
         value: r[`${field}Num`],
         error: r[`${field}Error`],
-        title: `A number, or a formula — e.g. ${example}`,
+        title: `A number or a formula, e.g. ${example}`,
       },
     ) + forwardedBadge(model, sphereForwardKey(r.sphere) ? `${sphereForwardKey(r.sphere)}.${into}` : '', {
       waiting: into === 'cl' && r.clWaiting ? 'no casting class has a level yet' : '' });
@@ -523,12 +522,12 @@ function sphereBonusPanel(model, sideKey, side) {
                 thing being added to. */''}
           <th class="num" title="${esc(isMagic
     ? 'A bonus to this sphere’s caster level only'
-    : 'A bonus to this sphere’s attack bonus only — its BAB, or the skill ranks Alchemy and Beastmastery use instead')}">${
+    : 'A bonus to this sphere’s attack bonus only (its BAB, or the skill ranks Alchemy and Beastmastery use).')}">${
   rankLabel}</th>
           <th class="num" title="A bonus to this sphere’s save DC only">DC+</th>
           <th class="num">${TRAINING_SIDES[sideKey].totalLabel}</th></tr></thead>
         <tbody>${active.length ? active.map(render).join('')
-    : `<tr><td colspan="5" class="hint">No spheres yet. A talent from a class level, the tradition or a bonus talent adds its sphere here. Every sphere is computed below.</td></tr>`}</tbody>
+    : `<tr><td colspan="5" class="hint">No spheres yet. A talent from a class level, the tradition or a bonus talent adds its sphere here.</td></tr>`}</tbody>
       </table></div>
       <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">All spheres (${rows.length - active.length})</summary>
         <div class="tablewrap"><table><tbody>${rows.filter((r) => !active.includes(r)).map(render).join('')}</tbody></table></div>
@@ -579,21 +578,19 @@ function sphereSkillPanel(model) {
           <td>${esc(r.skill)}
             <div class="req${r.state === 'unknown' ? ' unsure' : ''}"
               title="${esc(r.state === 'met'
-    ? `${r.requirement} — found on this character.`
-    : `${r.requirement} — the sphere is here, but it still holds talents nobody has named. Write them in on the Alternate Training tab and this row answers itself; until then the tick beside it decides.`)}">${esc(r.requirement)}</div></td>
+    ? `${r.requirement}: found on this character.`
+    : `${r.requirement}: the sphere is here, but some of its talents are not named yet. Name them on the Alternate Training tab; until then, the tick beside it decides.`)}">${esc(r.requirement)}</div></td>
           <td class="num">${r.talents || ''}</td>
           <td class="num total">${r.current || ''}</td>
         </tr>`).join('')}</tbody>
       </table></div>
       <p class="hint">
-        5 ranks per talent in the associated sphere, capped at level. These feed
-        the Spheres column of the Skills tab automatically. A row appears only
-        when its requirement is on the character: the sphere for a <em>Base</em>
-        row, the named package or talent otherwise.
-        ${anyUnsure ? 'A <span class="req unsure">dotted</span> requirement is one the sheet cannot confirm yet. '
-    + 'The sphere is there, but it still holds talents nobody has written down, usually a technique\'s picks '
-    + 'from 7th level. Name them on the <strong>Alternate Training</strong> tab and the row resolves itself. '
-    + 'Until then the tick decides.' : ''}
+        5 ranks per talent in the associated sphere, up to your level. These go to the Spheres
+        column of the Skills tab. A row appears only when the character has its requirement: the
+        sphere for a <em>Base</em> row, or the named package or talent.
+        ${anyUnsure ? 'A <span class="req unsure">dotted</span> requirement cannot be confirmed yet because '
+    + 'the sphere has unnamed talents, usually a technique\'s picks from 7th level. Name them on the '
+    + '<strong>Alternate Training</strong> tab; until then, the tick decides.' : ''}
       </p>
     </section>`;
   }
@@ -667,8 +664,8 @@ function templateGroup(ctx, model, ti, fi, f, total) {
         </span>
       </div>
       ${f.temporary ? `<p class="hint pending">Temporary. The import could not place these cells
-        under a feature, so they were kept here rather than dropped. Move their contents into
-        abilities of their own, then delete this once it is empty.</p>` : ''}
+        under a feature. Move their contents into their own abilities, then delete this when it
+        is empty.</p>` : ''}
       ${itemArea(model, list, fi, 'text', f.text, 4)}
       ${templateTables(model, ctx, ti, path, f)}
       ${kids.length ? `<div class="tkids">
@@ -774,7 +771,7 @@ function templateTables(model, ctx, ti, path, f) {
             ${homes.map(([p, label]) => `<option value="${p}">${esc(label)}</option>`).join('')}
           </select>` : ''}
           <button data-view data-cells="${table}" aria-pressed="${raw}"
-            title="Show every cell as it is stored, merge markers and all">Cells</button>
+            title="Show every cell as stored, including merge markers.">Cells</button>
           <button data-action="add-template-column" data-path="${table}">+ Column</button>
           ${removeButton(`${path}.tables`, bi, { what: 'table', text: 'Remove table' })}
         </div>
