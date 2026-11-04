@@ -39,15 +39,15 @@ export const CARD_MODIFICATIONS = [
   { key: 'bleedingHand', label: 'Bleeding Hand', kind: 'count', max: 2, needs: null,
     hint: 'Discard a card from your hand whenever you take a standard or full-round action that does not play or discard one. Taken twice: move, swift and immediate actions too.' },
   { key: 'coloredMana', label: 'Colored Mana', kind: 'colors', needs: 'manaPool',
-    hint: 'Mana Point cards and effects each have a colour; mana only pays for effects of its colour. Three colours: no colour may be more than half your effects. Five colours: no more than a quarter, and it counts as two drawbacks.' },
+    hint: 'Mana Point cards and effects each have a color; mana only pays for effects of its color. Three colors: no color may be more than half your effects. Five colors: no more than a quarter, and it counts as two drawbacks.' },
   { key: 'deckout', label: 'Deckout', kind: 'bool', needs: 'cooldown',
     hint: 'You can never shuffle the discard pile back into the deck. Every turn the deck is empty you take 4 Constitution burn (Charisma if you have no Con). Reaching 0 kills you.' },
   { key: 'exposedGrip', label: 'Exposed Grip', kind: 'bool', needs: 'cooldown',
-    hint: 'No card at the start of your turn; a move, swift or standard action draws one. Whenever you are hit or fail a save, discard a card — or take 4 Con burn if your hand is empty.' },
+    hint: 'No card at the start of your turn; a move, swift or standard action draws one. Whenever you are hit or fail a save, discard a card, or take 4 Con burn if your hand is empty.' },
   { key: 'gradualRamp', label: 'Gradual Ramp', kind: 'bool', needs: 'manaPool',
     hint: 'Only one Mana Point card may be played from your hand per round.' },
   { key: 'lifeboundDeck', label: 'Lifebound Deck', kind: 'bool', needs: null,
-    hint: 'Three extra piles — Stun, Wounds, Death. Lifebound value = one third of total HP divided by the deck size at the start of the day (minimum 1). Every Lifebound value of damage lost moves a card down the piles; every Lifebound value healed moves one back.' },
+    hint: 'Three extra piles: Stun, Wounds and Death. Lifebound value = one third of total HP divided by the deck size at the start of the day (minimum 1). Every Lifebound value of damage lost moves a card down the piles; every Lifebound value healed moves one back.' },
   { key: 'singleton', label: 'Singleton', kind: 'bool', needs: 'cooldown',
     hint: 'One copy of each card in the deck; Mana Point cards not affected by Specialized Mana Cards may still repeat.' },
   { key: 'stagnantPool', label: 'Stagnant Pool', kind: 'bool', needs: 'manaPool', clashes: 'manaGraveyard',
@@ -1076,28 +1076,28 @@ function deckFigures(inDeck, { cam, rainbow, mods, colors, coloredCount = null }
     // are its own. The rule allows three or five and nothing else.
     const n = coloredCount ?? mods.coloredMana;
     if (coloredCount !== null && coloredCount !== 3 && coloredCount !== 5) {
-      issues.push(`Colored Mana names ${coloredCount} colour${coloredCount === 1 ? '' : 's'}; the rule wants three or five.`);
+      issues.push(`Colored Mana names ${coloredCount} color${coloredCount === 1 ? '' : 's'}; the rule wants three or five.`);
     }
     // Rainbow Efficiency loosens the balance: ¾ of effects may share a
     // colour with three colours in play, ½ with five.
     const share = n >= 5 ? (rainbow ? 0.5 : 0.25) : (rainbow ? 0.75 : 0.5);
     const named = colorsInPlay.split('').filter(Boolean);
     if (named.length && named.length !== n) {
-      issues.push(`Colored Mana names ${n} colours but ${named.length} ${named.length === 1 ? 'is' : 'are'} in play (${named.join(', ')}).`);
+      issues.push(`Colored Mana names ${n} colors but ${named.length} ${named.length === 1 ? 'is' : 'are'} in play (${named.join(', ')}).`);
     }
     const few = (list) => `${list.slice(0, 3).map((x) => x.name || x.effect || 'a card').join(', ')}${list.length > 3 ? '…' : ''}`;
     // Every effect is assigned a colour, and nothing wears a colour the
     // deck does not run. (A fused card's mana half may carry two colours:
     // that is how the sheet's own deck is built, and left alone.)
     const uncoloured = inDeck.filter((card) => isEffect(card) && !card.calc.colors && !card.calc.artifact);
-    if (uncoloured.length) issues.push(`${uncoloured.length} effect card${uncoloured.length === 1 ? ' has' : 's have'} no colour (${few(uncoloured)}); Colored Mana assigns every effect one.`);
+    if (uncoloured.length) issues.push(`${uncoloured.length} effect card${uncoloured.length === 1 ? ' has' : 's have'} no color (${few(uncoloured)}); Colored Mana assigns every effect one.`);
     if (colors) {
       const off = inDeck.filter((card) => [...card.calc.colors, ...card.mana].some((k) => !colors.includes(k)));
-      if (off.length) issues.push(`${off.length} card${off.length === 1 ? ' wears' : 's wear'} a colour the deck does not run (${few(off)}); the colours in play are ${named.join(', ')}.`);
+      if (off.length) issues.push(`${off.length} card${off.length === 1 ? ' wears' : 's wear'} a color the deck does not run (${few(off)}); the colors in play are ${named.join(', ')}.`);
     }
     for (const k of named) {
       const t = colorTally[k];
-      if (t && effectCards && t.effects === 0) issues.push(`No ${CARD_COLORS.find(([x]) => x === k)[1]} effect in the deck; every colour needs at least one.`);
+      if (t && effectCards && t.effects === 0) issues.push(`No ${CARD_COLORS.find(([x]) => x === k)[1]} effect in the deck; every color needs at least one.`);
       if (t && effectCards && t.effects > effectCards * share) {
         const cap = share === 0.75 ? 'three quarters' : share === 0.5 ? 'half' : 'quarter';
         issues.push(`${CARD_COLORS.find(([x]) => x === k)[1]} effects are ${t.effects} of ${effectCards}, over the ${cap} ${rainbow ? 'Rainbow Efficiency' : 'Colored Mana'} allows.`);
@@ -1108,7 +1108,7 @@ function deckFigures(inDeck, { cam, rainbow, mods, colors, coloredCount = null }
     const maxColors = rainbowMaxColors(rainbow, n);
     const over = inDeck.filter((card) => card.color.length > maxColors);
     if (over.length) {
-      issues.push(`${over.length} card${over.length === 1 ? ' costs' : 's cost'} more than ${maxColors} colour${maxColors === 1 ? '' : 's'} (${over.slice(0, 3).map((x) => x.name || x.effect).join(', ')}${over.length > 3 ? '…' : ''}); that takes ${rainbow ? 'Improved ' : ''}Rainbow Efficiency.`);
+      issues.push(`${over.length} card${over.length === 1 ? ' costs' : 's cost'} more than ${maxColors} color${maxColors === 1 ? '' : 's'} (${over.slice(0, 3).map((x) => x.name || x.effect).join(', ')}${over.length > 3 ? '…' : ''}); that takes ${rainbow ? 'Improved ' : ''}Rainbow Efficiency.`);
     }
   }
   if (mods.singleton) {
@@ -1230,7 +1230,7 @@ export function coverColors(colors, cards) {
 
 /** The orders the deck view offers; the first is the order the cards were typed in. */
 export const DECK_SORTS = [
-  ['', 'as entered'], ['color', 'colour (WUBRG)'], ['cost', 'cost'], ['tags', 'tags'], ['sphere', 'sphere'],
+  ['', 'as entered'], ['color', 'color (WUBRG)'], ['cost', 'cost'], ['tags', 'tags'], ['sphere', 'sphere'],
 ];
 
 /** Colour order for sorting: white, blue, black, red, green. */
@@ -1626,7 +1626,7 @@ export function castCheck(model, id, who = null, terrain = null) {
     const untapped = t.mana.filter((m) => !m.tapped).map((m) => String(model.tableCard(m.id)?.mana || ''));
     const strict = card.calc?.rainbow === 2;
     const covered = strict ? coverColors(colors, untapped) : [...colors].every((c) => untapped.some((letters) => letters.includes(c)));
-    if (!covered) { ok = false; why = strict ? `needs a Mana Point card for each colour (${colors}), one colour a card` : `needs mana of each colour (${colors})`; }
+    if (!covered) { ok = false; why = strict ? `needs a Mana Point card for each color (${colors}), one color a card` : `needs mana of each color (${colors})`; }
   }
   if (ok && discount) why = `${why ? `${why}; ` : ''}Rainbow Efficiency: ${discount} off`;
   return { ok, need, spend, worth, have: usable.length, why, caster, discount, terrain: toll };
@@ -2499,7 +2499,7 @@ export function moveCard(model, from, index, to, { copy = false } = {}) {
   const card = src?.[index];
   if (!card) return { ok: false, why: 'no such card' };
   const active = !!model.data.cardcasting?.table?.active;
-  if (!copy && from === 'cardcasting.cards' && active) return { ok: false, why: 'the deck is in play: end the encounter first, or copy it instead' };
+  if (!copy && from === 'cardcasting.cards' && active) return { ok: false, why: 'the deck is in play. End the encounter first, or copy the card instead' };
   const dest = model.list(to);
   if (copy) {
     const { calc, ...rest } = card;

@@ -1247,11 +1247,11 @@ console.log('\nthe card table has three faces: the tab, a table window, a hand w
   c.data.cardcasting.cards[0].cost = '2';
   c.recompute();
   const rainbow = subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' });
-  ok('a two-colour face shows its discounted cost', /Rainbow Efficiency: 1 off for 2 colours — 1 to cast"[^>]*>→ 1</.test(rainbow));
+  ok('a two-colour face shows its discounted cost', /Rainbow Efficiency: 1 off for 2 colors. Costs 1 to cast."[^>]*>→ 1</.test(rainbow));
   c.tableStart();
   const bolt = c.data.cardcasting.table.hand.find((id) => id.startsWith('0#')) || c.data.cardcasting.table.deck.find((id) => id.startsWith('0#'));
   c.tableMove(bolt, 'hand');
-  ok('and the hand shows the cost to pay, the typed one on hover', /title="Typed 2; Rainbow Efficiency takes 1 off">1</.test(subsystems.cardTableView(c, ctx, 'hand')));
+  ok('and the hand shows the cost to pay, the typed one on hover', /title="Cost 2, reduced by 1 by Rainbow Efficiency.">1</.test(subsystems.cardTableView(c, ctx, 'hand')));
   c.tableEnd();
 }
 
@@ -1308,7 +1308,7 @@ console.log('\na squad member takes its own deck manipulations');
   c.tableMove(bolt, 'hand');
   c.tablePlay(bolt, 'ongoing');
   const control = subsystems.cardTableView(c, ctx, 'control', cc.id);
-  ok('the control view is the member\'s hand with its buttons, and says whose it is', control.includes('controlview') && control.includes(`data-card="${mend}"`) && new RegExp(`data-table="play\\|${mend}\\|cast"`).test(control) && /You are running Lira/.test(control));
+  ok('the control view is the member\'s hand with its buttons, and says whose it is', control.includes('controlview') && control.includes(`data-card="${mend}"`) && new RegExp(`data-table="play\\|${mend}\\|cast"`).test(control) && /You control Lira/.test(control));
   ok('the character\'s cards are not in that hand, and in play they take no press', !new RegExp(`class="mcard mini[^"]*" [^>]*data-card="${bolt}"[^]*?data-table="resolve\\|${bolt}`).test(control) && control.includes('f-play') && !control.includes(`data-table="resolve|${bolt}|"`));
   ok('no round controls, no windows, no peek, no spell points of the player\'s', !/data-table="next\|/.test(control) && !/data-table="window\|/.test(control) && !/data-table="peek\|/.test(control) && !/data-table="sp\|/.test(control) && !/data-table="exileRandom\|/.test(control));
   ok('the table window itself is unchanged by the member', subsystems.cardTableView(c, ctx, 'table').includes(`data-table="resolve|${bolt}|"`));

@@ -12113,7 +12113,7 @@ console.log('card casting -- the deck reads off the Cardcaster Deck tab');
     [true, true, true, 3, false]);
   check('three colours in play', p.colors, 'RBU');
   check('worth seven drawbacks for boons', k.drawbackValue, 7);
-  check('the deck is legal as imported, but for the placeholder card with no colour', k.issues, ['1 effect card has no colour (Keep); Colored Mana assigns every effect one.']);
+  check('the deck is legal as imported, but for the placeholder card with no colour', k.issues, ['1 effect card has no color (Keep); Colored Mana assigns every effect one.']);
   check('the identical-effect spread is 1 to 4', [k.spreadMin, k.spreadMax], [1, 4]);
   // A fused card: the effect, and the mana it carries, split from one cell.
   const reanimate = p.cards[1];
@@ -12156,7 +12156,7 @@ console.log('card casting -- the deck reads off the Cardcaster Deck tab');
   check('and count towards both colours', c.data.cardcasting.calc.colorTally.R.effects, 21);
   check('two colours is within Rainbow Efficiency', c.data.cardcasting.calc.issues.some((i) => /more than/.test(i)), false);
   c.setItem('cardcasting.cards', 0, 'color', 'RUB');
-  check('three is not, without Improved', c.data.cardcasting.calc.issues.some((i) => /more than 2 colours/.test(i)), true);
+  check('three is not, without Improved', c.data.cardcasting.calc.issues.some((i) => /more than 2 colors/.test(i)), true);
   // Rainbow Efficiency's discount comes off the typed cost.
   const cost0 = c.data.cardcasting.cards[0].cost;
   const card0 = () => c.data.cardcasting.cards[0].calc;
@@ -13960,7 +13960,7 @@ console.log('\na card moves between the deck and the sideboard, or is copied acr
   check('the same list, or no such card, is refused', [c.moveCard('cardcasting.cards', 0, 'cardcasting.cards').ok, c.moveCard('cardcasting.cards', 9, 'cardcasting.sideboard').ok, c.moveCard('weapons', 0, 'cardcasting.sideboard').ok], [false, false, false]);
   c.tableStart();
   const held = c.moveCard('cardcasting.cards', 0, 'cardcasting.sideboard');
-  check('while the deck is in play nothing leaves it, and the reason is given', [held.ok, /end the encounter/.test(held.why), deck()], [false, true, ['Big Sky', 'Spare']]);
+  check('while the deck is in play nothing leaves it, and the reason is given', [held.ok, /end the encounter/i.test(held.why), deck()], [false, true, ['Big Sky', 'Spare']]);
   check('but a copy, and a card joining the deck, are fine', [c.moveCard('cardcasting.cards', 0, 'cardcasting.sideboard', { copy: true }).ok, c.moveCard('cardcasting.sideboard', 0, 'cardcasting.cards').ok, deck()], [true, true, ['Big Sky', 'Spare', 'Desert']]);
   const html = subsystemPanels.cardcastingPanel(c, { deckView: 'deck', openCards: new Set() });
   check('the face edits the subtitle and offers the move and the copy', [html.includes('data-item="cardcasting.cards|0|subtitle"'), html.includes('data-card-move="cardcasting.cards|0|cardcasting.sideboard|move" disabled'), html.includes('data-card-move="cardcasting.cards|0|cardcasting.sideboard|copy"'), html.includes('data-card-move="cardcasting.sideboard|0|cardcasting.cards|move" ')], [true, true, true, true]);
@@ -14263,7 +14263,7 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   let k = p.calc;
   const lira = k.squad.find((m) => m.id === cc.id);
   check('the companion is a squad member: Card Casting, the same switches, its own colours', [lira.ok, lira.why, lira.colors, lira.casts, lira.cl], [true, '', 'WG', true, cc.calc.casting.cl]);
-  check('its deck is checked on its own, and two colours is not a Colored Mana the rule allows', [lira.deck.deckSize, lira.deck.effectCards, lira.deck.issues], [24, 20, ['Colored Mana names 2 colours; the rule wants three or five.']]);
+  check('its deck is checked on its own, and two colours is not a Colored Mana the rule allows', [lira.deck.deckSize, lira.deck.effectCards, lira.deck.issues], [24, 20, ['Colored Mana names 2 colors; the rule wants three or five.']]);
   check('the character\'s own figures are the character\'s deck alone', [k.deckSize, k.colorsInPlay], [21, 'RBU']);
   check('a card owned by nobody on the sheet is the character\'s, and said so', [c.cardOwner(p.cards[4]), k.issues.some((i) => /no longer on the sheet/.test(i))], ['', true]);
   check('the combined deck is everything', [k.combined.deckSize, k.combined.colors, k.combined.members], [45, 'RBUWG', 1]);
@@ -14333,7 +14333,7 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   const dawn = () => p.cards.find((x) => x.name === 'Dawn').calc;
   const dusk = () => p.cards.find((x) => x.name === 'Dusk').calc;
   check('the member\'s two-colour card is discounted by its own feat', [p.calc.squad.find((m) => m.id === cc.id).rainbow, dawn().cost, dawn().discount], [1, 2, 1]);
-  check('the character\'s is not, without the feat, and is flagged', [dusk().cost, dusk().rainbow, p.calc.issues.some((i) => /more than 1 colour/.test(i))], [2, 0, true]);
+  check('the character\'s is not, without the feat, and is flagged', [dusk().cost, dusk().rainbow, p.calc.issues.some((i) => /more than 1 color/.test(i))], [2, 0, true]);
   c.data.training.magic.tradition.boughtOff = ['Rainbow Efficiency [Deck]'];
   c.recompute();
   check('with the feat the character\'s card costs one less', [dusk().cost, dusk().discount, dusk().rainbow], [1, 1, 1]);
@@ -14359,7 +14359,7 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   c.tableMove(duskId, 'hand');
   for (const id of [...t.mana.map((m) => m.id)]) c.tableMove(id, 'deck');
   c.tableMove(find('Alloy'), 'mana');
-  check('one two-colour Mana Point card is not a card for each colour under Improved', [c.castCheck(duskId).ok, c.castCheck(duskId).why], [false, 'needs a Mana Point card for each colour (RB), one colour a card']);
+  check('one two-colour Mana Point card is not a card for each colour under Improved', [c.castCheck(duskId).ok, c.castCheck(duskId).why], [false, 'needs a Mana Point card for each color (RB), one color a card']);
   c.tableMove(find('Ruby'), 'mana');
   check('a card for each colour is', [c.castCheck(duskId).ok, c.castCheck(duskId).need, c.castCheck(duskId).why], [true, 1, 'Rainbow Efficiency: 1 off']);
   c.data.training.magic.tradition.boughtOff = ['Rainbow Efficiency [Deck]'];
