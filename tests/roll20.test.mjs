@@ -401,7 +401,7 @@ console.log('a question the sheet cannot answer becomes a Roll20 query');
     by('Crit damage'), `4d6+14+(${QUERY})*2`);
   check('and the roll says what it will ask',
     spec.notes.find((n) => n.label === 'Question')?.text,
-    'Deathgrip — answer the same way each time you are asked');
+    'Deathgrip: answer the same way each time you are asked');
   check('the questions are listed for a caller that would rather ask them',
     spec.queries.map((q) => q.label), ['Deathgrip']);
 

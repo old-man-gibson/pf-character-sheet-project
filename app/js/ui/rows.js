@@ -317,7 +317,7 @@ export function working(model, key, shown) {
 }
 
 /** The sentence a moved number wears on its hover: what it was, and what moved it. */
-export const movedTitle = (base, sources) => `Base ${base} — with ${sources || 'buffs and conditions'} applied`;
+export const movedTitle = (base, sources) => `Base ${base}. Shown with ${sources || 'buffs and conditions'} applied.`;
 
 /**
  * A number a condition or a buff has moved, in place of the base: red when

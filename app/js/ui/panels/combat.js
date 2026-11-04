@@ -36,9 +36,9 @@ import {
 
 /** What a template feature's type means, on the dropdown that sets it. */
 const TEMPLATE_TYPE_HINTS = {
-  Ex: 'Extraordinary — not magical, works in an antimagic field',
-  Su: 'Supernatural — magical, but no spell resistance or concentration',
-  Sp: 'Spell-like — as a spell, subject to spell resistance',
+  Ex: 'Extraordinary: not magical, works in an antimagic field',
+  Su: 'Supernatural: magical, but no spell resistance or concentration',
+  Sp: 'Spell-like: works like a spell, subject to spell resistance',
 };
 
 /** A table starts as two named columns and a row, which is enough to type into. */
@@ -302,7 +302,7 @@ function weaponSet(model, block, bi, si, set, list, spheres, Unit = 'Weapon') {
       </table>
       <div class="listrow weapondrawback">
         ${itemText(list, si, 'drawback', set.drawback, 'Drawback…', true)}
-        ${itemCheck(list, si, 'boughtOff', set.boughtOff, 'off', 'Bought off — which costs the talent it bought')}
+        ${itemCheck(list, si, 'boughtOff', set.boughtOff, 'off', 'Bought off. This removes the talent the drawback granted.')}
       </div>
     </div>`;
   }
@@ -399,7 +399,7 @@ function boonSplit(m) {
     // the first three parts.
     const steps = (p, value, kind) => `<input type="number" min="0" max="${p.steps}"
       value="${value}" data-split="training.magic.tradition.boonSP|${p.steps}|${kind}|${esc(p.label)}"
-      aria-label="${esc(p.label)} — steps as ${kind === 'sp' ? 'spell points' : 'essence'}">`;
+      aria-label="${esc(p.label)}: steps as ${kind === 'sp' ? 'spell points' : 'essence'}">`;
 
     // Each split is a steps box with what it comes to straight beside it, the
     // pair under one heading; see table.build.boonsplit in sheet.css.

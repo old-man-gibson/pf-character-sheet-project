@@ -1941,7 +1941,7 @@ function companionAttacksPanel(model, cc) {
           <td>${itemNum(list, i, 'bonus', a.bonus)}${
             forwardedBadge(model, `${sn}.attack.${companionAttackKey(a)}`)}</td>
           <td class="num total"><span class="rollpair">${fmt(a.toHit ?? 0)}${
-            rollButton(model, roll, `attack:${i}`, `${a.type || 'this attack'} — attack and damage`)}</span></td>
+            rollButton(model, roll, `attack:${i}`, `${a.type || 'this attack'}: attack and damage`)}</span></td>
           <td>${esc(a.damageType || '')}</td>
           <td>${itemArea(model, list, i, 'qualities', a.qualities, 1)}</td>
           ${rowRemove(list, i)}
@@ -2870,7 +2870,7 @@ function tableHead(s) {
     const windows = !faces.windows ? '' : `<span class="pair winctl">
         ${tableBtn('window', 'table', '⧉ Table window', { title: 'Open the table in a new window for a shared screen. It shows cards in play, mana, the piles and the log, but not the hand.' })}
         ${tableBtn('window', 'hand', '⧉ Hand window', { title: 'Open your hand in a new window for a private screen. It shows the hand, the controls and the top of the deck.' })}
-        ${check('cardcasting.copyOnCast', p.copyOnCast, 'Copy for Roll20 on cast', 'Every Cast, Ongoing, Spring and Retrace also puts the card on the clipboard as a Roll20 message — paste it into chat')}
+        ${check('cardcasting.copyOnCast', p.copyOnCast, 'Copy for Roll20 on cast', 'Every Cast, Ongoing, Spring and Retrace also copies the card as a Roll20 message to paste into chat.')}
       </span>`;
 
     const notes = [];
@@ -2882,8 +2882,8 @@ function tableHead(s) {
     }
     if (active && k.handMax) notes.push(`Tight Hand: ${t.hand.length} of ${k.handMax} in hand${tc.handOver ? ` — ${tc.handOver} over` : ''}.`);
     if (active && p.mods.gradualRamp) notes.push(`Gradual Ramp: ${t.manaPlayed} Mana Point card${t.manaPlayed === 1 ? '' : 's'} played this round (one allowed).`);
-    if (active && p.mods.deckout && !t.deck.length) notes.push('Deckout: the deck is empty — 4 Constitution burn every turn it stays so.');
-    if (active && tc.missing) notes.push(`${tc.missing} cop${tc.missing === 1 ? 'y' : 'ies'} added to the deck since the shuffle — in play after the next shuffle.`);
+    if (active && p.mods.deckout && !t.deck.length) notes.push('Deckout: the deck is empty; 4 Constitution burn every turn it stays empty.');
+    if (active && tc.missing) notes.push(`${tc.missing} cop${tc.missing === 1 ? 'y' : 'ies'} added to the deck since the shuffle. They join the deck at the next shuffle.`);
     if (active && p.mods.bleedingHand) notes.push(`Bleeding Hand: discard a card for each ${p.mods.bleedingHand === 2 ? 'action' : 'standard or full-round action'} that does not play or discard one.`);
 
     const lastRoll = t.lastRoll && model.tableCard(t.lastRoll.id)
@@ -3206,7 +3206,7 @@ function deckSummaryPanel(p, k) {
       ${line('Identical-effect spread', `${k.spreadMin ?? 0}–${k.spreadMax ?? 0} copies (may differ by up to ${k.cam ?? 0})`)}
       ${line('Effect cards', `${k.effectCards ?? 0} — ${k.uniqueEffects ?? 0} distinct effect${k.uniqueEffects === 1 ? '' : 's'}`)}
       ${line('Mana point cards', `${k.manaCards ?? 0}${k.fused ? ` (${k.fused} fused onto an effect)` : ''}`)}
-      ${k.lifebound ? line('Lifebound value', `${k.lifebound} — HP ÷ 3 ÷ deck size, minimum 1`) : ''}
+      ${k.lifebound ? line('Lifebound value', `${k.lifebound} (HP ÷ 3 ÷ deck size, minimum 1)`) : ''}
       ${inPlay.length ? `<div class="tally">${inPlay.map((c) => `<span class="t">${manaChips(c)}
         <span class="n">${tally[c]?.effects ?? 0}</span> effect${(tally[c]?.effects ?? 0) === 1 ? '' : 's'} ·
         <span class="n">${tally[c]?.mana ?? 0}</span> mana</span>`).join('')}</div>` : ''}
@@ -3577,12 +3577,12 @@ function cardStatBars(model, list, i, card) {
       return /[{}()+*/]/.test(v) || v.length > 14;
     });
     return `<div class="bar stats${wide ? ' rows' : ''}">
-        ${stat('save', 'save', 'Saving throw: Ref, Fort, Will or none — or a formula in braces', 'card-saves')}
-        ${stat('dc', 'DC', 'Save DC: a number or a formula — caster.dc, 10 + floor(caster.level/2) + int.mod', 'card-dcs')}
+        ${stat('save', 'save', 'Saving throw: Ref, Fort, Will or none, or a formula in braces', 'card-saves')}
+        ${stat('dc', 'DC', 'Save DC: a number or a formula, such as caster.dc or 10 + floor(caster.level/2) + int.mod', 'card-dcs')}
         ${stat('range', 'range', 'Range: melee, close, medium or long (worked out in feet for the caster level), a number of feet, or a formula', 'card-ranges')}
         ${stat('target', 'target', 'Target or area, such as single, line, cone or burst, or a formula.', 'card-targets')}
-        ${stat('duration', 'duration', 'Duration: instantaneous, concentration, 1 round/level… — or a formula, {caster.level} rounds', 'card-durations')}
-        ${stat('casting', 'cast', 'Casting time: standard action, swift action, full-round action, 1 minute… — or a formula', 'card-casting-times')}
+        ${stat('duration', 'duration', 'Duration: instantaneous, concentration, 1 round/level…, or a formula such as {caster.level} rounds', 'card-durations')}
+        ${stat('casting', 'cast', 'Casting time: standard action, swift action, full-round action, 1 minute…, or a formula', 'card-casting-times')}
       </div>
       <div class="bar stats dmg">
         <span class="stat grow" title="Damage types separated by commas, such as fire, cold, or a formula in braces."><small>dmg</small>
@@ -3715,10 +3715,10 @@ function deckTableBody(model, ctx, p, k, own = '') {
     return `<section class="panel span2">
       <h3>Deck
         <span class="badge">${d.deckSize ?? 0} cards</span>
-        ${!who && p.useD100 ? `<span class="badge">d100 — reroll above ${k.deckSize ?? 0}</span>` : ''}
+        ${!who && p.useD100 ? `<span class="badge">d100: reroll above ${k.deckSize ?? 0}</span>` : ''}
         <span class="pair" style="margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0">
           <label class="pair">Sort ${select('cardcasting.deckSort', p.deckSort, DECK_SORTS, null, { attrs: 'aria-label="Sort the deck" title="The display order. The cards keep their order in the list."' })}</label>
-          ${check(own ? `cardcasting.harrowBy.${own}` : 'cardcasting.harrow', harrowFor(p, own), 'Harrow deck — suits & alignments')}
+          ${check(own ? `cardcasting.harrowBy.${own}` : 'cardcasting.harrow', harrowFor(p, own), 'Harrow deck (suits and alignments)')}
         </span>
       </h3>
       <p class="hint">Cost and color are at the top right and set the frame color; click the color
@@ -3767,7 +3767,7 @@ function squadPanel(model, p, k, ctx = {}) {
     if (!squad.length) return '';
     const c = k.combined || {};
     return `<section class="panel span2">
-      <h3>Squad — Multi-Headed Play
+      <h3>Squad: Multi-Headed Play
         <span class="badge">${c.members || 0} deck${c.members === 1 ? '' : 's'} combine</span>
         <span class="badge" title="All decks combined, with every member at the table.">${c.deckSize ?? 0} cards in all</span>
         ${c.colors ? `<span class="pair">${manaChips(c.colors, '')}</span>` : ''}

@@ -90,7 +90,7 @@ export function renderSystemManagerPanel(model, ctx) {
 
     const mode = model.viewMode();
     return `<div class="grid">${campaignPanel(model, ctx)}<section class="panel span2">
-      <h3>Tab bar — ${mode === 'session' ? 'session view' : 'build view'}
+      <h3>Tab bar: ${mode === 'session' ? 'session view' : 'build view'}
         <button data-view data-action="view-mode" style="margin-left:auto" title="${mode === 'session'
     ? 'Switch to the build view and edit its bar' : 'Switch to the session view and edit its bar'}">
           Switch to ${mode === 'session' ? 'build' : 'session'} view</button>
@@ -123,7 +123,7 @@ export function renderSystemManagerPanel(model, ctx) {
     </section>
 
     <section class="panel span2">
-      <h3>Extra — weird systems</h3>
+      <h3>Uncommon systems</h3>
       <p class="hint">
         Uncommon systems: Cardcasting, Technique List and AutoTechnique. These stay off the bar
         unless the character uses them.
@@ -302,7 +302,7 @@ function extensionBlocksPanel(model, ctx) {
     }).join('');
 
     return `<section class="panel span2">
-      <h3>Extensions — building blocks</h3>
+      <h3>Extension blocks</h3>
       <p class="hint">
         Blocks from the active extension packs: ${packs.length
     ? `${packs.length} pack${packs.length === 1 ? '' : 's'} on, ${blocks.length} block${blocks.length === 1 ? '' : 's'}.`

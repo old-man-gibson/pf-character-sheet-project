@@ -77,7 +77,7 @@ export function tokenTitle(model, seg, scope, local = null) {
   if (seg.kind === 'ref') {
     const def = (model.inlineDefinitions || []).find((d) => d.name === seg.name);
     return def
-      ? `{${seg.name}} — defined as ${workingLine(def.expr, scope)}`
+      ? `{${seg.name}}: defined as ${workingLine(def.expr, scope)}`
       : `{${seg.name}}`;
   }
   // A forwarded bonus says where it goes before it says how it was worked

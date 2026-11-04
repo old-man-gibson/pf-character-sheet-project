@@ -119,7 +119,7 @@ export function sessionRolls(model, card, answers = null) {
   if (extra) {
     try {
       const first = rolls.findIndex(r => r.label.startsWith('Attack'));
-      if (first < 0) throw new Error('Nothing to repeat yet — link a weapon from the picker, or fill in Attack bonus or formula (e.g. attack.melee)');
+      if (first < 0) throw new Error('Nothing to repeat yet. Link a weapon from the picker, or fill in Attack bonus or formula (e.g. attack.melee)');
       const copies = [];
       for (const group of splitTopLevel(expand(extra))) {
         if (!group.trim()) continue;

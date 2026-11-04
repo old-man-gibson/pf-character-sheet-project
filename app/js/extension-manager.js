@@ -623,7 +623,7 @@ Hit Die: d12.
         <span class="kind">${e.kind === 'stance' ? 'Stance' : 'Maneuver'}</span>
         <span class="what"><strong>${esc(e.name || '(unnamed)')}</strong>
           <span class="d">${esc([e.level ? `level ${e.level}` : '', ...cells].filter(Boolean).join(' · '))}${
-  e.text ? esc(` — ${e.text.slice(0, 90)}${e.text.length > 90 ? '…' : ''}`) : ' — no description'}</span></span>
+  e.text ? esc(`: ${e.text.slice(0, 90)}${e.text.length > 90 ? '…' : ''}`) : ': no description'}</span></span>
         <input type="text" data-mdisc="${i}" value="${esc(mdisc[i])}"
           placeholder="Discipline" title="The discipline this maneuver belongs to."
           style="width:11rem"${mdisc[i] ? '' : ' class="needs"'}>
@@ -1207,7 +1207,7 @@ Hit Die: d12.
           ${F(i, 'classSkills', 'Class skills', b.classSkills.join(', '), { wide: true, ph: 'Acrobatics, Climb, Craft, … (comma-separated; ticked on the Skills tab when added)' })}
           ${A(i, 'features', 'Features by level', b.features.map((f) => `${f.level}: ${f.name}${f.text ? ` — ${f.text}` : ''}`).join('\n'), 6,
     'one per line, "level: name — text", e.g.\n1: Fast movement, Rage\n2: Rage power, Uncanny dodge\n3: Trap sense +1', false)}
-          ${A(i, 'text', 'Description', b.text, 3, 'flavour, role, alignment — free text')}
+          ${A(i, 'text', 'Description', b.text, 3, 'flavor, role, alignment (free text)')}
           ${F(i, 'source', 'Source', b.source, { wide: true, ph: 'book and page, or a URL' })}
         </div>`;
       case 'race':
@@ -1227,7 +1227,7 @@ Hit Die: d12.
         return `<div class="fields">
           ${F(i, 'name', 'Trait name', b.name)}
           ${F(i, 'race', 'Race', b.race, { ph: 'Dwarf' })}
-          ${F(i, 'replaces', 'Replaces', b.replaces.join(', '), { wide: true, ph: 'hatred, stonecunning — the standard traits it swaps out when added (read from the text if blank)' })}
+          ${F(i, 'replaces', 'Replaces', b.replaces.join(', '), { wide: true, ph: 'hatred, stonecunning: the standard traits it replaces (read from the text if blank)' })}
           ${A(i, 'text', 'Text', b.text, 3)}
           ${F(i, 'source', 'Source', b.source, { wide: true })}
         </div>`;
@@ -1238,7 +1238,7 @@ Hit Die: d12.
             <option value="" ${!b.type ? 'selected' : ''}>—</option>
             ${['Ex', 'Su', 'Sp'].map((t) => `<option ${b.type === t ? 'selected' : ''}>${t}</option>`).join('')}
           </select></label>
-          ${F(i, 'group', 'Group (template) it joins', b.group, { ph: 'e.g. Barbarian — made if missing' })}
+          ${F(i, 'group', 'Group (template) it joins', b.group, { ph: 'e.g. Barbarian (created if missing)' })}
           ${A(i, 'text', 'Text', b.text, 5)}
           ${F(i, 'source', 'Source', b.source, { wide: true })}
         </div>`;
@@ -1273,7 +1273,7 @@ Hit Die: d12.
           ${F(i, 'class', 'Class it applies to', b.class, { ph: 'Legendary Samurai' })}
           ${F(i, 'stacksWith', 'Can be combined with', b.stacksWith.join(', '), { wide: true, ph: 'names of archetypes it may overlap with (read from the text if blank)' })}
           ${A(i, 'features', 'Features', b.features.map((f) => `${f.name}${f.type ? ` (${f.type})` : ''}: ${f.text.replace(/\n+/g, ' ')}`).join('\n'), 10,
-    'one per line, "Name (Ex): text" — end the text with what it does, e.g. "This ability replaces challenge and kiai arts." or "This ability alters resolve."', false)}
+    'one per line, "Name (Ex): text". End the text with what it does, e.g. "This ability replaces challenge and kiai arts." or "This ability alters resolve."', false)}
           ${A(i, 'text', 'Description', b.text, 2)}
           ${F(i, 'source', 'Source', b.source, { wide: true })}
           <p class="hint" style="grid-column:1/-1;margin:0">Read from the features: ${esc([...new Set(b.features.flatMap((f) => f.replaces))].map((k) => `replaces ${k}`).concat([...new Set(b.features.flatMap((f) => f.alters))].map((k) => `alters ${k}`)).join(' · ') || 'nothing yet')}.</p>
@@ -1282,9 +1282,9 @@ Hit Die: d12.
         return `<div class="fields">
           ${F(i, 'name', 'Menu name', b.name, { ph: 'Legendary Samurai Iaijutsu Technique' })}
           ${F(i, 'class', 'Class it is for', b.class, { ph: 'Legendary Samurai' })}
-          ${F(i, 'feature', 'Feature that picks from it', b.feature, { ph: 'Iaijutsu Technique — a column of this name picks from the menu' })}
+          ${F(i, 'feature', 'Feature that picks from it', b.feature, { ph: 'Iaijutsu Technique: a column of this name picks from the menu' })}
           ${A(i, 'options', 'Entries', menuOptionLines(b.options), 10,
-    'one per line, "Category / Name (Ex) 5+: text" — the category and the "(Ex)" and the level it asks for are all optional, e.g.\nSlashes / Bloody Slash (Ex) 5+: The target takes bleed damage.\nCuts / Ranged Cut (Ex): Strike at a range of 30 feet.\nDurable: Items the blacksmith maintains resist sundering.', false)}
+    'one per line, "Category / Name (Ex) 5+: text". The category, the "(Ex)" and the level are optional, e.g.\nSlashes / Bloody Slash (Ex) 5+: The target takes bleed damage.\nCuts / Ranged Cut (Ex): Strike at a range of 30 feet.\nDurable: Items the blacksmith maintains resist sundering.', false)}
           ${A(i, 'text', 'About these options', b.text, 2, 'what the menu is, a condition its entries use')}
           ${F(i, 'source', 'Source', b.source, { wide: true })}
           <p class="hint" style="grid-column:1/-1;margin:0">${b.options.length
@@ -1448,7 +1448,7 @@ Hit Die: d12.
       q('[data-action="from-character"]')?.addEventListener('click', () => {
         const data = currentCharacter();
         if (!data) return;
-        const name = `${data.identity?.name || 'Character'} — pack`;
+        const name = `${data.identity?.name || 'Character'} pack`;
         const ext = blankExtension({ name });
         ext.blocks = blocksFromCharacter(data);
         ext.description = `Lifted from ${data.identity?.name || 'a character'}: classes, race, feature groups and trackers.`;

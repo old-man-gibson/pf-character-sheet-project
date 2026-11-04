@@ -419,7 +419,7 @@ console.log('a family broken into what it is made of -- a heading each');
   check('a second of a kind reads under its own id', heading('companion', 'Wisp (Eidolon 2)')
     .items.every((i) => i.name.startsWith('eidolon2.')), true);
   check('and a companion\'s skills sit under a heading beside it',
-    heading('companion', 'Pip (Familiar) — skills')?.items.every((i) => i.name.startsWith('familiar.skill.')), true);
+    heading('companion', 'Pip (Familiar): skills')?.items.every((i) => i.name.startsWith('familiar.skill.')), true);
   check('a tracker is headed by its name, not its id',
     heading('tracker', 'Burn Pool')?.items.map((i) => i.name).includes('tracker.burn_pool.max'), true);
   check('the abilities are headed in the order a sheet lists them',

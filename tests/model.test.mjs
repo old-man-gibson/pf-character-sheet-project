@@ -997,7 +997,7 @@ console.log('the working -- a companion\'s numbers carry theirs too');
     const html = working(c, 'eidolon.ac', '42');
     check(`${id} a companion's number carries its key`, html.includes('data-bd="eidolon.ac"'), true);
     check(`${id} and the plain working on its title`,
-      html.includes(`title="Armour class ${c.data.eidolon[0].calc.ac}\n`), true);
+      html.includes(`title="Armor class ${c.data.eidolon[0].calc.ac}\n`), true);
     check(`${id} a number with no working goes out as it came in`, working(c, 'eidolon.nonsense', '42'), '42');
   }
 }
@@ -1913,7 +1913,7 @@ console.log('companions -- a minionmancer keeps more than one of a kind');
   check('and there is no second spelling', [s.companion, c.scopeNames().some((n) => n.startsWith('companion.'))],
     [undefined, false]);
   check('the destinations name the creature and its id',
-    c.forwardTargets().list.find((t) => t.name === 'eidolon2.ac.total')?.label, 'Brutus (eidolon2): Armour class');
+    c.forwardTargets().list.find((t) => t.name === 'eidolon2.ac.total')?.label, 'Brutus (eidolon2): Armor class');
 
   // Aiming: by id at the second, by the bare name at the first -- each lands
   // on its own creature and nothing else.
@@ -8202,7 +8202,7 @@ console.log('auto-cooking -- the iron chef dish maker, read from Bryva and cooke
   check('Spicy: level + rice*3 = 19 resistance', text('Spicy'), '+19 cold and fire resistance.');
   check('Ginger: 2 + 2 (level 10+) + 2 sweet', text('Ginger'), '+6 alchemical bonus to saving throws against the nauseated and sickened conditions for the duration of the effect.');
   check('Fetid DC 10 + floor(19/2) + 16 = 35', /DC 35\)/.test(text('Fetid')), true);
-  check('the post leads with the chef and level', v.export.split('\n')[0], '**Iron Chef Dish** — cooked by Nakano Bryva (iron chef level 16)');
+  check('the post leads with the chef and level', v.export.split('\n')[0], '**Iron Chef Dish**, cooked by Nakano Bryva (iron chef level 16)');
   check('and lists the courses', v.export.split('\n')[1], 'Entrees: Mycoprotein, Red Meat · Flavors: Savory, Spicy, Sweet · Side Dishes: Melons, Rice · Aroma: Fetid · Garnish: Ginger');
   check('one bullet per ingredient', v.export.split('\n').filter((l) => l.startsWith('• ')).length, 9);
 
@@ -12359,7 +12359,7 @@ console.log('card casting -- the table: an encounter played through');
   g.tablePlay('0#0', 'cast');
   check('[Draw 2] draws two and [Mill 1] mills one', [gt().hand.length, gt().deck.length], [handBefore - 1 + 2, deckBefore2 - 3]);
   check('[Peek] reads the top card (Read the Cards is taken)', gt().log.some((l) => /\[Peek 1\]: \w/.test(l)), true);
-  check('[Wild] is skipped without Wild Card', gt().log.some((l) => /\[wild\] skipped — needs Wild Card/.test(l)), true);
+  check('[Wild] is skipped without Wild Card', gt().log.some((l) => /\[wild\] skipped: needs Wild Card/.test(l)), true);
   check('[Exile] is the card\'s own rule and always applies', [gt().exile.includes('0#0'), gt().discard.includes('0#0')], [true, false]);
   check('and being exiled is a trigger event', gt().log.some((l) => /exiled$/.test(l)), true);
   g.setItem('cardcasting.cards', 1, 'effect', 'Grave Rite [Banish] [OnBanish] Lose 1d6 hit points');
@@ -12421,7 +12421,7 @@ console.log('card casting -- the table: an encounter played through');
   check('a round ticks an Early counter down', nt().counters.early, 4);
   n.tableMove('22#0', 'deckTop');
   n.tableDraw(1);
-  check('drawing it logs the branch and marks it drawn', [nt().counters.drawn, /\[Ante\] Snakebite drawn — Early counters \(4\)/.test(nt().log.join('\n'))], [true, true]);
+  check('drawing it logs the branch and marks it drawn', [nt().counters.drawn, /\[Ante\] Snakebite drawn: Early counters \(4\)/.test(nt().log.join('\n'))], [true, true]);
   n.tablePlay('22#0', 'cast');
   check('the second cast exiles it and clears the counters', [nt().exile.includes('22#0'), nt().counters], [true, null]);
   n.tableMove('6#0', 'deckTop');
@@ -12442,7 +12442,7 @@ console.log('card casting -- the table: an encounter played through');
   n.tableMove(b0, 'banished');
   check('a card can be banished by hand', [nt().banished.includes(b0), nt().hand.includes(b0), /banished until spell points recover$/.test(nt().log[nt().log.length - 1])], [true, false, true]);
   n.tableEnd();
-  check('the end of the encounter leaves it banished and says so', [nt().banished.includes(b0), nt().deck.includes(b0), /— 1 banished until spell points recover$/.test(nt().log[nt().log.length - 1])], [true, false, true]);
+  check('the end of the encounter leaves it banished and says so', [nt().banished.includes(b0), nt().deck.includes(b0), /; 1 banished until spell points recover$/.test(nt().log[nt().log.length - 1])], [true, false, true]);
   n.tableStart();
   check('the next encounter is dealt without it', [[...nt().deck, ...nt().hand].includes(b0), nt().banished.includes(b0), /\(1 banished until spell points recover\)/.test(nt().log[0])], [false, true, true]);
   n.rest('encounter');
@@ -13424,7 +13424,7 @@ console.log('\nthe Other column -- a number, or a rule the sheet keeps as one');
   check('it follows the level', [c.offsetOf('saves.will.total'), will()], [3, will(control(12)) + 3]);
   const row = c.audit().find((r) => r.id === 'other-saves.will.total');
   check('and the audit lists it', [row?.name, row?.status, row?.value, row?.formula],
-    ['Will — Other', 'ok', 3, 'floor(level / 4)']);
+    ['Will: Other', 'ok', 3, 'floor(level / 4)']);
 
   // Round trip: the rule survives a save, and is not counted twice on the
   // way back in -- the saved total already holds it, and the offset is the
@@ -13471,7 +13471,7 @@ console.log('\nthe Other column -- a number, or a rule the sheet keeps as one');
   const hpAgain = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('and keep it across a save without doubling',
     [hpAgain.offsetSource('hp.total'), hp(hpAgain), hpAgain.diffFromSource()], ['level * 2', hp(), []]);
-  check('named for the reader', c.audit().find((r) => r.id === 'other-hp.total')?.name, 'Hit points — Other');
+  check('named for the reader', c.audit().find((r) => r.id === 'other-hp.total')?.name, 'Hit points: Other');
 }
 
 /*
@@ -13911,14 +13911,14 @@ console.log('\nTerrain Casting: every cast pays a point, a step, a blight, or a 
   check('the cast check counts the terrain point in the cost', [c.castCheck('0#0').need, c.castCheck('0#0').terrain, c.castCheck('1#0').need, c.castCheck('1#0').terrain], [2, 'sp', 0, 'step']);
   const before = sp();
   c.tablePlay('0#0', 'cast');
-  check('a cast pays the card and the terrain point, and says so', [sp() - before, /Terrain Casting — one spell point more/.test(log())], [2, true]);
+  check('a cast pays the card and the terrain point, and says so', [sp() - before, /Terrain Casting: one more spell point/.test(log())], [2, true]);
   const b2 = sp();
   c.tablePlay('1#0', 'cast');
   check('an at-will card pays nothing and is cast a step slower', [sp() - b2, /cast as a full-round action rather than a standard action/.test(log())], [0, true]);
   inHand('0#1');
   const b3 = sp();
   c.tablePlay('0#1', 'cast', { terrain: 'blight' });
-  check('blight costs nothing now and is written down for the map', [sp() - b3, /blighted: dead magic for you/.test(log())], [1, true]);
+  check('blight costs nothing now and is written down for the map', [sp() - b3, /blighted \(dead magic for you/.test(log())], [1, true]);
   const html = subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set(), castPick: t().hand[0] || null });
   check('the table says the drawback is in force', /Terrain Casting: every cast pays one spell point more/.test(html), true);
   check('and the tradition panel does too', /Terrain Casting is active/.test(combatPanels.renderMagicPanel(c)), true);

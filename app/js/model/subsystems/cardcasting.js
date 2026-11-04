@@ -890,7 +890,7 @@ export function recomputeCardcasting(model) {
   const mods = p.mods;
   if (orphaned) issues.push(`${orphaned} card${orphaned === 1 ? '' : 's'} belong${orphaned === 1 ? 's' : ''} to a companion that is no longer on the sheet; counted as yours until given an owner.`);
   for (const m of squad) {
-    if (m.deck.deckSize && !m.ok) issues.push(`${m.name}'s deck cannot combine with yours — ${m.why}.`);
+    if (m.deck.deckSize && !m.ok) issues.push(`${m.name}'s deck cannot combine with yours: ${m.why}.`);
   }
   if (p.manaGraveyard && !(p.cooldown && p.manaPool)) issues.push('Mana Graveyard needs both Cooldown and Mana Pool.');
   for (const m of CARD_MODIFICATIONS) {
@@ -974,7 +974,7 @@ export function recomputeCardcasting(model) {
   const landFeat = deckFeats.some((f) => /land-?attuned magic/i.test(f)) || featNames(c).some((f) => /land-?attuned magic/i.test(f));
   const landDrawback = hasTraditionDrawback(c, /^(terrain casting|area bound)/i);
   const landAttuned = !!(p.manaPool && landFeat && landDrawback);
-  const landAttunedWhy = landAttuned ? `each Mana Point card in play pays two spell points on ${p.attunedSpheres.length ? 'an attuned sphere' : 'an attuned sphere — none is ticked'}`
+  const landAttunedWhy = landAttuned ? `each Mana Point card in play pays two spell points on ${p.attunedSpheres.length ? 'an attuned sphere' : 'an attuned sphere (none is ticked)'}`
     : !landFeat ? 'Land-Attuned Magic is not among the feats'
       : !landDrawback ? 'Land-Attuned Magic wants Terrain Casting or Area Bound in the tradition'
         : 'its special wants Mana Pool';
@@ -1142,7 +1142,7 @@ export const HELD_ZONES = ['banished', ...LIFEBOUND_PILES];
 /** Where a card can be moved by hand, and what the move is called. */
 export const TABLE_DESTINATIONS = [
   ['hand', 'hand'], ['play', 'in play'], ['mana', 'mana in play'], ['discard', 'discard'], ['exile', 'exile'],
-  ['banished', 'banished — until spell points recover'],
+  ['banished', 'banished until spell points recover'],
   ['deckTop', 'top of deck'], ['deckBottom', 'bottom of deck'], ['deck', 'shuffled into deck'],
   ['stun', 'Stun pile'], ['wounds', 'Wounds pile'], ['death', 'Death pile'],
 ];
@@ -1581,12 +1581,12 @@ export function stepCastingTime(text) {
  */
 function payTerrain(model, t, card, toll, name) {
   if (!toll) return;
-  if (toll === 'sp') tableLog(model, t, `${name}: Terrain Casting — one spell point more, paid with the cost`);
+  if (toll === 'sp') tableLog(model, t, `${name}: Terrain Casting: one more spell point, paid with the cost`);
   else if (toll === 'step') {
     const slower = stepCastingTime(card.casting);
-    tableLog(model, t, `${name}: Terrain Casting — ${slower ? `cast as a ${slower} rather than a ${String(card.casting).trim()}` : 'casting time one step slower'}`);
+    tableLog(model, t, `${name}: Terrain Casting: ${slower ? `cast as a ${slower} rather than a ${String(card.casting).trim()}` : 'casting time one step slower'}`);
   } else if (toll === 'blight') {
-    tableLog(model, t, `${name}: Terrain Casting — this square and the eight around it are blighted: dead magic for you, for about a year`);
+    tableLog(model, t, `${name}: Terrain Casting: this square and the eight around it are blighted (dead magic for you for about a year)`);
   }
 }
 
@@ -1679,9 +1679,9 @@ export function drawCards(model, n, why = 'draw') {
     if (!t.deck.length && p.cooldown && !p.mods.deckout && t.discard.length) {
       t.deck = shuffle(model, t.discard);
       t.discard = [];
-      tableLog(model, t, 'deck empty — discard shuffled back in');
+      tableLog(model, t, 'deck empty; discard shuffled back in');
     }
-    if (!t.deck.length) { tableLog(model, t, 'deck is empty — no card to draw'); break; }
+    if (!t.deck.length) { tableLog(model, t, 'deck is empty; no card to draw'); break; }
     const id = t.deck.shift();
     const card = model.tableCard(id);
     const pureMana = card && !String(card.effect || '').trim() && card.mana;
@@ -1700,7 +1700,7 @@ export function drawCards(model, n, why = 'draw') {
       const branch = early > 0 ? `Early counters (${early}): discard the top ${2 * early} cards of the deck, then remove them`
         : late > 0 ? `Late counters (${late}): take Life Draw × ${2 * late} damage, then remove them`
           : 'no counters: a free-action ranged attack with every erratic blast';
-      tableLog(model, t, `[Ante] ${tableName(model, id)} drawn — ${branch}`);
+      tableLog(model, t, `[Ante] ${tableName(model, id)} drawn: ${branch}`);
     }
   }
   if (drawn.length) tableLog(model, t, `${why}: ${drawn.join(', ')}`);
@@ -1730,7 +1730,7 @@ export function tableStart(model) {
     ...piles, faceDown: [], targets: {}, log: [], counters: null, lastRoll: null, lastTrigger: '',
   });
   const loaded = 2 * (k.loadedHand || 0);
-  tableLog(model, t, `encounter begins — ${t.deck.length} cards shuffled${t.banished.length ? ` (${t.banished.length} banished until spell points recover)` : ''}`);
+  tableLog(model, t, `encounter begins: ${t.deck.length} cards shuffled${t.banished.length ? ` (${t.banished.length} banished until spell points recover)` : ''}`);
   drawCards(model, k.openingHand + loaded, `opening hand (${k.openingHand}${loaded ? ` + ${loaded} Loaded Hand` : ''})`);
   return model.recompute();
 }
@@ -1769,9 +1769,9 @@ export function tableNextRound(model) {
     else if (t.counters.late < maxAnte(model.data.identity?.level)) t.counters.late += 1;
     tableLog(model, t, `[Ante] ${tableName(model, t.counters.id)}: ${t.counters.early} Early, ${t.counters.late} Late`);
   }
-  if (p.mods.exposedGrip) tableLog(model, t, 'round begins — Exposed Grip: no automatic draw');
+  if (p.mods.exposedGrip) tableLog(model, t, 'round begins; Exposed Grip: no automatic draw');
   else drawCards(model, 1, 'round draw');
-  if (p.mods.deckout && !t.deck.length) tableLog(model, t, 'Deckout: the deck is empty — 4 Constitution burn this turn');
+  if (p.mods.deckout && !t.deck.length) tableLog(model, t, 'Deckout: the deck is empty; 4 Constitution burn this turn');
   return model.recompute();
 }
 
@@ -1812,7 +1812,7 @@ export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0, who 
 
   if (mode === 'mana') {
     const may = manaPlayCheck(model, id, !!(p.mods.gradualRamp && t.manaPlayed >= 1));
-    if (!may.ok) { tableLog(model, t, `${name} not played — ${may.why}`); return model.recompute(); }
+    if (!may.ok) { tableLog(model, t, `${name} not played: ${may.why}`); return model.recompute(); }
     t.hand.splice(at, 1);
     t.mana.push({ id, tapped: false });
     t.manaPlayed += 1;
@@ -1959,7 +1959,7 @@ export function tableKeywords(model, id, card) {
   while ((m = re.exec(text))) {
     const kw = m[1].toLowerCase();
     const n = Math.max(1, Number(m[2]) || 1);
-    if (may[kw] && !may[kw][0]()) { tableLog(model, t, `[${kw}] skipped — needs ${may[kw][1]}`); continue; }
+    if (may[kw] && !may[kw][0]()) { tableLog(model, t, `[${kw}] skipped: needs ${may[kw][1]}`); continue; }
     switch (kw) {
       case 'draw': drawCards(model, n, `[Draw ${n}]`); break;
       case 'discard': tableLog(model, t, `[Discard ${n}]: choose ${n} card${n === 1 ? '' : 's'} in hand to discard`); break;
@@ -1976,7 +1976,7 @@ export function tableKeywords(model, id, card) {
         break;
       }
       case 'peek': tableLog(model, t, `[Peek ${n}]: ${model.tablePeek(n).map((g) => tableName(model, g)).join(', ') || 'deck is empty'}`); break;
-      case 'wild': tableLog(model, t, '[Wild]: search the deck for a card — move it to the hand'); break;
+      case 'wild': tableLog(model, t, '[Wild]: search the deck for a card and move it to the hand'); break;
       case 'exile': fate = 'exile'; break;
       case 'banish': fate = 'banished'; break;
       case 'bottom': fate = 'deckBottom'; break;
@@ -1990,7 +1990,7 @@ export function tableKeywords(model, id, card) {
         if (t.counters?.id === id && t.counters.drawn) {
           fate = 'exile';
           t.counters = null;
-          tableLog(model, t, `[Ante] ${tableName(model, id)} played after its draw — exiled`);
+          tableLog(model, t, `[Ante] ${tableName(model, id)} played after its draw; exiled`);
         } else {
           const early = maxAnte(model.data.identity?.level);
           t.counters = { id, early, late: 0, drawn: false };
@@ -2087,7 +2087,7 @@ export function spendSP(model, n, why, pool = 'sp') {
   const after = clampTracker(sp, before + n);
   sp.current = after;
   const left = max - after;
-  if (t) tableLog(model, t, `${why}: ${after - before} spell point${after - before === 1 ? '' : 's'} spent, ${left} left${after - before < n ? ' — the pool ran out' : ''}`);
+  if (t) tableLog(model, t, `${why}: ${after - before} spell point${after - before === 1 ? '' : 's'} spent, ${left} left${after - before < n ? '; the pool ran out' : ''}`);
   return left;
 }
 
@@ -2096,7 +2096,7 @@ export function tableSpend(model, id, n = 1) {
   const p = model.data.cardcasting;
   if (!p?.table) return model;
   if (!model.spellPointTracker()) { tableLog(model, p.table, 'no Spell Points tracker to spend from'); return model.recompute(); }
-  spendSP(model, Math.max(1, Math.floor(Number(n) || 1)), id ? `${tableName(model, id)} — extra` : 'spent');
+  spendSP(model, Math.max(1, Math.floor(Number(n) || 1)), id ? `${tableName(model, id)}: extra` : 'spent');
   return model.recompute();
 }
 
@@ -2654,6 +2654,6 @@ export function tableEnd(model) {
     deck: shuffle(model, all), hand: [], play: [], mana: [], discard: [], exile: [], faceDown: [], targets: {},
     counters: null, lastRoll: null, lastTrigger: '',
   });
-  tableLog(model, t, `encounter over — everything shuffled back${exiled ? ` (${exiled} exiled cards: half return now, the rest one a minute)` : ''}${banished ? ` — ${banished} banished until spell points recover` : ''}`);
+  tableLog(model, t, `encounter over: everything shuffled back${exiled ? ` (${exiled} exiled cards: half return now, the rest one a minute)` : ''}${banished ? `; ${banished} banished until spell points recover` : ''}`);
   return model.recompute();
 }

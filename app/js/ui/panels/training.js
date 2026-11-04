@@ -239,8 +239,8 @@ export function ladderTable(model, list, ci, cls, systems, spheres) {
       return blended ? side : null;
     };
     const why = (side, sphere) => (side === 'none'
-      ? ` — ${sphere} is not a sphere this class's talents count as, so it counts nowhere`
-      : side ? ` — counts as ${SYSTEM_NOUNS[side]}` : '');
+      ? `: ${sphere} is not a sphere this class's talents count as, so it is not counted`
+      : side ? `: counts as ${SYSTEM_NOUNS[side]}` : '');
     const heading = (which, label, other) => {
       const shrunk = layout[which].shrunk;
       if (!layout.toggles) {
@@ -275,7 +275,7 @@ export function ladderTable(model, list, ci, cls, systems, spheres) {
               on ? `Talent #${Math.floor(lv.count)} at level ${lv.level}${why(side, lv.sphere)}` : '',
               uOn ? `Utility talent #${lv.utilityCount}${why(uSide, lv.utilitySphere)}` : '',
             ].filter(Boolean).join(' · ') || `Level ${lv.level} grants nothing`;
-            const cellTitle = (s, sphere) => (s === 'none' ? ` title="${esc(why(s, sphere).slice(3))}"` : '');
+            const cellTitle = (s, sphere) => (s === 'none' ? ` title="${esc(why(s, sphere).slice(2))}"` : '');
             return `<tr class="${lv.future ? 'future' : ''}">
               <td class="num" title="${esc(count)}">${lv.level}</td>
               <td class="${state}">${talentCell(model,
@@ -316,8 +316,8 @@ export function ladderStack(model, list, ci, cls, systems, spheres) {
     return talentLandsOn(sphere, systems) ?? 'none';
   };
   const why = (side, sphere) => (side === 'none'
-    ? ` — ${sphere} is not a sphere this class's talents count as, so it counts nowhere`
-    : side ? ` — counts as ${SYSTEM_NOUNS[side]}` : '');
+    ? `: ${sphere} is not a sphere this class's talents count as, so it is not counted`
+    : side ? `: counts as ${SYSTEM_NOUNS[side]}` : '');
   // One ladder's row: `u` is the [utility] ladder, whose fields carry the
   // prefix. `head` is what the level cell says.
   const row = (lv, li, u, head, extra = '') => {
@@ -421,8 +421,8 @@ export function singleLadderTable(model, slots, cls, spheres, systems = null) {
     // The running talent count used to be a column of its own; it says the
     // same thing as a tooltip on the level it belongs to.
     const count = on ? `Talent #${Math.floor(lv.count)} at level ${lv.level}${
-      side === 'none' ? ` — ${lv.sphere} is not a sphere this class's talents count as, so it counts nowhere`
-        : side ? ` — counts as ${SYSTEM_NOUNS[side]}` : ''}`
+      side === 'none' ? `: ${lv.sphere} is not a sphere this class's talents count as, so it is not counted`
+        : side ? `: counts as ${SYSTEM_NOUNS[side]}` : ''}`
       : `Level ${lv.level} grants no talent`;
     return `<tr class="${lv.future ? 'future' : ''}${on ? '' : ' emptyslot'}">
               <td class="num" data-stack="head" data-headlabel="Level" title="${esc(count)}">${esc(lv.level)}</td>

@@ -194,7 +194,7 @@ function companionHeadingFor(head, second, under) {
   const title = under || companionHeading(kind, { id: head });
   const rank = (COMPANION_KINDS.indexOf(kind) + 1) * 1000 + nth * 2;
   return second === 'skill'
-    ? { key: `${head}.skill`, label: `${title} — skills`, rank: rank + 1 }
+    ? { key: `${head}.skill`, label: `${title}: skills`, rank: rank + 1 }
     : { key: head, label: title, rank };
 }
 

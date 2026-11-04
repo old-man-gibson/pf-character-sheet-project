@@ -56,8 +56,8 @@ export function renderTrackersPanel(model, ctx) {
             <input data-draft="refresh" placeholder="Refresh (Daily)" value="${esc(draft.refresh)}">
             <select data-draft="fill" aria-label="Fill or drain"
               title="Fill shows the amount spent; Drain shows the amount left.">
-              <option value="spent" ${draft.fill !== 'remaining' ? 'selected' : ''}>Fill — lights up as it is spent</option>
-              <option value="remaining" ${draft.fill === 'remaining' ? 'selected' : ''}>Drain — shows what is left</option>
+              <option value="spent" ${draft.fill !== 'remaining' ? 'selected' : ''}>Fill: shows the amount spent</option>
+              <option value="remaining" ${draft.fill === 'remaining' ? 'selected' : ''}>Drain: shows the amount left</option>
             </select>
           </div>
           ${preview}
@@ -541,7 +541,7 @@ function trackerEditRow(model, ctx, t) {
 function trackerNoteField(model, t, value) {
   const facts = Object.keys(model.trackerScope(t).self);
   return `<label class="fld tall tnote-edit">
-      <span>Note — shown under the tracker, formulas resolve as it fills</span>
+      <span>Note: shown under the tracker; formulas update as it changes</span>
       ${prose(model, `data-tedit="note"`, value, 2, '', model.trackerScope(t))}
       <span class="hint">
         <code>self</code> is this tracker: ${facts.map((k) => `<code>self.${k}</code>`).join(' ')}.
@@ -581,12 +581,12 @@ export function trackerStyleEditor(model, ctx, t) {
         <select data-tstyle="shape" aria-label="Shape">
           <option value="pips" ${s.shape === 'pips' ? 'selected' : ''}>Pips</option>
           <option value="bar" ${s.shape === 'bar' ? 'selected' : ''}>Bar</option>
-          <option value="squares" ${s.shape === 'squares' ? 'selected' : ''}>Squares — a small block, then a count</option>
+          <option value="squares" ${s.shape === 'squares' ? 'selected' : ''}>Squares: a small grid, then a count</option>
         </select>
         <span class="tlabel">Fill</span>
         <select data-tstyle="fill" aria-label="Fill direction" ${twoSided ? 'disabled title="Two-sided meters always show their position"' : ''}>
           <option value="spent" ${s.fill === 'spent' ? 'selected' : ''}>Fills up as it is spent</option>
-          <option value="remaining" ${s.fill === 'remaining' ? 'selected' : ''}>Drains — shows what is left</option>
+          <option value="remaining" ${s.fill === 'remaining' ? 'selected' : ''}>Drains: shows the amount left</option>
         </select>
       </div>
       ${colorField('color', s.color, { label: twoSided ? 'Color (above 0)' : 'Color', none: 'Theme accent', noneCss: THEME_ACCENT.css })}

@@ -460,7 +460,7 @@ function abpPicksPanel(model) {
   const core = coreAbp(c);
   const steps = core ? CORE_PROWESS_LEVELS : { mental: MENTAL_PROWESS_LEVELS, physical: PHYSICAL_PROWESS_LEVELS };
   return `<section class="panel">
-      <h3>ABP — Mental &amp; Physical Prowess</h3>
+      <h3>ABP: Mental &amp; Physical Prowess</h3>
       <div class="tablewrap"><table class="build picks">
         <thead><tr><th class="num">Lvl</th><th>Mental</th><th>Physical</th></tr></thead>
         <tbody>${ABP_LEVELS.filter((l) => steps.mental.includes(l) || steps.physical.includes(l)).map((l) => {

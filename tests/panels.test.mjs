@@ -1148,7 +1148,7 @@ console.log('\nevery moved number is the one moved number');
   const { movedValue } = await import('../app/js/ui/rows.js');
   check('down: red, with what it was and what moved it on the hover',
     movedValue('12', -2, { base: '14', sources: 'Shaken' }),
-    '<strong class="adj" title="Base 14 — with Shaken applied">12</strong>');
+    '<strong class="adj" title="Base 14. Shown with Shaken applied.">12</strong>');
   check('up: green', movedValue('16', 2, { base: '14', sources: 'Bull' }).includes('class="adj up"'), true);
   check('not moved: the figure as it is', movedValue('14', 0, { base: '14' }), '14');
   check('kept: its own classes either way', movedValue('+3', 0, { tag: 'span', cls: 'mod', keep: true }), '<span class="mod">+3</span>');
@@ -1203,7 +1203,7 @@ console.log('\nthe card table has three faces: the tab, a table window, a hand w
   ok('and never shows the card Read the Cards turned up', !table.includes(`data-card="${peeked}"`));
   ok('the table window still has the field: in play, the deck, mana, the piles, the log', ['f-play', 'f-deck', 'f-mana', 'f-piles', 'f-log'].every((z) => table.includes(z)));
   ok('the piles hold the banished under the exile, on the tab and on the table window', sheet.includes('<h3>Banished') && table.includes('<h3>Banished'));
-  ok('and every card offers banishing among its moves', /<option value="banished">banished — until spell points recover<\/option>/.test(hand));
+  ok('and every card offers banishing among its moves', /<option value="banished">banished until spell points recover<\/option>/.test(hand));
   ok('the hand window has the hand, the controls and the peeked card, and nothing in play', hand.includes(`data-card="${inHand}"`) && /data-table="next\|/.test(hand)
     && hand.includes(`data-card="${peeked}"`) && !hand.includes('f-play') && !hand.includes('f-mana'));
   ok('a card in hand carries its Roll20 text for the window to copy, on the d20 and on Cast',
@@ -1397,7 +1397,7 @@ console.log('\nthe squad on the deck and at the table');
   c.recompute();
   const ctx = { ...blankView(), tab: 'cardcasting', deckView: 'deck', rollFormat: 'template' };
   const deck = subsystems.cardcastingPanel(c, ctx);
-  ok('the deck view has a squad panel with the member and its deck', deck.includes('Squad — Multi-Headed Play') && deck.includes('<strong>Lira</strong>') && /badge ok[^>]*>combines</.test(deck));
+  ok('the deck view has a squad panel with the member and its deck', deck.includes('Squad: Multi-Headed Play') && deck.includes('<strong>Lira</strong>') && /badge ok[^>]*>combines</.test(deck));
   ok('each caster\'s deck is a view of its own: the character\'s faces and add buttons here', deck.includes('Nico’s deck') && deck.includes('Lira’s deck')
     && (deck.match(/data-add="cardcasting\.cards"/g) || []).length === 2 && deck.includes('data-item="cardcasting.cards|0|name"') && !deck.includes('data-item="cardcasting.cards|1|name"'));
   const hers = subsystems.cardcastingPanel(c, { ...ctx, deckView: `deck:${cc.id}` });

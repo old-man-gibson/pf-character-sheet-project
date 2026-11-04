@@ -1053,7 +1053,7 @@ console.log('spheres -- a whole sphere as a shared table, tags and all');
     [true, false, false]);
   const shown = sphereBasePick('Divination', 'Alternate Divination', nico);
   check('and is shown the shares for the spheres she has, and no others',
-    [shown.label, /Death: Divine Undead/.test(shown.text), /Divine Time|Divine Warp/.test(shown.text), /Death:$/m.test(shown.text.split('\n\n')[1])],
+    [shown.label, /Death: Divine Undead/.test(shown.text), /Divine Time|Divine Warp/.test(shown.text), /\(Death\):$/m.test(shown.text.split('\n\n')[1])],
     ['Divination Sphere (Alternate Divinations)', true, false, true]);
   // One alternate divination, named outright -- not a talent, and not the
   // whole ability either.

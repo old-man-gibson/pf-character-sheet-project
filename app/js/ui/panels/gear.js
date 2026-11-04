@@ -259,7 +259,7 @@ export function weaponsPanel(model, e) {
             title="${esc(w.proficiencyWhy)}. ${w.nonproficiency ? 'Nonproficiency gives −4 to hit.' : 'The −4 is turned off for this weapon.'}">not proficient${w.nonproficiency ? ' · −4' : ''}</span>`
     : w.proficient === true && w.proficiencySource !== 'overview' ? `<span class="badge ok nonprof"
             title="${esc(w.proficiencyWhy)}">proficient · ${w.proficiencySource === 'veil' ? 'veil' : esc(w.proficiencyNote || 'row')}</span>` : ''}
-          ${rollButton(model, 'weapon', i, `${String(w.name || '').trim() || 'this weapon'} — attack and damage`, cs)}
+          ${rollButton(model, 'weapon', i, `${String(w.name || '').trim() || 'this weapon'}: attack and damage`, cs)}
           ${removeButton('equipment.weapons', i, { what: 'weapon' })}
         </div>
         <div class="weapongrid">

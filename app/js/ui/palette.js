@@ -390,7 +390,7 @@ function equipment(model, add) {
       sub: bits(text(w.attackType), text(w.damageType), text(w.special),
         w.critRange ? threatText(Number(w.critRange) || 20, critMultOf(w.critMult)) : ''),
       sel: `[data-item^="equipment.weapons|${i}|"]`,
-      roll: { kind: 'weapon', ref: i, what: `${text(w.name)} — attack and damage` },
+      roll: { kind: 'weapon', ref: i, what: `${text(w.name)}: attack and damage` },
       keys: 'weapon attack damage',
     });
   });

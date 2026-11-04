@@ -2300,7 +2300,7 @@ export class CharacterSheetElement extends HTMLElement {
           { id: slug(stem), title: stem });
         return this.importDocument(doc, warningsFor(doc));
       } catch (err) {
-        return fail(`${name} could not be converted — ${err.message}`);
+        return fail(`${name} could not be converted: ${err.message}`);
       }
     }
 
@@ -2308,7 +2308,7 @@ export class CharacterSheetElement extends HTMLElement {
     try {
       doc = JSON.parse(await file.text());
     } catch (err) {
-      return fail(`${name} is not valid JSON — ${err.message}`);
+      return fail(`${name} is not valid JSON: ${err.message}`);
     }
     // An extension pack (or a library of them) is not a character. The sheet
     // cannot store one, but a host page with an extension manager can, so it
@@ -2848,7 +2848,7 @@ export class CharacterSheetElement extends HTMLElement {
     let ok = true;
     try { await navigator.clipboard.writeText(text); } catch { ok = false; }
     if (!note) return;
-    note.textContent = ok ? `Copied ${text}` : `Could not copy — ${text}`;
+    note.textContent = ok ? `Copied ${text}` : `Could not copy: ${text}`;
     note.hidden = false;
     clearTimeout(this.#fxCopiedTimer);
     this.#fxCopiedTimer = setTimeout(() => { note.hidden = true; }, 2200);
@@ -4421,7 +4421,7 @@ export class CharacterSheetElement extends HTMLElement {
     if (!r.ok) { this.#render(); this.#showUndoToast(`Could not undo ${r.label}: ${r.reason}`, { offer: false }); return; }
     this.#undoToast = null;
     this.#render();
-    if (r.kind === 'snapshot') this.#showUndoToast(`${r.label} — put back`, { redo: true });
+    if (r.kind === 'snapshot') this.#showUndoToast(`${r.label}: restored`, { redo: true });
     else this.#showUndoToast(`Undid ${r.label}`, { offer: false, redo: true });
   }
 

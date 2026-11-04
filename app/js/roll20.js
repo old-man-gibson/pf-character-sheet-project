@@ -949,7 +949,7 @@ export function weaponRollSpec(c, index, cs = null, answers = null, single = fal
   if (unanswered.length) {
     notes.push({
       label: unanswered.length > 1 ? 'Questions' : 'Question',
-      text: `${unanswered.map((q) => q.label).join(', ')} — answer the same way each time you are asked`,
+      text: `${unanswered.map((q) => q.label).join(', ')}: answer the same way each time you are asked`,
     });
   }
   return {

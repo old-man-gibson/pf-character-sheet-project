@@ -138,7 +138,7 @@ export function renderSessionBoard(model) {
           <fieldset class="session-fields"><legend>Cost</legend>
             <div class="session-settings-grid">
               <label>Resource <select data-session-field="${edit}.resource"><option value="">No resource cost</option>
-                ${card.resource && !tracker ? `<option value="${esc(card.resource)}" selected>Missing resource — choose another</option>` : ''}
+                ${card.resource && !tracker ? `<option value="${esc(card.resource)}" selected>Missing resource; choose another</option>` : ''}
                 ${model.trackers.map(t => `<option value="${esc(t.id)}" ${card.resource === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
               <label>Cost (number or formula) ${input(`${edit}.cost`, card.cost ?? '1')}</label>
             </div>

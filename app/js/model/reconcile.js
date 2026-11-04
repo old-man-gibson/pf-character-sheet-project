@@ -59,7 +59,7 @@ export function shadowReason(name, builtin) {
   }
   if (builtin.has(name)) {
     return `"${name}" is a value the sheet works out for itself, so it cannot be defined here. `
-      + 'Pick a name of your own — a dotted one such as my.' + String(name).split('.').pop()
+      + 'Pick a name of your own, such as my.' + String(name).split('.').pop()
       + ' never collides.';
   }
   const parts = String(name).split('.');
@@ -468,7 +468,7 @@ export const FORMULA_FIELDS = [
     collect: (model) => Object.entries(model.data.otherFormulas || {})
       .filter(([key, text]) => stringFormula(text) && offsetKey(key))
       .map(([key, text]) => ({
-        id: `other-${key}`, place: `offset:${key}`, name: `${offsetLabel(key)} — Other`,
+        id: `other-${key}`, place: `offset:${key}`, name: `${offsetLabel(key)}: Other`,
         formula: text, value: offsetOf(model, key), error: offsetError(model, key),
       })),
   },
@@ -520,7 +520,7 @@ export const FORMULA_FIELDS = [
     collect: (model) => {
       const hp = model.data.hp || {};
       return [
-        ['fcb', 'Favoured class hit points'], ['toughness', 'Toughness per level'],
+        ['fcb', 'Favored class hit points'], ['toughness', 'Toughness per level'],
         ['misc', 'Misc hit points'], ['deathBonus', 'Death threshold'],
       ].filter(([key]) => stringFormula(hp[key])).map(([key, name]) => ({
         id: `hp-${key}`, place: `hp:${key}`, name,
@@ -536,18 +536,18 @@ export const FORMULA_FIELDS = [
       const cr = model.data.crafting || {};
       const fields = [
         ...(cr.speedIncreases || []).map((s, i) => ({
-          id: `crafting-speed-${i}`, name: `Speed increase — ${s.label || `#${i + 1}`}`, obj: s, field: 'value',
+          id: `crafting-speed-${i}`, name: `Speed increase: ${s.label || `#${i + 1}`}`, obj: s, field: 'value',
           place: `craftNumber:crafting.speedIncreases|${i}|value`,
         })),
         ...(cr.costReductions || []).map((r, i) => ({
-          id: `crafting-reduction-${i}`, name: `Cost reduction — ${r.label || `#${i + 1}`}`, obj: r, field: 'value',
+          id: `crafting-reduction-${i}`, name: `Cost reduction: ${r.label || `#${i + 1}`}`, obj: r, field: 'value',
           place: `craftNumber:crafting.costReductions|${i}|value`,
         })),
         ...(cr.projects || []).flatMap((p, i) => {
           const item = p.name || `Project ${i + 1}`;
           return [
-            { id: `crafting-value-${i}`, name: `${item} — market value`, obj: p, field: 'value', place: `craftNumber:crafting.projects|${i}|value` },
-            { id: `crafting-dc-${i}`, name: `${item} — item DC`, obj: p, field: 'itemDC', place: `craftNumber:crafting.projects|${i}|itemDC` },
+            { id: `crafting-value-${i}`, name: `${item}: market value`, obj: p, field: 'value', place: `craftNumber:crafting.projects|${i}|value` },
+            { id: `crafting-dc-${i}`, name: `${item}: item DC`, obj: p, field: 'itemDC', place: `craftNumber:crafting.projects|${i}|itemDC` },
             ...(p.dcAdjustments || []).map((a, j) => ({
               id: `crafting-dc-${i}-${j}`, name: `${item} — DC ${a.label || `adjustment ${j + 1}`}`, obj: a, field: 'value',
               place: `craftNumber:crafting.projects.${i}.dcAdjustments|${j}|value`,

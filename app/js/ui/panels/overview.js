@@ -629,7 +629,7 @@ function dashOffenseCard(model, ctx, openNow) {
       <span class="label">${esc(String(w.name || '').trim() || `Weapon ${i + 1}`)}</span>
       <span class="value rollpair">${movedValue(esc(now.atk), now.atkDelta, { title: now.atkTitle, keep: true })}
         ${movedValue(esc(now.dmg), now.dmgMoved, { tag: 'span', cls: 'dashdmg', title: now.dmgTitle, keep: true })}
-        ${rollButton(model, 'weapon', i, `an attack with ${String(w.name || '').trim() || 'this weapon'} — full, single or Vital Strike`, cs)}</span>
+        ${rollButton(model, 'weapon', i, `an attack with ${String(w.name || '').trim() || 'this weapon'} (full, single or Vital Strike)`, cs)}</span>
     </div>`;
     };
     return `<section class="panel">
@@ -655,8 +655,8 @@ function dashOffenseCard(model, ctx, openNow) {
         </select>`
       : weapons.length === 1 ? `<span class="dim">${esc(wname(weapons[0], 0))}</span>` : '';
     const roll = chosen !== null
-      ? rollButton(model, 'weapon', chosen, `an attack with ${wname(weapons[chosen], chosen)} — full, single or Vital Strike`, cs)
-      : rollButton(model, 'mode', 'melee', 'a full-round melee attack — every iterative', cs);
+      ? rollButton(model, 'weapon', chosen, `an attack with ${wname(weapons[chosen], chosen)} (full, single or Vital Strike)`, cs)
+      : rollButton(model, 'mode', 'melee', 'a full-round melee attack with every iterative', cs);
     return lineHtml('Full attack', `${control}
       <span class="dim">${esc(c.attack.iterative || '—')}</span> ${roll}`);
   })()}
@@ -1677,7 +1677,7 @@ function attackPanel(model) {
           // read-only, so the row adds up in front of the reader.
           const other = alt
             ? `<td class="num" data-label="Other">${roValue(model.offsetOf(ATTACK_MODE_KEY[alt]),
-              `Shares ${ATTACK_MODE_LABELS[alt]}'s — an alternate is that attack with a different ability in the slot`)}</td>`
+              `Shares ${ATTACK_MODE_LABELS[alt]}'s. An alternate is that attack with a different ability.`)}</td>`
             : sheetBonusCell(model, ATTACK_MODE_KEY[k]);
           return `
           ${/* Not a stacked table, deliberately. Folded to a name and a total it
@@ -2079,7 +2079,7 @@ function hpBuild(model) {
     model.mythicHp ? [term(model.mythicHp),
       `${c.mythic?.path || 'mythic'} tier ${c.identity?.mythicTier || 0}`] : null,
     misc ? [term(misc), 'misc'] : null,
-    other ? [term(other), 'other — what the source sheet added and this one cannot see'] : null,
+    other ? [term(other), 'other: what the source sheet added that this sheet cannot read'] : null,
   ].filter(Boolean);
 
   const why = `${rules.gestalt ? 'The best hit die on each level' : 'The hit die of the class taken at each level'}${

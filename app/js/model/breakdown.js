@@ -79,7 +79,7 @@ function hpBreakdown(model) {
     plain('hit dice', c.gestalt?.hdTotal ?? 0, `${campaignRules(c).gestalt ? 'the best die' : 'the class\'s die'} on each of ${level} level${
       level === 1 ? '' : 's'}${{ max: '', average: ', averaged after 1st', rolled: ', rolled after 1st' }[campaignRules(c).hitPoints]}`),
     part(`${c.hp.ability || 'ability'}${c.hp.ability2 ? ` + ${c.hp.ability2}` : ''} × ${level}`, abilityMod * level),
-    part('favoured class', fcb),
+    part('favored class', fcb),
     part(`Toughness × ${level}`, tough * level),
     part('mythic', mythicHp(model)),
     part('misc', misc),

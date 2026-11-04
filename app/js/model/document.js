@@ -236,7 +236,7 @@ export function weaponProficient(prof, w) {
   const eq = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
   const note = String(w.proficiencyNote || '').trim();
   if (w.proficiency === 'yes') return { state: true, why: note ? `proficient via ${note}` : 'marked proficient on the row', source: 'override' };
-  if (w.proficiency === 'no') return { state: false, why: note ? `not proficient — ${note}` : 'marked not proficient on the row', source: 'override' };
+  if (w.proficiency === 'no') return { state: false, why: note ? `not proficient (${note})` : 'marked not proficient on the row', source: 'override' };
 
   const groups = (w.groups || []).filter(Boolean);
   const text = `${w.name || ''} ${w.special || ''}`;
@@ -286,7 +286,7 @@ export function inspectDocument(doc) {
     return fail('That file is not a character document.');
   }
   if (doc.schemaVersion === undefined) {
-    return fail('No schemaVersion — this does not look like a sheet export.');
+    return fail('No schemaVersion. This does not look like a sheet export.');
   }
   if (doc.schemaVersion !== SCHEMA_VERSION) {
     return fail(`Built for schema ${doc.schemaVersion}, but this app reads schema ${SCHEMA_VERSION}.`
@@ -298,7 +298,7 @@ export function inspectDocument(doc) {
   try {
     model = new Character(doc);
   } catch (err) {
-    return fail(`The document did not load — ${err.message}`);
+    return fail(`The document did not load: ${err.message}`);
   }
   const d = model.data;
   return {
