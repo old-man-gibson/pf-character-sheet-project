@@ -153,12 +153,12 @@ export function levelPin(path, override, planner, { width = '' } = {}) {
   return autoNum(`data-set="${path}"`, override, {
     placeholder: planner ?? 0,
     width,
-    title: `Auto: ${planner ?? 0} level(s) of this class in the Planner. Enter a number to override it.`,
+    title: `Auto: ${planner ?? 0} level(s) of this class in the Planner. Enter a number to pin it.`,
   });
 }
 
 /** The note under a pinned level that the Planner now counts differently, or ''. */
 export function levelPinHint(override, base, planner) {
   if (!isPinned(override) || Number(base) === Number(planner)) return '';
-  return `<p class="hint">The Planner has ${planner} level${planner === 1 ? '' : 's'} of this class.</p>`;
+  return `<p class="hint">The Planner gives ${planner} level${planner === 1 ? '' : 's'} of this class.</p>`;
 }

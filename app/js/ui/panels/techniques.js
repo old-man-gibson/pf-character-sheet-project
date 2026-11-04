@@ -137,7 +137,7 @@ function techniqueExportBox(model, ctx, text, id) {
           <button data-view data-action="copy-text" data-copy="${id}">Copy for Discord</button>
         </span>
       </h3>
-      <p class="hint">The application text: the character, the request and the technique in a code block. Paste it as is.</p>
+      <p class="hint">The workbook's application text: the character, what is applied for, and the technique in a code block. Paste it as-is.</p>
       <textarea id="${id}" class="exportbox" readonly rows="14" spellcheck="false">${esc(text)}</textarea>
     </section>`;
 }
@@ -159,12 +159,13 @@ export function renderTechniqueListPanel(model, ctx) {
           ${Object.entries(byStatus).map(([k, n]) => `<span class="badge">${esc(k)} ${n}</span>`).join('')}
         </h3>
         <p class="hint">
-          Every technique on the character's <code>techRef</code>, shown one at a time. Only the
-          approval status can be edited here. To change a technique, copy it to AutoTechnique,
-          edit it and add it back; the same name replaces the entry. <strong>Import from
-          workbook</strong> adds missing techniques from a workbook and changes nothing else on
-          this character.
-          <button data-action="tech-import" title="Add the techniques from an .xlsx workbook to this list.">Import from workbook…</button>
+          Every technique on the character's <code>techRef</code>, shown one at a time as the
+          workbook's tab does. The list is read-only apart from the approval status. To
+          change a technique, copy it to AutoTechnique, edit it there and add it back. The
+          same name replaces the entry. <strong>Import from workbook</strong> brings in missing
+          techniques, for a character imported before the catalogue was read or for new ones
+          on the sheet. Only the techniques are taken. Nothing else on this character changes.
+          <button data-action="tech-import" title="Merge the techniques from a .xlsx export of the workbook into this list">Import from workbook…</button>
           <input type="file" accept=".xlsx,.xlsm" data-techfile hidden>
         </p>
         <div class="pair techpick">
@@ -210,10 +211,10 @@ export function renderAutoTechniquePanel(model, ctx) {
           </span>
         </h3>
         <p class="hint">
-          Design a technique: name it, then pick its spheres and the talents each adds.
-          Complexity, DCs and SP cost use the workbook's formulas.
-          <strong>Add to Technique List</strong> adds it to the list (<code>techRef</code>).
-          The application below is ready to paste.
+          Design a technique. Name it, then pick its spheres and the talents each contributes.
+          Complexity, DCs and SP cost are computed with the workbook's formulas.
+          <strong>Add to Technique List</strong> puts it on the list (the
+          workbook's <code>techRef</code>). The application below is ready to paste.
         </p>
         ${techniqueSheet(model, ctx, view, { editable: true, path: 'techniques.draft', mode: 'auto' })}
       </section>
@@ -234,10 +235,11 @@ export function renderCookingPanel(model, ctx) {
           </span>
         </h3>
         <p class="hint">
-          The iron chef ability. Pick the courses. Each ingredient's effect depends on the
-          chef's level and the combination; for example, a Red Meat entree strengthens Apples
-          and Potatoes, and Rice counts the recipe as three levels higher. The ingredient list
-          below shows the other combos. Duration is ⌊level ÷ 3⌋ + 1 hours.
+          The iron chef ability, for anyone at the table. Pick the courses. Each
+          ingredient's effect is computed from the chef's level and the combination. A
+          Red Meat entree strengthens Apples and Potatoes. Rice counts the recipe as three
+          levels higher. The ingredient list below has the other combos. Duration is
+          ⌊level ÷ 3⌋ + 1 hours.
         </p>
         <div class="fieldgrid" style="margin-bottom:10px">
           <label class="fld"><span>Iron chef level</span>
@@ -265,7 +267,7 @@ export function renderCookingPanel(model, ctx) {
             <div>${esc(e.text)}</div>
             ${e.combo ? `<div class="hint">Combo: ${esc(e.combo)}</div>` : ''}
           </li>`).join('')}
-        </ul>` : '<p class="empty">No ingredients yet. Pick some above.</p>'}
+        </ul>` : '<p class="empty">An empty plate. Pick some ingredients above.</p>'}
       </section>
 
       <section class="panel span2">

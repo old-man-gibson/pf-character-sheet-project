@@ -92,14 +92,14 @@ function unarmedFold(model) {
       : `${u.effectiveTalents ?? 0} effective talents`;
     const setup = `<div class="unarmed-cols">
       <div>
-        <div class="statline" title="Use the class's own unarmed damage table instead of the practitioner table.">
+        <div class="statline" title="A class that prints its own unarmed damage table uses that instead of the practitioner one">
           <span class="label">Class has its own progression</span>
           <span class="value">${check(`${base}.nativeProgression`, u.nativeProgression)}</span></div>
         ${native ? nativeUnarmedBlock(model, u, n, base) : ''}
         ${sharedUnarmedBlock(u, base)}
       </div>
       <div>${collapsibleSub(model, 'unarmed-practitioner',
-    `Practitioner table${native ? ` <span class="badge">not in use: ${esc(u.practitionerDice || '—')}</span>` : ''}`,
+    `Practitioner table${native ? ` <span class="badge">not in use — ${esc(u.practitionerDice || '—')}</span>` : ''}`,
     practitionerUnarmedBlock(u, per, base), '',
     // Folded by default once a class progression is what the character uses:
     // it is then a reading to compare against rather than a set of controls.
@@ -125,27 +125,27 @@ function nativeUnarmedBlock(model, u, n, base) {
       ${field('Class', select(`${base}.native.className`, n.className || '', classes, '— character level —'))}
       <table class="grid-table">
         <thead><tr><th style="width:5rem">From</th><th>Dice</th><th></th></tr></thead>
-        <tbody>${rungs || '<tr><td colspan="3" class="hint">No rungs yet. Add the class’s table.</td></tr>'}</tbody>
+        <tbody>${rungs || '<tr><td colspan="3" class="hint">No rungs yet — add the class’s table.</td></tr>'}</tbody>
       </table>
       <div class="rowtools">
         ${addButton(list, 'rung', { from: (ladder.length ? Math.max(...ladder.map((r) => Number(r.from) || 0)) + 4 : 1), dice: '' })}
         ${ladder.length ? '' : addManyButton(list, 'monk ladder', MONK_UNARMED_LADDER)}
       </div>
-      ${n.rung != null ? `<p class="hint">Using rung <strong>${n.rung}</strong> at ${esc(n.className || 'character')} level ${n.classLevel || 0}: <strong>${esc(n.baseDice || '—')}</strong>.</p>`
-        : (ladder.length && !n.formula ? `<p class="hint warn">No rung at ${esc(n.className || 'character')} level ${n.classLevel || 0} yet. The weapon uses the practitioner table.</p>` : '')}
-      ${field('Formula', text(`${base}.native.formula`, n.formula || '', '{= … } overrides the rungs'))}
+      ${n.rung != null ? `<p class="hint">Reading rung <strong>${n.rung}</strong> at ${esc(n.className || 'character')} level ${n.classLevel || 0} — <strong>${esc(n.baseDice || '—')}</strong>.</p>`
+        : (ladder.length && !n.formula ? `<p class="hint warn">No rung at ${esc(n.className || 'character')} level ${n.classLevel || 0} yet. The weapon reads the practitioner table.</p>` : '')}
+      ${field('Formula', text(`${base}.native.formula`, n.formula || '', '{= … } — wins over the rungs'))}
       ${n.error ? `<p class="hint warn">${esc(n.error)}</p>` : ''}
       <div class="unarmed-grid" style="margin-top:6px">
         ${editLine('Extra size at N talents', `${base}.native.threshold`, n.threshold)}
         ${editLine('Sizes it grants', `${base}.native.bonusSizes`, n.bonusSizes)}
       </div>
-      <div class="statline" title="Talents in Boxing, Brute, Open Hand and Wrestling, plus any added by Unorthodox Unarmed Training.">
+      <div class="statline" title="Talents in Boxing, Brute, Open Hand and Wrestling, plus whatever Unorthodox Unarmed Training added to them">
         <span class="label">Unarmed-associated talents</span>
         <span class="value">${u.assocTalents ?? 0}${n.qualifies ? ' ✓' : ''}</span></div>
       ${editLine('Count extra as associated', `${base}.native.extraAssoc`, n.extraAssoc ?? 0)}
       <p class="hint">${n.qualifies
-        ? `${u.assocTalents} associated talent${u.assocTalents === 1 ? ' meets' : 's meet'} ${n.threshold}, so the strike is ${n.sizeBonus} size${n.sizeBonus === 1 ? '' : 's'} larger.`
-        : `${u.assocTalents ?? 0} of ${n.threshold} associated talents. No extra size yet.`}</p>
+        ? `${u.assocTalents} associated talent${u.assocTalents === 1 ? '' : 's'} meets ${n.threshold}, so the strike is ${n.sizeBonus} size${n.sizeBonus === 1 ? '' : 's'} larger.`
+        : `${u.assocTalents ?? 0} of ${n.threshold} associated talents — no extra size yet.`}</p>
     </div>`;
   }
 
@@ -165,7 +165,7 @@ function practitionerUnarmedBlock(u, per, base) {
         <span class="badge">${u.unorthodoxFeats || 0} feat${u.unorthodoxFeats === 1 ? '' : 's'} · ${slots} picks</span></span>
       <div class="picks">${Array.from({ length: slots }, (_, i) => select(`${base}.otherSpheres.${i}`, picks[i] || '', COMBAT_SPHERES.filter((s) => !UNARMED_SPHERES.includes(s)))).join('')}</div>
       </div>`
-      : '<p class="hint">Each Unorthodox Unarmed Training feat adds two sphere picks here.</p>';
+      : '<p class="hint">Unorthodox Unarmed Training is a feat. Each time it is taken, it adds two sphere picks here.</p>';
     return `<div class="unarmed-grid">
         ${chk('Boxing', `${base}.usesBoxing`, u.usesBoxing, per.Boxing)}
         ${chk('Brute', `${base}.usesBrute`, u.usesBrute, per.Brute)}
@@ -181,7 +181,7 @@ function practitionerUnarmedBlock(u, per, base) {
           <span class="label">Brawler's Vest <span class="badge">+${BRAWLERS_VEST_TALENTS}</span></span>
           <span class="value">${check(`${base}.brawlersVest`, u.brawlersVest)}</span></div>
       </div>
-      ${u.asuraEssence ? `<div class="statline" title="Essence invested in the Bands of the Asura veil. Each point counts as ${ASURA_TALENTS_PER_ESSENCE} Open Hand talents.">
+      ${u.asuraEssence ? `<div class="statline" title="The essence invested in the Bands of the Asura veil, ${ASURA_TALENTS_PER_ESSENCE} Open Hand talents a point">
         <span class="label">Bands of the Asura <span class="badge">${u.asuraEssence} essence</span></span>
         <span class="value">+${u.asuraEssence * ASURA_TALENTS_PER_ESSENCE} talents</span></div>` : ''}
       ${editLine('Extra effective talents', `${base}.extraTalents`, u.extraTalents ?? 0)}
@@ -236,7 +236,7 @@ export function weaponsPanel(model, e) {
             >${w.collapsed ? '▸' : '▾'}</button>
           <span class="wnames">
             ${itemText('equipment.weapons', i, 'name', w.name, 'Weapon name')}
-            <label class="whandle" title="The weapon's name in formulas, as in {weapon.${esc(w.handle || '')}.damage += 2}. Leave it blank to use the weapon's name up to the first bracket.">
+            <label class="whandle" title="What a formula calls this weapon — {weapon.${esc(w.handle || '')}.damage += 2}. Clear it and it goes back to the weapon's own name, cut at the first bracket.">
               <span>weapon.</span><input type="text" class="mono" value="${esc(w.handle ?? '')}"
                 data-item="equipment.weapons|${i}|id" data-kind="text"
                 placeholder="${esc(weaponHandle(w.name))}" aria-label="Formula name"></label>
@@ -251,15 +251,15 @@ export function weaponsPanel(model, e) {
           ${movedValue(esc(now.dmg), now.dmgMoved, {
       tag: 'span',
       cls: 'bigroll dmg',
-      title: now.dmgTitle || `Damage including [[…]] tokens${w.sizeSteps ? ` (${w.dice} at Medium, adjusted to ${w.sizeNow})` : ''}`,
+      title: now.dmgTitle || `Damage including [[…]] tokens${w.sizeSteps ? ` — ${w.dice} at Medium, stepped to ${w.sizeNow}` : ''}`,
       keep: true,
     })}`;
   })()}
           ${w.proficient === false ? `<span class="badge err nonprof"
-            title="${esc(w.proficiencyWhy)}. ${w.nonproficiency ? 'Nonproficiency gives −4 to hit.' : 'The −4 is turned off for this weapon.'}">not proficient${w.nonproficiency ? ' · −4' : ''}</span>`
+            title="${esc(w.proficiencyWhy)} — ${w.nonproficiency ? 'non-proficiency is −4 to hit, applied' : 'the −4 is switched off on this row'}">not proficient${w.nonproficiency ? ' · −4' : ''}</span>`
     : w.proficient === true && w.proficiencySource !== 'overview' ? `<span class="badge ok nonprof"
             title="${esc(w.proficiencyWhy)}">proficient · ${w.proficiencySource === 'veil' ? 'veil' : esc(w.proficiencyNote || 'row')}</span>` : ''}
-          ${rollButton(model, 'weapon', i, `${String(w.name || '').trim() || 'this weapon'}: attack and damage`, cs)}
+          ${rollButton(model, 'weapon', i, `${String(w.name || '').trim() || 'this weapon'} — attack and damage`, cs)}
           ${removeButton('equipment.weapons', i, { what: 'weapon' })}
         </div>
         <div class="weapongrid">
@@ -280,15 +280,15 @@ export function weaponsPanel(model, e) {
               value: /^\s*(\{|\[\[)/.test(String(w.dice ?? '')) && !w.useUnarmedDice ? w.diceResolved : null,
               error: w.diceError,
               title: w.useUnarmedDice ? 'Overridden by the unarmed strike dice'
-                : 'Dice such as 12d8, or a named value such as {kinetic.fist}.',
+                : 'Literal dice (12d8), or a reference like {kinetic.fist} to a name defined in prose',
             })}
             ${itemCheck('equipment.weapons', i, 'useUnarmedDice', w.useUnarmedDice, '🥊',
-    'Use the unarmed strike dice. The card shows how they are calculated.')}
+    'Use the unarmed strike dice — ticked, the card shows how they are worked out')}
           </span>`)}
           ${field('Ability', itemSelect('equipment.weapons', i, 'damageAbility', w.damageAbility, ABILITIES.map((k) => ABILITY_LABELS[k])))}
           ${field('×', `<input type="number" value="${esc(w.abilityMult ?? 1)}" step="0.5" min="0"
             data-item="equipment.weapons|${i}|abilityMult" data-kind="number" style="width:3.2rem"
-            title="Ability multiplier, usually 1, 1.5 or 2.">`)}
+            title="Ability multiplier — usually 1, 1.5 or 2, but anything goes">`)}
           ${field('Misc dmg', itemExpr('equipment.weapons', i, 'miscDamage', w, { width: '4.5rem' })
             + forwardedBadge(model, `weapon.${i}.damage`)
             + forwardedBadge(model, `weapon.${i}.damage.mult`, { tag: 'mult' })
@@ -323,25 +323,25 @@ export function weaponsPanel(model, e) {
           <span class="wsep"></span>
           ${field('As', `<input type="text" value="${esc(w.baseWeapon ?? '')}" data-item="equipment.weapons|${i}|baseWeapon"
             data-kind="text" placeholder="katana" style="width:6.5rem"
-            title="The base weapon, such as katana for a named katana. Checked against the Overview's specific weapon proficiencies.">`)}
+            title="The base weapon this is — a named blade that is a katana, a veil that takes a longsword's form — read against the Overview's specific weapons">`)}
           ${field('Proficient', itemSelect('equipment.weapons', i, 'proficiency', w.proficiency, [['yes', 'Yes'], ['no', 'No']],
     `Auto${w.proficient === true ? ' ✓' : w.proficient === false ? ' ✗' : ''}`, null, {
-      attrs: `title="${esc(w.proficiencyWhy || 'Auto checks this weapon against the Overview\'s proficiencies and the [Enhanced] veil rule.')}"`,
+      attrs: `title="${esc(w.proficiencyWhy || 'Auto reads the row against the Overview\'s Proficiencies and the [Enhanced] veil rule')}"`,
     }))}
-          ${w.proficient === false ? field('−4 to hit', `<span title="Untick if Misc already includes the −4.">${itemBox('equipment.weapons', i, 'nonproficiencyPenalty', w.nonproficiencyPenalty !== false)}</span>`) : ''}
+          ${w.proficient === false ? field('−4 to hit', `<span title="Untick when the −4 is already written in Misc">${itemBox('equipment.weapons', i, 'nonproficiencyPenalty', w.nonproficiencyPenalty !== false)}</span>`) : ''}
           ${w.proficiency ? field('Via', `<input type="text" value="${esc(w.proficiencyNote ?? '')}" data-item="equipment.weapons|${i}|proficiencyNote"
             data-kind="text" placeholder="Custom Training" style="width:8rem"
-            title="What grants or denies proficiency, such as a talent, class feature or trait.">`) : ''}
+            title="What grants or denies it — a talent, a class feature, a trait">`) : ''}
         </div>`, 'weaponwhat', true)}
         ${!w.useUnarmedDice ? ''
     : i === firstUnarmed ? unarmedFold(model)
-      : `<p class="hint">🥊 Unarmed dice ${esc(model.data.training?.combat?.unarmed?.dice ?? '—')}, set up under
+      : `<p class="hint">🥊 Unarmed dice ${esc(model.data.training?.combat?.unarmed?.dice ?? '—')}, worked out under
           ${esc(String(weapons[firstUnarmed].name || '').trim() || 'the first 🥊 weapon')}.</p>`}
         <label class="fld" style="margin-top:6px"><span>Special properties
-          <span class="hint">{{…}} adds to attack and [[…]] adds to damage. Both accept dice,
-            formulas or a {name}. Tag a damage token <strong>Crit</strong> for damage dealt only on a
-            crit (multiplied), or <strong>Mult</strong> for damage multiplied on a crit. Untagged
-            damage is added once on a crit.</span></span>
+          <span class="hint">— write {{…}} to add to hit and [[…]] to add damage; dice, formulas, a
+            {name} you defined, or a mix. Tag a damage token <strong>Crit</strong> for crit-only
+            (multiplied) or <strong>Mult</strong> for damage that multiplies with the weapon;
+            untagged is a rider, added once on a crit.</span></span>
           ${itemArea(model, 'equipment.weapons', i, 'special', w.special, 2)}</label>
         ${w.calc ? `<div class="wcalc">
           <div class="hint">atk ${fmt(w.calc.baseAtk)} · dmg ${esc(diceString(w.calc.baseDmgDice, w.calc.baseDmgFlat))}
@@ -370,9 +370,9 @@ export function weaponsPanel(model, e) {
       <div style="margin-top:8px">${addButton('equipment.weapons', 'Add weapon', blankWeapon())}</div>
       <p class="hint">
         Attack = base mode total + enhancement + misc + adjustment. Damage = dice +
-        floor(ability × mult) + misc + enhancement. Tick 🥊 to make a weapon an unarmed strike;
-        its dice come from a class progression or the practitioner table, set up in the weapon's
-        card.
+        floor(ability × mult) + misc + enhancement. Tick 🥊 to make a weapon an unarmed strike.
+        Its dice then come from a class progression or the practitioner table. Both are set up
+        in the weapon's card.
       </p>
     </section>`;
   }
@@ -387,7 +387,7 @@ function armorPanel(e) {
       <td class="num" data-label="Max Dex">${autoNum(`data-set="${path}.maxDex"`, piece.maxDex,
     { placeholder: '—', width: '3.2rem' })}</td>
       <td class="num" data-label="Armor check penalty">${num(`${path}.acp`, piece.acp, 'style="width:3.2rem"')}</td>
-      <td data-label="Type"${piece.kind === 'Shield' ? '' : ` title="Light, Medium or Heavy. Formulas read it as ac.armor.type (1 to 3) and ac.armor.light / medium / heavy."`}>${
+      <td data-label="Type"${piece.kind === 'Shield' ? '' : ` title="Light, Medium or Heavy — formulas read it as ac.armor.type (1 to 3) and ac.armor.light / medium / heavy"`}>${
   text(`${path}.type`, piece.type, '', piece.kind === 'Shield' ? {} : { list: 'armor-types' })}</td>
       <td class="mid" data-label="Ghost touch">${check(`${path}.ghostTouch`, piece.ghostTouch)}</td>
       <td class="num" data-label="Weight">${num(`${path}.weight`, piece.weight, 'style="width:3.6rem"')}</td>
@@ -397,7 +397,7 @@ function armorPanel(e) {
     return `<section class="panel span2">
       <h3>Armor &amp; shields</h3>
       <div class="tablewrap"><table class="armor stacked">
-        <thead><tr><th title="Worn pieces count toward AC.">On</th><th></th><th>Name</th>
+        <thead><tr><th title="Worn — counts toward AC">On</th><th></th><th>Name</th>
           <th class="num" title="The piece's own bonus">AC</th>
           <th class="num" title="Its enhancement bonus: a +1 breastplate is AC 6, Enh. 1">Enh.</th>
           <th class="num">Max Dex</th><th class="num">ACP</th>
@@ -415,8 +415,8 @@ function armorPanel(e) {
       })}</div>
       <p class="hint">
         Worn pieces add to AC. The lowest Max Dex among them caps the AC stat. Their armor
-        check penalty applies to flagged skills. A piece's enhancement adds to its own bonus,
-        so a +1 breastplate is AC 6 and Enh. 1.
+        check penalty applies to flagged skills. All of this updates live. A piece's
+        enhancement adds to its own bonus, so a +1 breastplate is AC 6 and Enh. 1.
       </p>
     </section>`;
   }
@@ -464,13 +464,13 @@ function bonusCells(model, list, i, bi, g, { wide = false } = {}) {
       <td class="num bval" data-label="Bonus ${bi + 1}">${exprField(`data-item="${list}|${i}|bonuses.${bi}.value"`,
     bonusSource(b.value), {
       kind: 'expr-or-null', width: wide ? '4.4rem' : '3.6rem', placeholder: '—',
-      value: st.value, error: st.error, title: 'A number or a formula, e.g. floor(level / 4)',
+      value: st.value, error: st.error, title: 'A number, or a formula like floor(level / 4)',
     })}</td>
       <td class="btype" data-label="Bonus ${bi + 1} type">${itemSelect(list, i, `bonuses.${bi}.type`, b.type, GEAR_TYPE_OPTIONS)}</td>
       <td class="bto" data-label="Bonus ${bi + 1} to">${targetSelect(model, list, i, bi, target, st.targetError)}${wide ? `
         <input type="text" class="target-free" value="${esc(target)}" data-item="${list}|${i}|bonuses.${bi}.target"
           data-kind="text" placeholder="or type one: resistance.fire"
-          title="Type a destination that is not in the list.">` : ''}</td>`;
+          title="Anything a forwarded bonus can be aimed at, by name — for a destination the list has not got">` : ''}</td>`;
   }
 
 /**
@@ -479,14 +479,14 @@ function bonusCells(model, list, i, bi, g, { wide = false } = {}) {
  * claim a name keeps it; whatever nothing claims goes last.
  */
 const TARGET_GROUPS = [
-  ['Armor class', (n) => n === 'ac' || n.startsWith('ac.')],
+  ['Armour class', (n) => n === 'ac' || n.startsWith('ac.')],
   ['Saves', (n) => n === 'saves' || n.startsWith('saves.')],
   ['Attacks & initiative', (n) => n === 'attack' || n.startsWith('attack.') || n === 'initiative'],
   ['Hit points', (n) => n.startsWith('hp.')],
   ['Ability scores', (n) => /^(str|dex|con|int|wis|cha)\.score$/.test(n)],
   ['Skills', (n) => n === 'skill' || n.startsWith('skill.')],
   ['Weapons', (n) => n.startsWith('weapon.') || n === 'damage' || n.startsWith('damage.')],
-  ['Defenses', (n) => n.startsWith('defenses.') || /^(dr|resistance|weakness|immune)\./.test(n)],
+  ['Defences', (n) => n.startsWith('defenses.') || /^(dr|resistance|weakness|immune)\./.test(n)],
   ['Spheres', (n) => n.startsWith('sphere.')],
   ['Speeds', (n) => n === 'speed' || n.startsWith('speed.')],
 ];
@@ -563,7 +563,7 @@ function targetSelect(model, list, i, bi, value, error) {
     const v = String(value ?? '').trim();
     return `<select class="target${error ? ' invalid' : ''}" data-item="${list}|${i}|bonuses.${bi}.target" data-kind="text"
         data-fill="targets"
-        title="${esc(error || (v ? `Forwarded to ${v}` : 'Where the bonus applies, such as AC, a save, a skill or an ability score.'))}">
+        title="${esc(error || (v ? `Forwarded to ${v}` : 'Where the bonus goes: AC, a save, a skill, an ability score…'))}">
         ${targetChoices(model, v, { all: false })}
       </select>`;
   }
@@ -582,7 +582,7 @@ function gearRow(model, ctx, list, i, g, cols, tools) {
     const label = String(g.name || '').trim() || g.slot || 'this item';
     return `<tr class="gearrow${open ? ' open' : ''}">
       <td class="slot" data-stack="head"><button data-view class="disclose" data-gearopen="${esc(key)}" aria-expanded="${open}"
-        title="${esc(open ? `Close ${label}` : `Open ${label} to edit it in full.`)}"
+        title="${esc(open ? `Close ${label}` : `Open ${label} — the whole item, with room to write`)}"
         aria-label="${esc(open ? `Close ${label}` : `Open ${label}`)}">${open ? '▾' : '▸'}</button
         >${esc(g.slot ?? '')}</td>
       <td class="name" data-stack="name">${itemText(list, i, 'name', g.name, '', true)}</td>
@@ -620,10 +620,10 @@ function gearHead(list, cols, inUse, armed) {
   inUse[kind] ? ` data-arm="${esc(arm)}"` : ''}
         class="${on ? 'danger armed' : inUse[kind] ? 'danger' : ''}"
         title="${esc(on
-    ? `Click again to remove the last ${label} column and its contents.`
+    ? `Click again to drop the last ${label} column and what is written in it`
     : inUse[kind]
-      ? `Remove the last ${label} column. It has contents, so you must click twice.`
-      : `Remove the last ${label} column.`)}"
+      ? `Remove the last ${label} column — something is written in it, so this asks twice`
+      : `Remove the last ${label} column`)}"
         aria-label="Remove a ${label} column">${on ? 'sure?' : '−'}</button>
       <button data-action="gear-col" data-list="${esc(list)}" data-kind="${kind}" data-delta="1"
         title="Add another ${label} column to every row" aria-label="Add a ${label} column">+</button>
@@ -634,7 +634,7 @@ function gearHead(list, cols, inUse, armed) {
     const bonusHeads = Array.from({ length: cols.bonuses }, (_, bi) => {
       const last = bi === cols.bonuses - 1;
       return `
-      <th class="num" title="Bonus ${bi + 1} amount: a number or a formula">B${bi + 1}</th><th title="Bonus type">Type</th><th${last ? ' class="colhead"' : ''} title="Where the bonus applies">To${last ? step('bonuses', 'bonus') : ''}</th>`;
+      <th class="num" title="Bonus ${bi + 1}: how much — a number or a formula">B${bi + 1}</th><th title="What kind of bonus">Type</th><th${last ? ' class="colhead"' : ''} title="Where it goes">To${last ? step('bonuses', 'bonus') : ''}</th>`;
     }).join('');
     const otherHeads = Array.from({ length: cols.others }, (_, oi) => {
       const last = oi === cols.others - 1;
@@ -644,7 +644,7 @@ function gearHead(list, cols, inUse, armed) {
     return `<thead><tr>
       <th class="slot">Slot</th><th>Item</th>
       ${bonusHeads}${otherHeads}
-      ${cols.qty ? '<th class="num" title="Quantity. Weight and cost are per item.">Qty</th>' : ''}
+      ${cols.qty ? '<th class="num" title="How many: weight and cost are per item">Qty</th>' : ''}
       <th class="num">Wt</th><th class="num">Cost</th><th></th></tr></thead>`;
   }
 
@@ -700,10 +700,12 @@ function gearCard(model, list, i, g, cols) {
         </div>
         <h5>Description</h5>
         ${prose(model, `data-item="${list}|${i}|note"`, g.note, 3, 'grow')}
-        <p class="hint">The description accepts <code>{name = expr}</code> formulas, for example to
-          define a pool the item grants. The Other columns accept formulas too. A bonus with an
-          amount, a type and a To is added to that stat and stacks by its type. If the destination
-          is not in the To list, type it in the box below, such as <code>resistance.fire</code>.</p>
+        <p class="hint">The description resolves <code>{name = expr}</code> like any other prose
+          on the sheet. An item that grants a pool can define it here. The Other columns
+          read formulas too. A bonus with an amount, a type and a To is forwarded to that
+          target. It stacks with other bonuses by its type. To lists every destination the
+          sheet knows. The box under it takes one not on the list, such as
+          <code>resistance.fire</code>.</p>
       </div>
     </td></tr>`;
   }
@@ -730,7 +732,7 @@ function whereCarried(model, i, g) {
     [...containerChoices(model, i), STORED_CHOICE], 'On you'))}
           ${field('Container', itemSelect('equipment.other', i, 'holds', g.holds,
     [['counted', 'Holds things'], ['weightless', 'Holds things, weightless inside']], 'Not a container',
-    null, { attrs: 'title="Items in a weightless container, such as a bag of holding, weigh nothing. The container\'s own weight still counts."' }))}`;
+    null, { attrs: 'title="A weightless container (a bag of holding) carries what is in it for nothing; its own weight still counts."' }))}`;
   }
 
 function gearSlotsPanel(model, ctx, e) {
@@ -753,11 +755,12 @@ function gearSlotsPanel(model, ctx, e) {
     bonuses: gearColumnInUse(e.gear, 'bonuses'), others: gearColumnInUse(e.gear, 'others'),
   }, ctx.armedRemove)}
         <tbody>${rows.map(({ g, i }) => gearRow(model, ctx, 'equipment.gear', i, g, cols)).join('')
-    || `<tr><td colspan="${gearSpan(cols)}"><p class="empty">Nothing worn. Show all slots to fill them in.</p></td></tr>`}</tbody>
+    || `<tr><td colspan="${gearSpan(cols)}"><p class="empty">Nothing worn — show all slots to fill them in.</p></td></tr>`}</tbody>
       </table></div>
-      <p class="hint">Each row has typed bonuses (amount, type and destination) and Other
-        properties. Amounts accept formulas. The + and − buttons on the last column of each group
-        add or remove a column for every row. Click an item's ▸ to open it in full.</p>
+      <p class="hint">Each row has typed bonuses (amount, type, and where it goes) and freeform
+        Other properties. The amount takes a formula. Add as many columns of each as you need.
+        The ± on the last column of each family adds or drops one across every row. Click an
+        item's ▸ to open it with room to describe it.</p>
     </section>`;
   }
 
@@ -837,11 +840,11 @@ export function loadLine(c) {
     const name = { light: 'Light', medium: 'Medium', heavy: 'Heavy', over: 'Over heavy' }[load] || load;
     if (!p) return line('Load', 'Light');
     const off = c.carry?.applyLoad === false;
-    const what = `max Dex +${p.maxDex}, check penalty ${minus(p.acp)}, reduced land speed, run ×${p.run}`;
+    const what = `max Dex +${p.maxDex}, check penalty ${minus(p.acp)}, land speed cut, run ×${p.run}`;
     return `${line('Load', `${name}${off ? ' (penalties off)' : ''}`)}
       <p class="hint${off ? '' : ' warn'}">${off
-    ? `A ${name.toLowerCase()} load would give ${what}. Load penalties are turned off in the Overview's Carrying capacity panel.`
-    : `${what}. Armor's own values apply where they are worse.${p.note ? ` ${p.note}` : ''}`}</p>`;
+    ? `A ${name.toLowerCase()} load would mean ${what}. Switched off on the Overview's Carrying capacity panel.`
+    : `${what}. Armour's own figures apply instead where they are worse.${p.note ? ` ${p.note}` : ''}`}</p>`;
   }
 
   /* ---------------- item crafting ---------------- */
@@ -907,8 +910,9 @@ function craftSpeedPanel(cr) {
       })}</div>
       ${line('Progress / day', group(cr.calc?.speedPerDay))}
       <p class="hint">
-        Flat increases add to the base rate. Multipliers add together: two ×2 bonuses
-        make ×4. Amounts accept formulas (<code>level * 100</code>).
+        Flat increases add to the base rate. Multipliers stack additively: two ×2 bonuses
+        make ×4. This matches the original sheet's count. Amounts may be formulas
+        (<code>level * 100</code>).
       </p>
       <p class="hint">
         A project takes its <strong>base price</strong> ÷ this rate, rounded up.
@@ -925,7 +929,7 @@ function craftCostPanel(cr) {
     return `<section class="panel">
       <h3>Crafting cost</h3>
       ${field('Base crafting cost', select('crafting.baseCostIndex',
-    String(cr.baseCostIndex ?? 0), presets.map((b, i) => [String(i), `${b.label} (${b.percent}%)`]), null))}
+    String(cr.baseCostIndex ?? 0), presets.map((b, i) => [String(i), `${b.label} — ${b.percent}%`]), null))}
       <details style="margin:6px 0">
         <summary class="hint" style="cursor:pointer">Edit base costs (${presets.length})</summary>
         <div class="tablewrap" style="margin-top:6px"><table class="craftlist stacked">
@@ -938,7 +942,7 @@ function craftCostPanel(cr) {
           </tr>`).join('')}</tbody>
         </table></div>
         <div style="margin-top:6px">${addButton('crafting.baseCosts', 'Add base cost', { label: '', percent: 50 })}</div>
-        <p class="hint">50, 33 and 25 mean exactly half, a third and a quarter of market value.</p>
+        <p class="hint">50, 33 and 25 mean a true half, third and quarter of market value. This matches the original sheet's dropdown.</p>
       </details>
       <div class="subhead">Manufacturing cost reductions</div>
       <div class="tablewrap"><table class="craftlist stacked">
@@ -1023,7 +1027,7 @@ function craftProject(ctx, model, cr, p, i) {
       <div class="weapongrid">
         ${field('Base price', itemExpr(list, i, 'value', p, { width: '7rem' }))}
         ${field('Discount %', autoNum(`data-item="${list}|${i}|discountOverride"`, p.discountOverride, {
-    placeholder: Number(cr.discount) || 0, width: '4.4rem', title: "Leave blank to use the crafter's default discount.",
+    placeholder: Number(cr.discount) || 0, width: '4.4rem', title: "Blank uses the crafter's standing discount",
   }))}
         ${field('Zero profit', `<span class="pair">${itemBox(list, i, 'zeroProfit', p.zeroProfit)}
           <span class="hint">sell at cost</span></span>`)}
@@ -1153,7 +1157,7 @@ export function wealthPanel(model, ctx) {
     return `<section class="panel span2 wealth">
       <h3>Wealth
         <span class="badge">${esc(v.currency)}</span>
-        ${v.due ? `<span class="badge ${v.expected.total > 0 ? 'err' : ''}" title="The amount of the next offering as of today.">owed ${n(v.expected.total)}</span>` : ''}
+        ${v.due ? `<span class="badge ${v.expected.total > 0 ? 'err' : ''}" title="What the next offering comes to today">owed ${n(v.expected.total)}</span>` : ''}
       </h3>
       <div class="bigstats wealthstats">
         ${bigStat('On hand', n(v.current), v.currency)}
@@ -1174,14 +1178,14 @@ export function wealthPanel(model, ctx) {
       </div>
       ${v.due ? `<div class="fieldgrid wealthfields">
         ${field('Last offering', `<input type="date" value="${esc(v.lastOffering)}" data-set="wealth.lastOffering" data-kind="text"
-          min="1900-01-01" max="${esc(v.today)}" title="The date of the last offering. It cannot be later than today.">`)}
+          min="1900-01-01" max="${esc(v.today)}" title="The day the last offering was made; today at the latest">`)}
         ${field('Baseline after last offering', autoNum('data-set="wealth.baseline"', v.baseline, {
-    placeholder: '—', title: 'The balance after the last offering.',
+    placeholder: '—', title: 'The balance recorded after the last offering',
   }))}
       </div>
       ${v.oathOfOfferings ? part('Oath of Offerings', v.expected.oath, `
         ${field('OoO / day', roField(n(v.offeringPerDay), `${cur} / day ÷ 2`))}
-        ${field(`Session ${money} since`, num('wealth.sessionMana', v.sessionMana, `min="0" title="${esc(cur)} earned in sessions since the last offering. Half is owed under the oath."`))}`,
+        ${field(`Session ${money} since`, num('wealth.sessionMana', v.sessionMana, `min="0" title="${esc(cur)} earned in sessions since the last offering; the oath takes half"`))}`,
   oathWorking, oathRule) : ''}
       ${v.materialCasting ? part('Material casting', v.expected.casting, `
         ${field('Spheres caster level', roField(String(v.casterLevel), 'From the Magic Spheres tab'))}
@@ -1195,16 +1199,16 @@ export function wealthPanel(model, ctx) {
           </select>
           <input type="number" data-draft="wealthAmount" value="${esc(draft.amount)}" placeholder="amount" style="width:6.5rem" aria-label="Amount">
           <input type="text" data-draft="wealthLabel" value="${esc(draft.label)}" placeholder="label (e.g. Session 12 reward)" style="width:15rem" aria-label="Label">
-          <button class="primary" data-action="wealth-record" title="Add this line to the ledger and update the wallet.">Record</button>
+          <button class="primary" data-action="wealth-record" title="Write it to the ledger and move the wallet">Record</button>
         </span>
         <span class="pair" style="margin-left:auto">
           <button data-action="wealth-offering" ${v.due && v.expected.total > 0 ? '' : 'disabled'}
-            title="Pay ${n(v.expected.total)}. The balance after it becomes the new baseline, today becomes the last offering date, and session ${esc(money)} resets to 0.">Make offering (${n(v.expected.total)})</button>
+            title="Pay ${n(v.expected.total)}: the balance after it becomes the new baseline, today the last offering, session ${esc(money)} back to 0">Make offering (${n(v.expected.total)})</button>
         </span>
       </div>
       <p class="hint">
-        A <em>session</em> line is income added to the wallet; under the oath, half of it is owed
-        at the next offering. A <em>spend</em> line is taken off the wallet.
+        A <em>session</em> line is session income. It is added to the wallet. Under the oath,
+        half of it is owed at the next offering. A <em>spend</em> line is taken off the wallet.
         Formulas can read <code>mana.current</code>, <code>mana.expected</code> and
         <code>mana.after</code>.
       </p>
@@ -1214,8 +1218,8 @@ export function wealthPanel(model, ctx) {
           <td>${esc(l.date)}</td>
           <td>${esc(l.label)} <span class="badge">${kindLabel[l.kind] || l.kind}</span></td>
           <td class="num ${l.amount < 0 ? 'neg' : 'pos'}">${signed(l.amount, n)}</td>
-          <td class="tools">${removeAction('wealth-remove', { index: l.i }, { what: 'this line', title: 'Remove this line and undo its change.' })}</td>
+          <td class="tools">${removeAction('wealth-remove', { index: l.i }, { what: 'this line', title: 'Remove this line and undo it' })}</td>
         </tr>`).join('')}</tbody>
-      </table>${ledger.length > 12 ? `<p class="hint">${ledger.length - 12} older line${ledger.length - 12 === 1 ? ' is' : 's are'} not shown.</p>` : ''}</div>` : ''}
+      </table>${ledger.length > 12 ? `<p class="hint">${ledger.length - 12} older line${ledger.length - 12 === 1 ? '' : 's'} kept.</p>` : ''}</div>` : ''}
     </section>`;
   }

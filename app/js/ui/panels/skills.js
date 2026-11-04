@@ -89,7 +89,7 @@ export function renderSkillsPanel(model, ctx) {
         PERFORM_CATEGORIES.map(([c, examples]) => [c, c, examples]), 'pick one')
       : `<input type="text" value="${esc(s.spec ?? '')}" data-item="skills|${i}|spec" data-kind="text"
           placeholder="which one?"
-          title="${esc(`Which ${root}? Shown as "${skillLabel(s.name, s.spec || '…')}". You can also type the full name.`)}">`;
+          title="${esc(`Which ${root}? Reads as "${skillLabel(s.name, s.spec || '…')}" — typing the whole thing works too.`)}">`;
     return `<span class="variant ${s.spec ? '' : 'empty'}">${control}</span>`;
   }
 
@@ -152,10 +152,10 @@ export function renderSkillsPanel(model, ctx) {
         <div class="fieldgrid">
           ${campaignRules(model.data).gestalt
     ? field('Class ranks / level (gestalt)', `<span class="value">${model.data.gestalt?.ranksPerLevel ?? 0}</span>`)
-    : field('Class ranks (each class)', `<span class="value" title="Each class's ranks per level, times its levels.">${model.data.gestalt?.ranksTotal ?? 0}</span>`)}
+    : field('Class ranks (each class)', `<span class="value" title="Each class's ranks a level, for the levels it has">${model.data.gestalt?.ranksTotal ?? 0}</span>`)}
           ${/* Read off the Intelligence score rather than typed beside it, so
                 the two cannot disagree. See `applyBudget`. */''}
-          ${field('Int bonus / level', `<span class="value" title="The Intelligence modifier. It changes with the Intelligence score.">${
+          ${field('Int bonus / level', `<span class="value" title="The Intelligence modifier — raise the score and this follows">${
   fmt(b.intPerLevel ?? 0)}</span>`)}
           ${field('Bonus points / level', exprField('data-set="skillBudget.bonusPerLevel"',
     b.bonusPerLevel ?? 0, {
@@ -178,10 +178,11 @@ export function renderSkillsPanel(model, ctx) {
       : '<p class="hint" style="color:var(--cs-good)">Every skill point is spent.</p>'}
         <p class="hint">
           Only <strong>Bought</strong> ranks count against the budget. Specialty, gear,
-          Other and sphere ranks are free. Int bonus/level is the current Intelligence modifier,
-          counted once per level. By the rules, raising Int does not add ranks for earlier levels
-          unless your GM allows it. Bonus points accepts a formula, and a bonus anywhere on the
-          sheet can add a point: <code>{skill.pointsPerLevel += 1}</code>.
+          Other and sphere ranks are free. Int bonus/level follows the Intelligence
+          modifier and is one flat figure per level. Raising Int does not refund ranks for
+          the levels below it, unless your table rules otherwise. Bonus points takes a formula.
+          A rule written anywhere on the sheet can grant a point:
+          <code>{skill.pointsPerLevel += 1}</code>.
         </p>
       </section>
 
@@ -193,7 +194,8 @@ export function renderSkillsPanel(model, ctx) {
           ${field('Free choice', select('specialtySkills.free', spec.free, pickOptions(() => true)))}
         </div>
         <p class="hint">
-          Each specialty skill gets ranks equal to your level, marked ★ in the table below.
+          Each specialty skill gets full ranks for your level, like the sheet's Specialty
+          column. Marked with ★ in the table below.
         </p>
       </section>`}
       </div>
@@ -201,7 +203,7 @@ export function renderSkillsPanel(model, ctx) {
       <section class="panel span2">
         <h3>Skills
           <span class="badge">${rows.length} of ${skills.length}</span>
-          ${hiddenCount ? `<span class="badge" title="Hidden with the eye button. Show all shows them again.">${hiddenCount} hidden</span>` : ''}
+          ${hiddenCount ? `<span class="badge" title="Hidden with the eye; Show all brings them back">${hiddenCount} hidden</span>` : ''}
           <button data-view data-action="toggle-skills" style="margin-left:8px">
             ${ctx.showAllSkills ? 'Hide unused' : 'Show all'}
           </button>
@@ -218,7 +220,7 @@ export function renderSkillsPanel(model, ctx) {
               <th title="Another source grants full ranks (class features, templates)">Other</th>
               <th class="num" title="From sphere talents">Spheres</th>
               <th>Ability</th><th class="num">Mod</th><th class="num">Misc</th>
-              <th title="Requires training: no check without a rank.">Trained only</th>
+              <th title="Requires training: no check at all without a rank in it">Trained only</th>
               <th>Notes</th><th></th>
             </tr></thead>
             <tbody>
@@ -242,9 +244,9 @@ export function renderSkillsPanel(model, ctx) {
                 <td class="mid" data-label="Gear grants ranks">${itemCheck('skills', i, 'rankSources.gear', s.rankSources?.gear)}</td>
                 <td class="mid" data-label="Other grants ranks">${itemCheck('skills', i, 'rankSources.other', s.rankSources?.other)}</td>
                 <td class="num" data-label="From spheres">${s.sphereRanks || ''}${s.competence
-                  ? `<span class="skillcomp" title="${esc('Two spheres are associated with this skill, '
-                    + 'so only one grants ranks. The other grants a +' + s.competence
-                    + ' competence bonus instead (half your level, minimum +1).')}">+${s.competence}</span>` : ''}</td>
+                  ? `<span class="skillcomp" title="${esc('Two spheres associate themselves with this skill, '
+                    + 'so only one of them pays it ranks. The other grants a +' + s.competence
+                    + ' competence bonus instead — half your level, minimum +1.')}">+${s.competence}</span>` : ''}</td>
                 <td data-label="Ability">${itemSelect('skills', i, 'abilities.0', (s.abilities || [])[0], ABILITIES.map((k) => ABILITY_LABELS[k]))}</td>
                 <td class="num" data-label="Ability mod">${fmt(s.abilityMod || 0)}</td>
                 <td class="num bought" data-label="Misc">${exprField(`data-item="skills|${i}|offset"`, s.offset ?? 0, {
@@ -257,7 +259,7 @@ export function renderSkillsPanel(model, ctx) {
                 <td class="mid" data-label="Trained only">${itemCheck('skills', i, 'requiresTraining', s.requiresTraining)}</td>
                 <td data-label="Notes">${itemText('skills', i, 'situational', s.situational)}</td>
                 <td class="tools"><button data-action="toggle-skill-hidden" data-index="${i}" class="eye"
-                  title="${s.hidden ? 'Hidden. Show this skill again.' : 'Hide this skill from the list.'}"
+                  title="${s.hidden ? 'Hidden — show this skill again' : 'Hide this skill from the list'}"
                   aria-pressed="${!!s.hidden}" aria-label="${s.hidden ? 'Show skill' : 'Hide skill'}">${s.hidden ? '◌' : '👁'}</button></td>
               </tr>`).join('')}
             </tbody>
@@ -275,21 +277,23 @@ export function renderSkillsPanel(model, ctx) {
         </div>
         <p class="hint">
           Total ranks = min(level, Bought + (★ + Gear + Other) × level + Spheres).
-          <strong>Spheres</strong> comes from the talent counts on the training tabs. A gold figure
-          beside it is a <em>competence</em> bonus: when two spheres are associated with a skill,
-          only one grants ranks and the other grants half your level.
-          <strong>Misc</strong> holds flat bonuses from gear, traits and similar sources, as a number
-          or a formula such as <code>int.mod</code>, <code>floor(level/2)</code> or a named value like
-          <code>skill_familiarity</code>. A gold figure beside it is a bonus <em>forwarded</em> from a
-          feature with <code>{skill.bluff += …}</code>; hover over it to see which feature.
+          <strong>Spheres</strong> comes from the training tabs' talent counts. A gold figure
+          beside it is a <em>competence</em> bonus. Two spheres are associated with this
+          skill, so only one of them grants ranks. The other grants half your level instead.
+          <strong>Misc</strong> holds flat bonuses from gear, traits and similar sources. It takes a
+          number, or a formula such as <code>int.mod</code>, <code>floor(level/2)</code>, or a name
+          defined in prose like <code>skill_familiarity</code>. A gold figure beside it is a bonus
+          <em>forwarded</em> here from a feature that wrote
+          <code>{skill.bluff += …}</code>. Point at it to see which feature.
         </p>
         <p class="hint">
           Only ${VARIANT_SKILLS.map((v) => `<strong>${esc(v)}</strong>`).join(', ')} and
-          <strong>Perform</strong> take a variant, in the highlighted slots. Write the variant
-          alone or the full name, such as <em>Craft (Weapons and Armor)</em>. Perform is one of nine:
+          <strong>Perform</strong> take a variant, in the highlighted slots. Write just the
+          variant, or the whole <em>Craft (Weapons and Armor)</em>. Either way the skill
+          reads as one name. Perform is one of nine:
           ${PERFORM_CATEGORIES.map(([c, examples]) => `<span title="${esc(examples)}">${esc(c)}</span>`).join(', ')}.
-          Other skills are fixed. <strong>Add skill</strong> creates a new skill, such as another
-          Craft or a homebrew skill.
+          Every other skill is fixed. <strong>Add skill</strong> creates a new skill with its
+          own name, such as a further Craft or a homebrew skill.
         </p>
       </section>
     </div>`;

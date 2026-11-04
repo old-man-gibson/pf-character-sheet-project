@@ -105,20 +105,23 @@ function guileTrainingPanel(model, g) {
       </div>
       ${talentLegend()}
       <p class="hint">
-        A tier grants talents in <strong>Any</strong> and in <strong>[utility]</strong> on two
-        separate ladders, so a level can unlock neither, one or both. Virtuoso grants 3/4 of a
-        talent per level and a utility talent every 2 levels. Journeyman grants 1/2 and 1/2.
-        Trained grants 1/4 and 1/2. Class levels come from the Planner; set the override if
-        needed. A class that trades its feats or spellcasting for a progression works like any
-        other block. The <strong>operative modifier</strong> (Int, Wis or Cha) is one choice for
-        the whole character and sets every skill sphere's save DC; changing it on any class block
-        changes it for all. A class that traded its spellcasting uses its casting ability.
-        For a class no tier matches, <strong>Custom rules</strong> lists the class levels each
-        ladder grants at: <code>all</code>, <code>even</code>, <code>2, +2</code>,
-        <code>char: 6-10</code>. Hover over a rule box for details.
+        A tier grants the talents in <strong>Any</strong> <em>in addition to</em> those in
+        <strong>[utility]</strong>. They are two separate ladders, so a level can light up
+        neither slot, one, or both. Virtuoso grants 3/4 of a free talent per level and a utility
+        talent every 2 levels. Journeyman grants 1/2 and 1/2. Trained grants 1/4 and 1/2, so a
+        Trained operative's picks are mostly utility ones. Class levels come from the Planner.
+        Set the override for a sparse one. A class that trades its feats or its spellcasting for
+        a progression (the two conversion tables) is one of these blocks like any other.
+        The <strong>operative modifier</strong> (Int, Wis or Cha) is one choice for the whole
+        character. Every skill sphere's save DC is built on it. The field appears on each class
+        block, but all of them set the one value. A class that traded its spellcasting for a
+        progression uses the score its casting used.
+        For a class no tier matches, <strong>Custom rules</strong> writes both ladders out as the
+        class levels they gain at: <code>all</code>, <code>even</code>, <code>2, +2</code>,
+        <code>char: 6-10</code>. Hover a rule box for the rest.
         Tick <strong>martial</strong> or <strong>magical</strong> under Counts as for a class
-        whose talents can also go to those spheres. A pick in a sphere the class cannot use does
-        not count and is marked on its row.
+        whose talents may also be spent on those spheres. A pick in a sphere of a kind the class
+        does not reach counts nowhere and is marked on its row.
       </p>
     </section>`;
   }
@@ -151,7 +154,7 @@ function guileSpherePanel(model, g) {
       width: '4rem',
       value: r[`${field}Num`],
       error: r[`${field}Error`],
-      title: `A number or a formula, e.g. ${example}`,
+      title: `A number, or a formula — e.g. ${example}`,
     });
     return `<section class="panel span2">
       <h3>Skill spheres <span class="badge">${rows.length}</span></h3>
@@ -176,31 +179,31 @@ function guileSpherePanel(model, g) {
     const trained = repeat ? 0 : talentsIn(g.tally, r.sphere);
     return `<tr>
           <td${repeat ? ` class="dupskill" title="${esc(`${r.sphere} is already on row ${r.repeatOf + 1}. `
-      + 'A sphere has one associated skill, so this row grants nothing. Remove it or pick another sphere.')}"` : ''}>${
+      + 'A sphere has one associated skill, so this row pays nothing. Remove it, or pick another sphere.')}"` : ''}>${
   itemSelect(list, i, 'sphere', r.sphere, spheres)}${repeat ? '<div class="req">already listed above</div>' : ''}</td>
           <td>${packages.length
       ? itemSelect(list, i, 'package', r.package, packages)
       : '<span class="hint">—</span>'}</td>
           <td class="${lost ? 'lostskill' : r.duplicate ? 'dupskill' : ''}"${lost
       ? ` title="${esc(`No skill on this character is called "${r.skill}". `
-        + 'Add it on the Skills tab or pick its current name. Until then, this sphere '
-        + 'counts no ranks.')}"` : r.duplicate
-      ? ` title="${esc(`More than one sphere is associated with ${r.skill}. Their ranks do not stack: `
-        + 'one grants ranks and the other grants a competence bonus of half your level.')}"` : ''}>
+        + 'Add the row on the Skills tab, or pick the name it has now — until then this sphere '
+        + 'reads as though it had no ranks at all.')}"` : r.duplicate
+      ? ` title="${esc(`More than one sphere is associated with ${r.skill}. They never stack their ranks: `
+        + 'one fills the skill and the overlap is worth a competence bonus of half your level instead.')}"` : ''}>
             ${itemSelect(list, i, 'skill', r.skill, skills)}
-            <div class="req" title="${esc(`The sphere requires: ${hint}`)}">${
+            <div class="req" title="${esc(`The sphere asks for: ${hint}`)}">${
   lost ? 'no such skill on this sheet' : esc(hint)}</div></td>
           <td class="num">${r.talents || ''}</td>
           <td class="num" title="${esc(r.paysRanks
-      ? `${RANKS_PER_TALENT} ranks per talent, up to ${level} Hit Dice. The skill's total is ${r.ranks}.`
-        + (r.competence ? ` Another sphere shares this skill, so this one grants +${r.competence} competence`
-          + ' instead of ranks.' : '')
-      : repeat ? 'This sphere already grants ranks on the row above.'
+      ? `${RANKS_PER_TALENT} ranks a talent, capped at ${level} Hit Dice. The skill's total is ${r.ranks}.`
+        + (r.competence ? ` Another sphere shares this skill, so it pays +${r.competence} competence`
+          + ' rather than a second helping of ranks.' : '')
+      : repeat ? 'This sphere already pays on the row above.'
       : r.duplicate
-        ? `${owed} ranks earned but not granted: ${r.skill} already gets ranks from another sphere, `
-          + `here or on the Martial Spheres tab. This sphere grants ${r.competence
+        ? `${owed} ranks earned and not paid: ${r.skill} is already filled by another sphere `
+          + `— here or on the martial tab. The overlap is worth ${r.competence
             ? `the +${r.competence} competence bonus beside it` : 'a competence bonus'} instead.`
-        : 'Choose an associated skill to grant ranks to it.')}">${
+        : 'Choose an associated skill and this sphere pays into it.')}">${
   [r.paysRanks ? `${r.ranksGranted || ''}` : r.duplicate ? `<span class="was">${owed}</span>` : '',
     r.competence ? `<span class="dupskill">+${r.competence}</span>` : ''].filter(Boolean).join(' ')}</td>
           <td class="num">${bonus(r, i, 'rankBonus', 'floor(level / 4)')}${
@@ -216,7 +219,7 @@ function guileSpherePanel(model, g) {
       // × would only reset the row. It goes when its talents do.
       ? `<td class="tools"><button class="danger" disabled aria-label="Remove"
           title="${esc(`${r.sphere} has ${trained} talent${trained === 1 ? '' : 's'}, so it stays on the table. `
-            + 'The row is removed when its talents are.')}">×</button></td>`
+            + 'The row goes when its talents do.')}">×</button></td>`
       : rowRemove(list, i)}
         </tr>`;
   }).join('')}</tbody>
@@ -235,7 +238,7 @@ function guileSpherePanel(model, g) {
     return `<details style="margin-top:6px"><summary class="hint" style="cursor:pointer">All spheres (${rest.length})</summary>
         <div class="tablewrap"><table class="guilespheres"><tbody>${rest.map((s) => `<tr>
           <td>${esc(s)}</td>
-          <td class="hint">no talents. Choose its associated skill to add it to the table.</td>
+          <td class="hint">no talents — choose its associated skill to put it on the table</td>
           <td class="tools"><button data-action="add-guile-sphere" data-sphere="${esc(s)}"
             title="${esc(`Add ${s} to the table`)}">+ Add</button></td>
         </tr>`).join('')}</tbody></table></div>
@@ -244,14 +247,16 @@ function guileSpherePanel(model, g) {
       <p class="hint">
         A skill sphere has no caster level and no practitioner level. Its save DC is
         <strong>10 + half your ranks in the associated skill + your operative modifier</strong>.
-        Its close, medium and long ranges use the same ranks. Taking the sphere grants
-        ${RANKS_PER_TALENT} ranks in that skill, plus ${RANKS_PER_TALENT} more per talent spent in
-        the sphere, up to your Hit Dice. These ranks go into the <strong>Spheres</strong> column of
-        the Skills tab. A sphere divided into packages gains only one package, which sets the skill.
+        Its close, medium and long ranges use the same ranks. The skill in the third column is
+        the number the whole sphere is built on. Taking the sphere grants
+        ${RANKS_PER_TALENT} ranks in that skill, plus another ${RANKS_PER_TALENT} per talent spent
+        in the same sphere, capped at Hit Dice. Those ranks go into the <strong>Spheres</strong>
+        column of the Skills tab. A sphere divided into packages gains only one package. The
+        package carries the skill.
         ${anyDupes ? '<br>A <span class="dupskill">marked</span> row has a skill that another '
-    + 'sphere already grants ranks to, here or on the Martial Spheres tab. Ranks do not stack; '
-    + 'the second sphere grants a competence bonus of half your level (minimum +1) instead, '
-    + 'shown beside Misc on the Skills tab.' : ''}
+    + 'sphere already fills, here or on the martial tab. Ranks never stack. The second '
+    + 'sphere instead pays a competence bonus of half your level (minimum +1) to that skill. '
+    + 'The Skills tab adds it beside Misc.' : ''}
       </p>
     </section>`;
   }
@@ -276,8 +281,9 @@ function guileBonusPanel(model, g) {
       <h3>Bonus skill talents ${rows.length ? `<span class="badge">${rows.length}</span>` : ''}</h3>
       ${bonusTalentTable(model, list, rows, spheres, { guile: true, placeholder: 'Feat, archetype…' })}
       <p class="hint">
-        A talent that comes with a sphere or one of its drawbacks is <strong>free</strong> and
-        does not count toward the sphere's ranks. Every other talent here does.
+        A talent that came with a sphere or with one of its drawbacks is
+        <strong>free</strong>. It is not a talent <em>spent</em>, so it does not count toward
+        the ranks that sphere pays out. Every other talent here does.
       </p>
     </section>`;
   }
@@ -313,15 +319,16 @@ function tradeTraditionPanel(model, g) {
       </p>
       ${traditionTable(model, list, rows, spheres, adroit)}
       ${rows.some((e) => e.adroit) && !adroit
-    ? '<p class="hint warn">Grayed rows are the tradition\'s adroit talents. Set the rank above to get them.</p>'
+    ? '<p class="hint warn">Greyed rows are the tradition\'s adroit talents. Set the rank above to claim them.</p>'
     : ''}
       <h4 class="subhead">Class skills</h4>
       <p class="hint">
-        A trade tradition replaces the class's skill list. It grants
-        ${TRADE_CLASS_SKILLS.map((s) => `<strong>${esc(s)}</strong>`).join(', ')} as class skills,
-        plus ${TRADE_BACKGROUND_SKILLS.map((s) => `<strong>${esc(s)}</strong>`).join(' and ')} in a
-        game with background skills. Its trade talents grant the rest; tick them in the
-        <strong>Class</strong> column of the Skills tab.
+        Any trade tradition gives up the class's own skill list. It grants
+        ${TRADE_CLASS_SKILLS.map((s) => `<strong>${esc(s)}</strong>`).join(', ')} outright.
+        In a game using background skills it also grants
+        ${TRADE_BACKGROUND_SKILLS.map((s) => `<strong>${esc(s)}</strong>`).join(' and ')}.
+        Its trade talents grant the rest. Tick them in the <strong>Class</strong> column of the
+        Skills tab.
       </p>
     </section>`;
   }
@@ -358,12 +365,13 @@ function operativePanel(model, g) {
         <span class="badge">+${DAILY_LEVERAGE_EXTRA}</span></span>
         <span class="value">${check('training.guile.leverageDaily', lev.daily)}</span></div>
       <p class="hint">
-        One pool, spent with any skill it is unlocked for. ${lev.spheres.length}
-        sphere${lev.spheres.length === 1 ? ' unlocks' : 's unlock'} it (${esc(lev.spheres.join(', '))}).
-        It refills after 8 hours' rest, and regains one use when you defeat a new foe, overcome a
-        real trap, win over someone who has never helped you, or make a discovery that opens a way.
-        With the daily pool variant it refreshes once a day and has ${DAILY_LEVERAGE_EXTRA} more
-        uses. Add a tracker to spend it at the table.
+        This is one pool. Spend it with any skill it is unlocked for. It is unlocked by
+        ${lev.spheres.length} sphere${lev.spheres.length === 1 ? '' : 's'}
+        (${esc(lev.spheres.join(', '))}). It refills after 8 hours' rest. It also regains one use
+        when you thwart a new foe, beat a real trap, win over someone who has never helped you,
+        or make a discovery that opens a way. Under the daily-pool variant it refreshes once a
+        day and holds ${DAILY_LEVERAGE_EXTRA} more uses for a four-encounter day. Make a tracker
+        for it to spend it at the table.
       </p>` : `<p class="empty">No sphere unlocking leverage yet.</p>
       <p class="hint">Every skill sphere unlocks it except Vocation, which has no base ability.</p>`}
 
@@ -374,14 +382,14 @@ function operativePanel(model, g) {
       ${editLine('[plan] [utility] talents', 'training.guile.utilityPlanBonus', g.utilityPlanBonus ?? 0)}
       <p class="hint">
         Uses equal 1 + your [plan] talents without the [utility] tag. Talents with both tags
-        form a second pool for utility plans only.
+        make a second pool, spendable only on utility plans.
         ${plans.counted
-    ? `<strong>${plans.counted}</strong> found by tag in the sphere catalog; the two fields add to that.`
-    : 'None could be counted by tag. Enter the totals.'}
+    ? `<strong>${plans.counted}</strong> found by tag in the sphere catalogue. The two fields add to that.`
+    : 'Nothing could be counted by tag. Type the totals in.'}
         ${plans.unknown ? `${plans.unknown} talent${plans.unknown === 1 ? ' is' : 's are'} not in the
-          catalog (no active pack has ${plans.counted ? 'them' : 'the skill spheres'}); count
+          catalogue (no pack carries ${plans.counted ? 'them' : 'the skill spheres'} yet). Count
           any [plan] among them by hand.` : ''}
-        Preparing all plans takes an hour, and they stay prepared until revealed.
+        Preparing all plans takes an hour. They stay prepared until revealed.
       </p>
     </section>`;
   }

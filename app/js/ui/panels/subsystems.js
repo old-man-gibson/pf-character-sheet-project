@@ -93,7 +93,7 @@ export function markKeywords(html) {
     const word = kw.toLowerCase().replace(/^on\s*/, 'on ');
     const trigger = word.startsWith('on ');
     const label = word.replace(/(^|\s)\w/g, (c) => c.toUpperCase());
-    return `<span class="kw${trigger ? ' trig' : ''}" title="${trigger ? 'Trigger: takes effect when this happens to the card.' : 'Takes effect when the card is cast.'}">${trigger ? '⚡ ' : ''}${label}${n ? ` ${n.trim()}` : ''}</span>`;
+    return `<span class="kw${trigger ? ' trig' : ''}" title="${trigger ? 'Trigger: fires when this happens to the card' : 'Fires when the card is cast'}">${trigger ? '⚡ ' : ''}${label}${n ? ` ${n.trim()}` : ''}</span>`;
   });
 }
 
@@ -143,7 +143,7 @@ export function slotSpend({ pool, total, left, shape = 'pips', name = 'slot' }) 
   // With none left there is nothing to spend, and the old way of asking gave
   // one back instead.
   const count = () => `<button class="pipcount" ${attrs(lit)}${lit ? '' : ' disabled'}
-      title="${esc(lit ? `${title}. Click to spend one.` : `None of ${cap} left.`)}">${lit}<span class="of">/${cap}</span></button>`;
+      title="${esc(lit ? `${title} — click to spend one` : `None of ${cap} left`)}">${lit}<span class="of">/${cap}</span></button>`;
 
   if (shape === 'squares') {
     const sq = squareLayout({ min: 0, max: cap, current: cap - lit, style: { shape, fill: 'remaining' } });
@@ -196,8 +196,9 @@ export function systemExtrasPanel(model, block, path, tabName) {
     return `<section class="panel span2">
       <h3>From the source tab <span class="badge">${rows.length} rows</span></h3>
       <p class="hint">
-        Cells from the workbook's ${esc(tabName)} tab that are not under any heading. They are
-        not used above. <code>{…}</code> formulas in them still work.
+        Cells from the workbook's ${esc(tabName)} tab that no heading claimed. They are kept as
+        written. Nothing above reads them. A <code>{…}</code> formula in one of them works as in
+        any other cell.
       </p>
       <div class="tablewrap" style="margin-top:8px"><table class="gridtab"><tbody>
         ${rows.map((r, ri) => `<tr>
@@ -264,7 +265,7 @@ function essencePanel(ctx, model, a) {
     return `<section class="panel span2">
       <h3>Essence
         ${over ? `<span class="badge err" title="${esc((k.overCap || []).join(', '))}">${over} over cap</span>` : ''}
-        ${k.spShort ? `<span class="badge err" title="Condensing this much essence costs ${k.spSpent} spell points; the character has ${k.spPool}.">${k.spShort} SP short</span>` : ''}
+        ${k.spShort ? `<span class="badge err" title="Condensing that much essence costs ${k.spSpent} spell points and the character has ${k.spPool}">${k.spShort} SP short</span>` : ''}
         ${meterStyleButton(ctx, 'essence')}
       </h3>
       ${meterStyleEditor(model, ctx, 'essence')}
@@ -300,9 +301,10 @@ function essencePanel(ctx, model, a) {
           </div>
         </div>
       </div>
-      <p class="hint">The Veilweaving sphere turns ${SP_PER_TEMP_ESSENCE} spell points into
-        1 temporary essence for the day. The points are spent whether or not the essence is
-        invested, and come off the total on <strong>Magic Spheres</strong>.</p>
+      <p class="hint">The Veilweaving sphere condenses
+        ${SP_PER_TEMP_ESSENCE} spell points into 1 temporary essence for the day.
+        The points are spent whether or not the essence is invested. They
+        come off the total on <strong>Magic Spheres</strong>.</p>
     </section>`;
   }
 
@@ -330,8 +332,8 @@ function akashicClassesPanel(a) {
       .filter(({ c }) => c.added || c.name || c.mod || c.level || c.essenceCap || c.bonusCap);
     const vw = a.veilweaving || {};
     const levelTitle = vw.sphere
-      ? 'Levels in casting and veilweaving classes, each level counted once (Veilweaving sphere). Type a number to override it.'
-      : 'Levels in this class, from the Planner or the Classes table. Type a number to override it.';
+      ? 'Levels in casting and veilweaving classes together, each level once (the Veilweaving sphere). Type a number to pin it.'
+      : 'Levels in this class, from the Planner or the Classes table. Type a number to pin it.';
     return `<section class="panel span2">
       <h3>Veilweaving <span class="badge">${rows.length} class${rows.length === 1 ? '' : 'es'}</span></h3>
       <div class="akashic-head">
@@ -360,12 +362,12 @@ function akashicClassesPanel(a) {
             <label class="minifield">Base DC
               ${autoNum('data-set="akashic.baseDCOverride"', a.baseDCOverride, {
     auto: true, placeholder: vw.baseDCAuto ?? a.baseDC ?? 10, width: '3.4rem',
-    title: `10 + the veilweaving modifier${vw.ability ? ` (${vw.ability})` : ''}. Type a number to override it.`,
+    title: `10 + the veilweaving modifier${vw.ability ? ` (${vw.ability})` : ''}. Type a number to pin it.`,
   })}</label>
             <label class="minifield">Steady veil DC
               ${autoNum('data-set="akashic.steadyVeilDCOverride"', a.steadyVeilDCOverride, {
     auto: true, placeholder: vw.steadyVeilDCAuto ?? a.steadyVeilDC ?? 10, width: '3.4rem',
-    title: 'The base DC plus half the veilweaving level. Type a number to override it.',
+    title: 'The base DC and half the veilweaving level. Type a number to pin it.',
   })}</label>
           </div>
           ${vw.sphere ? `<p class="hint">With the Veilweaving sphere, levels in casting classes count
@@ -379,14 +381,14 @@ function akashicClassesPanel(a) {
             <tr><th scope="row">Pool</th>
               <td class="num">${num('akashic.essence.pool', e.pool)}</td></tr>
             ${ESSENCE_SOURCES.map(([key, label]) => (key === 'boon' && a.calc?.traditionBoon ? `<tr>
-              <th scope="row" title="The casting tradition's pool, taken as essence instead of spell points. Set it on the Magic Spheres tab.">
+              <th scope="row" title="The casting tradition's own pool, taken as essence rather than spell points — set on the Magic Spheres tab">
                 ${esc(label)}</th>
               <td class="num total">${a.calc.traditionBoon}</td>
             </tr>` : `<tr>
               <th scope="row">${esc(label)}</th>
               <td class="num">${num(`akashic.essence.${key}`, e[key])}</td>
             </tr>`)).join('')}
-            <tr${a.calc?.sourcesShort ? ` title="These sources add up to ${a.calc.sources}, but the daily pool above is ${a.calc.pool}. Change the pool if it is wrong."` : ''}>
+            <tr${a.calc?.sourcesShort ? ` title="These sources come to ${a.calc.sources}, but the daily pool above is ${a.calc.pool} — the sheet's own total. Adjust the pool if the difference is real."` : ''}>
               <th scope="row">Sources${a.calc?.sourcesShort ? ' <span class="badge err">≠ pool</span>' : ''}</th>
               <td class="num total">${a.calc?.sources ?? 0}</td></tr>
           </tbody></table>
@@ -429,8 +431,8 @@ function akashicSlotsPanel(model, ctx, a) {
         </span>
       </h3>
       <p class="hint">One veil per slot, or two with Twinveil. A veil's save DC
-        is the base DC plus the essence invested in it. Descriptions accept
-        <code>{name = expr}</code> formulas.</p>
+        is the base DC plus the essence invested in it. A description may contain
+        <code>{name = expr}</code> formulas, as any other prose field can.</p>
       ${shown.length
     ? `<div class="veils"${veilGridStyle(model)}>${shown.map(({ s, i }) => veilSlotCard(model, ctx, a, list, s, i)).join('')}</div>`
     : '<p class="empty">No veils shaped.</p>'}
@@ -451,7 +453,7 @@ function veilColumnsControl(model) {
       <span class="seg-k">Per row</span>
       ${[[0, 'Auto'], [3, '3'], [4, '4'], [5, '5']].map(([n, label]) => `
         <button data-view data-veilcols="${n}" aria-pressed="${cols === n}"
-          title="${n ? `${n} veil cards per row` : 'As many as fit'}">${label}</button>`).join('')}
+          title="${n ? `${n} veil cards to a row` : 'As many as fit'}">${label}</button>`).join('')}
     </span>`;
   }
 
@@ -592,11 +594,11 @@ function veilCard(model, ctx, list, v, vi, options = { id: '' }) {
         <span class="veil-dc" title="base DC + essence">DC ${v.dc ?? 0}</span>
         ${d.known ? `<button class="mnote-btn${d.mine ? ' has-note' : ''}" data-vedit="${esc(key)}"
           aria-expanded="${writing}"
-          title="${d.mine ? 'Your description. Click to edit.' : 'Write your own description. Leave it empty to use the pack’s text.'}"
+          title="${d.mine ? 'What you wrote about it — click to edit' : 'Write your own version; leave it empty and the pack’s text stands'}"
           aria-label="Edit ${esc(v.name || 'this veil')}">✎</button>` : ''}
         ${removeButton(list, vi, { what: 'this veil', title: 'Unshape this veil', tiny: true })}
       </div>
-      ${meta.length ? `<div class="veil-meta" title="From the pack that includes this veil.">${meta.map((m) => esc(m)).join(' · ')}</div>` : ''}
+      ${meta.length ? `<div class="veil-meta" title="from the pack that carries this veil">${meta.map((m) => esc(m)).join(' · ')}</div>` : ''}
       ${writing
     ? itemArea(model, list, vi, 'desc', own.desc, 2, model.veilScope(v))
     : packText(ctx, `veil:${key}`, 'veil-text', renderedProse(model, d.desc, model.veilScope(v)))}
@@ -611,7 +613,8 @@ function akashicKheshigPanel(model, ctx, a) {
     if (!(a.kheshig || []).length) return '';
     return `<section class="panel span2">
       <h3>Kheshig receptacles</h3>
-      <p class="hint">A weapon or armor veil uses the slot it names instead of its own slot.</p>
+      <p class="hint">A weapon or armour veil takes the slot it names rather than
+        occupying one of its own.</p>
       <div class="veils"${veilGridStyle(model)}>
         ${(a.kheshig || []).map((r, i) => `<div class="veilslot">
           <div class="veilslot-head">
@@ -638,8 +641,9 @@ function akashicReceptaclesPanel(model, a) {
     const ticks = rows.some((r) => r.active !== undefined);
     return `<section class="panel span2">
       <h3>Other receptacles <span class="badge">${rows.length}</span></h3>
-      <p class="hint">Anything holding essence other than the slots above. Its essence counts
-        against the daily pool, like a veil's. An unticked receptacle does not count.</p>
+      <p class="hint">Anything holding essence that is not one of the slots above.
+        Its essence counts against the day's pool, as a veil's does.
+        A receptacle ticked off does not count.</p>
       ${rows.length ? `<div class="veils"${veilGridStyle(model)}>
         ${rows.map((r, i) => `<div class="veilslot${r.active === false ? ' is-off' : ''}">
           <div class="veilslot-body">
@@ -699,12 +703,13 @@ export function maneuversPanel(model, ctx) {
             <option value="">Train a discipline…</option>
             ${available.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('')}
           </select>
-          ${available.length ? '' : '<span class="hint">Every discipline in the catalog is trained.</span>'}
+          ${available.length ? '' : '<span class="hint">Every discipline in the catalogue is trained.</span>'}
         </div>
         <p class="hint" style="margin-top:6px">
-          <strong>Tick</strong> a maneuver to ready it. <strong>Click its name</strong> to read
-          your description, or ✎ to edit its type, action, range, target, duration, saving throw
-          and description. Each field accepts <code>{…}</code> formulas.
+          <strong>Tick</strong> a maneuver to ready it. Only the box toggles it; nothing else
+          on the row does. <strong>Click its name</strong> to read what you wrote
+          about it. Click the ✎ to write it: type, action, range, target, duration,
+          saving throw and description. Each field takes <code>{…}</code> formulas.
           <strong>Right-click</strong> a name to open its page on the
           <a href="${esc(WIKI_BASE)}" target="_blank" rel="noopener noreferrer">wiki</a>.
         </p>
@@ -740,7 +745,7 @@ function disciplineColumn(model, ctx, d, i) {
       </div>
       ${collapsed ? '' : `<div class="discipline-body">
         ${d.inCatalogue === false && !entries.length
-    ? '<p class="empty">Not in the catalog.</p>' : ''}
+    ? '<p class="empty">Not in the catalogue.</p>' : ''}
         ${levels.map((lvl) => `
           <div class="dlevel">${lvl ? `Level ${lvl}` : 'Other'}</div>
           ${entries.map((e, ei) => [e, ei]).filter(([e]) => e.level === lvl).map(([e, ei]) => {
@@ -761,12 +766,12 @@ function disciplineColumn(model, ctx, d, i) {
                   aria-label="Ready ${esc(e.name)}"></label>
               <button data-view type="button" class="mname" data-mopen="${esc(key)}"
                 ${wiki ? `data-wiki="${esc(wiki)}"` : ''} aria-expanded="${open}"
-                title="${esc(e.name)}${entry.type ? `: ${esc(entry.type)}` : ''}
+                title="${esc(e.name)}${entry.type ? ` — ${esc(entry.type)}` : ''}
 
-Click to ${open ? 'close' : 'open'} it.${wiki ? ' Right-click to open its wiki page.' : ''}">${esc(e.name)}</button>
+Click to ${open ? 'close' : 'open'} it${wiki ? ', right-click for the wiki' : ''}">${esc(e.name)}</button>
               <span class="mtype ${e.kind === 'stance' ? 'is-stance' : ''}">${esc(shortType(entry.type))}</span>
               <button class="mnote-btn${written ? ' has-note' : ''}" data-medit="${esc(key)}"
-                title="${written ? 'Your description. Click to edit.' : 'Describe what it does. {…} formulas work.'}"
+                title="${written ? 'What you wrote down about it — click to edit' : 'Write down what it does — {…} formulas work'}"
                 aria-label="Edit ${esc(e.name)}" aria-expanded="${open && !!ctx.maneuverEdit}">✎</button>
             </div>
             ${open ? maneuverCard(model, ctx, list, e, entry, own, key, wiki) : ''}`;
@@ -800,10 +805,10 @@ function maneuverCard(model, ctx, list, e, entry, own, key, wiki) {
         <span class="mdetail-name" title="${esc(e.name)}">${esc(e.name)}</span>
         <span class="mdetail-sub">${esc(sub)}</span>
         ${wiki ? `<a class="mdetail-wiki" href="${esc(wiki)}" target="_blank" rel="noopener noreferrer"
-          title="Open its wiki page.">wiki ↗</a>` : ''}
+          title="Its page on the wiki">wiki ↗</a>` : ''}
         <button class="tiny" ${editing ? `data-view data-mopen="${esc(key)}"` : `data-medit="${esc(key)}"`}
           aria-pressed="${editing}"
-          title="${editing ? 'Stop editing.' : 'Describe what it does.'}">${editing ? 'Done' : 'Edit'}</button>
+          title="${editing ? 'Back to reading it' : 'Fill in what it does'}">${editing ? 'Done' : 'Edit'}</button>
         <button data-view class="tiny" data-mclose="${esc(key)}" title="Close" aria-label="Close ${esc(e.name)}">×</button>
       </div>
       ${editing ? maneuverCells(model, list, e, own) : maneuverRead(model, ctx, entry, key, e.known)}
@@ -830,7 +835,7 @@ function maneuverRead(model, ctx, entry, key, readied = true) {
   return `${cells.length ? `<dl class="mdetail-cells">${cells.map(([f, v]) => `
       <dt>${esc(f.label)}</dt><dd>${value(v)}</dd>`).join('')}</dl>` : ''}
     ${body ? packText(ctx, `man:${key}`, 'mdetail-text', value(body[1])) : ''}
-    ${maneuverIsWritten(entry) ? '' : '<p class="empty">No description yet. Press <strong>Edit</strong> to add one.</p>'}`;
+    ${maneuverIsWritten(entry) ? '' : '<p class="empty">Nothing written down yet — <strong>Edit</strong> fills it in.</p>'}`;
 }
 
 /**
@@ -861,7 +866,7 @@ function maneuverCells(model, list, e, own) {
     const ghost = under || (f.hint ? `e.g. ${f.hint}` : '');
     const control = f.options
       ? maneuverSelect(bind(f), own[f.key], f.options,
-        under ? `${under} (from the catalog)` : '—')
+        under ? `${under} — from the catalogue` : '—')
       : prose(model, `${bind(f)} placeholder="${esc(ghost)}"`,
         own[f.key], f.lines || 1, 'grow', null, { ...UNREADIED, inactive: !e.known });
     return `<div class="mcell"><span class="k">${esc(f.label)}</span>${control}</div>`;
@@ -905,16 +910,17 @@ export function vancianPanel(model, ctx = {}) {
           ${v.calc?.spent ? `<span class="badge">${v.calc.spent} spent today</span>` : ''}
           <span class="pair" style="margin-left:auto">
             <button data-action="vancian-new-day"
-              title="Restore all spent slots.">New day</button>
+              title="Everything spent comes back">New day</button>
           </span>
         </h3>
-        <p class="hint">Each block uses the slot table of the class it picks, which can differ
-          from the block's name (for example, an archetype). Slots per day, spells known and save
-          DC come from the table, the caster level from the Planner, and the casting stats. Type
-          into any of them to override it.</p>
+        <p class="hint">A block picks the class whose table it draws slots from. That
+          is separate from the block's name, so an archetype keeps its own name.
+          Slots per day, spells known and the save DC follow from the table, the caster
+          level counted from the Planner, and the casting stats. Type into any of them
+          to override.</p>
         ${unknown.length ? `<p class="hint warn">No casting table for
-          ${unknown.map((n) => `<strong>${esc(n)}</strong>`).join(', ')}. Enter those blocks'
-          numbers by hand.</p>` : ''}
+          ${unknown.map((n) => `<strong>${esc(n)}</strong>`).join(', ')}. Those blocks
+          keep whatever numbers you give them.</p>` : ''}
         ${(v.classes || []).length ? '' : '<p class="empty">No casting classes yet.</p>'}
       </section>
 
@@ -980,15 +986,15 @@ function castingClassPanel(model, c, i) {
         value: c.concentrationNum,
         error: c.concentrationError,
         placeholder: String(c.concentrationAuto ?? 0),
-        title: `Blank uses caster level ${c.casterLevel ?? 0} + casting modifier ${fmt(c.statMod ?? 0)}. `
-          + `Or enter a number or a formula, e.g. ${vancianForwardKey(c) || 'vancian.wizard.cl'} + ${
+        title: `Blank: caster level ${c.casterLevel ?? 0} + casting modifier ${fmt(c.statMod ?? 0)}. `
+          + `Or a number, or a formula like ${vancianForwardKey(c) || 'vancian.wizard.cl'} + ${
             String(c.stat || 'Int').toLowerCase()}.mod`,
       })}${rollButton(model, 'concentration', `vancian:${i}`,
     `${c.name || 'this class'} concentration`)}</span>`)}
         </div>
       </div>
       ${c.tableName && c.tableName !== c.slotType
-    ? `<p class="hint">Using <strong>${esc(c.tableName)}</strong>'s table.</p>` : ''}
+    ? `<p class="hint">Reading <strong>${esc(c.tableName)}</strong>'s table.</p>` : ''}
       ${levelPinHint(c.casterLevelOverride, c.casterLevelBase ?? c.casterLevel, c.plannerLevel)}
       ${countsTowardLine(model, vancianForwardKey(c) || '')}
       ${c.levelClass && c.levelClass !== String(c.name || '').trim()
@@ -996,7 +1002,7 @@ function castingClassPanel(model, c, i) {
       <div class="tablewrap"><table class="build vslots"><thead><tr>
         <th title="${esc(noun.one)} level">Level</th>
         <th class="num" title="${esc(noun.many)} per day">/day</th>
-        ${hasBonus ? '<th class="num" title="Bonus slots granted by the class.">Bonus</th>' : ''}
+        ${hasBonus ? '<th class="num" title="Granted by the class itself, on top of the slots">Bonus</th>' : ''}
         <th class="num" title="${esc(noun.many)} known">Known</th>
         <th class="num" title="Save DC">DC</th>
         ${spends ? '<th title="Click a pip to spend or restore">Remaining today</th>' : ''}
@@ -1004,7 +1010,7 @@ function castingClassPanel(model, c, i) {
         ${(c.spells || []).map((s, si) => {
     const auto = slotText(s);
     const breakdown = s.base === null || s.base === undefined
-      ? (s.atWill ? 'At will: the class knows cantrips' : 'Not castable at this level')
+      ? (s.atWill ? 'At will — the class knows cantrips' : 'Not castable at this level')
       : `${s.base} from the table${s.abilityBonus ? ` + ${s.abilityBonus} for the casting stat` : ''}`;
     const autoKnown = s.knownCount === null || s.knownCount === undefined ? '—' : String(s.knownCount);
     return `<tr>
@@ -1128,15 +1134,18 @@ function vancianPreparedPanel(model, v, ctx = {}) {
       <h3>Spell list <span class="badge">${spells}</span>
         ${v.calc?.spent ? `<span class="badge">${v.calc.spent} spent today</span>` : ''}
       </h3>
-      <p class="hint">The workbook's first column is kept as a label. <strong>Prepared</strong>
-        is how many times the spell is prepared, and the squares show how many are left.
-        <strong>Notes</strong> accepts {…} formulas, such as <code>heals {2 + level}d8</code>.</p>
+      <p class="hint">The workbook's first column was used as a label, not a tick box.
+        Whatever is in it is kept as written. <strong>Prepared</strong> is
+        how many times this spell is committed. The squares beside it show how many
+        of those are left. <strong>Notes</strong> reads {…} like any prose field, so a
+        spell's text can include its numbers and keep them current:
+        <code>heals {2 + level}d8</code>.</p>
       ${spellDatalist(v)}
       ${rows.length ? `<div class="tablewrap"><table class="spelllist"><thead><tr>
         <th style="width:6.5rem">Label</th>
         <th style="width:4.5rem" title="Class and spell level">C / L</th>
         <th style="width:13rem">Spell</th>
-        <th title="The spell's text or your note. {…} formulas work.">Notes</th>
+        <th title="The spell's text or your own note — {…} formulas resolve">Notes</th>
         <th class="num" style="width:4rem" title="How many times this spell is prepared">Prep.</th>
         <th style="width:4.5rem" title="Click a square to spend or restore">Left</th><th></th>
       </tr></thead><tbody>
@@ -1188,9 +1197,9 @@ export function altTrainingPanel(model) {
     if (k.off) {
       return `<section class="panel span2 mythicoff">
         <h3>Alternate Training <span class="badge">off</span></h3>
-        <p class="hint">Alternate Training is off in this character's campaign rules, so its
-          technique grants nothing. Your picks are kept and count again when it is turned on.
-          <button data-view data-action="campaign-rules">Campaign rules…</button></p>
+        <p class="hint">Alternate Training is off for this character in its campaign rules, so its
+          technique grants nothing. What was picked here is kept, and counts again when it is turned
+          on. <button data-view data-action="campaign-rules">Campaign rules…</button></p>
       </section>`;
     }
 
@@ -1213,7 +1222,7 @@ export function altTrainingPanel(model) {
     return `<div class="grid">
       <section class="panel span2">
         <h3>Alternate Training Technique ${prereqBadge}
-          ${n.due ? `<span class="badge due" title="Levels reached with no pick yet.">${n.due} to pick</span>` : ''}
+          ${n.due ? `<span class="badge due" title="Levels reached with nothing written against them">${n.due} to pick</span>` : ''}
         </h3>
         <div class="statbar">
           <label class="minifield">Technique
@@ -1225,19 +1234,21 @@ export function altTrainingPanel(model) {
           ${miniStat('Level', level, 'Grants above this level are planned, not counted')}
         </div>
         ${prereq ? `<p class="hint" style="margin-top:6px">
-          <strong>Prerequisite:</strong> ${esc(prereq.text)}${prereq.detail ? ` (${esc(prereq.detail)})` : ''}
-          ${prereq.state === 'unmet' ? ' The technique still works; this is only a reminder.' : ''}
+          <strong>Prerequisite:</strong> ${esc(prereq.text)}${prereq.detail ? ` — ${esc(prereq.detail)}` : ''}
+          ${prereq.state === 'unmet' ? ' The technique still works here; this is a note, not a lock.' : ''}
         </p>` : ''}
         ${k.note ? `<p class="hint">${esc(k.note)}</p>` : ''}
-        ${k.unknown ? `<p class="hint warn"><strong>${esc(p.technique)}</strong> is not in the
-          catalog of the active packs, so the ladder below is empty. What you wrote for each level
-          is kept.</p>` : ''}
+        ${k.unknown ? `<p class="hint warn">The sheet names
+          <strong>${esc(p.technique)}</strong>. That technique is not in the catalogue the active
+          packs supply. The ladder below stays empty until the field names one that is.
+          Whatever is written against a level is kept either way.</p>` : ''}
         <p class="hint">
           One technique, taken at 1st level or when its prerequisite is first met. It grants
           at 1st, 3rd, 5th, then ${k.repeatFrom ?? altTrainingRepeatFrom()}th and every two levels after.
-          <strong>Grants</strong> is what the rules give at each level, and the next column is what
-          you took. The last column is your note and accepts formulas. Under the Associated Feat rules,
-          a technique feat can be swapped if you later gain a feat for a sphere or talent you already have.
+          <strong>Grants</strong> is what the rules give at that level. The column beside it is what you
+          took for it. It is filled in already on the levels where the rules name the grant. The last
+          column is your note and takes formulas. A technique feat can be swapped under the Associated Feat
+          rules if you are later given a feat for a sphere or talent you already have.
         </p>
       </section>
 
@@ -1246,7 +1257,7 @@ export function altTrainingPanel(model) {
       <section class="panel span2">
         <h3>Notes</h3>
         ${prose(model, 'data-set="altTraining.notes"', p.notes, 3, 'grow')}
-        <p class="hint">Accepts <code>{name = expr}</code> formulas.</p>
+        <p class="hint">Resolves <code>{name = expr}</code> like any other prose field on the sheet.</p>
       </section>
     </div>`;
   }
@@ -1280,7 +1291,7 @@ function altTrainingLadder(model, k) {
         <thead><tr>
           <th class="num">Lvl</th>
           <th class="grants">Grants</th>
-          <th class="pickname" title="What you took. Filled in where the rules name it.">${esc(noun)}</th>
+          <th class="pickname" title="What you took — filled in already where the rules name it">${esc(noun)}</th>
           <th class="picknote">Notes</th>
         </tr></thead>
         <tbody>${(k.rows || []).map((row) => {
@@ -1293,7 +1304,7 @@ function altTrainingLadder(model, k) {
   esc(row.repeating && g.short ? g.short : g.text)}${!row.repeating ? citeTag(g.cite) : ''}</span>
             ${g.base?.alt ? `<label class="chk alt"><input type="checkbox" ${g.alt ? 'checked' : ''}
               data-set="altTraining.alt.${row.level}" data-kind="bool"
-              title="${esc(g.base.text)}. Tick if you already had it, so this level grants the spell instead.">
+              title="${esc(g.base.text)} — tick if you already had it, so this level grants the spell instead">
               <span>already had the feat, so this level grants ${esc(g.base.alt.text
     .replace(/^One /, 'a ').replace(/ added to your spells known$/, ''))} instead</span></label>` : ''}
           `).join('')}</td>
@@ -1309,9 +1320,10 @@ function altTrainingLadder(model, k) {
         <strong>From ${k.repeatFrom}th, every two levels:</strong> ${esc(k.repeat.text)}${citeTag(k.repeat.cite)}
       </p>` : ''}
       <p class="hint">
-        Reached levels with no pick are outlined and counted above. Levels not reached yet are
-        dotted. Where the rules name the grant, it is filled in; type over it to change it. Notes
-        accept <code>{name = expr}</code> formulas.
+        A reached level with no choice made yet is outlined and counted above. A level not
+        reached yet is dotted and not counted. Levels whose grant the rules name show that
+        name already. Type over it to record something else. Every row's note
+        resolves <code>{name = expr}</code> like any other prose field on the sheet.
       </p>
     </section>`;
   }
@@ -1350,7 +1362,7 @@ function altTrainingPick(model, row, sphere = null) {
       ? prose(model, `data-set="${path}"${pickAttr}`, row.text, 1, 'grow')
       : `<input type="text" class="autotext${auto ? ' auto' : ''}" value="${esc(row.text)}"
           data-set="${path}"${pickAttr} data-kind="text" placeholder="${esc(placeholder)}"${auto
-  ? ` title="${esc(`${row.auto}, from the technique. Type to replace it.`)}"` : ''}>`);
+  ? ` title="${esc(`${row.auto} — the technique's own. Type to put something else here.`)}"` : ''}>`);
   }
 
   /** With no technique taken, the catalogue on offer and what each asks for. */
@@ -1359,8 +1371,9 @@ function altTrainingChooser() {
     if (!techniques.length) {
       return `<section class="panel span2">
         <h3>No techniques on offer</h3>
-        <p class="empty">No active pack has Alternate Training techniques. Turn on a pack with a
-          technique catalog in Extensions and Rules to see the ladder.</p>
+        <p class="empty">No active content pack supplies Alternate Training techniques.
+          The tab still keeps whatever is written on it; switch on a pack that carries a
+          catalogue (Extensions and Rules, top right) and the ladder appears.</p>
       </section>`;
     }
     return `<section class="panel span2">
@@ -1375,8 +1388,8 @@ function altTrainingChooser() {
           <td>${esc(t.repeat?.text || '')}</td>
         </tr>`).join('')}</tbody>
       </table></div>
-      <p class="hint">Pick one to show its ladder. You can change it later without losing what is
-        written.</p>
+      <p class="hint">Pick one. The ladder replaces this table. Nothing written on the tab is
+        lost if you change your mind.</p>
     </section>`;
   }
 
@@ -1409,7 +1422,7 @@ export function psionicsPanel(model, ctx) {
           <span class="badge">${left} of ${pool}</span>
           ${p.spent ? `<span class="badge">${p.spent} spent today</span>` : ''}
           <span class="pair" style="margin-left:auto">
-            <button data-action="psionics-new-day" title="Restore the whole pool.">New day</button>
+            <button data-action="psionics-new-day" title="The whole pool comes back">New day</button>
             ${meterStyleButton(ctx, 'pp')}
           </span>
         </h3>
@@ -1421,12 +1434,13 @@ export function psionicsPanel(model, ctx) {
         <div class="fieldgrid" style="margin-top:8px">
           ${field('Bonus points', num('psionics.bonusPoints', p.bonusPoints))}
         </div>
-        <p class="hint">The pool is the points from every manifesting class plus the bonus from
-          feats or items. Formulas can read <code>pp.pool</code>, <code>pp.left</code> and
-          <code>pp.spent</code>.</p>
-        ${unknown.length ? `<p class="hint warn">No power point curve for
-          ${unknown.map((n) => `<strong>${esc(n)}</strong>`).join(', ')}. These classes add no
-          points until a curve is picked.</p>` : ''}
+        <p class="hint">The pool is every manifesting class's points plus the bonus.
+          The bonus is the one typed figure: points from a feat or an item.
+          Readable from a formula as
+          <code>pp.pool</code>, <code>pp.left</code> and <code>pp.spent</code>.</p>
+        ${unknown.length ? `<p class="hint warn">No power-point curve reaches
+          ${unknown.map((n) => `<strong>${esc(n)}</strong>`).join(', ')} at level 20.
+          Those classes contribute nothing until a curve is picked.</p>` : ''}
         ${(p.classes || []).length ? '' : '<p class="empty">No manifesting classes yet.</p>'}
       </section>
 
@@ -1446,7 +1460,7 @@ function curveOptions() {
     const classes = psionicTables().classes || [];
     return psionicCurveTotals().map((total) => {
       const names = classes.filter((c) => c.total === total).map((c) => c.name);
-      return [total, names.length ? `${total} (${names.join(', ')})` : `${total}`];
+      return [total, names.length ? `${total} — ${names.join(', ')}` : `${total}`];
     });
   }
 
@@ -1482,7 +1496,7 @@ function manifestingClassPanel(model, c, i, ctx = {}) {
       ${powerDatalist(c)}
       ${(c.powers || []).length ? `<table style="margin-top:8px"><thead><tr>
         <th>Power</th><th style="width:7rem">Level</th>
-        <th title="The power's text or your note. {…} formulas work.">Notes</th><th></th>
+        <th title="The power's text or your own note — {…} formulas resolve">Notes</th><th></th>
       </tr></thead><tbody>
         ${(c.powers || []).map((w, wi) => `<tr>
           <td>${itemText(list, wi, 'name', w.name, 'Power', { list: powerListId(c) })}</td>
@@ -1603,22 +1617,22 @@ function companionSwitchPanel(model, kind, list, active, label) {
       <div class="statline" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
         ${many ? list.map((c, i) => `<button data-view data-action="companion-select" data-kind="${kind}" data-index="${i}"
           aria-pressed="${i === active}" ${i === active ? 'class="primary"' : ''}
-          title="Formulas read it as ${esc(c.id)}.*">
+          title="Reads in formulas as ${esc(c.id)}.*">
           ${esc(String(c.name || '').trim() || `${label} ${i + 1}`)}
           <span class="hint">${c.calc?.level ? `L${c.calc.level} ` : ''}<code>${esc(c.id)}</code></span>
         </button>`).join('') : ''}
         <button data-action="companion-add" data-kind="${kind}"
-          title="Add another ${label.toLowerCase()}. Its numbers get their own name (${kind}2.*, ${kind}3.*).">+ Add ${esc(label.toLowerCase())}</button>
+          title="Another ${label.toLowerCase()} — its numbers get a name of their own (${kind}2.*, ${kind}3.*), so a rule can be aimed at each">+ Add ${esc(label.toLowerCase())}</button>
         ${many ? removeButton(kind, active, {
     what: `this ${label.toLowerCase()}`,
-    title: `Remove the ${label.toLowerCase()} shown. You can undo this.`,
+    title: `Remove the ${label.toLowerCase()} being shown. Undo brings it back.`,
     text: 'Remove this one',
     style: 'margin-left:auto',
   }) : ''}
       </div>
-      ${many ? `<p class="hint">One of ${list.length}. Each one's numbers and bonuses use the id on its chip:
-        <code>${kind}.hp</code>, <code>${kind}2.hp</code>. The id stays the same when a companion is
-        renamed or reordered.</p>` : ''}
+      ${many ? `<p class="hint">One of ${list.length}. Each reads and takes bonuses under the id on its chip:
+        <code>${kind}.hp</code>, <code>${kind}2.hp</code>. The id stays with the creature through a
+        rename or a reordering.</p>` : ''}
     </section>`;
   }
 
@@ -1645,7 +1659,7 @@ function companionLevelControls(model, cc) {
       ${showClass ? field('Master class', select(`${p}.masterClass`, b.masterClass, classes)) : ''}
       ${field('Level override', autoNum(`data-set="${p}.levelOverride"`, b.levelOverride, {
     placeholder: k.rawLevel ?? 0,
-    title: `Auto: ${k.rawLevel ?? 0} from ${autoFrom}. Enter a number to override it.`,
+    title: `Auto: ${k.rawLevel ?? 0} from ${autoFrom}. Enter a number to pin it.`,
     extra: `min="0" max="${kind === 'conjured' ? 40 : 20}"`,
   }))}
       ${field('Master level penalty', num(`${p}.masterLevelPenalty`, b.masterLevelPenalty, 'min="0"'))}`;
@@ -1676,11 +1690,11 @@ function companionHeadPanel(model, cc) {
         ${field('Alignment', text(`${p}.alignment`, b.alignment))}`;
     return `<section class="panel span2">
       <h3>${esc(String(b.name || '').trim() || label)}
-        <span class="badge" title="${esc(`This companion’s name in formulas and bonuses, as in ${cc.sn}.hp or ${cc.sn}.ac.total. It stays the same when the companion is renamed or reordered.`)}">${esc(cc.sn)}</span>
+        <span class="badge" title="${esc(`The name this companion’s numbers read by in a formula — ${cc.sn}.hp, ${cc.sn}.ac.total — and a bonus is sent to. It stays with the creature through a rename or a reordering.`)}">${esc(cc.sn)}</span>
         <span class="badge">${working(model, `${sn}.level`, `level ${k.level ?? 0}`)}</span>
         <span class="badge">${k.hd ?? 0} HD${kind === 'conjured' && k.hitDie ? ` (d${k.hitDie})` : ''}</span>
         ${kind === 'conjured' && k.summonCost !== undefined
-    ? `<span class="badge" title="Summoning is a standard action. One more spell point lets it stay 1 minute per caster level without concentration.">${k.summonCost} sp to summon</span>` : ''}
+    ? `<span class="badge" title="A standard action; one more spell point lets it stay a minute per caster level without concentration">${k.summonCost} sp to summon</span>` : ''}
         ${(k.archetypes || []).map((a) => `<span class="badge">${esc(a.toLowerCase())}</span>`).join('')}
         ${k.penalty ? `<span class="badge">−${k.penalty} master level</span>` : ''}
         ${!k.level ? '<span class="badge">no level yet</span>' : ''}
@@ -1708,13 +1722,13 @@ function companionHeadPanel(model, cc) {
         ${bigStat('Will', { html: w('will', sv('will')) }, kind === 'familiar' ? 'master’s base' : ((k.formSaves || b.goodSaves)?.will ? 'good' : 'poor'))}
       </div>
       <p class="hint">${kind === 'familiar'
-    ? 'A familiar’s level is its master’s level. It uses the master’s BAB and base saves. It has half the master’s hit points. Its Intelligence and natural armor come from the familiar table.'
+    ? 'A familiar’s level is its master’s level. It uses the master’s BAB and base saves. It has half the master’s hit points. Its Intelligence and natural armour come from the familiar table.'
     : kind === 'animalCompanion'
-      ? 'The level is the master’s levels in the class named, less any penalty. A Spheres companion uses ranks in Handle Animal or Ride instead. HD, BAB, saves, skill ranks, feats, natural armor, the Str/Dex bonus and bonus tricks follow the animal companion table.'
+      ? 'The level is the master’s levels in the class named, less any penalty. A Spheres companion uses ranks in Handle Animal or Ride instead. HD, BAB, saves, skill ranks, feats, natural armour, the Str/Dex bonus and bonus tricks follow the animal companion table.'
       : kind === 'conjured'
-        ? 'The level is the Conjuration sphere’s caster level from the Magic Spheres table, with its bonuses, less any penalty. A class’s levels can be used instead. HD, BAB, saves, skill points, feats and natural armor follow the Conjuration sphere’s companion table. The base form adds its own natural armor, saves and starting scores. Archetypes that change the progression are ticked below.'
-        : 'The level is the master’s levels in the class named, less any penalty. HD, BAB, saves, feats, natural armor, the Str/Dex bonus, the evolution pool and the attack cap follow the eidolon table.'}
-        Formulas can read <code>${esc(sn)}.hp</code>, <code>${esc(sn)}.ac</code>, <code>${esc(sn)}.str.mod</code>…</p>
+        ? 'The level is the Conjuration sphere’s caster level, less any penalty. That is the CL on the sphere’s row of the Magic Spheres table, its own bonuses included. A class’s levels can be used instead. HD, BAB, saves, skill points, feats and natural armour follow the Conjuration sphere’s companion table. The base form adds its own natural armour, saves and starting scores. Archetypes that change the progression are ticked below.'
+        : 'The level is the master’s levels in the class named, less any penalty. HD, BAB, saves, feats, natural armour, the Str/Dex bonus, the evolution pool and the attack cap follow the eidolon table.'}
+        Readable from a formula as <code>${esc(sn)}.hp</code>, <code>${esc(sn)}.ac</code>, <code>${esc(sn)}.str.mod</code>…</p>
     </section>`;
   }
 
@@ -1741,8 +1755,8 @@ function companionHpPanel(cc) {
       <p class="hint">${kind === 'familiar'
     ? `Half the master’s maximum${k.protectorDoubles ? ', doubled for a Protector' : ''}, plus the bonus.`
     : `${kind === 'conjured'
-      ? `${k.hpPerDie ?? 10} per hit die (the full d${k.hitDie ?? 10}${k.hitDie === 6 ? ' of the mage archetype' : ''})`
-      : '8 per hit die'} plus the ${esc(b.hpAbility || 'Con')} modifier per die, plus the bonus. Damage uses temporary hit points first.`}</p>
+      ? `${k.hpPerDie ?? 10} per hit die (the full d${k.hitDie ?? 10}${k.hitDie === 6 ? ', the mage archetype’s' : ''}, as the character’s own levels are counted)`
+      : '8 per hit die'} plus the ${esc(b.hpAbility || 'Con')} modifier per die, plus the bonus. Damage spends temporary points first.`}</p>
     </section>`;
   }
 
@@ -1757,7 +1771,7 @@ function companionScoresPanel(model, cc) {
       <h3>Ability scores</h3>
       <div class="tablewrap"><table class="build compact"><thead><tr>
         <th scope="col">Score</th><th scope="col">Base</th>${evo ? '<th scope="col">Evo</th>' : ''}
-        <th scope="col" title="The table’s Str/Dex bonus and the +1 ability increases.">Level</th>
+        <th scope="col" title="The table’s Str/Dex bonus and the +1s at the increase levels">Level</th>
         <th scope="col">Misc</th><th scope="col" class="num">Total</th><th scope="col" class="num">Mod</th>
       </tr></thead><tbody>
         ${ABILITIES.map((a) => {
@@ -1765,13 +1779,13 @@ function companionScoresPanel(model, cc) {
     const base = kind === 'familiar' && a === 'int'
       ? autoNum(`data-set="${p}.scores.int.base"`, b.scores?.int?.base, {
         placeholder: k.tableInt ?? '',
-        title: `Auto: ${k.tableInt ?? ''} from the familiar table. Enter a number to override it.`,
+        title: `Auto: ${k.tableInt ?? ''} from the familiar table. Enter a number to pin it.`,
       })
       : kind === 'conjured'
         ? autoNum(`data-set="${p}.scores.${a}.base"`, b.scores?.[a]?.base, {
           placeholder: s.base ?? 10,
           title: `Auto: ${s.base ?? 10} from ${b.baseForm ? `the ${b.baseForm} base form` : 'the default line'}${
-            b.size === 'Small' ? ', adjusted for Small' : ''}. Enter a number to override it.`,
+            b.size === 'Small' ? ', Small-adjusted' : ''}. Enter a number to pin it.`,
         })
         : num(`${p}.scores.${a}.base`, b.scores?.[a]?.base ?? 10);
     return `<tr>
@@ -1806,7 +1820,7 @@ function companionDefensePanel(model, cc) {
     // ...and each carries its working, opened on the number itself.
     const w = (stat, shown) => working(model, `${sn}.${stat}`, shown);
     return `<section class="panel">
-      <h3>Defenses <span class="badge">AC ${k.ac ?? 10}</span></h3>
+      <h3>Defences <span class="badge">AC ${k.ac ?? 10}</span></h3>
       ${lineHtml('Armor class', `${w('ac', String(k.ac ?? 10))}${fwd('ac.total')}`, true)}
       ${lineHtml('Touch', `${w('touch', String(k.touch ?? 10))}${fwd('ac.touch')}`)}
       ${lineHtml('Flat-footed', `${w('ff', String(k.flatFooted ?? 10))}${fwd('ac.flatFooted')}`)}
@@ -1825,11 +1839,11 @@ function companionDefensePanel(model, cc) {
     `auto (${['Tiny', 'Diminutive', 'Fine'].includes(b.size) ? 'Dex' : 'Str'})`))}
         ${field('Initiative bonus', formulaBox(cc, 'initBonus'))}
       </div>
-      <p class="hint">AC is 10 + Dex + size ${fmt(k.sizeAC ?? 0)} + natural armor ${fmt(k.tableNatural ?? 0)} from the table
-        + the bonuses. <em>All</em> applies to every AC (deflection, luck, insight…). <em>Touch only</em>
-        is for dodge, which flat-footed AC loses. <em>Flat-footed only</em> is for armor and extra natural armor.
-        CMD includes <em>All</em>, dodge and every penalty. CMB is BAB + ${esc(k.cmbAbility || 'Str')} + the
-        special size modifier ${fmt(-(k.sizeAC ?? 0))}; CMD uses the same size modifier. Tiny or smaller creatures use Dex.</p>
+      <p class="hint">AC is 10 + Dex + size ${fmt(k.sizeAC ?? 0)} + natural armour ${fmt(k.tableNatural ?? 0)} from the table
+        + the bonuses. <em>All</em> counts in every AC (deflection, luck, insight…). <em>Touch only</em>
+        is for dodge, which flat-footed loses. <em>Flat-footed only</em> is for armour and extra natural armour.
+        CMD takes <em>all</em>, dodge, and every penalty. CMB is BAB + ${esc(k.cmbAbility || 'Str')} + the
+        special size modifier ${fmt(-(k.sizeAC ?? 0))}. CMD uses the same size modifier. Tiny or smaller uses Dex.</p>
       ${kind === 'eidolon' || kind === 'conjured' ? `<div class="fieldgrid" style="margin-top:8px">
         ${field('DR', text(`${p}.dr`, b.dr))}
         ${field('Resistances', text(`${p}.resistances`, b.resistances))}
@@ -1857,7 +1871,7 @@ function companionSavesPanel(model, cc) {
           ${kind === 'familiar' ? '' : k.formSaves
     // The base form sets these; a tick here would change nothing.
     ? `<td class="good"><label class="chk tick"><input type="checkbox" disabled ${k.formSaves[key] ? 'checked' : ''}
-        title="${esc(`${k.formSaves[key] ? 'Good' : 'Poor'}, set by the ${b.baseForm} form`)}"></label></td>`
+        title="${esc(`${k.formSaves[key] ? 'Good' : 'Poor'} — set by the ${b.baseForm} form`)}"></label></td>`
     : `<td class="good">${check(`${p}.goodSaves.${key}`, b.goodSaves?.[key])}</td>`}
           <td class="num derived">${fmt(saves[key]?.base ?? 0)}</td>
           <td class="num derived">${fmt(saves[key]?.mod ?? 0)}</td>
@@ -1901,7 +1915,7 @@ function formulaBox(cc, path) {
       width: '100%',
       value: r && !r.error ? String(r.value) : null,
       error: r?.error || null,
-      title: `A number or a formula, e.g. floor(${sn}.hd / 2)`,
+      title: `A number, or a formula like floor(${sn}.hd / 2)`,
     });
   }
 
@@ -1941,7 +1955,7 @@ function companionAttacksPanel(model, cc) {
           <td>${itemNum(list, i, 'bonus', a.bonus)}${
             forwardedBadge(model, `${sn}.attack.${companionAttackKey(a)}`)}</td>
           <td class="num total"><span class="rollpair">${fmt(a.toHit ?? 0)}${
-            rollButton(model, roll, `attack:${i}`, `${a.type || 'this attack'}: attack and damage`)}</span></td>
+            rollButton(model, roll, `attack:${i}`, `${a.type || 'this attack'} — attack and damage`)}</span></td>
           <td>${esc(a.damageType || '')}</td>
           <td>${itemArea(model, list, i, 'qualities', a.qualities, 1)}</td>
           ${rowRemove(list, i)}
@@ -1949,9 +1963,9 @@ function companionAttacksPanel(model, cc) {
       </tbody></table></div>` : '<p class="empty">No attacks yet.</p>'}
       <div style="margin-top:6px">${addButton(list, 'Add attack', { type: 'Bite', damage: '', crit: '20/×2', primary: null, bonus: 0, dmgBonus: 0, qualities: '' })}</div>
       <p class="hint">Secondary attacks take −5${k.multiattack ? ' (−2 here, with Multiattack)' : ' (−2 with Multiattack)'}.
-        On auto, Role follows the natural attack table. Damage is kept as written, such as
-        “1d6 plus grab”. Put a damage bonus in the Dmg + column; it is added to the flat part
-        of the roll.</p>
+        Role on auto follows the natural-attack table. Damage is kept as you write it,
+        “1d6 plus grab” or “1d6+7”. A bonus to damage goes in the column beside it and is
+        added to the flat part of the roll.</p>
     </section>`;
   }
 
@@ -1991,8 +2005,8 @@ function eidolonEvolutionsPanel(model, cc) {
         <label class="fld" style="grid-column:1/-1"><span>Base form evolutions (free, by level)</span>
           ${prose(model, `data-set="${p}.baseEvolutions"`, b.baseEvolutions, 2)}</label>
       </div>
-      <p class="hint">The pool is the table’s value at this level, less the master level penalty, plus bonus points.
-        Formulas can read <code>${esc(sn)}.evoPool</code> and <code>${esc(sn)}.evoLeft</code>.</p>
+      <p class="hint">The pool is the table’s at this level, less the master-level penalty, plus the bonus points.
+        Readable as <code>${esc(sn)}.evoPool</code> and <code>${esc(sn)}.evoLeft</code>.</p>
     </section>`;
   }
 
@@ -2083,7 +2097,7 @@ function conjuredArchetypePanel(model, cc) {
     return `<section class="panel">
       <h3>Archetype <span class="badge">${k.summonCost ?? 1} sp to summon</span></h3>
       ${k.formLine ? `<p class="hint"><strong>${esc(b.baseForm)}:</strong> ${esc(k.formLine)}.
-        Speeds and attacks go in their own rows. The form’s scores and natural armor are already counted.</p>`
+        Speeds and attacks are written into their own rows; the form’s scores and natural armour are already counted.</p>`
     : '<p class="hint">Pick a base form above for its printed stat line, saves and starting scores.</p>'}
       <div class="rowlist">
         ${CONJURED_ARCHETYPES.map((a) => `<div class="item statline">
@@ -2132,10 +2146,10 @@ function conjuredCastingPanel(model, cc) {
         Spell points are its Hit Dice plus its Charisma modifier (${k.hd ?? 0} ${cha < 0 ? '−' : '+'} ${Math.abs(cha)}).`
     : `Magical Companion: a caster on Charisma. Caster level is half its ${k.hd ?? 0} Hit Dice.
         Spell points are its Charisma modifier.`}
-        The talent’s Charisma increase is not added here; add it with a bonus in the talent’s note.
-        The pool refills when this companion rests and on a new day.
-        Formulas can read <code>${esc(sn)}.sp</code> and <code>${esc(sn)}.cl</code>${pool
-    ? `, and the pool as <code>tracker.${esc(pool.id)}</code>` : ''}.</p>
+        The talent’s Charisma increase is not added here. Forward it from the talent’s note.
+        The pool refills on this companion’s Rest and on a new day.
+        Readable as <code>${esc(sn)}.sp</code> and <code>${esc(sn)}.cl</code>${pool
+    ? `; the pool as <code>tracker.${esc(pool.id)}</code>` : ''}.</p>
 
       <h4 class="subhead">Casting tradition</h4>
       <label class="fld"><span>Tradition</span>${text(`${p}.tradition.name`, tr.name, 'Natural casting')}</label>
@@ -2153,11 +2167,12 @@ function conjuredCastingPanel(model, cc) {
       ${cast.boons ? `<label class="fld"><span>Boons as spell points</span>${text(`${p}.tradition.boonSP`, tr.boonSP ?? '', String(cast.boonsDefault))}</label>
       ${line('Boons', `${cast.boons} (one per drawback${cast.boughtOff ? ', two off per drawback feat' : ''})`)}
       ${line(`${cast.boonSteps} as spell points at ${k.hd ?? 0} HD`, `+${cast.boonSP} sp`)}` : ''}
-      <p class="hint">Blank means natural casting. Each drawback gives one boon (“x2” counts two), and
-        each drawback feat removes two drawbacks, as for your own tradition. Boons taken as spell points
-        add their boon ladder value at this companion’s Hit Dice to the pool above. A blank Boons as
-        spell points box counts every drawback with no boon listed. A line can add a bonus like any
-        note: <code>{${esc(sn)}.cha.score += 2}</code>.</p>
+      <p class="hint">Blank means natural casting. Each drawback is a boon (“x2” counts two), and each
+        drawback feat buys off two of them, as on your own tradition. A boon taken as spell points is worth its step on the boon ladder, read at this
+        companion’s Hit Dice, and is added to the pool above. Blank in the box means every
+        drawback without a boon written in the list. The boons written here are kept as
+        written. A line can forward what it grants, as any note can:
+        <code>{${esc(sn)}.cha.score += 2}</code>.</p>
     </section>`;
   }
 
@@ -2218,8 +2233,8 @@ function companionFeatsPanel(model, cc) {
         slots,
         extra: `<div class="fieldgrid tight">${field('Bonus feats', formulaBox(cc, 'bonusFeats'))}</div>`,
         hint: `One feat at every odd Hit Die (${allowed} at ${k.hd ?? 0} HD), plus a slot for each bonus feat.
-          The Bonus feats field accepts a number or a formula. A feat past the last slot is kept and marked so you can remove it.
-          Multiattack reduces the secondary attack penalty to −2.`,
+          The Bonus feats field takes a number or a formula. A feat past the last slot is kept, marked, and can be removed.
+          A feat named Multiattack reduces the secondary attack penalty to −2.`,
       });
     }
     const over = (k.featsTaken ?? 0) > allowed;
@@ -2232,7 +2247,7 @@ function companionFeatsPanel(model, cc) {
       // What the importer reads off the table beside each feat, and what a
       // player adding one by hand is being asked for.
       sourcePlaceholder: 'Level 5',
-      hint: `The table allows ${allowed} at this level. Multiattack reduces the secondary attack penalty to −2.`,
+      hint: `The table allows ${allowed} at this level. A feat named Multiattack softens secondary attacks to −2.`,
     });
   }
 
@@ -2255,7 +2270,7 @@ function companionSkillsPanel(model, cc) {
     // gets it typed into the name, as its player would write it. A variant
     // a document already holds is still shown, under the name, so it is
     // not lost -- none of the imported companions carries one.
-    const row = (s, i) => `<tr${s.trained && !(s.effectiveRanks > 0) ? ' class="future" title="Trained only, no ranks yet"' : ''}>
+    const row = (s, i) => `<tr${s.trained && !(s.effectiveRanks > 0) ? ' class="future" title="Trained only — no ranks yet"' : ''}>
           <td class="cname">${itemText(list, i, 'name', s.name, 'Skill', true)}${
             String(s.spec || '').trim() ? `<div class="hint">(${esc(s.spec)})</div>` : ''}</td>
           <td>${itemSelect(list, i, 'ability', s.ability, ABILITY_LABELS_LIST, null)}</td>
@@ -2292,7 +2307,7 @@ function companionSkillsPanel(model, cc) {
     : kind === 'eidolon'
       ? 'Ranks per the sheet: HD × (6 + Int modifier). The +3 class-skill bonus applies once there is a rank.'
       : kind === 'conjured'
-        ? '2 ranks per hit die at Intelligence 10 or higher, 1 per hit die below that. A mindless companion gets none. The +3 class-skill bonus applies once there is a rank.'
+        ? '2 ranks per hit die at Intelligence 10 or higher, 1 per hit die below that (the printed column, at the forms’ Int 7). A mindless companion gets none. The +3 class-skill bonus applies once there is a rank.'
         : 'Ranks from the table at this level. The +3 class-skill bonus applies once there is a rank.'}</p>
     </section>`;
   }
@@ -2323,15 +2338,15 @@ function companionItemsPanel(model, cc) {
     const list = `${p}.slotless`;
     const rows = b.slotless || [];
     const worn = (path, on) => `<label class="chk" title="${
-      on === false ? 'Not worn: the effect beside it does not apply.' : 'Worn: the effect beside it applies.'}">
+      on === false ? 'Not worn — the effect beside it is written down but not applying' : 'Worn: the effect beside it is applying'}">
       <input type="checkbox" ${on === false ? '' : 'checked'} data-set="${path}" data-kind="bool"></label>`;
     // Taken off, a row still shows what it would do and stops doing it -- and
     // says so in the colour of its tokens, the same way an unticked buff does.
     const off = (it) => (it?.worn === false
-      ? { inactive: true, inactiveTitle: 'Not worn, so the bonus does not apply. Tick the row to wear it.' }
+      ? { inactive: true, inactiveTitle: 'Not worn, so the bonus is not applying. Tick the row to put it on.' }
       : {});
     const wornItem = (i, on) => `<label class="chk" title="${
-      on === false ? 'Not worn: the effect below does not apply.' : 'Worn: the effect below applies.'}">
+      on === false ? 'Not worn — the effect below is written down but not applying' : 'Worn: the effect below is applying'}">
       <input type="checkbox" ${on === false ? '' : 'checked'} data-item="${list}|${i}|worn" data-kind="bool"></label>`;
     /*
      * The name is capped and Effect takes what is left.
@@ -2415,13 +2430,13 @@ function companionItemsPanel(model, cc) {
         </tr>`).join('')}
       </tbody></table></div>` : ''}
       <div style="margin-top:6px">${addButton(list, slots.length ? 'Add slotless item' : 'Add item', { name: '', cost: 0, worn: true, effect: '' })}</div>
-      <p class="hint"><strong>Effect</strong> accepts <code>{…}</code> formulas. Any of the
-        ${esc(label.toLowerCase())}'s numbers can receive a bonus:
+      <p class="hint"><strong>Effect</strong> reads <code>{…}</code> like any prose field on the sheet.
+        Every number the ${esc(label.toLowerCase())} rolls can be the target of a bonus:
         <code>{${esc(sn)}.str.score += 4 as enhancement}</code>, <code>{${esc(sn)}.ac += 1 as deflection}</code>,
         <code>{${esc(sn)}.skill.perception += 5}</code>, <code>{${esc(sn)}.attack += 1}</code>,
         <code>{${esc(sn)}.damage += 1}</code>, <code>{${esc(sn)}.saves += 2 as resistance}</code>,
-        <code>{${esc(sn)}.cmb += 2}</code>. A row with <em>Worn</em> unticked shows its effect but
-        does not apply it.</p>
+        <code>{${esc(sn)}.cmb += 2}</code>. Untick <em>Worn</em> and the row still shows its effect
+        but stops applying it.</p>
     </section>`;
   }
 
@@ -2498,7 +2513,7 @@ function companionNotesPanel(model, cc) {
   /** A run of mana letters as coloured chips; a dash for none. */
 function manaChips(letters, none = '—') {
     const chips = String(letters || '').split('').filter(Boolean);
-    if (!chips.length) return `<span class="mana"><span class="chip none" title="No color">${esc(none)}</span></span>`;
+    if (!chips.length) return `<span class="mana"><span class="chip none" title="No colour">${esc(none)}</span></span>`;
     return `<span class="mana">${chips.map((k) => {
       const name = (CARD_COLORS.find(([x]) => x === k) || [k, k])[1];
       return `<span class="chip ${esc(k)}" title="${esc(name)}">${esc(k)}</span>`;
@@ -2611,7 +2626,7 @@ function otherDecksPanel(model, p, k, own) {
         <div class="what"><strong>${esc(o.name)}</strong>
           <span class="badge">${o.deck?.deckSize ?? 0} cards</span>
           ${manaChips(o.colors, '')}
-          ${o.deck?.issues?.length ? `<span class="badge err" title="${esc(o.deck.issues.join('\n'))}">${o.deck.issues.length} issue${o.deck.issues.length === 1 ? '' : 's'}</span>` : '<span class="badge ok">legal</span>'}
+          ${o.deck?.issues?.length ? `<span class="badge err" title="${esc(o.deck.issues.join('\n'))}">${o.deck.issues.length} to look at</span>` : '<span class="badge ok">legal</span>'}
           <span class="badge">${o.manipulationsTaken ?? 0} of ${o.manipulationsAvailable ?? 0} manipulations</span>
           ${o.rainbow ? `<span class="badge">${o.rainbow === 2 ? 'Improved ' : ''}Rainbow Efficiency</span>` : ''}
           ${o.id ? (o.ok ? (present.has(o.id) ? '<span class="badge ok">at the table</span>' : '') : `<span class="badge err" title="${esc(o.why || '')}">cannot combine</span>`) : ''}
@@ -2639,16 +2654,16 @@ function memberDeckPanel(model, p, k, m) {
         <span class="badge">${d.deckSize ?? 0} cards</span>
         ${m.casts ? `<span class="badge">CL ${m.cl} · mod ${fmt(m.mod)}</span>` : '<span class="badge err" title="Give it the Magical Companion talent or the mage archetype">does not cast</span>'}
         <span class="badge">opening hand ${Math.max(2, 1 + (Number(m.mod) || 0))}</span>
-        <span class="badge ${m.ok ? 'ok' : 'err'}" title="${esc(m.why || 'Has Card Casting with the same switches as yours.')}">${m.ok ? 'combines' : m.cardCasting ? 'switches differ' : 'no Card Casting'}</span>
+        <span class="badge ${m.ok ? 'ok' : 'err'}" title="${esc(m.why || 'Card Casting, with the same switches as yours')}">${m.ok ? 'combines' : m.cardCasting ? 'switches differ' : 'no Card Casting'}</span>
         <span class="badge ${issues.length ? 'err' : 'ok'}">${issues.length ? `${issues.length} to look at` : 'deck is legal'}</span>
       </h3>
-      <p class="hint">A squad member’s deck, using its own casting modifier, colors and feats.
-        Its switches and colors come from the casting tradition on its own tab${m.kind ? ` (${esc(COMPANION_LABELS[m.kind] || m.kind)})` : ''},
-        and its deck feats and Rainbow Efficiency from its feats. It is shuffled into your deck while it is at the table.</p>
-      ${lineHtml('Colors', inPlay.length ? manaChips(m.colors, '') : esc('none named; write “Colored Mana (WGB)” on its tradition'))}
+      <p class="hint">A squad member’s deck, built here and read against its own casting modifier, colours and feats.
+        Its switches and its colours come from the casting tradition on its own tab${m.kind ? ` (${esc(COMPANION_LABELS[m.kind] || m.kind)})` : ''};
+        its deck feats and Rainbow Efficiency from its feats. It shuffles in with yours while it is at the table.</p>
+      ${lineHtml('Colours', inPlay.length ? manaChips(m.colors, '') : esc('none named — write “Colored Mana (WGB)” on its tradition'))}
       ${line('Switches', taken.length ? taken.join(', ') : 'none')}
       ${line('Identical-effect spread', `${d.spreadMin ?? 0}–${d.spreadMax ?? 0} copies (may differ by up to ${Number(m.mod) || 0})`)}
-      ${line('Effect cards', `${d.effectCards ?? 0} (${(d.effects || []).length} distinct effect${(d.effects || []).length === 1 ? '' : 's'})`)}
+      ${line('Effect cards', `${d.effectCards ?? 0} — ${(d.effects || []).length} distinct effect${(d.effects || []).length === 1 ? '' : 's'}`)}
       ${line('Mana point cards', `${d.manaCards ?? 0}${d.fused ? ` (${d.fused} fused onto an effect)` : ''}`)}
       ${inPlay.length ? `<div class="tally">${inPlay.map((c) => `<span class="t">${manaChips(c)}
         <span class="n">${tally[c]?.effects ?? 0}</span> effect${(tally[c]?.effects ?? 0) === 1 ? '' : 's'} ·
@@ -2663,7 +2678,7 @@ function costMark(card) {
     const typed = String(card.cost ?? '').trim();
     if (!typed) return '';
     const off = Number(card.calc?.discount) || 0;
-    return off ? `<b title="${esc(`Cost ${typed}, reduced by ${off} by Rainbow Efficiency.`)}">${esc(String(card.calc.cost))}</b>` : `<b>${esc(typed)}</b>`;
+    return off ? `<b title="${esc(`Typed ${typed}; Rainbow Efficiency takes ${off} off`)}">${esc(String(card.calc.cost))}</b>` : `<b>${esc(typed)}</b>`;
   }
 
   /**
@@ -2691,13 +2706,13 @@ function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = 
       </div>
       ${String(card.subtitle || '').trim() ? `<div class="bar sub subtitle"><span>${esc(card.subtitle)}</span></div>` : ''}
       ${card.art ? `<div class="art"><img src="${esc(card.art)}" alt="" loading="lazy"></div>` : ''}
-      <div class="bar type"><span>${esc(card.sphere || (isMana ? 'Mana Point' : ''))}${card.tags ? `, ${esc(card.tags)}` : ''}</span></div>
+      <div class="bar type"><span>${esc(card.sphere || (isMana ? 'Mana Point' : ''))}${card.tags ? ` — ${esc(card.tags)}` : ''}</span></div>
       ${statsLine(model, card)}
       ${String(card.effect || '').trim() ? `<div class="text">${markKeywords(hasTokens(card.effect) ? renderedProse(model, card.effect) : esc(card.effect))}</div>` : ''}
       ${rolls}
       ${extra}
       <div class="foot">
-        ${card.mana ? `<span class="pair" title="Mana on this card.">${manaChips(card.mana, '')}</span>` : ''}
+        ${card.mana ? `<span class="pair" title="Mana this card carries">${manaChips(card.mana, '')}</span>` : ''}
         ${badge}
         <span class="pair tools">${buttons}</span>
       </div>
@@ -2727,7 +2742,7 @@ function ownerTag(model, card) {
 
   /** The corner button that opens a card out, or folds it back: the same press wherever the card is. */
 function expandBtn(ref, open) {
-    return tableBtn('expand', ref, open ? '⤡' : '⤢', { cls: 'expand', title: open ? 'Close the card.' : 'Open the card to read and edit it.' });
+    return tableBtn('expand', ref, open ? '⤡' : '⤢', { cls: 'expand', title: open ? 'Fold the card back' : 'Open the card out to read and edit it at length' });
   }
 
   /** A button that drives the table: `data-table="action|id|arg"`. `copy` rides along as the Roll20 text a pop-out window copies on the click. */
@@ -2761,7 +2776,7 @@ function cardCopyButton(model, ctx, ref, what) {
     if (!text) return '';
     const shown = spec.rolls.slice(0, 3).map((r) => r.formula).join(' · ') || 'the card as text';
     return `<button class="d20" data-roll="card|${esc(ref)}" data-rollwhat="${esc(what)}" data-copytext="${esc(text)}"
-      title="${esc(`Copy for Roll20: ${shown}`)}" aria-label="${esc(`Copy a Roll20 roll for ${what}`)}">${D20_ICON}</button>`;
+      title="${esc(`Copy for Roll20 — ${shown}`)}" aria-label="${esc(`Copy a Roll20 roll for ${what}`)}">${D20_ICON}</button>`;
   }
 
   /**
@@ -2805,7 +2820,7 @@ function tableState(model, ctx, p, k, view, member = '') {
       return { open, formulas: open ? model.cardRollFormulas(model.tableCard(id)) : [], locked: !s.mine(id) };
     };
     // +1 SP spends the character's own points, which a GM running a member does not.
-    s.spBtn = (id) => (sp && !member ? tableBtn('sp', id, '+1 SP', { arg: 1, title: 'Spend one spell point on this card, such as for a boost or a mode.' }) : '');
+    s.spBtn = (id) => (sp && !member ? tableBtn('sp', id, '+1 SP', { arg: 1, title: 'Spend one spell point on this card — a boost, a modal option' }) : '');
     s.copyBtn = (id) => cardCopyButton(model, ctx, id, model.tableCard(id)?.name || 'card');
     s.zoneMoves = (id, from) => {
       const opts = TABLE_DESTINATIONS.filter(([v]) => p.mods.lifeboundDeck || !LIFEBOUND_PILES.includes(v));
@@ -2849,28 +2864,28 @@ function tableHead(s) {
     const { p, k, t, tc, active, has, readTwice, loaded, redraw, sp, spLeft, stagnant, faces, model } = s;
     const controls = !faces.controls ? '' : active ? `
         ${tableBtn('next', '', 'Next round', { title: p.mods.exposedGrip ? 'Exposed Grip: no automatic draw' : 'Draw one card' + (p.mods.stagnantPool ? '; untap Stagnant Pool mana' : ''), cls: 'primary' })}
-        ${tableBtn('draw', '', 'Draw a card', { title: 'Draw a card from an effect such as Rapid Fill, Life Draw, Prize Card or Primed Hand.' })}
+        ${tableBtn('draw', '', 'Draw a card', { title: 'Rapid Fill, Life Draw, Prize Card, Primed Hand — any draw the rules hand you' })}
         ${tableBtn('redraw', '', `Redraw hand → ${redraw.next}`, { title: 'Shuffle the hand back and draw one fewer' + (has('Mulligan') ? ' (Mulligan: the same number the first time)' : ''), disabled: redraw.size <= 1 })}
-        ${p.cooldown ? tableBtn('shuffle', '', 'Shuffle discard in', { title: 'Full-round action: shuffle the discard pile into the deck.', disabled: !(t.discard?.length) }) : ''}
+        ${p.cooldown ? tableBtn('shuffle', '', 'Shuffle discard in', { title: 'A full-round action: the discard pile shuffled into the deck', disabled: !(t.discard?.length) }) : ''}
         ${has('Read the Cards') ? tableBtn('peek', '', `Read the cards (${readTwice ? 3 : 1})`, { arg: readTwice ? 3 : 1, title: 'Look at the top of the deck' }) : ''}
-        ${sp ? tableBtn('sp', '', 'Spend 1 SP', { arg: 1, title: 'Spend a spell point on something not on a card, such as Retrace, Read the Cards or Fresh Hand.' }) : ''}
-        ${tableBtn('end', '', 'End encounter', { title: 'Shuffle every card back into the deck.', cls: 'danger' })}`
-      : `${tableBtn('start', '', `Start encounter: draw ${k.openingHand ?? 2}${loaded ? ` + ${loaded}` : ''}`, { title: 'Shuffle every copy in the deck and draw the opening hand', cls: 'primary', disabled: !(k.deckSize > 0) })}`;
+        ${sp ? tableBtn('sp', '', 'Spend 1 SP', { arg: 1, title: 'A spell point on something the cards do not know about — Retrace, Read the Cards, Fresh Hand…' }) : ''}
+        ${tableBtn('end', '', 'End encounter', { title: 'Everything shuffled back into the deck', cls: 'danger' })}`
+      : `${tableBtn('start', '', `Start encounter — draw ${k.openingHand ?? 2}${loaded ? ` + ${loaded}` : ''}`, { title: 'Shuffle every copy in the deck and draw the opening hand', cls: 'primary', disabled: !(k.deckSize > 0) })}`;
     // The squad: each member in or out of the table, with its deck. A press
     // is the player's, so the roster is drawn where the controls are; the
     // shared screen only sees who is in.
     const roster = (tc.squad || []).filter((m) => m.ok || m.present);
     const squad = !roster.length ? '' : faces.controls
       ? `<span class="pair squadctl" title="Multi-Headed Play: a member at the table has its deck shuffled in with yours, and may cast any card in the hand">
-          ${roster.map((m) => tableBtn('squad', m.id, `${m.present ? '✓' : '○'} ${esc(m.name)}${s.ctx?.grants?.[m.id] ? ' <small title="Controlled by the GM">⚑</small>' : ''} <small>${m.cards}</small>`, { cls: m.present ? 'primary' : '', title: m.present ? `${m.name} is at the table with ${m.cards} cards in the deck. Press to remove ${m.name}.` : `Press when ${m.name} is summoned. Its ${m.cards} cards join the deck.` }))}
+          ${roster.map((m) => tableBtn('squad', m.id, `${m.present ? '✓' : '○'} ${esc(m.name)}${s.ctx?.grants?.[m.id] ? ' <small title="handed to the GM">⚑</small>' : ''} <small>${m.cards}</small>`, { cls: m.present ? 'primary' : '', title: m.present ? `${m.name} is at the table: ${m.cards} cards in the deck — press to send ${m.name} away` : `Press when ${m.name} is summoned: ${m.cards} cards join the deck` }))}
         </span>`
       : '';
     // The two windows and the Roll20 switch: the sheet's own, since a window
     // opens from the page that owns the character.
     const windows = !faces.windows ? '' : `<span class="pair winctl">
-        ${tableBtn('window', 'table', '⧉ Table window', { title: 'Open the table in a new window for a shared screen. It shows cards in play, mana, the piles and the log, but not the hand.' })}
-        ${tableBtn('window', 'hand', '⧉ Hand window', { title: 'Open your hand in a new window for a private screen. It shows the hand, the controls and the top of the deck.' })}
-        ${check('cardcasting.copyOnCast', p.copyOnCast, 'Copy for Roll20 on cast', 'Every Cast, Ongoing, Spring and Retrace also copies the card as a Roll20 message to paste into chat.')}
+        ${tableBtn('window', 'table', '⧉ Table window', { title: 'The table in its own window, for the screen you share: in play, mana, the piles and the log — never the hand' })}
+        ${tableBtn('window', 'hand', '⧉ Hand window', { title: 'Your hand in its own window, for a screen you do not share: the hand, the controls and the top of the deck' })}
+        ${check('cardcasting.copyOnCast', p.copyOnCast, 'Copy for Roll20 on cast', 'Every Cast, Ongoing, Spring and Retrace also puts the card on the clipboard as a Roll20 message — paste it into chat')}
       </span>`;
 
     const notes = [];
@@ -2880,10 +2895,10 @@ function tableHead(s) {
         ? `Terrain Casting is on the tradition, and ${freedom} ignores it: no cast pays it.`
         : 'Terrain Casting: every cast pays one spell point more, or a casting-time step, or blights your square and the eight around it. Cast pays the point on a card with a cost and the step on an at-will one; … pays another way.');
     }
-    if (active && k.handMax) notes.push(`Tight Hand: ${t.hand.length} of ${k.handMax} in hand${tc.handOver ? `, ${tc.handOver} over` : ''}.`);
+    if (active && k.handMax) notes.push(`Tight Hand: ${t.hand.length} of ${k.handMax} in hand${tc.handOver ? ` — ${tc.handOver} over` : ''}.`);
     if (active && p.mods.gradualRamp) notes.push(`Gradual Ramp: ${t.manaPlayed} Mana Point card${t.manaPlayed === 1 ? '' : 's'} played this round (one allowed).`);
-    if (active && p.mods.deckout && !t.deck.length) notes.push('Deckout: the deck is empty; 4 Constitution burn every turn it stays empty.');
-    if (active && tc.missing) notes.push(`${tc.missing} cop${tc.missing === 1 ? 'y' : 'ies'} added to the deck since the shuffle. They join the deck at the next shuffle.`);
+    if (active && p.mods.deckout && !t.deck.length) notes.push('Deckout: the deck is empty — 4 Constitution burn every turn it stays so.');
+    if (active && tc.missing) notes.push(`${tc.missing} cop${tc.missing === 1 ? 'y' : 'ies'} added to the deck since the shuffle — in play after the next shuffle.`);
     if (active && p.mods.bleedingHand) notes.push(`Bleeding Hand: discard a card for each ${p.mods.bleedingHand === 2 ? 'action' : 'standard or full-round action'} that does not play or discard one.`);
 
     const lastRoll = t.lastRoll && model.tableCard(t.lastRoll.id)
@@ -2901,7 +2916,7 @@ function tableHead(s) {
         ${k.landAttuned ? `<span class="badge" title="${esc(k.landAttunedWhy)}">land-attuned: mana pays ×2</span>` : ''}
         ${withBadge}
         ${!faces.controls ? '' : sp ? `<span class="badge ${spLeft <= 0 ? 'err' : ''}" title="${esc(sp.name)}: casts are paid from this tracker">${spLeft} of ${sp.max} SP</span>`
-    : '<span class="badge" title="Add a tracker named Spell Points to pay for casts.">no SP tracker</span>'}
+    : '<span class="badge" title="Add a tracker named Spell Points and casts will be paid from it">no SP tracker</span>'}
         ${lastRoll}
         ${t.counters ? `<span class="badge" title="Perfect Draw's counters">[Ante] ${esc(model.tableCard(t.counters.id)?.name || '')}: ${t.counters.early} Early · ${t.counters.late} Late</span>` : ''}
       </h3>
@@ -2909,12 +2924,12 @@ function tableHead(s) {
       ${controls || windows || squad ? `<div class="pair tablectl">${controls}${squad}${windows}</div>` : ''}
       ${notes.length ? `<ul class="hint" style="margin:8px 0 0 1.1rem;padding:0">${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
       ${!active && faces.controls ? `<p class="hint">At initiative: shuffle the deck and draw ${k.openingHand ?? 2} (1 + casting modifier, at least 2)${loaded ? ` plus ${loaded} for Loaded Hand` : ''}.
-        ${p.manaPool ? ` Mana Point cards drawn go straight to the table.${p.mods.gradualRamp ? ' Under Gradual Ramp they stay in hand, and one is played per round.' : ''}` : ''}
-        ${p.cooldown ? ' Resolved cards go to the discard. A full-round action shuffles the discard back into the deck. Running out of cards does the same.' + (p.mods.deckout ? ' Deckout forbids both.' : '') : ' Resolved cards shuffle back into the deck.'}
+        ${p.manaPool ? ` Mana Point cards drawn go straight to the table.${p.mods.gradualRamp ? ' Under Gradual Ramp they wait in hand instead, and one is played per round.' : ''}` : ''}
+        ${p.cooldown ? ' Resolved cards go to the discard. A full-round action shuffles the discard back into the deck. Running out of cards does the same.' + (p.mods.deckout ? ' Deckout forbids both.' : '') : ' Resolved cards shuffle straight back into the deck.'}
         Out of combat there is no hand. Search the deck and cast at +1 minute.
-        Keywords in a card's text take effect when it is cast: ${CARD_KEYWORDS.map((w) => `<code>[${w[0].toUpperCase()}${w.slice(1)}${KEYWORD_EXAMPLE[w] ? ` ${KEYWORD_EXAMPLE[w]}` : ''}]</code>`).join(' ')}.
-        A keyword for a manipulation needs that manipulation.
-        A card with dice in its text or Dice field gets a 🎲 button${faces.windows ? '. The d20 beside it copies the card for Roll20' : ''}.</p>` : ''}
+        Keywords in a card's text fire when it is cast: ${CARD_KEYWORDS.map((w) => `<code>[${w[0].toUpperCase()}${w.slice(1)}${KEYWORD_EXAMPLE[w] ? ` ${KEYWORD_EXAMPLE[w]}` : ''}]</code>`).join(' ')}.
+        A keyword that stands in for a manipulation needs that manipulation taken.
+        A card with dice in its text, or in its Dice field, gets a 🎲 button${faces.windows ? '. The d20 beside it copies the card for Roll20' : ''}.</p>` : ''}
     </section>`;
   }
 
@@ -2946,7 +2961,7 @@ function castPicker(s, id, card, modes, casters = []) {
         ${who}
         ${modes.length ? `<label class="pickrow">Mode
           <select name="mode" aria-label="Mode">
-            ${modes.map((m) => `<option value="${esc(m.label)}" data-sp="${m.sp}"${copy(m.label) ? ` data-copytext="${esc(copy(m.label))}"` : ''}>${esc(m.label)}${m.formula ? `: ${esc(m.formula)}` : m.source ? `: ${esc(m.source)}` : ''}${m.sp ? ` (${m.sp} SP)` : ''}</option>`).join('')}
+            ${modes.map((m) => `<option value="${esc(m.label)}" data-sp="${m.sp}"${copy(m.label) ? ` data-copytext="${esc(copy(m.label))}"` : ''}>${esc(m.label)}${m.formula ? ` — ${esc(m.formula)}` : m.source ? ` — ${esc(m.source)}` : ''}${m.sp ? ` (${m.sp} SP)` : ''}</option>`).join('')}
           </select>
         </label>` : ''}
         <label class="pickrow">Spell points on top of the cost
@@ -2957,7 +2972,7 @@ function castPicker(s, id, card, modes, casters = []) {
       <div class="foot"><span class="pair tools">
         ${tableBtn('play', id, 'Cast', { arg: 'cast', title: 'Cast this mode: the effect resolves now', cls: 'primary' })}
         ${tableBtn('play', id, 'Ongoing', { arg: 'ongoing', title: 'Cast this mode as an effect that lasts' })}
-        ${tableBtn('pick', '', '×', { title: 'Cancel' })}
+        ${tableBtn('pick', '', '×', { title: 'Never mind' })}
       </span></div>
     </div>`;
   }
@@ -3006,10 +3021,10 @@ function handZone(s) {
       const terrain = isEffect && !!model.terrainDefault(card);
       if ((asks || casters.length || terrain) && s.castPick === id) return castPicker(s, id, card, modes, casters);
       const castBtns = !isEffect ? '' : asks
-        ? tableBtn('pick', id, 'Cast…', { title: `${modes.length} modes. Pick one${casters.length ? ', who casts it' : ''}, and how many spell points to add.`, cls: 'primary' })
+        ? tableBtn('pick', id, 'Cast…', { title: `${modes.length} modes: pick one${casters.length ? ', who casts it' : ''}, and the spell points to put into it`, cls: 'primary' })
         : tableBtn('play', id, 'Cast', { arg: 'cast', title: 'Cast: the effect resolves now', cls: 'primary', copy })
           + tableBtn('play', id, 'Ongoing', { arg: 'ongoing', title: 'Cast an effect that lasts: the card stays in play until it resolves', copy })
-          + (casters.length || terrain ? tableBtn('pick', id, '…', { title: [casters.length ? 'cast as a squad member' : '', 'add spell points', terrain ? 'choose how Terrain Casting is paid' : ''].filter(Boolean).join(', ').replace(/^./, (ch) => ch.toUpperCase()) }) : '');
+          + (casters.length || terrain ? tableBtn('pick', id, '…', { title: [casters.length ? 'cast it as a squad member' : '', 'spell points on top', terrain ? 'how Terrain Casting is paid' : ''].filter(Boolean).join(', ').replace(/^./, (ch) => ch.toUpperCase()) }) : '');
       return cardMini(model, id, {
         ...s.miniOpts(id),
         badge,
@@ -3034,7 +3049,7 @@ function playZone(s) {
       ? `<div class="mcard mini trap" data-card="${esc(id)}">
           <div class="trapback">Trap<br><small>face down</small></div>
           <div class="foot"><span class="pair tools">${s.mine(id) ? `
-            ${tableBtn('resolve', id, 'Spring', { title: 'Spring the trap: it is cast now, with its keywords.', cls: 'primary', copy: copyText(id) })}
+            ${tableBtn('resolve', id, 'Spring', { title: 'The trap springs: it is cast now, keywords and all', cls: 'primary', copy: copyText(id) })}
             ${tableBtn('reveal', id, 'Reveal', { title: 'Turn it face up, still in play' })}
             ${s.zoneMoves(id, 'play')}` : ''}
           </span></div>
@@ -3044,9 +3059,9 @@ function playZone(s) {
         // Who it is affecting: the player writes it where the controls are;
         // the shared screen reads it.
         extra: s.faces.controls || (s.member && s.mine(id))
-          ? `<div class="targets"><input type="text" value="${esc(t.targets?.[id] || '')}" data-table-targets="${esc(id)}" placeholder="targets" aria-label="Targets"></div>`
+          ? `<div class="targets"><input type="text" value="${esc(t.targets?.[id] || '')}" data-table-targets="${esc(id)}" placeholder="targets — who it affects" aria-label="Targets"></div>`
           : (t.targets?.[id] ? `<div class="targets"><small>targets</small> ${esc(t.targets[id])}</div>` : ''),
-        buttons: `${tableBtn('resolve', id, 'Resolve', { title: 'End the effect. The card returns to the deck, or to the discard with Cooldown.', cls: 'primary' })}${s.rollBtn(id, model.tableCard(id))}${s.copyBtn(id)}${s.spBtn(id)}${s.zoneMoves(id, 'play')}`,
+        buttons: `${tableBtn('resolve', id, 'Resolve', { title: 'The effect ends: back to the deck, or the discard under Cooldown', cls: 'primary' })}${s.rollBtn(id, model.tableCard(id))}${s.copyBtn(id)}${s.spBtn(id)}${s.zoneMoves(id, 'play')}`,
       }))).join('');
     return `<section class="panel f-play">
       <h3>In play <span class="badge">${t.play.length}</span>${faceDown.size ? `<span class="badge">${faceDown.size} face down</span>` : ''}</h3>
@@ -3066,7 +3081,7 @@ function deckZone(s) {
       ${peeked.length ? `<p class="hint">Top of the deck: </p><div class="zone one">${peeked.map((id, i) => cardMini(model, id, {
     ...s.miniOpts(id),
     badge: `<span class="badge">${i === 0 ? 'top' : `${i + 1}${i === 1 ? 'nd' : 'rd'}`}</span>`,
-    buttons: `${tableBtn('bury', id, '⤓ bottom (1 SP)', { title: 'Read the Cards: spend a spell point to put it on the bottom of the deck.' })}
+    buttons: `${tableBtn('bury', id, '⤓ bottom (1 SP)', { title: 'Read the Cards: a spell point puts it on the bottom of the deck' })}
       ${readTwice ? tableBtn('move', id, 'discard', { arg: 'discard', title: 'Read the Cards taken twice: discard it' }) : ''}`,
   })).join('')}</div>` : `<div class="deckback"><span>${t.deck.length}</span></div>`}
       ${p.mods.lifeboundDeck ? LIFEBOUND_PILES.map((z) => `<h4 class="subhead" style="margin-top:10px">${z[0].toUpperCase()}${z.slice(1)} pile <span class="badge">${t[z].length}</span></h4>
@@ -3092,7 +3107,7 @@ function manaZone(s) {
       <h3>Mana in play <span class="badge">${t.mana.length}</span>${stagnant ? `<span class="badge">${tc.manaUntapped} untapped</span>` : ''}</h3>
       ${p.manaPool ? `<p class="hint">${p.manaGraveyard ? 'Mana Graveyard: casting sends Mana Point cards equal to the cost to the discard.'
         : stagnant ? 'Stagnant Pool: mana in play is the spell points you may spend a round; tapped mana untaps at the start of your next turn.'
-          : 'A card needs as many Mana Point cards in play as it costs' + (p.mods.coloredMana ? ', of its color' : '') + '.'}</p>` : '<p class="hint">Without Mana Pool, mana on the table has no effect.</p>'}
+          : 'A card needs as many Mana Point cards in play as it costs' + (p.mods.coloredMana ? ', of its colour' : '') + '.'}</p>` : '<p class="hint">Without Mana Pool, mana on the table is a note rather than a rule.</p>'}
       ${t.mana.length ? `<div class="zone manazone">${cards}</div>` : '<p class="empty">No mana in play.</p>'}
     </section>`;
   }
@@ -3103,10 +3118,10 @@ function pilesZone(s) {
     return `<div class="f-piles">
       <section class="panel">
         <h3>Discard <span class="badge">${t.discard.length}</span>
-          ${t.discard.length && !s.member ? `<span class="pair" style="margin-left:auto">${tableBtn('exileRandom', '', 'Exile one at random', { arg: 1, title: 'Blood and Dust, Grave Peril: exile a random card from the discard pile.' })}</span>` : ''}
+          ${t.discard.length && !s.member ? `<span class="pair" style="margin-left:auto">${tableBtn('exileRandom', '', 'Exile one at random', { arg: 1, title: 'Blood and Dust, Grave Peril: a random card from the graveyard into exile' })}</span>` : ''}
         </h3>
-        ${t.discard.length ? `<div class="zonelist">${s.listZone(t.discard, 'discard', (id) => `${s.rollBtn(id, model.tableCard(id))}${s.copyBtn(id)}${s.spBtn(id)}${has('Recollection') || has('Resupply') ? tableBtn('move', id, '→ hand', { arg: 'hand', title: 'Recollection / Resupply' }) : ''}${has('Retrace') ? tableBtn('retrace', id, 'Retrace', { title: 'Retrace: cast it from the discard for its cost + 1 spell point (or a longer casting time). It rolls, its keywords take effect, and it stays in the discard.', copy: copyText(id) }) : ''}`)}</div>`
-    : `<p class="empty">${p.cooldown ? 'Nothing discarded.' : 'Nothing discarded. Resolved cards shuffle back into the deck.'}</p>`}
+        ${t.discard.length ? `<div class="zonelist">${s.listZone(t.discard, 'discard', (id) => `${s.rollBtn(id, model.tableCard(id))}${s.copyBtn(id)}${s.spBtn(id)}${has('Recollection') || has('Resupply') ? tableBtn('move', id, '→ hand', { arg: 'hand', title: 'Recollection / Resupply' }) : ''}${has('Retrace') ? tableBtn('retrace', id, 'Retrace', { title: 'Retrace: cast it from the discard for its cost + 1 spell point (or a longer casting time); it rolls, its keywords fire, and it stays in the discard', copy: copyText(id) }) : ''}`)}</div>`
+    : `<p class="empty">${p.cooldown ? 'Nothing discarded.' : 'Nothing discarded — resolved cards shuffle straight back.'}</p>`}
       </section>
       <section class="panel">
         <h3>Exile <span class="badge">${t.exile.length}</span></h3>
@@ -3114,7 +3129,7 @@ function pilesZone(s) {
       </section>
       <section class="panel">
         <h3>Banished <span class="badge">${(t.banished || []).length}</span></h3>
-        <p class="hint">A banished card does not return to the deck until you rest to regain spell points.</p>
+        <p class="hint">The heavier exile: a banished card does not return to the deck until you rest to regain spell points.</p>
         ${(t.banished || []).length ? `<div class="zonelist">${s.listZone(t.banished, 'banished')}</div>` : '<p class="empty">Nothing banished.</p>'}
       </section>
     </div>`;
@@ -3175,9 +3190,9 @@ export function cardTableView(model, ctx, view, member = '') {
     // player's and is shown as it stands.
     const who = s.member ? (p.calc?.squad || []).find((m) => m.id === s.member) : null;
     const note = view !== 'control' ? '' : `<p class="hint gmnote">${who
-      ? `You control ${esc(who.name)}. You can use its cards in the hand and in play, with its own numbers and spell points. The rest of the table belongs to the player.`
+      ? `You are running ${esc(who.name)}: its cards in the hand and in play take presses, cast on its own numbers and points. The rest of the table is the player’s.`
       : 'This companion is no longer in the squad.'}</p>`;
-    const idle = view === 'control' ? '<p class="empty gmnote">No encounter in play. The player starts one from the sheet.</p>' : '';
+    const idle = view === 'control' ? '<p class="empty gmnote">No encounter in play — the player starts one from the sheet.</p>' : '';
     return `<div class="grid">${tableHead(s)}${note}${s.active ? `<div class="span2 tablefield ${esc(view)}view">${field}</div>` : idle}</div>`;
   }
 
@@ -3196,26 +3211,26 @@ function deckSummaryPanel(p, k) {
       </h3>
       <div class="fieldgrid">
         ${field('Casting ability', select('cardcasting.castingStat', p.castingStat, ABILITY_LABELS_LIST))}
-        ${field('Colors in play', `<span class="pair">${text('cardcasting.colors', p.colors, 'RBU')}
+        ${field('Colours in play', `<span class="pair">${text('cardcasting.colors', p.colors, 'RBU')}
           ${manaChips(k.colorsInPlay, '')}</span>`)}
         ${field('Draw with', select('cardcasting.useD100', p.useD100 ? '1' : '',
     [['', 'a shuffled deck'], ['1', 'a d100 and the roll table']], null))}
       </div>
       ${line('Casting modifier', `${fmt(k.cam ?? 0)}${k.stat ? ` (${k.stat})` : ''}`)}
-      ${line('Opening hand at initiative', `${k.openingHand ?? 2} (1 + modifier, at least 2); each redraw draws one fewer`)}
+      ${line('Opening hand at initiative', `${k.openingHand ?? 2} — 1 + modifier, at least 2; redraw for one fewer each time`)}
       ${line('Identical-effect spread', `${k.spreadMin ?? 0}–${k.spreadMax ?? 0} copies (may differ by up to ${k.cam ?? 0})`)}
-      ${line('Effect cards', `${k.effectCards ?? 0} (${k.uniqueEffects ?? 0} distinct effect${k.uniqueEffects === 1 ? '' : 's'})`)}
+      ${line('Effect cards', `${k.effectCards ?? 0} — ${k.uniqueEffects ?? 0} distinct effect${k.uniqueEffects === 1 ? '' : 's'}`)}
       ${line('Mana point cards', `${k.manaCards ?? 0}${k.fused ? ` (${k.fused} fused onto an effect)` : ''}`)}
-      ${k.lifebound ? line('Lifebound value', `${k.lifebound} (HP ÷ 3 ÷ deck size, minimum 1)`) : ''}
+      ${k.lifebound ? line('Lifebound value', `${k.lifebound} — HP ÷ 3 ÷ deck size, minimum 1`) : ''}
       ${inPlay.length ? `<div class="tally">${inPlay.map((c) => `<span class="t">${manaChips(c)}
         <span class="n">${tally[c]?.effects ?? 0}</span> effect${(tally[c]?.effects ?? 0) === 1 ? '' : 's'} ·
         <span class="n">${tally[c]?.mana ?? 0}</span> mana</span>`).join('')}</div>` : ''}
       ${issues.length ? `<ul class="deckcheck hint warn" style="margin:8px 0 0 1.1rem;padding:0">
         ${issues.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}
-      <p class="hint" style="margin-top:8px">Formulas can read <code>deck.size</code>,
+      <p class="hint" style="margin-top:8px">Readable from a formula as <code>deck.size</code>,
         <code>deck.cam</code>, <code>deck.hand</code>, <code>deck.effects</code>, <code>deck.mana</code>,
         <code>deck.unique</code>, <code>deck.lifebound</code>, <code>deck.drawbacks</code>,
-        <code>deck.manipulationsLeft</code> and each pick as <code>deck.manip.&lt;name&gt;</code>. Card text accepts formulas too:
+        <code>deck.manipulationsLeft</code> and each pick as <code>deck.manip.&lt;name&gt;</code>. Card text takes formulas too:
         <code>Fort DC {= 10 + floor(level/2) + int.mod}</code>.</p>
     </section>`;
   }
@@ -3234,7 +3249,7 @@ function deckLadderPanel(p, k) {
         return select(path, String(mods[m.key] || 0), [['0', 'not taken'], ['1', 'taken once'], ['2', 'taken twice']], null);
       }
       if (m.kind === 'colors') {
-        return select(path, String(mods[m.key] || 0), [['0', 'not taken'], ['3', 'three colors'], ['5', 'five colors (2 drawbacks)']], null);
+        return select(path, String(mods[m.key] || 0), [['0', 'not taken'], ['3', 'three colours'], ['5', 'five colours (2 drawbacks)']], null);
       }
       return check(path, mods[m.key], mods[m.key] ? 'taken' : 'not taken');
     };
@@ -3252,7 +3267,7 @@ function deckLadderPanel(p, k) {
       </h3>
       <p class="hint">Card Casting alone counts as one drawback. Cooldown or Mana Pool makes it two.
         Both make it three. Mana Graveyard makes it four. Each modification adds one more.
-        Five-color Colored Mana adds two. Hover over a row for the full rule.</p>
+        Five-colour Colored Mana adds two. Hover a row for the whole rule.</p>
       <div class="modgrid">
       ${row('Card Casting', '<span class="badge">always</span>',
     'Effects that cost spell points are cards. Draw 1 + casting modifier (at least 2) at initiative, and one more each round. Play a card to cast it. Shuffle it back once its effect has resolved. Out of combat, search the deck and cast at +1 minute.')}
@@ -3310,7 +3325,7 @@ function deckManipulationsHead(model, p, k, own = '') {
     const featList = f.deckFeats.map((x) => x.replace(/\s*\[[^\]]*\]\s*/g, '').trim());
     const head = `<section class="panel span2 manip-head">
       <h3>Deck manipulations
-        <span class="badge ${left < 0 ? 'err' : ''}">${f.taken} of ${f.available} taken${left < 0 ? `, ${-left} over` : left ? `, ${left} left` : ''}</span>
+        <span class="badge ${left < 0 ? 'err' : ''}">${f.taken} of ${f.available} taken${left < 0 ? ` — ${-left} over` : left ? ` — ${left} left` : ''}</span>
         <span class="badge" title="${esc(featList.join(', ') || 'No feat or bought-off drawback is tagged [Deck]')}">${f.deckFeats.length} deck feat${f.deckFeats.length === 1 ? '' : 's'}</span>
         ${f.rainbow ? `<span class="badge">${f.rainbow === 2 ? 'Improved ' : ''}Rainbow Efficiency</span>` : ''}
       </h3>
@@ -3319,7 +3334,7 @@ function deckManipulationsHead(model, p, k, own = '') {
     // Blank is automatic, so an emptied box has to store nothing rather than 0.
     kind: 'expr-or-null',
     width: '7rem', value: k.manipulationsAvailable, error: k.manipulationsError, placeholder: `auto: ${k.autoAvailable ?? 0}`,
-    title: 'Blank gives one per deck feat, plus two for each Card Shark. Or enter a number or a formula.',
+    title: 'Blank: one per deck feat, and two for Card Shark each time it is taken. Or a number, or a formula.',
   }))}
         ${field('Add from the list', `<span class="pair"><select class="manip-pick" data-owner="${esc(own)}" aria-label="Add a deck manipulation">
           <option value="">— pick a manipulation —</option>
@@ -3329,8 +3344,8 @@ function deckManipulationsHead(model, p, k, own = '') {
   }).join('')}
         </select></span>`)}
       </div>
-      <p class="hint">One manipulation per deck feat (a feat or bought-off drawback tagged [Deck]), plus
-        two for each Card Shark.${who ? '' : ' The Available field overrides this.'}${squad.length ? ` ${who ? 'A member\'s picks use its own deck feats, and it can use them at the table while it is there' : 'Each caster has its own picks; a member\'s are in its deck view'}. Each copy has an owner, so one copy can go to another deck.` : ''} Hover over a name for its rule.${who ? '' : ' Formulas can read'}
+      <p class="hint">One manipulation per deck feat (a feat or bought-off drawback tagged [Deck]), and two
+        for Card Shark each time it is taken.${who ? '' : ' The Available field overrides that.'}${squad.length ? ` ${who ? 'A member\'s picks are its own, against its own deck feats, and it may use them at the table while it is there' : 'Each caster\'s picks are its own; a member\'s are on its deck\'s view'}. Each row has an owner pick per copy, so one copy can be given to another deck and the rest kept.` : ''} Hover a name for its rule.${who ? '' : ' Readable as'}
         ${who ? '' : '<code>deck.manip.&lt;name&gt;</code> (<code>deck.manip.loaded_hand</code>, <code>deck.manip.fused_cards</code>) and <code>deck.feats</code>.'}</p>
     </section>`;
     return collapsible(model, `deck-manipulations${own ? `:${own}` : ''}`, head);
@@ -3369,7 +3384,7 @@ function deckManipulationsPanel(model, p, k, own = '') {
           ${rows.map(({ m, i }) => {
     const entry = manipulationEntry(m);
     const mc = m.calc || {};
-    const tip = entry ? `${entry.name}${entry.needs || entry.requires.length ? ` (${[...entry.requires.map((r) => NEED[r]), entry.needs].filter(Boolean).join(', ')})` : ''}: ${entry.text}` : 'Not in the catalog (homebrew or an unknown name).';
+    const tip = entry ? `${entry.name}${entry.needs || entry.requires.length ? ` (${[...entry.requires.map((r) => NEED[r]), entry.needs].filter(Boolean).join(', ')})` : ''}: ${entry.text}` : 'Not in the catalogue — a homebrew or a name it does not know';
     // Folded to its name by default: the card's text is a hover away, and
     // the player's note instead once they have written one. Folded by the
     // manipulation's name, so a removal above does not open another row.
@@ -3380,7 +3395,7 @@ function deckManipulationsPanel(model, p, k, own = '') {
             <td class="what">
               <span class="pair">${foldButton(model, foldKey, { open: !shut })}<span class="manipname"${peek}><input type="text" value="${esc(m.name ?? '')}" data-item="${list}|${i}|name" data-kind="text"
                 placeholder="Manipulation"${shut ? '' : ` title="${esc(tip)}"`}></span>
-                ${entry ? '' : '<span class="badge" title="Not in the catalog">?</span>'}
+                ${entry ? '' : '<span class="badge" title="Not in the catalogue">?</span>'}
                 ${(mc.unmet || []).map((r) => `<span class="badge err">needs ${esc(NEED[r])}</span>`).join('')}
                 ${mc.overMax ? `<span class="badge err">max ${entry.max}</span>` : ''}
               </span>
@@ -3389,7 +3404,7 @@ function deckManipulationsPanel(model, p, k, own = '') {
             </td>
             <td>${itemNum(list, i, 'count', m.count)}</td>
             <td class="tools"><span class="pair">
-              ${squad.length ? Array.from({ length: Math.max(1, Number(m.count) || 0) }, (_, n) => `<select class="movesel" data-manip-owner="${i}" aria-label="Whose copy ${n + 1} is" title="${esc(`Owner of copy ${n + 1} of ${Math.max(1, Number(m.count) || 0)}. Changing it does not move the other copies.`)}">${owners.map((o) => `<option value="${esc(o.id)}"${o.id === ownerOf(m) ? ' selected' : ''}>${esc(o.name)}</option>`).join('')}</select>`).join('') : ''}
+              ${squad.length ? Array.from({ length: Math.max(1, Number(m.count) || 0) }, (_, n) => `<select class="movesel" data-manip-owner="${i}" aria-label="Whose copy ${n + 1} is" title="${esc(`Copy ${n + 1} of ${Math.max(1, Number(m.count) || 0)}: whose it is. Moving one copy leaves the others where they are.`)}">${owners.map((o) => `<option value="${esc(o.id)}"${o.id === ownerOf(m) ? ' selected' : ''}>${esc(o.name)}</option>`).join('')}</select>`).join('') : ''}
               ${removeButton(list, i, { what: 'manipulation' })}
             </span></td>
           </tr>`;
@@ -3436,12 +3451,12 @@ function landAttunedPanel(p, k) {
     return `<section class="panel span2">
       <h3>Land-attuned magic
         ${attuned.size ? `<span class="badge">${attuned.size} attuned</span>` : ''}
-        <span class="badge ${k.landAttuned ? 'ok' : ''}" title="${esc(k.landAttunedWhy || '')}">${k.landAttuned ? 'mana pays ×2 on attuned spheres' : 'feat not active'}</span>
+        <span class="badge ${k.landAttuned ? 'ok' : ''}" title="${esc(k.landAttunedWhy || '')}">${k.landAttuned ? 'mana pays ×2 on attuned spheres' : 'feat not in force'}</span>
       </h3>
-      <p class="hint">The spheres each mana color covers. Tick a sphere to mark it attuned. The number
-        beside a sphere is how many deck cards belong to it. With the Land-Attuned Magic feat, Terrain
-        Casting or Area Bound in the tradition, and Mana Pool, each Mana Point card in play pays two spell
-        points for an attuned sphere's card instead of one.
+      <p class="hint">The spheres each colour of mana covers, as the deck's own table had them. Tick a
+        sphere to mark it attuned. The count beside a sphere is how many cards in the deck belong to it.
+        With Land-Attuned Magic among the feats, Terrain Casting or Area Bound in the tradition, and Mana Pool taken,
+        every Mana Point card in play pays two spell points on an attuned sphere's card instead of one.
         ${k.landAttunedWhy ? `Currently ${esc(k.landAttunedWhy)}.` : ''}</p>
       ${CARD_COLORS.map(([c, name]) => {
     const list = `cardcasting.colorSpheres.${c}`;
@@ -3451,7 +3466,7 @@ function landAttunedPanel(p, k) {
             <div class="spheres">
               ${rows.map((s, i) => `<span class="pair">
                 <button data-action="attune-sphere" data-sphere="${esc(s)}" aria-pressed="${attuned.has(s)}"
-                  title="${attuned.has(s) ? 'Attuned. Click to clear.' : 'Click to attune.'}"
+                  title="${attuned.has(s) ? 'Attuned — click to clear' : 'Click to attune'}"
                   class="${attuned.has(s) ? 'primary' : ''}">${attuned.has(s) ? '✓' : '○'}</button>
                 ${itemText(list, i, 'self', s, 'Sphere')}
                 ${tally[s] ? `<span class="badge">${tally[s]}</span>` : ''}
@@ -3493,18 +3508,18 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
       <div class="bar title">
         <input type="text" class="name" value="${esc(card.name ?? '')}" data-item="${list}|${i}|name" data-kind="text"
           placeholder="${isMana ? 'Mana Point' : 'Card name'}" aria-label="Card name">
-        <span class="cost" title="Spell point cost and the colors it must be paid in (two or more with Rainbow Efficiency)${r.fromSphere ? '. With no color of its own, the frame uses the sphere’s color' : ''}.">
+        <span class="cost" title="Spell point cost, and the colour(s) it must be paid in — two or more with Rainbow Efficiency${r.fromSphere ? '. No colour of its own: the frame follows the sphere' : ''}">
           <input type="text" value="${esc(card.cost ?? '')}" data-item="${list}|${i}|cost" data-kind="text" placeholder="—" aria-label="Cost">
           <span class="colorcell${colors ? ' filled' : ''}" style="--n:${Math.max(2, colors.length)}">
             <input type="text" class="colorpick" value="${esc(card.color ?? '')}" data-item="${list}|${i}|color" data-kind="text"
-              placeholder="${esc(r.fromSphere ? colors : '◌')}" aria-label="Cost colors" title="Color letters R B U W G. Click the pips to type them.">
+              placeholder="${esc(r.fromSphere ? colors : '◌')}" aria-label="Cost colours" title="The colour letters R B U W G. Click the pips to type them">
             ${colors ? manaChips(colors, '') : ''}
           </span>
-          ${r.discount ? `<span class="badge" title="${esc(`Rainbow Efficiency: ${r.discount} off for ${colors.length} colors. Costs ${r.cost} to cast.`)}">→ ${r.cost}</span>` : ''}
+          ${r.discount ? `<span class="badge" title="${esc(`Rainbow Efficiency: ${r.discount} off for ${colors.length} colours — ${r.cost} to cast`)}">→ ${r.cost}</span>` : ''}
         </span>
       </div>
-      <div class="bar sub subtitle" title="Subtitle: a short description of what the card does, e.g. Big Sky · Explosive Orb (Fire Blast).">
-        <input type="text" value="${esc(card.subtitle ?? '')}" data-item="${list}|${i}|subtitle" data-kind="text" placeholder="subtitle" aria-label="Subtitle">
+      <div class="bar sub subtitle" title="A subtitle: what the card does, in a few words, under a name of its own — Big Sky · Explosive Orb (Fire Blast)">
+        <input type="text" value="${esc(card.subtitle ?? '')}" data-item="${list}|${i}|subtitle" data-kind="text" placeholder="subtitle — the effect in a few words" aria-label="Subtitle">
       </div>
       ${harrowFor(p, model.cardOwner(card)) ? `<div class="bar sub">
         ${itemSelect(list, i, 'suit', card.suit, ABILITY_LABELS_LIST, 'suit')}
@@ -3563,7 +3578,7 @@ function cardStatBars(model, list, i, card) {
     const feetWord = s.rangeFeet !== null && !/^\d+$/.test(s.range);
     const preview = [
       changed('save', s.save) ? ['Save', s.save] : null,
-      s.dcError ? ['DC', `${s.dc}: ${s.dcError}`, 'err'] : changed('dc', s.dc) ? ['DC', s.dc] : null,
+      s.dcError ? ['DC', `${s.dc} — ${s.dcError}`, 'err'] : changed('dc', s.dc) ? ['DC', s.dc] : null,
       feetWord ? ['Range', `${s.range} = ${s.rangeFeet} ft`] : changed('range', s.range) ? ['Range', s.range] : null,
       changed('target', s.target) ? ['Target', s.target] : null,
       changed('duration', s.duration) ? ['Duration', s.duration] : null,
@@ -3577,15 +3592,15 @@ function cardStatBars(model, list, i, card) {
       return /[{}()+*/]/.test(v) || v.length > 14;
     });
     return `<div class="bar stats${wide ? ' rows' : ''}">
-        ${stat('save', 'save', 'Saving throw: Ref, Fort, Will or none, or a formula in braces', 'card-saves')}
-        ${stat('dc', 'DC', 'Save DC: a number or a formula, such as caster.dc or 10 + floor(caster.level/2) + int.mod', 'card-dcs')}
+        ${stat('save', 'save', 'Saving throw: Ref, Fort, Will or none — or a formula in braces', 'card-saves')}
+        ${stat('dc', 'DC', 'Save DC: a number or a formula — caster.dc, 10 + floor(caster.level/2) + int.mod', 'card-dcs')}
         ${stat('range', 'range', 'Range: melee, close, medium or long (worked out in feet for the caster level), a number of feet, or a formula', 'card-ranges')}
-        ${stat('target', 'target', 'Target or area, such as single, line, cone or burst, or a formula.', 'card-targets')}
-        ${stat('duration', 'duration', 'Duration: instantaneous, concentration, 1 round/level…, or a formula such as {caster.level} rounds', 'card-durations')}
-        ${stat('casting', 'cast', 'Casting time: standard action, swift action, full-round action, 1 minute…, or a formula', 'card-casting-times')}
+        ${stat('target', 'target', 'Target or area: single, line, cone, burst — or a formula', 'card-targets')}
+        ${stat('duration', 'duration', 'Duration: instantaneous, concentration, 1 round/level… — or a formula, {caster.level} rounds', 'card-durations')}
+        ${stat('casting', 'cast', 'Casting time: standard action, swift action, full-round action, 1 minute… — or a formula', 'card-casting-times')}
       </div>
       <div class="bar stats dmg">
-        <span class="stat grow" title="Damage types separated by commas, such as fire, cold, or a formula in braces."><small>dmg</small>
+        <span class="stat grow" title="Damage types, comma-separated — fire, cold — or a formula in braces"><small>dmg</small>
           <input type="text" value="${esc(card.damage ?? '')}" data-item="${ref}|damage" data-kind="text" list="card-damage" placeholder="damage types" aria-label="Damage types"></span>
         <select class="movesel dmgpick" data-append="${ref}|damage" data-join="," aria-label="Add a damage type" title="Add a damage type">
           <option value="">add…</option>
@@ -3606,7 +3621,7 @@ function cardShelfButtons(model, list, i, inDeck) {
     const where = inDeck ? 'sideboard' : 'deck';
     const active = !!model.data.cardcasting?.table?.active;
     const held = inDeck && active;
-    return `<button data-card-move="${list}|${i}|${to}|move" ${held ? 'disabled' : ''} title="${held ? 'The deck is in play. End the encounter first, or copy the card instead.' : `Move this card to the ${where}`}" aria-label="Move to ${where}">→ ${where}</button>
+    return `<button data-card-move="${list}|${i}|${to}|move" ${held ? 'disabled' : ''} title="${held ? 'The deck is in play: end the encounter first, or copy it instead' : `Move this card to the ${where}`}" aria-label="Move to ${where}">→ ${where}</button>
           <button data-card-move="${list}|${i}|${to}|copy" title="Copy this card to the ${where}" aria-label="Copy to ${where}">⧉ ${where}</button>`;
   }
 
@@ -3675,21 +3690,21 @@ function cardDiceRow(model, ctx, list, i, card, p, inDeck) {
       : `<span class="badge err" title="${esc(r.error)}">${esc(r.label)}: ${esc(r.source || '—')}</span>`)).join('');
     const hasStats = CARD_STAT_FIELDS.some((f) => String(card[f] ?? '').trim());
     const alike = inDeck && (String(card.dice || '').trim() || hasStats) ? model.cardSiblings(list, i) : [];
-    const title = 'Dice to roll, such as 8d6+int.mod or {1+floor(caster.level/2)}d6. For several rolls, name each: damage: 8d6; boost (1 SP): 15d6. Blank uses the first dice in the text.';
+    const title = 'Dice to roll on the table — 8d6+int.mod, {1+floor(caster.level/2)}d6, or several with names: damage: 8d6; boost (1 SP): 15d6. Blank uses the first dice in the text.';
     // Opened out, the field is a line per roll; the entries are read the
     // same way either way, since a new line separates them as a ; does.
     const open = !!ctx.openCards?.has?.(`${list}.${i}`);
     const lines = String(card.dice ?? '').split(/;\s*|\n/).filter((x, n, all) => x.trim() || n < all.length - 1);
     const field = open
-      ? `<textarea class="dice" data-item="${ref}|dice" data-kind="text" rows="${Math.max(2, lines.length + 1)}" spellcheck="false" placeholder="one roll per line, e.g. damage: 8d6+int.mod" aria-label="Dice">${esc(lines.join('\n'))}</textarea>`
-      : `<input type="text" class="dice" value="${esc(card.dice ?? '')}" data-item="${ref}|dice" data-kind="text" placeholder="dice, e.g. 8d6+int.mod" aria-label="Dice">`;
+      ? `<textarea class="dice" data-item="${ref}|dice" data-kind="text" rows="${Math.max(2, lines.length + 1)}" spellcheck="false" placeholder="one roll a line — damage: 8d6+int.mod" aria-label="Dice">${esc(lines.join('\n'))}</textarea>`
+      : `<input type="text" class="dice" value="${esc(card.dice ?? '')}" data-item="${ref}|dice" data-kind="text" placeholder="dice — 8d6+int.mod; boost (1 SP): 15d6" aria-label="Dice">`;
     return `<div class="foot dice${open ? ' open' : ''}">
       <span class="pair grow" title="${esc(title)}">🎲${field}</span>
-      <select class="movesel dicepick" data-append="${ref}|dice" aria-label="Add dice" title="Add a roll.">
+      <select class="movesel dicepick" data-append="${ref}|dice" aria-label="Add dice" title="Add a roll in the sheet's own spelling">
         <option value="">add…</option>
         ${cardDicePresets(p.castingStat).map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}
       </select>
-      ${alike.length ? `<button data-dice-share="${ref}" title="Copy these dice and stats to the ${alike.length} other card${alike.length === 1 ? '' : 's'} with this effect.">→ ${alike.length} alike</button>` : ''}
+      ${alike.length ? `<button data-dice-share="${ref}" title="Give these dice and this stat line to the ${alike.length} other card${alike.length === 1 ? '' : 's'} with this effect">→ ${alike.length} alike</button>` : ''}
       ${cardCopyButton(model, ctx, ref, card.name || card.effect || 'card')}
       ${preview ? `<span class="pair preview">${preview}</span>` : ''}
     </div>`;
@@ -3715,19 +3730,19 @@ function deckTableBody(model, ctx, p, k, own = '') {
     return `<section class="panel span2">
       <h3>Deck
         <span class="badge">${d.deckSize ?? 0} cards</span>
-        ${!who && p.useD100 ? `<span class="badge">d100: reroll above ${k.deckSize ?? 0}</span>` : ''}
+        ${!who && p.useD100 ? `<span class="badge">d100 — reroll above ${k.deckSize ?? 0}</span>` : ''}
         <span class="pair" style="margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0">
-          <label class="pair">Sort ${select('cardcasting.deckSort', p.deckSort, DECK_SORTS, null, { attrs: 'aria-label="Sort the deck" title="The display order. The cards keep their order in the list."' })}</label>
-          ${check(own ? `cardcasting.harrowBy.${own}` : 'cardcasting.harrow', harrowFor(p, own), 'Harrow deck (suits and alignments)')}
+          <label class="pair">Sort ${select('cardcasting.deckSort', p.deckSort, DECK_SORTS, null, { attrs: 'aria-label="Sort the deck" title="The order the faces are shown in — the cards themselves stay where they were typed"' })}</label>
+          ${check(own ? `cardcasting.harrowBy.${own}` : 'cardcasting.harrow', harrowFor(p, own), 'Harrow deck — suits & alignments')}
         </span>
       </h3>
-      <p class="hint">Cost and color are at the top right and set the frame color; click the color
-        pips to type the letters. The type line is sphere and tags. The letters under the text are
-        the mana the card adds to the table when a Mana Point card is fused onto it. Leave the effect
-        blank for a plain Mana Point card.
-        ${p.useD100 ? 'The number at the bottom right is the card\'s d100 roll.' : ''}
-        Sort orders the cards by color (white, blue, black, red, green, then gold), cost, tags or
-        sphere, and applies to the sideboard too.</p>
+      <p class="hint">Cost and its colour sit top right and set the frame colour; the colour shows
+        as pips, and a click on them opens the letters to type. The type line is
+        sphere — tags. The letters under the text are the mana the card puts on the table when a
+        Mana Point card is fused onto it. Leave the effect blank for a plain Mana Point card.
+        ${p.useD100 ? 'The number bottom right is the card\'s roll on the d100.' : ''}
+        Sort shows the faces by colour (white, blue, black, red, green, then gold), by cost, by tags
+        or by sphere; the sideboard follows.</p>
       ${(() => { const l = model.deckList(own); return postBox(ctx, `decklist${own ? `-${own}` : ''}`, 'Decklist', l.text, Math.min(24, Math.max(4, l.text.split('\n').length + 1))); })()}
       ${harrowFor(p, own) && Object.keys(suitTally).length ? `<div class="tally">
         ${Object.entries(suitTally).map(([s, n]) => `<span class="t">${esc(s)} <span class="n">${n}</span></span>`).join('')}
@@ -3749,7 +3764,7 @@ function deckFaces(model, ctx, p, k, list, cards, newCard, own) {
     const colors = who ? who.colors : k.colorsInPlay;
     const mine = deckOrder(cards, p.deckSort).filter((i) => model.cardOwner(cards[i]) === own);
     const faces = mine.map((i) => cardFace(model, ctx, list, i, cards[i], p)).join('');
-    return `${mine.length ? `<div class="cardgrid">${faces}</div>` : `<p class="empty">${who ? `No cards yet for ${esc(who.name)}. Add 20 to 30 cards from spheres you do not use.` : 'No cards yet. A deck needs at least 20.'}</p>`}
+    return `${mine.length ? `<div class="cardgrid">${faces}</div>` : `<p class="empty">${who ? `No cards yet for ${esc(who.name)} — 20 to 30 of the spheres you do not run.` : 'No cards yet. A deck needs at least 20.'}</p>`}
       <div class="pair" style="margin-top:10px">
         ${addButton(list, 'Add effect card', newCard({ owner: own }))}
         ${addButton(list, 'Add mana point card', newCard({ cost: '', mana: (colors || 'R').slice(0, 1), owner: own }))}
@@ -3767,24 +3782,24 @@ function squadPanel(model, p, k, ctx = {}) {
     if (!squad.length) return '';
     const c = k.combined || {};
     return `<section class="panel span2">
-      <h3>Squad: Multi-Headed Play
+      <h3>Squad — Multi-Headed Play
         <span class="badge">${c.members || 0} deck${c.members === 1 ? '' : 's'} combine</span>
-        <span class="badge" title="All decks combined, with every member at the table.">${c.deckSize ?? 0} cards in all</span>
+        <span class="badge" title="Every deck together, when every member is at the table">${c.deckSize ?? 0} cards in all</span>
         ${c.colors ? `<span class="pair">${manaChips(c.colors, '')}</span>` : ''}
       </h3>
-      <p class="hint">A squad member's deck has its own view above and is shuffled into yours while the member is at
-        the table (see the roster under the table controls). Any member can cast any card in the hand using its own caster
-        level, modifier and spell points. Write a card's numbers as <code>caster.level</code> and <code>caster.mod</code>
-        so they use whoever casts it. A member's tradition must have Card Casting with the same switches as yours. Its
-        Colored Mana colors and Rainbow Efficiency are its own. A member takes its own deck manipulations against its own
-        deck feats (the owner pick on each row under Deck manipulations) and can use them at the table while it is there.
-        Your other deck feats stay yours.</p>
+      <p class="hint">A squad member's deck has a view of its own above, and is shuffled in with yours while it is at the table (the roster under the table's
+        controls). Any member may cast any card in the hand, using its own caster level, modifier and spell points. Write
+        a card's numbers as <code>caster.level</code> and <code>caster.mod</code> and they follow whoever casts it. A member's
+        tradition must list Card Casting with the same switches as yours. Its Colored Mana colours are its own, and so is
+        Rainbow Efficiency: a member's multi-colour cards are discounted by its own feat, yours by yours. A member takes
+        its own deck manipulations against its own deck feats (the owner pick on each row under Deck manipulations) and
+        may use them at the table while it is there. Your other deck feats stay yours.</p>
       ${squad.map((m) => `<div class="squadrow">
         <div class="what"><strong>${esc(m.name)}</strong>
-          <span class="badge ${m.ok ? 'ok' : 'err'}" title="${esc(m.why || 'Has Card Casting with the same switches as yours.')}">${m.ok ? 'combines' : m.cardCasting ? 'switches differ' : 'no Card Casting'}</span>
+          <span class="badge ${m.ok ? 'ok' : 'err'}" title="${esc(m.why || 'Card Casting, with the same switches')}">${m.ok ? 'combines' : m.cardCasting ? 'switches differ' : 'no Card Casting'}</span>
           ${m.casts ? `<span class="badge">CL ${m.cl} · mod ${fmt(m.mod)}</span>` : '<span class="badge err" title="Give it the Magical Companion talent or the mage archetype">does not cast</span>'}
           ${manaChips(m.colors, '')}
-          ${m.rainbow ? `<span class="badge" title="Its own deck feat: its multicolor effects cost less.">${m.rainbow === 2 ? 'Improved ' : ''}Rainbow Efficiency</span>` : ''}
+          ${m.rainbow ? `<span class="badge" title="Its own deck feat: its multi-colour effects cost less">${m.rainbow === 2 ? 'Improved ' : ''}Rainbow Efficiency</span>` : ''}
           <span class="badge ${m.manipulationsLeft < 0 ? 'err' : ''}" title="Its own deck manipulations, against its own deck feats">${m.manipulationsTaken} of ${m.manipulationsAvailable} manipulations</span>
           <span class="badge">${m.deck.deckSize} cards</span>
           ${m.deck.issues.length ? `<ul class="hint warn" style="margin:4px 0 0 1.1rem;padding:0">${m.deck.issues.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}
@@ -3793,9 +3808,9 @@ function squadPanel(model, p, k, ctx = {}) {
         <div class="hint">${m.pool ? `points from ${esc(m.name)}’s own pool` : ''}
           ${grantControls(m, ctx)}</div>
       </div>`).join('')}
-      <p class="hint">Hand a member to the GM when you no longer control it, such as an unwilling companion that made
-        its save. The GM gets a link to a page with that member's cards in hand, the table and its features. The GM's
-        actions run on this sheet, which must stay open. Take back closes the GM's page.</p>
+      <p class="hint">Hand a member to the GM when it is no longer yours to run — an unwilling companion that made its save.
+        The GM gets a link to a page with that member's cards in hand, the table as it stands, and the companion's
+        features; what the GM presses runs here, on this sheet, which must stay open. Take back closes the page.</p>
     </section>`;
   }
 
@@ -3807,13 +3822,13 @@ function squadPanel(model, p, k, ctx = {}) {
 function grantControls(m, ctx) {
     const g = ctx?.grants?.[m.id];
     if (!g) {
-      return `<div class="pair grant"><button data-action="hand-over" data-member="${esc(m.id)}" title="Create a link for the GM to this companion’s hand, the table and its features. The character is published first if needed.">Hand over to the GM</button></div>`;
+      return `<div class="pair grant"><button data-action="hand-over" data-member="${esc(m.id)}" title="A link to this companion’s hand, the table and its features, for the GM. The character is published first if it is not yet.">Hand over to the GM</button></div>`;
     }
     return `<div class="pair grant">
       <span class="badge ok" title="${esc(`Handed to the GM${g.since ? ` since ${g.since}` : ''}`)}">handed to the GM${g.viewers ? ` · ${g.viewers} watching` : ''}</span>
       <input type="text" readonly value="${esc(g.url || '')}" aria-label="Control link" style="width:16rem">
       <button data-action="copy-grant-link" data-member="${esc(m.id)}" title="Copy the control link for the GM">Copy link</button>
-      <button data-action="take-back" data-member="${esc(m.id)}" class="danger" title="Take control back and close the GM’s page.">Take back</button>
+      <button data-action="take-back" data-member="${esc(m.id)}" class="danger" title="Take control back: the GM’s page is closed">Take back</button>
     </div>`;
   }
 

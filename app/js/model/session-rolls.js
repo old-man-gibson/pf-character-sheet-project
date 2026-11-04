@@ -119,7 +119,7 @@ export function sessionRolls(model, card, answers = null) {
   if (extra) {
     try {
       const first = rolls.findIndex(r => r.label.startsWith('Attack'));
-      if (first < 0) throw new Error('Nothing to repeat yet. Link a weapon from the picker, or fill in Attack bonus or formula (e.g. attack.melee)');
+      if (first < 0) throw new Error('Nothing to repeat yet — link a weapon from the picker, or fill in Attack bonus or formula (e.g. attack.melee)');
       const copies = [];
       for (const group of splitTopLevel(expand(extra))) {
         if (!group.trim()) continue;
@@ -137,7 +137,7 @@ export function sessionRolls(model, card, answers = null) {
   }
   const attacks = rolls.filter(r => r.label.startsWith('Attack'));
   attacks.forEach((r, i) => { r.label = attacks.length > 1 ? `Attack ${i + 1}` : 'Attack'; });
-  const spec = { name: `${model.data.identity.name}: ${card.title || source?.title || 'Action'}`,
+  const spec = { name: `${model.data.identity.name} — ${card.title || source?.title || 'Action'}`,
     rolls, notes: (inherited?.notes || []).filter(n => !attack || n.label !== 'Threat'), queries: inherited?.queries || [] };
   const bonuses = attacks.map(r => r.formula.replace(/^1d20(?:cs>\d+)?/, '') || '+0');
   const attackText = bonuses.join(' / ');
@@ -173,7 +173,7 @@ function routineRollSpec(model, card) {
   if (parts.some(p => p === undefined)) return null;
   const branches = routineBranches(model, card).map(row => ({ label: row.label,
     buttons: row.buttons.map(b => ({ label: b.label, spec: cardRollSpec(model, b.card, 'all', null) })).filter(b => b.spec) }));
-  return { name: `${model.data.identity.name}: ${card.title || 'Routine'}`, rolls: [], notes: [], queries: [],
+  return { name: `${model.data.identity.name} — ${card.title || 'Routine'}`, rolls: [], notes: [], queries: [],
     parts: parts.filter(Boolean), branches };
 }
 

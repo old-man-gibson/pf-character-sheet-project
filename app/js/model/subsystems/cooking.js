@@ -143,7 +143,7 @@ export function cookingDish(dish, { level = 0, characterName = '' } = {}) {
 /** The dish as a Discord post: what is in it, how long it lasts, and each effect as a bullet. */
 export function cookingExport(view) {
   const head = view.dishName ? `**${view.dishName}**` : '**Iron Chef Dish**';
-  const by = view.chef ? `, cooked by ${view.chef}` : '';
+  const by = view.chef ? ` — cooked by ${view.chef}` : '';
   const lines = [
     `${head}${by} (iron chef level ${view.level})`,
     view.courses.filter((c) => c.picks.length).map((c) => `${c.label}: ${c.picks.join(', ')}`).join(' · '),

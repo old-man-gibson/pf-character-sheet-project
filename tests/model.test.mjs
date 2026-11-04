@@ -997,7 +997,7 @@ console.log('the working -- a companion\'s numbers carry theirs too');
     const html = working(c, 'eidolon.ac', '42');
     check(`${id} a companion's number carries its key`, html.includes('data-bd="eidolon.ac"'), true);
     check(`${id} and the plain working on its title`,
-      html.includes(`title="Armor class ${c.data.eidolon[0].calc.ac}\n`), true);
+      html.includes(`title="Armour class ${c.data.eidolon[0].calc.ac}\n`), true);
     check(`${id} a number with no working goes out as it came in`, working(c, 'eidolon.nonsense', '42'), '42');
   }
 }
@@ -1037,17 +1037,17 @@ for (const id of IDS) {
   check(`${id} a condition's penalty is a row under the condition's name`, row(ac, 'Blinded')?.value, -2);
   check(`${id} a size step is a row of its own`, row(ac, '1 size larger')?.value, -1);
   const ref = c.breakdown('reflex');
-  check(`${id} a share that came by a wider road says which`, row(ref, 'Shaken')?.note, 'condition, every save');
+  check(`${id} a share that came by a wider road says which`, row(ref, 'Shaken')?.note, 'condition — every save');
   check(`${id} a counted condition says how many`, row(ref, 'Energy Drain ×2')?.value, -2);
   check(`${id} a targeted row lands on its own save alone`,
     [row(ref, 'Haste')?.value, row(c.breakdown('will'), 'Haste')?.value], [1, undefined]);
   check(`${id} what a buff did through an ability is a line under its own, and no further broken down`,
     row(ref, 'Haste')?.lines, [{ label: 'through Dex', value: 2, note: '' }]);
   check(`${id} a source with only that to show gets it as its own line`,
-    [row(c.breakdown('melee'), 'Bull')?.value, row(c.breakdown('melee'), 'Bull')?.note], [2, 'buff, through Str']);
+    [row(c.breakdown('melee'), 'Bull')?.value, row(c.breakdown('melee'), 'Bull')?.note], [2, 'buff — through Str']);
   const cmd = c.breakdown('cmd');
   check(`${id} an AC penalty's second life on CMD is said out loud`,
-    row(cmd, 'Blinded')?.note, 'condition, an AC penalty applies to CMD too');
+    row(cmd, 'Blinded')?.note, 'condition — an AC penalty applies to CMD too');
   // ...where there was a Dexterity bonus to lose: a +0 modifier moves nothing,
   // and a line that adds nothing is not drawn. Blinded is counted before the
   // Dexterity buff, so the bonus it takes is the one the character had.
@@ -1069,11 +1069,11 @@ for (const id of IDS) {
   check(`${id} heads the temporary half with its net`,
     title.includes(`\n\n  ${net > 0 ? '+' : ''}${net}  Buffs and conditions\n`), true);
   check(`${id} and lists the entries after it`,
-    title.indexOf('\n  +1  Haste (buff)') > title.indexOf('Buffs and conditions'), true);
+    title.indexOf('\n  +1  Haste — buff') > title.indexOf('Buffs and conditions'), true);
   check(`${id} a base is a number in the title too`, title.includes('\n  10  Base\n'), true);
   const refTitle = workingTitle(c.breakdown('reflex'));
   check(`${id} a share through an ability is a line under its source, set in further`,
-    refTitle.includes('\n  +1  Haste (buff)\n    +2  through Dex'), true);
+    refTitle.includes('\n  +1  Haste — buff\n    +2  through Dex'), true);
   // Two things ticked that cancel are still two entries, under a net of 0:
   // the working says what is evenly matched rather than nothing at all.
   c.data.buffs = [{ name: 'Steady', on: true, attack: 2 }];
@@ -1084,7 +1084,7 @@ for (const id of IDS) {
   check(`${id} a buff and a condition that cancel are listed under a net of 0`,
     [melee.delta, melee.adjustments?.map((p) => [p.label, p.value]), melee.adjusted === melee.total],
     [0, [['Shaken', -2], ['Steady', 2]], true]);
-  check(`${id} and the title says so`, workingTitle(melee).includes('\n\n  0  Buffs and conditions\n  -2  Shaken (condition, every attack)\n  +2  Steady (buff, every attack)'), true);
+  check(`${id} and the title says so`, workingTitle(melee).includes('\n\n  0  Buffs and conditions\n  -2  Shaken — condition — every attack\n  +2  Steady — buff — every attack'), true);
   // A companion has no condition layer, and its working says nothing about one.
   c.data.eidolon[0].levelOverride = 8;
   c.recompute();
@@ -1842,10 +1842,10 @@ console.log('companions -- a typed box takes a formula');
   const who = 'Conjured Companion';
   check('each box written as a formula is audited, and a number or plain text is not',
     rows().map((r) => [r.name, r.value, r.status, r.place, r.where]), [
-      [`${who}: Bonus AC (all)`, 3, 'ok', 'companionCell:conjured:0:ac.all', 'the Conjured Companion tab'],
-      [`${who}: Initiative bonus`, k().scores.str.mod, 'ok', 'companionCell:conjured:0:initBonus', 'the Conjured Companion tab'],
-      [`${who}: Will misc`, 2, 'ok', 'companionCell:conjured:0:saves.will.misc', 'the Conjured Companion tab'],
-      [`${who}: Fly (good) bonus`, 30, 'ok', 'companionCell:conjured:0:speeds.1.bonus', 'the Conjured Companion tab'],
+      [`${who} — Bonus AC (all)`, 3, 'ok', 'companionCell:conjured:0:ac.all', 'the Conjured Companion tab'],
+      [`${who} — Initiative bonus`, k().scores.str.mod, 'ok', 'companionCell:conjured:0:initBonus', 'the Conjured Companion tab'],
+      [`${who} — Will misc`, 2, 'ok', 'companionCell:conjured:0:saves.will.misc', 'the Conjured Companion tab'],
+      [`${who} — Fly (good) bonus`, 30, 'ok', 'companionCell:conjured:0:speeds.1.bonus', 'the Conjured Companion tab'],
     ]);
   c.set('conjured.0.cmdOther', '2');
   check('a number kept as text counts, and is not listed as a formula',
@@ -1913,7 +1913,7 @@ console.log('companions -- a minionmancer keeps more than one of a kind');
   check('and there is no second spelling', [s.companion, c.scopeNames().some((n) => n.startsWith('companion.'))],
     [undefined, false]);
   check('the destinations name the creature and its id',
-    c.forwardTargets().list.find((t) => t.name === 'eidolon2.ac.total')?.label, 'Brutus (eidolon2): Armor class');
+    c.forwardTargets().list.find((t) => t.name === 'eidolon2.ac.total')?.label, 'Brutus (eidolon2): Armour class');
 
   // Aiming: by id at the second, by the bare name at the first -- each lands
   // on its own creature and nothing else.
@@ -2977,8 +2977,8 @@ console.log('a breakdown names the ability a number is actually built on');
     { name: 'Bull', on: true, bonuses: [{ target: 'str', value: 4 }] }];
   c.recompute();
   const row = (key, label) => c.breakdown(key).adjustments?.find((p) => p.label === label);
-  check('an initiative keyed to Wisdom says so', row('initiative', 'Owl')?.note, 'buff, through Wis');
-  check('and CMD names the Strength it adds', row('cmd', 'Bull')?.note, 'buff, through Str');
+  check('an initiative keyed to Wisdom says so', row('initiative', 'Owl')?.note, 'buff — through Wis');
+  check('and CMD names the Strength it adds', row('cmd', 'Bull')?.note, 'buff — through Str');
 }
 
 console.log('companion ids are unique across every kind, whatever a file says');
@@ -4381,7 +4381,7 @@ console.log('a name can sit under another name, and a name you define takes forw
     targetGroups(c.forwardTargetList, 'infusion').find((g) => g.key === 'mine')?.items
       .map((it) => [it.name, it.label]), [['infusion.spec', 'the Formulas tab']]);
   check('and so does the formula lookup', formulaLookup(c, 'infusion').targets.some((t) => t.name === 'infusion.spec'), true);
-  check('its tooltip lists the bonus', /Forwarded here: \+1\n\+1 from .*: \+= 1/.test(renderedProse(c, notes)), true);
+  check('its tooltip lists the bonus', /Forwarded here: \+1\n\+1 from .* \u2014 \+= 1/.test(renderedProse(c, notes)), true);
 
   // Stacking as anywhere else; `target` and the name itself read it before bonuses.
   c.set('formulaNotes', `${notes} {infusion.spec += 2 as morale} {infusion.spec += 1 as morale} {infusion.spec -= 1}`);
@@ -8260,7 +8260,7 @@ console.log('auto-cooking -- the iron chef dish maker, read from Bryva and cooke
   check('Spicy: level + rice*3 = 19 resistance', text('Spicy'), '+19 cold and fire resistance.');
   check('Ginger: 2 + 2 (level 10+) + 2 sweet', text('Ginger'), '+6 alchemical bonus to saving throws against the nauseated and sickened conditions for the duration of the effect.');
   check('Fetid DC 10 + floor(19/2) + 16 = 35', /DC 35\)/.test(text('Fetid')), true);
-  check('the post leads with the chef and level', v.export.split('\n')[0], '**Iron Chef Dish**, cooked by Nakano Bryva (iron chef level 16)');
+  check('the post leads with the chef and level', v.export.split('\n')[0], '**Iron Chef Dish** — cooked by Nakano Bryva (iron chef level 16)');
   check('and lists the courses', v.export.split('\n')[1], 'Entrees: Mycoprotein, Red Meat · Flavors: Savory, Spicy, Sweet · Side Dishes: Melons, Rice · Aroma: Fetid · Garnish: Ginger');
   check('one bullet per ingredient', v.export.split('\n').filter((l) => l.startsWith('• ')).length, 9);
 
@@ -12171,7 +12171,7 @@ console.log('card casting -- the deck reads off the Cardcaster Deck tab');
     [true, true, true, 3, false]);
   check('three colours in play', p.colors, 'RBU');
   check('worth seven drawbacks for boons', k.drawbackValue, 7);
-  check('the deck is legal as imported, but for the placeholder card with no colour', k.issues, ['1 effect card has no color (Keep); Colored Mana assigns every effect one.']);
+  check('the deck is legal as imported, but for the placeholder card with no colour', k.issues, ['1 effect card has no colour (Keep); Colored Mana assigns every effect one.']);
   check('the identical-effect spread is 1 to 4', [k.spreadMin, k.spreadMax], [1, 4]);
   // A fused card: the effect, and the mana it carries, split from one cell.
   const reanimate = p.cards[1];
@@ -12214,7 +12214,7 @@ console.log('card casting -- the deck reads off the Cardcaster Deck tab');
   check('and count towards both colours', c.data.cardcasting.calc.colorTally.R.effects, 21);
   check('two colours is within Rainbow Efficiency', c.data.cardcasting.calc.issues.some((i) => /more than/.test(i)), false);
   c.setItem('cardcasting.cards', 0, 'color', 'RUB');
-  check('three is not, without Improved', c.data.cardcasting.calc.issues.some((i) => /more than 2 colors/.test(i)), true);
+  check('three is not, without Improved', c.data.cardcasting.calc.issues.some((i) => /more than 2 colours/.test(i)), true);
   // Rainbow Efficiency's discount comes off the typed cost.
   const cost0 = c.data.cardcasting.cards[0].cost;
   const card0 = () => c.data.cardcasting.cards[0].calc;
@@ -12417,7 +12417,7 @@ console.log('card casting -- the table: an encounter played through');
   g.tablePlay('0#0', 'cast');
   check('[Draw 2] draws two and [Mill 1] mills one', [gt().hand.length, gt().deck.length], [handBefore - 1 + 2, deckBefore2 - 3]);
   check('[Peek] reads the top card (Read the Cards is taken)', gt().log.some((l) => /\[Peek 1\]: \w/.test(l)), true);
-  check('[Wild] is skipped without Wild Card', gt().log.some((l) => /\[wild\] skipped: needs Wild Card/.test(l)), true);
+  check('[Wild] is skipped without Wild Card', gt().log.some((l) => /\[wild\] skipped — needs Wild Card/.test(l)), true);
   check('[Exile] is the card\'s own rule and always applies', [gt().exile.includes('0#0'), gt().discard.includes('0#0')], [true, false]);
   check('and being exiled is a trigger event', gt().log.some((l) => /exiled$/.test(l)), true);
   g.setItem('cardcasting.cards', 1, 'effect', 'Grave Rite [Banish] [OnBanish] Lose 1d6 hit points');
@@ -12479,7 +12479,7 @@ console.log('card casting -- the table: an encounter played through');
   check('a round ticks an Early counter down', nt().counters.early, 4);
   n.tableMove('22#0', 'deckTop');
   n.tableDraw(1);
-  check('drawing it logs the branch and marks it drawn', [nt().counters.drawn, /\[Ante\] Snakebite drawn: Early counters \(4\)/.test(nt().log.join('\n'))], [true, true]);
+  check('drawing it logs the branch and marks it drawn', [nt().counters.drawn, /\[Ante\] Snakebite drawn — Early counters \(4\)/.test(nt().log.join('\n'))], [true, true]);
   n.tablePlay('22#0', 'cast');
   check('the second cast exiles it and clears the counters', [nt().exile.includes('22#0'), nt().counters], [true, null]);
   n.tableMove('6#0', 'deckTop');
@@ -12500,7 +12500,7 @@ console.log('card casting -- the table: an encounter played through');
   n.tableMove(b0, 'banished');
   check('a card can be banished by hand', [nt().banished.includes(b0), nt().hand.includes(b0), /banished until spell points recover$/.test(nt().log[nt().log.length - 1])], [true, false, true]);
   n.tableEnd();
-  check('the end of the encounter leaves it banished and says so', [nt().banished.includes(b0), nt().deck.includes(b0), /; 1 banished until spell points recover$/.test(nt().log[nt().log.length - 1])], [true, false, true]);
+  check('the end of the encounter leaves it banished and says so', [nt().banished.includes(b0), nt().deck.includes(b0), /— 1 banished until spell points recover$/.test(nt().log[nt().log.length - 1])], [true, false, true]);
   n.tableStart();
   check('the next encounter is dealt without it', [[...nt().deck, ...nt().hand].includes(b0), nt().banished.includes(b0), /\(1 banished until spell points recover\)/.test(nt().log[0])], [false, true, true]);
   n.rest('encounter');
@@ -13482,7 +13482,7 @@ console.log('\nthe Other column -- a number, or a rule the sheet keeps as one');
   check('it follows the level', [c.offsetOf('saves.will.total'), will()], [3, will(control(12)) + 3]);
   const row = c.audit().find((r) => r.id === 'other-saves.will.total');
   check('and the audit lists it', [row?.name, row?.status, row?.value, row?.formula],
-    ['Will: Other', 'ok', 3, 'floor(level / 4)']);
+    ['Will — Other', 'ok', 3, 'floor(level / 4)']);
 
   // Round trip: the rule survives a save, and is not counted twice on the
   // way back in -- the saved total already holds it, and the offset is the
@@ -13529,7 +13529,7 @@ console.log('\nthe Other column -- a number, or a rule the sheet keeps as one');
   const hpAgain = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('and keep it across a save without doubling',
     [hpAgain.offsetSource('hp.total'), hp(hpAgain), hpAgain.diffFromSource()], ['level * 2', hp(), []]);
-  check('named for the reader', c.audit().find((r) => r.id === 'other-hp.total')?.name, 'Hit points: Other');
+  check('named for the reader', c.audit().find((r) => r.id === 'other-hp.total')?.name, 'Hit points — Other');
 }
 
 /*
@@ -13914,13 +13914,13 @@ console.log('\ntalents per level -- each system\'s own three rates');
   c.recompute();
   const intMod = c.data.abilities.int.mod;
   const spec = c.cardRollSpec('cardcasting.cards|0');
-  check('a short effect joins the name, formulas resolved', spec.name, `Big Sky: Fire Blast (Chain Blast) — Reflex DC ${17 + intMod}`);
+  check('a short effect joins the name, formulas resolved', spec.name, `Big Sky — Fire Blast (Chain Blast) — Reflex DC ${17 + intMod}`);
   check('each dice entry is a roll with plain dice', spec.rolls, [
     { label: 'damage', formula: '8d6+15' }, { label: 'boost (1 SP)', formula: '15d6' },
   ]);
   check('an entry that is not dice travels as a note, before the cost', spec.notes[0], { label: 'aside', text: 'see the sphere' });
   check('cost with its colour, sphere with its tags, the mana a fused card carries',
-    spec.notes.slice(1), [{ label: 'Cost', text: '1 SP (Red)' }, { label: 'Sphere', text: 'Destruction, blast' }, { label: 'Mana', text: 'RU' }]);
+    spec.notes.slice(1), [{ label: 'Cost', text: '1 SP (Red)' }, { label: 'Sphere', text: 'Destruction — blast' }, { label: 'Mana', text: 'RU' }]);
   check('an instance on the table names the same card', c.cardRollSpec('0#1').name, spec.name);
   check('a card with no dice is notes alone', [c.cardRollSpec('cardcasting.cards|1').rolls, c.cardRollSpec('cardcasting.cards|1').notes.length], [[], 2]);
   const long = c.cardRollSpec('cardcasting.cards|3');
@@ -13969,17 +13969,17 @@ console.log('\nTerrain Casting: every cast pays a point, a step, a blight, or a 
   check('the cast check counts the terrain point in the cost', [c.castCheck('0#0').need, c.castCheck('0#0').terrain, c.castCheck('1#0').need, c.castCheck('1#0').terrain], [2, 'sp', 0, 'step']);
   const before = sp();
   c.tablePlay('0#0', 'cast');
-  check('a cast pays the card and the terrain point, and says so', [sp() - before, /Terrain Casting: one more spell point/.test(log())], [2, true]);
+  check('a cast pays the card and the terrain point, and says so', [sp() - before, /Terrain Casting — one spell point more/.test(log())], [2, true]);
   const b2 = sp();
   c.tablePlay('1#0', 'cast');
   check('an at-will card pays nothing and is cast a step slower', [sp() - b2, /cast as a full-round action rather than a standard action/.test(log())], [0, true]);
   inHand('0#1');
   const b3 = sp();
   c.tablePlay('0#1', 'cast', { terrain: 'blight' });
-  check('blight costs nothing now and is written down for the map', [sp() - b3, /blighted \(dead magic for you/.test(log())], [1, true]);
+  check('blight costs nothing now and is written down for the map', [sp() - b3, /blighted: dead magic for you/.test(log())], [1, true]);
   const html = subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set(), castPick: t().hand[0] || null });
   check('the table says the drawback is in force', /Terrain Casting: every cast pays one spell point more/.test(html), true);
-  check('and the tradition panel does too', /Terrain Casting is active/.test(combatPanels.renderMagicPanel(c)), true);
+  check('and the tradition panel does too', /Terrain Casting is in force/.test(combatPanels.renderMagicPanel(c)), true);
   // Drawback Freedom (Terrain Casting) as a mythic path ability -- here the
   // pick of an Extra Mythic Path Ability -- switches the drawback off.
   c.data.mythic.abilities[0] = { ...c.data.mythic.abilities[0], name: 'Extra Mythic Path Ability', featChoice: 'Drawback Freedom (Terrain Casting)' };
@@ -14009,8 +14009,8 @@ console.log('\na card moves between the deck and the sideboard, or is copied acr
   const deck = () => c.data.cardcasting.cards.map((x) => x.name);
   const side = () => c.data.cardcasting.sideboard.map((x) => x.name);
   check('a subtitle is the name\'s second half in the Roll20 text, and the effect a note of its own',
-    [c.cardRollSpec('cardcasting.cards|0').name, c.cardRollSpec('cardcasting.cards|0').notes.some((n) => n.label === 'Effect')], ['Big Sky: Explosive Orb (Fire Blast)', true]);
-  check('without one, a short effect still joins the name', c.cardRollSpec('cardcasting.cards|1').name, 'Desert: Fire Blast');
+    [c.cardRollSpec('cardcasting.cards|0').name, c.cardRollSpec('cardcasting.cards|0').notes.some((n) => n.label === 'Effect')], ['Big Sky — Explosive Orb (Fire Blast)', true]);
+  check('without one, a short effect still joins the name', c.cardRollSpec('cardcasting.cards|1').name, 'Desert — Fire Blast');
   check('to the sideboard', [c.moveCard('cardcasting.cards', 1, 'cardcasting.sideboard').ok, deck(), side()], [true, ['Big Sky'], ['Spare', 'Desert']]);
   check('back to the deck, with a copy to play', [c.moveCard('cardcasting.sideboard', 0, 'cardcasting.cards').ok, deck(), side(), c.data.cardcasting.cards[1].qty], [true, ['Big Sky', 'Spare'], ['Desert'], 1]);
   check('a copy leaves the original where it is, and carries no worked-out fields', [c.moveCard('cardcasting.cards', 0, 'cardcasting.sideboard', { copy: true }).ok, deck(), side(), 'calc' in c.data.cardcasting.sideboard[1]], [true, ['Big Sky', 'Spare'], ['Desert', 'Big Sky'], true]);
@@ -14018,7 +14018,7 @@ console.log('\na card moves between the deck and the sideboard, or is copied acr
   check('the same list, or no such card, is refused', [c.moveCard('cardcasting.cards', 0, 'cardcasting.cards').ok, c.moveCard('cardcasting.cards', 9, 'cardcasting.sideboard').ok, c.moveCard('weapons', 0, 'cardcasting.sideboard').ok], [false, false, false]);
   c.tableStart();
   const held = c.moveCard('cardcasting.cards', 0, 'cardcasting.sideboard');
-  check('while the deck is in play nothing leaves it, and the reason is given', [held.ok, /end the encounter/i.test(held.why), deck()], [false, true, ['Big Sky', 'Spare']]);
+  check('while the deck is in play nothing leaves it, and the reason is given', [held.ok, /end the encounter/.test(held.why), deck()], [false, true, ['Big Sky', 'Spare']]);
   check('but a copy, and a card joining the deck, are fine', [c.moveCard('cardcasting.cards', 0, 'cardcasting.sideboard', { copy: true }).ok, c.moveCard('cardcasting.sideboard', 0, 'cardcasting.cards').ok, deck()], [true, true, ['Big Sky', 'Spare', 'Desert']]);
   const html = subsystemPanels.cardcastingPanel(c, { deckView: 'deck', openCards: new Set() });
   check('the face edits the subtitle and offers the move and the copy', [html.includes('data-item="cardcasting.cards|0|subtitle"'), html.includes('data-card-move="cardcasting.cards|0|cardcasting.sideboard|move" disabled'), html.includes('data-card-move="cardcasting.cards|0|cardcasting.sideboard|copy"'), html.includes('data-card-move="cardcasting.sideboard|0|cardcasting.cards|move" ')], [true, true, true, true]);
@@ -14173,7 +14173,7 @@ console.log('\na card cast in a mode: that mode rolls, and the points put into i
   c.tablePlay(t().hand[0], 'cast', { which: 'boost (1 SP)', sp: 1 });
   check('the picked mode is what rolled', [t().lastRoll.label, t().lastRoll.rolls.length], ['boost (1 SP)', 7]);
   check('the cost and the points on top both came off the tracker', before - left(), 2);
-  check('and the log says what the extra was for', t().log.some((l) => /Bolt: boost \(1 SP\)/.test(l)), true);
+  check('and the log says what the extra was for', t().log.some((l) => /Bolt — boost \(1 SP\)/.test(l)), true);
   c.tablePlay(t().hand[0], 'cast', { which: 'BIG (3 SP)', sp: 3 });
   check('a mode is matched by name, whatever the case', t().lastRoll.rolls.length, 11);
   c.tableDraw(1);
@@ -14321,7 +14321,7 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   let k = p.calc;
   const lira = k.squad.find((m) => m.id === cc.id);
   check('the companion is a squad member: Card Casting, the same switches, its own colours', [lira.ok, lira.why, lira.colors, lira.casts, lira.cl], [true, '', 'WG', true, cc.calc.casting.cl]);
-  check('its deck is checked on its own, and two colours is not a Colored Mana the rule allows', [lira.deck.deckSize, lira.deck.effectCards, lira.deck.issues], [24, 20, ['Colored Mana names 2 colors; the rule wants three or five.']]);
+  check('its deck is checked on its own, and two colours is not a Colored Mana the rule allows', [lira.deck.deckSize, lira.deck.effectCards, lira.deck.issues], [24, 20, ['Colored Mana names 2 colours; the rule wants three or five.']]);
   check('the character\'s own figures are the character\'s deck alone', [k.deckSize, k.colorsInPlay], [21, 'RBU']);
   check('a card owned by nobody on the sheet is the character\'s, and said so', [c.cardOwner(p.cards[4]), k.issues.some((i) => /no longer on the sheet/.test(i))], ['', true]);
   check('the combined deck is everything', [k.combined.deckSize, k.combined.colors, k.combined.members], [45, 'RBUWG', 1]);
@@ -14391,7 +14391,7 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   const dawn = () => p.cards.find((x) => x.name === 'Dawn').calc;
   const dusk = () => p.cards.find((x) => x.name === 'Dusk').calc;
   check('the member\'s two-colour card is discounted by its own feat', [p.calc.squad.find((m) => m.id === cc.id).rainbow, dawn().cost, dawn().discount], [1, 2, 1]);
-  check('the character\'s is not, without the feat, and is flagged', [dusk().cost, dusk().rainbow, p.calc.issues.some((i) => /more than 1 color/.test(i))], [2, 0, true]);
+  check('the character\'s is not, without the feat, and is flagged', [dusk().cost, dusk().rainbow, p.calc.issues.some((i) => /more than 1 colour/.test(i))], [2, 0, true]);
   c.data.training.magic.tradition.boughtOff = ['Rainbow Efficiency [Deck]'];
   c.recompute();
   check('with the feat the character\'s card costs one less', [dusk().cost, dusk().discount, dusk().rainbow], [1, 1, 1]);
@@ -14417,7 +14417,7 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   c.tableMove(duskId, 'hand');
   for (const id of [...t.mana.map((m) => m.id)]) c.tableMove(id, 'deck');
   c.tableMove(find('Alloy'), 'mana');
-  check('one two-colour Mana Point card is not a card for each colour under Improved', [c.castCheck(duskId).ok, c.castCheck(duskId).why], [false, 'needs a Mana Point card for each color (RB), one color a card']);
+  check('one two-colour Mana Point card is not a card for each colour under Improved', [c.castCheck(duskId).ok, c.castCheck(duskId).why], [false, 'needs a Mana Point card for each colour (RB), one colour a card']);
   c.tableMove(find('Ruby'), 'mana');
   check('a card for each colour is', [c.castCheck(duskId).ok, c.castCheck(duskId).need, c.castCheck(duskId).why], [true, 1, 'Rainbow Efficiency: 1 off']);
   c.data.training.magic.tradition.boughtOff = ['Rainbow Efficiency [Deck]'];

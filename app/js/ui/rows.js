@@ -107,7 +107,7 @@ export function exprField(bindingAttr, raw, {
       <input type="text" size="1" class="xf-src${isFormula ? ' mono' : ''}" value="${esc(src)}"
         ${bindingAttr} data-kind="${kind}" placeholder="${esc(placeholder)}"
         title="${esc(error || (view ? explain : title) || EXPR_HINT)}">
-      ${view ? `<span class="xf-view" title="${esc(explain)}. Click to edit.">${esc(value)}</span>` : ''}
+      ${view ? `<span class="xf-view" title="${esc(explain)} — click to edit">${esc(value)}</span>` : ''}
     </span>`;
 }
 
@@ -124,7 +124,7 @@ export function itemExpr(list, i, field, obj, { width = '5rem', placeholder = ''
     placeholder,
     value: obj[`${field}Num`],
     error: obj[`${field}Error`],
-    title: 'A number or a formula, e.g. level * 100',
+    title: 'A number, or a formula like level * 100',
   });
 }
 
@@ -183,9 +183,9 @@ export function removeControl(attrs, {
   const label = what ? `Remove ${what}` : 'Remove';
   const on = arm !== null && armed === arm;
   const hover = on ? `Click again to remove${what ? ` ${what}` : ''}`
-    : `${arm !== null ? (title || label).replace(/\.$/, '') : title || label}${arm !== null ? ' (click twice)' : ''}`;
+    : `${title || label}${arm !== null ? ' — asks twice' : ''}`;
   return `<button class="danger${tiny ? ' tiny' : ''}${on ? ' armed' : ''}" ${attrs}${style ? ` style="${style}"` : ''} `
-    + `title="${esc(hover)}" aria-label="${esc(on ? `${label}. Click again to confirm.` : label)}">`
+    + `title="${esc(hover)}" aria-label="${esc(on ? `${label} — click again to confirm` : label)}">`
     + `${on ? esc(armedText) : text ? esc(text) : '×'}</button>`;
 }
 
@@ -284,7 +284,7 @@ export function workingTitle(b, extra = '') {
   // A part is something added and wears its sign; the number a sum starts
   // from -- the 10 under an AC -- is a number, and does not.
   const figure = (p) => (p.plain ? String(p.value) : fmt(p.value));
-  const row = (p, indent = '  ') => `${indent}${figure(p)}  ${p.label}${p.note ? ` (${p.note})` : ''}`;
+  const row = (p, indent = '  ') => `${indent}${figure(p)}  ${p.label}${p.note ? ` — ${p.note}` : ''}`;
   const lines = b.parts.map((p) => row(p));
   if (b.sum !== b.total) lines.push(`  ${fmt(b.total - b.sum)}  unaccounted for`);
   const moved = Array.isArray(b.adjustments) && b.adjustments.length > 0;
@@ -317,7 +317,7 @@ export function working(model, key, shown) {
 }
 
 /** The sentence a moved number wears on its hover: what it was, and what moved it. */
-export const movedTitle = (base, sources) => `Base ${base}. Shown with ${sources || 'buffs and conditions'} applied.`;
+export const movedTitle = (base, sources) => `Base ${base} — with ${sources || 'buffs and conditions'} applied`;
 
 /**
  * A number a condition or a buff has moved, in place of the base: red when

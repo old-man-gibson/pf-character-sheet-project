@@ -3090,7 +3090,7 @@ export const CONDITIONS = [
     label: 'Helpless',
     group: 'helpless',
     rank: 1,
-    rule: 'Paralyzed, bound, sleeping or unconscious: Dexterity counts as 0, and melee attacks against it gain +4.',
+    rule: 'Paralysed, bound, sleeping or unconscious: Dexterity counts as 0, and melee attacks against it gain +4.',
     abilitySet: { dex: 0 },
     acVsMelee: -4,
     notes: ['can be coup de graced'],
@@ -3105,7 +3105,7 @@ export const CONDITIONS = [
     abilitySet: { str: 0, dex: 0 },
     acVsMelee: -4,
     speed: 0,
-    notes: ['helpless: melee attacks against it gain +4 and it can be coup de graced',
+    notes: ['helpless — melee attacks against it gain +4 and it can be coup de graced',
       'purely mental actions only'],
   },
   {
@@ -3171,7 +3171,7 @@ export const CONDITIONS = [
     abilitySet: { dex: 0 },
     acVsMelee: -4,
     speed: 0,
-    notes: ['helpless: it can be coup de graced'],
+    notes: ['helpless — it can be coup de graced'],
   },
 ];
 
@@ -3252,7 +3252,7 @@ export const BUFF_TARGETS = [
   // campaign allows sizes past it (see conditionState's `sizePast`).
   ['size', 'True size (+1 = one larger)'],
   ['sizeEffective', 'Effective size (dice only)'],
-  ['sizeStacking', 'Size (stacking)'],
+  ['sizeStacking', 'Size — stacking (wraps & such)'],
 ];
 
 const CONDITION_INDEX = new Map();
@@ -3459,7 +3459,7 @@ export function bonusParts(resolved, types, filter = null) {
     const other = typed ? Number(resolved?.[typed]) || 0 : 0;
     const name = bonusColumnName(key);
     out.push(recipePart(typed && other ? `${name} + typed` : name, value,
-      typed && other ? 'capped together: the progression’s bonus and your own do not stack past the cap' : '', key));
+      typed && other ? 'capped together — the progression’s and your own do not stack past the cap' : '', key));
   }
   return out;
 }
@@ -3469,7 +3469,7 @@ export function abilityPart(c, stat1, stat2, { cap = Infinity, label = 'ability'
   const raw = statMod(c, stat1, stat2);
   const value = Math.min(cap, raw);
   const names = [stat1, stat2].filter(Boolean).join(' + ') || label;
-  return recipePart(names, value, value === raw ? '' : `${raw} before the armor’s maximum Dexterity of ${cap}`, 'ability');
+  return recipePart(names, value, value === raw ? '' : `${raw} before the armour’s maximum Dexterity of ${cap}`, 'ability');
 }
 
 /** Initiative: the ability the row names -- Dex unless something says otherwise -- and the flat bonus. */
@@ -3512,7 +3512,7 @@ export function acParts(c, which = 'ac') {
   parts.push(recipePart('size', sizeMod(c), '', 'sizeMod'));
   if (which !== 'touch') {
     parts.push(recipePart('misc AC', d.miscAC, '', 'miscAC'));
-    parts.push(recipePart('armor', worn.armor, '', 'armor'));
+    parts.push(recipePart('armour', worn.armor, '', 'armor'));
     parts.push(recipePart('shield', worn.shield, '', 'shield'));
   }
   parts.push(...bonusParts(d.acBonusesResolved, AC_BONUS_TYPES, filter));

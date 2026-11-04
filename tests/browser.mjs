@@ -431,7 +431,7 @@ run.addEventListener('click', async () => {
         const count = sheet.model.playActions.length;
         root.querySelector('[data-action="undo-play-clear"]').click();
         assert(sheet.model.playActions.length === count, 'The first press cleared the list');
-        assert(/Clear \d+ actions\?/.test(root.querySelector('[data-action="undo-play-clear"]')?.textContent), 'Clear did not ask');
+        assert(/sure\?/.test(root.querySelector('[data-action="undo-play-clear"]')?.textContent), 'Clear did not ask');
         root.querySelector('[data-action="undo-play-clear"]').click();
         assert(sheet.model.playActions.length === 0 && !root.querySelector('.playundo'), 'The list is still there');
       } finally {
