@@ -810,7 +810,7 @@ export class Character {
   tableTap(id, ...a) { return this.play(`Tap ${tableName(this, id)}`, () => tableTap(this, id, ...a)); }
   tableShuffleDiscard(...a) { return this.play('Shuffle discard in', () => tableShuffleDiscard(this, ...a)); }
   tablePeek(...a) { return tablePeek(this, ...a); }
-  tableEnd(...a) { return this.play('End encounter — cards', () => tableEnd(this, ...a)); }
+  tableEnd(...a) { return this.play('End encounter: cards', () => tableEnd(this, ...a)); }
 
   // subsystems/maneuvers.js
   #recomputeManeuvers(...a) { return recomputeManeuvers(this, ...a); }
@@ -820,11 +820,11 @@ export class Character {
 
   // subsystems/psionics.js
   #recomputePsionics(...a) { return recomputePsionics(this, ...a); }
-  psionicsNewDay(...a) { return this.play('New day — power points', () => psionicsNewDay(this, ...a)); }
+  psionicsNewDay(...a) { return this.play('New day: power points', () => psionicsNewDay(this, ...a)); }
 
   // subsystems/vancian.js
   #recomputeVancian(...a) { return recomputeVancian(this, ...a); }
-  vancianNewDay(...a) { return this.play('New day — spell slots', () => vancianNewDay(this, ...a)); }
+  vancianNewDay(...a) { return this.play('New day: spell slots', () => vancianNewDay(this, ...a)); }
 
   // subsystems/cooking.js
   cookingView(...a) { return cookingView(this, ...a); }

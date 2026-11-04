@@ -1313,12 +1313,12 @@ export function stackingNote(x) {
 }
 
 /**
- * One bonus from forwardedInto as a line of text: "+1 from Level 8 — += 1".
+ * One bonus from forwardedInto as a line of text: "+1 from Level 8: += 1".
  * `to` names the destination, where one line lists several.
  */
 export function forwardedLine(x, to = '') {
   return `${fmt(x.value)}${x.type ? ` ${x.type}` : ''}${to ? ` to ${to}` : ''} from ${x.where}`
-    + ` — ${x.sign < 0 ? '-=' : '+='} ${x.expr}${stackingNote(x)}`;
+    + `: ${x.sign < 0 ? '-=' : '+='} ${x.expr}${stackingNote(x)}`;
 }
 
 /**

@@ -448,7 +448,7 @@ function pfText(spec, name) {
 /** The character's name in front of the thing rolled, when it has one. */
 function titled(c, what) {
   const name = String(c?.identity?.name ?? '').trim();
-  return name ? `${name} — ${what}` : what;
+  return name ? `${name}: ${what}` : what;
 }
 
 /**
@@ -608,7 +608,7 @@ const COMPANION_SAVE_LABELS = { fort: 'Fortitude', ref: 'Reflex', will: 'Will' }
 function companionTitle(c, kind, b, what) {
   const own = String(b?.name ?? '').trim() || COMPANION_LABELS[kind] || kind;
   const master = String(c?.identity?.name ?? '').trim();
-  return `${master ? `${master}’s ` : ''}${own} — ${what}`;
+  return `${master ? `${master}’s ` : ''}${own}: ${what}`;
 }
 
 /**
@@ -949,7 +949,7 @@ export function weaponRollSpec(c, index, cs = null, answers = null, single = fal
   if (unanswered.length) {
     notes.push({
       label: unanswered.length > 1 ? 'Questions' : 'Question',
-      text: `${unanswered.map((q) => q.label).join(', ')} — answer the same way each time you are asked`,
+      text: `${unanswered.map((q) => q.label).join(', ')}: answer the same way each time you are asked`,
     });
   }
   return {

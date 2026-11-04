@@ -20,7 +20,7 @@ import { forwardedPopHtml } from './breakdown-popover.js';
  */
 
 export function sheetBonusHead() {
-  return '<th class="num" title="Bonuses the source sheet added through formulas the export could not show — and where a new one goes">Other</th>';
+  return '<th class="num" title="Bonuses from the source sheet that the export could not show. You can add your own here.">Other</th>';
 }
 
 export function sheetBonusCell(model, key) {
@@ -45,7 +45,7 @@ export function sheetBonusField(model, key, width = '4rem') {
       width,
       value: model.offsetOf(key),
       error: model.offsetError(key),
-      title: 'A number, or a formula — e.g. floor(level / 4)',
+      title: 'A number or a formula, e.g. floor(level / 4)',
     });
 }
 
@@ -116,7 +116,7 @@ export function forwardedPop(model, names, extra = '') {
 }
 
 export function sheetBonusHint(examples) {
-  return `<p class="hint"><strong>Other</strong> holds what the source sheet added
-      through formulas that did not survive the export — ${esc(examples)}. It is the
-      number that makes the import match, and the place to add your own.</p>`;
+  return `<p class="hint"><strong>Other</strong> holds bonuses from the source sheet that the
+      export could not read, such as ${esc(examples)}. It makes the imported total match, and you
+      can add your own.</p>`;
 }

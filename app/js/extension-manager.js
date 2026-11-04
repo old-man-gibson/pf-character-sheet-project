@@ -82,9 +82,9 @@ export const COPY_WARN_BYTES = 262144;
 export function copyCost(doc) {
   const bytes = JSON.stringify(doc ?? null).length;
   if (bytes < COPY_WARN_BYTES) return null;
-  return `Where it sits now this pack costs no storage at all — a deployment's packs are fetched, not kept. `
-    + `Saving your copy writes ${packSize(doc)} into this browser instead, which not every browser has room for. `
-    + `Editing it is free; only Save spends anything.`;
+  return `This pack is loaded from the site and uses no browser storage. `
+    + `Saving a copy stores ${packSize(doc)} in this browser, which may not have room for it. `
+    + `Editing does not use storage until you save.`;
 }
 
 /** A source is a link only when it is one; a book-and-page reads as text. */
@@ -274,12 +274,12 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
     const local = store ? store.list() : [];
     const row = (s, { bundled: isBundled, enabled }) => `
       <div class="row ${enabled ? '' : 'off'}" data-id="${esc(s.id)}" data-find="${esc(packFindText(s))}">
-        <label class="sw" title="${enabled ? 'On — its tables and blocks are in use' : 'Off — ignored until switched on'}">
+        <label class="sw" title="${enabled ? 'On: its tables and blocks are in use.' : 'Off: not used.'}">
           <input type="checkbox" data-toggle="${esc(s.id)}" data-bundled="${isBundled}" ${enabled ? 'checked' : ''}>
         </label>
         <div class="main">
           <div class="name">${esc(s.name)} <span style="opacity:.55;font-weight:400">rev ${esc(s.revision)}${s.author ? ` · ${esc(s.author)}` : ''}</span></div>
-          <div class="meta">${esc(describeSummary(s))}${s.description ? ` — ${esc(s.description)}` : ''}${sourceLink(s.source)}${
+          <div class="meta">${esc(describeSummary(s))}${s.description ? ` · ${esc(s.description)}` : ''}${sourceLink(s.source)}${
   isBundled || !s.updatedAt ? '' : ` · ${s.origin === 'import' ? 'imported' : 'saved'} ${esc(String(s.updatedAt).slice(0, 10))}`}</div>
         </div>
         <div class="acts">
@@ -289,7 +289,7 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
           <button data-export="${esc(s.id)}" data-bundled="${isBundled}" title="Download this pack as a .json file to share">Export</button>
           ${isBundled ? '' : (confirmRemove === s.id
     ? `<button class="danger" data-remove-confirm="${esc(s.id)}">Really remove</button><button data-remove-cancel>Keep</button>`
-    : `<button class="danger" data-remove="${esc(s.id)}" title="Remove from this browser">×</button>`)}
+    : `<button class="danger" data-remove="${esc(s.id)}" title="Remove this pack from this browser.">×</button>`)}
         </div>
       </div>`;
 
@@ -321,7 +321,7 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
       ? ` <span class="d">${items.length} packs · ${items.filter((it) => it.enabled).length} on</span>` : '');
     const finder = bundledItems.length + localItems.length > PACK_GROUP_MIN ? `<div class="packfind">
         <input type="search" data-pack-find value="${esc(packQuery)}" spellcheck="false"
-          placeholder="Find a pack — its name, author, or what it holds" aria-label="Find a pack">
+          placeholder="Find a pack by name, author or content" aria-label="Find a pack">
         ${[['all', 'All'], ['on', 'On'], ['off', 'Off']].map(([v, label]) => `<button data-pack-show="${v}"
           aria-pressed="${packShow === v}"${packShow === v ? ' class="primary"' : ''}>${label}</button>`).join('')}
         <span class="d" data-pack-count></span>
@@ -329,11 +329,9 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
 
     return `
       <h2>Extensions and Rules</h2>
-      <p class="hint">Content the sheet does not carry on its own — class and discipline
-        catalogues, casting tables, and building blocks (a class, a race, a feature, a
-        tracker) you can add to a character — and the campaign rules every character can
-        share. Each pack is one <code>.json</code> file: write your own, export it to share,
-        and drop a friend's onto the page to bring it in. Everything stays in this browser.</p>
+      <p class="hint">Packs add catalogs, casting tables, classes, races, features and trackers
+        to the sheet. Each pack is one <code>.json</code> file that you can write, export or
+        import. Packs and campaign rules are saved in this browser.</p>
       ${notice ? `<p class="ok">${esc(notice)}</p>` : ''}
       ${error ? `<p class="err">${esc(error)}</p>` : ''}
       ${rulesHtml()}
@@ -342,20 +340,20 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
       <h3>Bundled with this deployment${tally(bundledItems)}</h3>
       ${bundledItems.length
     ? section('bundled', bundledItems)
-    : '<p class="hint">None — this deployment ships the engine alone.</p>'}
+    : '<p class="hint">No packs are bundled with this site.</p>'}
 
       <h3>Mine, in this browser${tally(localItems)}</h3>
       ${localItems.length
     ? `<p class="hint">${libraryLine(localItems)}</p>${section('local', localItems)}`
-    : '<p class="hint">Nothing yet. Start one below, or import a pack somebody sent you.</p>'}
+    : '<p class="hint">No packs yet. Create or import one below.</p>'}
 
       <div class="actions">
         <button class="primary" data-action="new">+ New extension</button>
-        <button data-action="import" title="One .json extension pack, as many as you select at once, or a library">Import packs…</button>
+        <button data-action="import" title="Import one or more .json pack files or a library file.">Import packs…</button>
         <button data-action="export-library" ${localItems.length ? '' : 'disabled'}
-          title="Every pack under Mine, and which packs are on, as one .json to import in another browser or on the site">Export library</button>
+          title="Download all your packs and their on/off settings as one .json file.">Export library</button>
         <button data-action="paste" aria-pressed="${showPaste}">Paste JSON</button>
-        <button data-action="from-character" title="Lift the open character's classes, race, feature groups and trackers into a new pack"
+        <button data-action="from-character" title="Create a pack from the open character's classes, race, feature groups and trackers."
           ${currentCharacter() ? '' : 'disabled'}>From this character…</button>
         <span class="spacer"></span>
         <button data-action="close">Close</button>
@@ -382,12 +380,12 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
         <label class="sw"><input type="checkbox" data-rules-on ${on ? 'checked' : ''}>
           <span>Share one set of rules with every character</span></label>
         <p class="hint">${on
-    ? `${changed.length ? `${changed.length} changed: ${esc(changed.join(', '))}.` : 'Defaults.'} Edit them on any character's
-          Campaign rules panel (⚙ tab).`
-    : 'Each character has its own rules (⚙ tab).'}</p>
+    ? `${changed.length ? `${changed.length} changed: ${esc(changed.join(', '))}.` : 'All rules are at their defaults.'} Edit them
+          in any character's Campaign rules on the ⚙ tab.`
+    : 'Each character uses its own rules, set on its ⚙ tab.'}</p>
         <div class="actions">
           <button data-action="rules-save" ${on ? '' : 'disabled'} title="Download the shared rules as campaign-rules.json">Save as a file</button>
-          <button data-action="rules-load" title="Load rules from a file and share them">Load from a file…</button>
+          <button data-action="rules-load" title="Load shared rules from a file.">Load from a file…</button>
           ${on && changed.length ? '<button data-action="rules-reset" title="Reset the shared rules to defaults">Reset to defaults</button>' : ''}
           <input type="file" accept="application/json,.json" data-rules-file hidden>
         </div>
@@ -399,7 +397,7 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
     const on = items.filter((it) => it.enabled).length;
     const latest = items.map((it) => String(it.s.updatedAt || '')).sort().pop();
     return `${items.length} pack${items.length === 1 ? '' : 's'}, ${on} on${latest ? `. Last changed ${esc(latest.slice(0, 10))}` : ''}.
-      Export library writes them all, with the switches, as one file to import in another browser.`;
+      Export library saves all of them and their on/off settings as one file.`;
   }
 
   const packFiltering = () => !!lower(packQuery) || packShow !== 'all';
@@ -488,27 +486,26 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
     const otherTables = Object.keys(d.provides).filter((k) => !OWN_SECTION.has(k));
     const otherCounts = Object.fromEntries(otherTables.map((k) => [k, s.tables[k]]));
     return `
-      <h2>${draftIsNew ? 'New extension' : `Edit — ${esc(d.name)}`}</h2>
-      <p class="hint">A pack has a header (who wrote it, where it came from), any shared
-        tables it provides, and blocks a player adds to a character. Save keeps it in this
-        browser; Export on the list sends it out.</p>
+      <h2>${draftIsNew ? 'New extension' : `Edit ${esc(d.name)}`}</h2>
+      <p class="hint">A pack has a header, shared tables and blocks that a player adds to a
+        character. Save stores it in this browser.</p>
       ${notice ? `<p class="ok">${esc(notice)}</p>` : ''}
       ${error ? `<p class="err">${esc(error)}</p>` : ''}
       <div class="actions" style="margin:0 0 10px">
         <button data-action="mode-form" aria-pressed="${!asJson && !paste}" ${asJson || paste ? '' : 'class="primary"'}>Form</button>
         <button data-action="mode-json" aria-pressed="${asJson}" ${asJson ? 'class="primary"' : ''}>JSON</button>
         <button data-action="mode-paste" aria-pressed="${!!paste}" ${paste ? 'class="primary"' : ''}
-          title="Paste a class, race or veil copied off a rules page and read it into blocks">Paste text…</button>
+          title="Paste a class, race or veil from a rules page and turn it into blocks.">Paste text…</button>
       </div>
       ${paste ? pasteHtml() : asJson ? `
         <textarea rows="22" data-json spellcheck="false">${esc(jsonText)}</textarea>
       ` : `
         <div class="fields">
           <label>Name <input type="text" data-h="name" value="${esc(d.name)}" maxlength="80"></label>
-          <label>Id <input type="text" data-h="id" value="${esc(d.id)}" maxlength="60" ${draftIsNew ? '' : 'readonly title="An id is fixed once saved; a pack with the same id replaces this one on import"'} placeholder="from the name"></label>
+          <label>Id <input type="text" data-h="id" value="${esc(d.id)}" maxlength="60" ${draftIsNew ? '' : 'readonly title="The id cannot change after saving. Importing a pack with the same id replaces this one."'} placeholder="from the name"></label>
           <label>Author <input type="text" data-h="author" value="${esc(d.author)}" maxlength="80"></label>
           <label>Source URL <input type="url" data-h="source" value="${esc(d.source)}" placeholder="where this came from"></label>
-          <label>Licence <input type="text" data-h="license" value="${esc(d.license)}" placeholder="OGL 1.0a, CC-BY, homebrew…"></label>
+          <label>License <input type="text" data-h="license" value="${esc(d.license)}" placeholder="OGL 1.0a, CC-BY, homebrew…"></label>
           <label>Revision <input type="number" data-h="revision" value="${esc(d.revision)}" min="1" step="1"></label>
           <label class="wide">Description <textarea class="prose" rows="2" data-h="description">${esc(d.description)}</textarea></label>
         </div>
@@ -518,13 +515,13 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
 
         <h3>Other shared tables</h3>
         <p class="hint">${otherTables.length
-    ? `This pack also provides ${esc(describeSummary({ tables: otherCounts, blocks: {} }))}. Open a list to see what is in it, and an entry to read it; they are edited in the JSON view.`
-    : `A pack can also carry ${TABLE_KINDS.filter((k) => !OWN_SECTION.has(k)).map((k) => `<code>${k}</code>`).join(', ')} under <code>provides</code> — see the JSON view, or copy a bundled pack to start from one.`}</p>
+    ? `This pack also provides ${esc(describeSummary({ tables: otherCounts, blocks: {} }))}. Edit them in the JSON view.`
+    : `A pack can also provide ${TABLE_KINDS.filter((k) => !OWN_SECTION.has(k)).map((k) => `<code>${k}</code>`).join(', ')} under <code>provides</code>. Add them in the JSON view.`}</p>
 
         ${contentsHtml(otherTables)}
 
         <h3>Blocks</h3>
-        <p class="hint">Building blocks a player adds to a character from the sheet's ⚙ manager.</p>
+        <p class="hint">Blocks are added to a character from the ⚙ tab.</p>
         ${d.blocks.map((b, i) => blockHtml(b, i)).join('') || '<p class="hint">No blocks yet.</p>'}
         <div class="actions" style="margin-top:6px">
           <select data-newkind>${Object.entries(BLOCK_KINDS).map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join('')}</select>
@@ -542,14 +539,10 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
   function pasteHtml() {
     if (paste.stage === 'text') {
       return `
-        <p class="hint">Paste a document your own tool wrote — structured markdown, an
-          <code>#</code> title over <code>* **Key:** value</code> entries — or a class, a race,
-          a veil, a sphere or a maneuver copied straight off a rules page (the whole page is
-          fine, several pages one after another too). The reader picks
-          out the progression table, hit die, saves, class skills and feature text of a class; the
-          ability modifiers, size, speed, languages and traits of a race; a veil's essence and bind
-          text; a martial ability's discipline, level, action, range, target, duration and rules
-          text. Then it shows you what it read, and asks you to tag whatever it could not place.</p>
+        <p class="hint">Paste a structured markdown document (an <code>#</code> title over
+          <code>* **Key:** value</code> entries), or a class, race, veil, sphere or maneuver copied
+          from a rules page. You can paste several pages at once. You review the result before
+          anything is added, and tag any text that was not recognized.</p>
         <textarea rows="16" data-paste-text placeholder="Barbarian
 Source PRPG Core Rulebook pg. 31
 …
@@ -557,7 +550,7 @@ Hit Die: d12.
 …">${esc(paste.text)}</textarea>
         <div class="actions">
           <button class="primary" data-action="paste-read">Read it</button>
-          <button data-action="pdf-pick" title="Read a document you have as a PDF. It is read here in the page — nothing is uploaded.">Read a PDF…</button>
+          <button data-action="pdf-pick" title="Read a PDF file. The file is not uploaded.">Read a PDF…</button>
           <button data-action="paste-cancel">Back to the form</button>
           <input type="file" accept="application/pdf,.pdf" data-pdf-file hidden>
         </div>`;
@@ -593,10 +586,10 @@ Hit Die: d12.
       return opts;
     };
     return `
-      <div class="report">${result.report.map((l) => esc(l)).join('<br>')}${result.report.length ? '' : 'Nothing was recognised.'}</div>
+      <div class="report">${result.report.map((l) => esc(l)).join('<br>')}${result.report.length ? '' : 'Nothing was recognized.'}</div>
 
       <h3>Read into blocks</h3>
-      <p class="hint">Untick anything you do not want. Each of these becomes a block on the pack you can then edit in the form.</p>
+      <p class="hint">Untick anything you do not want. Each ticked item becomes a block you can edit in the form.</p>
       ${result.blocks.map((b, i) => `<div class="found ${keep[i] ? '' : 'off'}">
         <label class="sw"><input type="checkbox" data-keep="${i}" ${keep[i] ? 'checked' : ''}></label>
         <span class="kind">${esc(BLOCK_KINDS[b.kind]?.label || b.kind)}</span>
@@ -605,8 +598,7 @@ Hit Die: d12.
 
       ${result.spheres.length ? `
       <h3>Read into spheres</h3>
-      <p class="hint">A whole sphere, read off its page's table of contents. Like a
-        discipline it joins the pack's shared tables rather than becoming a block.</p>
+      <p class="hint">Each sphere is added to the pack's shared tables, not as a block.</p>
       ${result.spheres.map((sp, i) => `<div class="found ${skeep[i] ? '' : 'off'}">
         <label class="sw"><input type="checkbox" data-skeep="${i}" ${skeep[i] ? 'checked' : ''}></label>
         <span class="kind">${esc(sp.kind || 'sphere')}</span>
@@ -620,10 +612,8 @@ Hit Die: d12.
 
       ${result.maneuvers.length ? `
       <h3>Read into disciplines</h3>
-      <p class="hint">A maneuver joins the pack's discipline catalogue rather than
-        becoming a block — a discipline is a shared table, so every character who trains
-        it sees this. Say which discipline each one belongs under; one that is not in
-        the pack yet is made.</p>
+      <p class="hint">Maneuvers are added to the pack's discipline tables, not as blocks.
+        Enter the discipline for each one. A discipline that is not in the pack yet is created.</p>
       ${result.maneuvers.map((m, i) => {
     const e = m.entry;
     const cells = ['type', 'action', 'range', 'target', 'duration', 'save']
@@ -633,35 +623,32 @@ Hit Die: d12.
         <span class="kind">${e.kind === 'stance' ? 'Stance' : 'Maneuver'}</span>
         <span class="what"><strong>${esc(e.name || '(unnamed)')}</strong>
           <span class="d">${esc([e.level ? `level ${e.level}` : '', ...cells].filter(Boolean).join(' · '))}${
-  e.text ? esc(` — ${e.text.slice(0, 90)}${e.text.length > 90 ? '…' : ''}`) : ' — no description'}</span></span>
+  e.text ? esc(`: ${e.text.slice(0, 90)}${e.text.length > 90 ? '…' : ''}`) : ': no description'}</span></span>
         <input type="text" data-mdisc="${i}" value="${esc(mdisc[i])}"
-          placeholder="Discipline" title="The discipline it is filed under"
+          placeholder="Discipline" title="The discipline this maneuver belongs to."
           style="width:11rem"${mdisc[i] ? '' : ' class="needs"'}>
       </div>`;
   }).join('')}` : ''}
 
       ${catalogueCount(result) ? `<h3>Picked by name <span class="count">${catalogueCount(result)}</span></h3>
-      <p class="hint">${esc(catalogueSummary(result))} — filed in the pack's catalogue tables, where a
-        character picks them by name and reads the text where it stands. They are not blocks, so there is
-        nothing to tick: they all go in.</p>` : ''}
+      <p class="hint">${esc(catalogueSummary(result))}. These are added to the pack's catalog tables,
+        where a character can pick them by name. All of them are added.</p>` : ''}
 
-      <h3>Not placed — tag it, or leave it</h3>
+      <h3>Not placed</h3>
       <p class="hint">${result.leftovers.length
-    ? 'Stretches of the paste nothing claimed. Say what each is — a feature of the class above it, a race trait, a note — or leave it out. Page chrome and tables of ages and heights are the usual leftovers.'
+    ? 'This text was not recognized. Choose what each part is, or leave it out.'
     : 'Everything in the paste was placed.'}</p>
       ${result.leftovers.length > LEFTOVER_LIMIT ? `<p class="err">Only the first
         ${LEFTOVER_LIMIT} of ${result.leftovers.length} are shown; the rest are left out.
-        This many means the reader did not recognise <em>what kind of document this is</em>
-        rather than missing a few lines — read the report above, and see
-        <code>STRUCTURED_KINDS</code> in <code>paste-import.js</code> for what it knows.</p>` : ''}
+        This usually means the document type was not recognized. Check the report above.</p>` : ''}
       ${result.leftovers.slice(0, LEFTOVER_LIMIT).map((l, i) => {
     const tag = tags[i];
     const split = splitChunk(l.text);
     return `<div class="left ${tag.choice === 'skip' ? 'skip' : ''}" data-left="${i}">
         <div class="top">
           <select data-tag="${i}">${choicesFor(l).map(([v, label]) => `<option value="${esc(v)}" ${tag.choice === v ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>
-          ${tag.choice === 'skip' ? '' : `<input type="text" data-tagname="${i}" value="${esc(tag.name ?? split.name)}" placeholder="name" title="The name it gets">`}
-          ${tag.choice === 'feature' ? `<input type="text" data-taggroup="${i}" value="${esc(tag.group ?? (l.near?.name || ''))}" placeholder="group" title="The template group it joins">` : ''}
+          ${tag.choice === 'skip' ? '' : `<input type="text" data-tagname="${i}" value="${esc(tag.name ?? split.name)}" placeholder="name" title="Name">`}
+          ${tag.choice === 'feature' ? `<input type="text" data-taggroup="${i}" value="${esc(tag.group ?? (l.near?.name || ''))}" placeholder="group" title="Template group">` : ''}
           <span class="near">${l.near ? `near ${esc(l.near.name)}` : ''} · ${l.text.split('\n').length} line(s)</span>
         </div>
         <pre>${esc(l.text.length > 600 ? `${l.text.slice(0, 600)}…` : l.text)}</pre>
@@ -708,13 +695,13 @@ Hit Die: d12.
       const title = file.name.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
       const outline = outlineOf(pages, { title });
       if (!outline.sections.some((s) => s.entries.length || s.lead.length > 200)) {
-        throw new Error('no text was found in it. A scanned document is pictures of pages, and needs OCR first.');
+        throw new Error('no text was found in it. A scanned document needs OCR first.');
       }
       // Guesses, from the headings: each one is a dropdown on the next screen.
       paste = { ...paste, stage: 'pdf', pdf: { title, outline, tags: guessTags(outline) } };
     } catch (err) {
       paste = { ...paste, stage: 'text' };
-      error = `Could not read ${file.name} — ${err.message}`;
+      error = `Could not read ${file.name}: ${err.message}`;
     }
     render();
   }
@@ -724,13 +711,11 @@ Hit Die: d12.
     const kinds = (now) => SECTION_KINDS.map(([v, label]) => `<option value="${v}"${v === now ? ' selected' : ''}>${esc(label)}</option>`).join('');
     const chosen = tags.filter((t) => t.kind !== 'skip').length;
     return `
-      <p class="hint">Read <strong>${outline.sections.length}</strong> sections out of the PDF, by the type its headings
-        are set in. A PDF cannot say what a section <em>is</em> — a talent and a feat are set the same — so say
-        it here. The guesses are from the headings; change any of them. Then the usual reader takes over and
-        shows you what it found before anything is added. Tables come through roughly, and a page whose text
-        runs round a picture may come out of order: read those entries once they are in.</p>
+      <p class="hint">Found <strong>${outline.sections.length}</strong> sections in the PDF. Choose what
+        each section contains; the guesses come from the headings. You can review the result before anything
+        is added. Tables and text around pictures may come out wrong, so check those entries.</p>
       <label class="fld"><span>Book</span>
-        <input type="text" data-pdf-title value="${esc(title)}" title="Written on every entry as its source"></label>
+        <input type="text" data-pdf-title value="${esc(title)}" title="Used as the source of every entry."></label>
       <div class="pdfsecs">${outline.sections.map((sec, i) => {
     const t = tags[i];
     const size = sec.entries.length
@@ -741,16 +726,16 @@ Hit Die: d12.
     return `<div class="found ${t.kind === 'skip' ? 'off' : ''}">
           <span class="kind">p. ${sec.page}</span>
           <span class="what"><strong>${esc(sec.heading)}</strong>
-            <span class="d">${esc(size)} — ${esc(peek)}</span></span>
+            <span class="d">${esc(size)}: ${esc(peek)}</span></span>
           <select data-pdf-kind="${i}">${kinds(t.kind)}</select>
           ${t.kind === 'talents' || t.kind === 'sphere' ? `<input type="text" data-pdf-sphere="${i}" value="${esc(t.sphere)}"
             placeholder="Sphere" title="The sphere these belong to" style="width:9rem"${t.sphere ? '' : ' class="needs"'}>` : ''}
           ${t.kind === 'options' ? `<input type="text" data-pdf-class="${i}" value="${esc(t.className || '')}"
-            placeholder="Class" title="The class whose feature picks from these — as its name is written in the progression" style="width:9rem"${t.className ? '' : ' class="needs"'}>
+            placeholder="Class" title="The class whose feature picks from these, as named in its progression table." style="width:9rem"${t.className ? '' : ' class="needs"'}>
             <input type="text" data-pdf-feature="${i}" value="${esc(t.feature || '')}"
-            placeholder="${esc(sec.heading)}" title="The feature column these are picked in — “Wild Talent”, “Monk Art”. Left empty, the section's heading." style="width:9rem">` : ''}
+            placeholder="${esc(sec.heading)}" title="The feature column that picks from these, e.g. “Wild Talent”. Blank uses the section heading." style="width:9rem">` : ''}
           ${t.kind === 'reference' ? `<input type="text" data-pdf-entrykind="${i}" value="${esc(t.entryKind)}"
-            placeholder="${esc(sec.heading.toLowerCase())}" title="What kind of thing these are — trait, equipment, drawback…" style="width:9rem">` : ''}
+            placeholder="${esc(sec.heading.toLowerCase())}" title="What these entries are, e.g. trait, equipment or drawback." style="width:9rem">` : ''}
         </div>`;
   }).join('')}</div>
       <div class="actions">
@@ -960,13 +945,13 @@ Hit Die: d12.
     const filed = applyManeuvers() + applySpheres() + applyCatalogues();
     notice = null;
     error = fresh.length || filed ? null
-      : 'Nothing was added — every block was unticked and every leftover left out.';
+      : 'Nothing was added. Every block was unticked and every leftover was left out.';
     // A maneuver with no discipline named has nowhere to go, and saying so is
     // better than dropping it quietly.
     const homeless = paste.result.maneuvers
       .filter((m, i) => paste.mkeep[i] && !String(paste.mdisc[i] || '').trim());
     if (homeless.length) {
-      error = `${homeless.map((m) => m.entry.name).join(', ')} had no discipline named, so ${homeless.length === 1 ? 'it was' : 'they were'} left out. Paste again and fill the discipline in.`;
+      error = `${homeless.map((m) => m.entry.name).join(', ')} had no discipline, so ${homeless.length === 1 ? 'it was' : 'they were'} left out. Paste again and enter a discipline.`;
     }
     paste = null;
     openBlocks.clear();
@@ -993,11 +978,9 @@ Hit Die: d12.
     const list = draft.provides.maneuvers?.disciplines || [];
     return `
       <h3>Disciplines</h3>
-      <p class="hint">Each one arrives on the sheet's Maneuvers tab under
-        <em>Train a discipline…</em>, and everything under it can be readied.
-        Cells left blank here are the player's to fill in on their own sheet;
-        cells you fill in show for everyone, and a player who writes over one
-        is writing over it for their character only.</p>
+      <p class="hint">Each discipline appears on the Maneuvers tab under <em>Train a discipline…</em>.
+        Cells you fill in here show for every character. Blank cells are filled in by each player,
+        and a player's edits apply only to their character.</p>
       ${list.map((x, i) => disciplineHtml(x, i)).join('')
         || '<p class="hint">None yet.</p>'}
       <div class="actions" style="margin-top:6px">
@@ -1035,7 +1018,7 @@ Hit Die: d12.
         <div class="lvl">${lvl ? `Level ${lvl}` : 'Other'}</div>
         ${rows.filter(([e]) => (Number(e.level) || 0) === lvl)
     .map(([e, ei]) => entryHtml(e, di, ei)).join('')}`).join('')
-    : '<p class="hint">Nothing in it yet.</p>'}
+    : '<p class="hint">No maneuvers yet.</p>'}
       <div class="actions" style="margin-top:8px">
         <button data-add-entry="${di}" data-kind="maneuver">+ Add maneuver</button>
         <button data-add-entry="${di}" data-kind="stance">+ Add stance</button>
@@ -1050,7 +1033,7 @@ Hit Die: d12.
     return `<div class="ent" data-ent="${esc(key)}">
       <div class="top">
         <input type="number" data-e="${esc(key)}" data-k="level" value="${esc(e.level ?? 0)}"
-          min="0" max="9" step="1" aria-label="Level" title="Level it is granted at">
+          min="0" max="9" step="1" aria-label="Level" title="Maneuver level">
         <select data-e="${esc(key)}" data-k="kind" aria-label="Maneuver or stance">
           <option value="maneuver" ${e.kind === 'stance' ? '' : 'selected'}>Maneuver</option>
           <option value="stance" ${e.kind === 'stance' ? 'selected' : ''}>Stance</option>
@@ -1164,12 +1147,11 @@ Hit Die: d12.
     const list = draft.provides.spheres?.spheres || [];
     if (!list.length) {
       return `<h3>Spheres</h3>
-        <p class="hint">None. <strong>Paste text…</strong> reads a whole sphere off its page
-          on the Spheres of Power or Spheres of Might wiki — its base abilities, every talent
-          by group, and the <code>(counter)</code> / <code>[3PP]</code> tags each one carries.</p>`;
+        <p class="hint">No spheres yet. Use <strong>Paste text…</strong> to read a sphere from its
+          rules page.</p>`;
     }
     return `<h3>Spheres</h3>
-      <p class="hint">Read off a wiki page and kept whole. Re-paste a page to replace one.</p>
+      <p class="hint">Paste a sphere's page again to replace it.</p>
       ${list.map((sp, i) => `<div class="block" data-sphere="${i}">
         <div class="head">
           <span class="kind">${esc(sp.kind || 'sphere')}</span>
@@ -1192,7 +1174,7 @@ Hit Die: d12.
         <button data-bopen="${i}" aria-expanded="${open}">${open ? 'Done' : 'Edit'}</button>
         <button class="danger" data-bremove="${i}" title="Remove this block">×</button>
       </div>
-      ${open ? `<div class="body">${blockFormHtml(b, i)}<div class="land">Lands on: ${esc(kind.lands)}.</div></div>` : ''}
+      ${open ? `<div class="body">${blockFormHtml(b, i)}<div class="land">Adds to: ${esc(kind.lands)}.</div></div>` : ''}
     </div>`;
   }
 
@@ -1225,7 +1207,7 @@ Hit Die: d12.
           ${F(i, 'classSkills', 'Class skills', b.classSkills.join(', '), { wide: true, ph: 'Acrobatics, Climb, Craft, … (comma-separated; ticked on the Skills tab when added)' })}
           ${A(i, 'features', 'Features by level', b.features.map((f) => `${f.level}: ${f.name}${f.text ? ` — ${f.text}` : ''}`).join('\n'), 6,
     'one per line, "level: name — text", e.g.\n1: Fast movement, Rage\n2: Rage power, Uncanny dodge\n3: Trap sense +1', false)}
-          ${A(i, 'text', 'Description', b.text, 3, 'flavour, role, alignment — free text')}
+          ${A(i, 'text', 'Description', b.text, 3, 'flavor, role, alignment (free text)')}
           ${F(i, 'source', 'Source', b.source, { wide: true, ph: 'book and page, or a URL' })}
         </div>`;
       case 'race':
@@ -1245,7 +1227,7 @@ Hit Die: d12.
         return `<div class="fields">
           ${F(i, 'name', 'Trait name', b.name)}
           ${F(i, 'race', 'Race', b.race, { ph: 'Dwarf' })}
-          ${F(i, 'replaces', 'Replaces', b.replaces.join(', '), { wide: true, ph: 'hatred, stonecunning — the standard traits it swaps out when added (read from the text if blank)' })}
+          ${F(i, 'replaces', 'Replaces', b.replaces.join(', '), { wide: true, ph: 'hatred, stonecunning: the standard traits it replaces (read from the text if blank)' })}
           ${A(i, 'text', 'Text', b.text, 3)}
           ${F(i, 'source', 'Source', b.source, { wide: true })}
         </div>`;
@@ -1256,7 +1238,7 @@ Hit Die: d12.
             <option value="" ${!b.type ? 'selected' : ''}>—</option>
             ${['Ex', 'Su', 'Sp'].map((t) => `<option ${b.type === t ? 'selected' : ''}>${t}</option>`).join('')}
           </select></label>
-          ${F(i, 'group', 'Group (template) it joins', b.group, { ph: 'e.g. Barbarian — made if missing' })}
+          ${F(i, 'group', 'Group (template) it joins', b.group, { ph: 'e.g. Barbarian (created if missing)' })}
           ${A(i, 'text', 'Text', b.text, 5)}
           ${F(i, 'source', 'Source', b.source, { wide: true })}
         </div>`;
@@ -1291,7 +1273,7 @@ Hit Die: d12.
           ${F(i, 'class', 'Class it applies to', b.class, { ph: 'Legendary Samurai' })}
           ${F(i, 'stacksWith', 'Can be combined with', b.stacksWith.join(', '), { wide: true, ph: 'names of archetypes it may overlap with (read from the text if blank)' })}
           ${A(i, 'features', 'Features', b.features.map((f) => `${f.name}${f.type ? ` (${f.type})` : ''}: ${f.text.replace(/\n+/g, ' ')}`).join('\n'), 10,
-    'one per line, "Name (Ex): text" — end the text with what it does, e.g. "This ability replaces challenge and kiai arts." or "This ability alters resolve."', false)}
+    'one per line, "Name (Ex): text". End the text with what it does, e.g. "This ability replaces challenge and kiai arts." or "This ability alters resolve."', false)}
           ${A(i, 'text', 'Description', b.text, 2)}
           ${F(i, 'source', 'Source', b.source, { wide: true })}
           <p class="hint" style="grid-column:1/-1;margin:0">Read from the features: ${esc([...new Set(b.features.flatMap((f) => f.replaces))].map((k) => `replaces ${k}`).concat([...new Set(b.features.flatMap((f) => f.alters))].map((k) => `alters ${k}`)).join(' · ') || 'nothing yet')}.</p>
@@ -1300,15 +1282,15 @@ Hit Die: d12.
         return `<div class="fields">
           ${F(i, 'name', 'Menu name', b.name, { ph: 'Legendary Samurai Iaijutsu Technique' })}
           ${F(i, 'class', 'Class it is for', b.class, { ph: 'Legendary Samurai' })}
-          ${F(i, 'feature', 'Feature that picks from it', b.feature, { ph: 'Iaijutsu Technique — a column of this name picks from the menu' })}
+          ${F(i, 'feature', 'Feature that picks from it', b.feature, { ph: 'Iaijutsu Technique: a column of this name picks from the menu' })}
           ${A(i, 'options', 'Entries', menuOptionLines(b.options), 10,
-    'one per line, "Category / Name (Ex) 5+: text" — the category and the "(Ex)" and the level it asks for are all optional, e.g.\nSlashes / Bloody Slash (Ex) 5+: The target takes bleed damage.\nCuts / Ranged Cut (Ex): Strike at a range of 30 feet.\nDurable: Items the blacksmith maintains resist sundering.', false)}
+    'one per line, "Category / Name (Ex) 5+: text". The category, the "(Ex)" and the level are optional, e.g.\nSlashes / Bloody Slash (Ex) 5+: The target takes bleed damage.\nCuts / Ranged Cut (Ex): Strike at a range of 30 feet.\nDurable: Items the blacksmith maintains resist sundering.', false)}
           ${A(i, 'text', 'About these options', b.text, 2, 'what the menu is, a condition its entries use')}
           ${F(i, 'source', 'Source', b.source, { wide: true })}
           <p class="hint" style="grid-column:1/-1;margin:0">${b.options.length
     ? `${b.options.length} entr${b.options.length === 1 ? 'y' : 'ies'}${
       [...new Set(b.options.map((o) => o.category).filter(Boolean))].length
-        ? ` in ${[...new Set(b.options.map((o) => o.category).filter(Boolean))].join(', ')}` : ''}. An entry saying what it replaces (“this replaces the Ranged Cut and Armor Rending Slash iaijutsu techniques”) pushes those out where this menu layers over another.`
+        ? ` in ${[...new Set(b.options.map((o) => o.category).filter(Boolean))].join(', ')}` : ''}. An entry that says what it replaces (e.g. “this replaces the Ranged Cut technique”) removes those entries from the menu it adds to.`
     : 'No entries yet.'}</p>
         </div>`;
       case 'note':
@@ -1340,7 +1322,7 @@ Hit Die: d12.
           notice = null; error = null;
         } catch (err) {
           notice = null;
-          error = `Could not switch that pack — ${err.message}`;
+          error = `Could not switch that pack: ${err.message}`;
         }
         runtime.refresh();
         render();
@@ -1374,7 +1356,7 @@ Hit Die: d12.
           notice = `Removed ${row?.name || 'the pack'} from this browser.`; error = null;
         } catch (err) {
           notice = null;
-          error = `Could not remove ${row?.name || 'the pack'} — ${err.message}`;
+          error = `Could not remove ${row?.name || 'the pack'}: ${err.message}`;
         }
         runtime.refresh();
         confirmRemove = null;
@@ -1406,7 +1388,7 @@ Hit Die: d12.
           error = null;
         } catch (err) {
           notice = null;
-          error = `Could not switch those packs — ${err.message}`;
+          error = `Could not switch those packs: ${err.message}`;
         }
         runtime.refresh();
         render();
@@ -1440,17 +1422,17 @@ Hit Die: d12.
           const rules = presetCampaign(JSON.parse(await file.text()));
           if (!rules) throw new Error('it holds no campaign rules');
           writeShared({ on: true, rules });
-          notice = `Every character now follows the campaign rules from ${file.name}, unless it is set to its own.`;
+          notice = `Loaded campaign rules from ${file.name}. Every character without its own rules now uses them.`;
           error = null;
         } catch (err) {
           notice = null;
-          error = `Could not read ${file.name} — ${err.message}`;
+          error = `Could not read ${file.name}: ${err.message}`;
         }
         render();
       });
       q('[data-action="rules-reset"]')?.addEventListener('click', () => {
         writeShared({ rules: {} });
-        notice = 'The shared campaign rules are the table\'s again.';
+        notice = 'The shared campaign rules are reset to defaults.';
         error = null;
         render();
       });
@@ -1466,7 +1448,7 @@ Hit Die: d12.
       q('[data-action="from-character"]')?.addEventListener('click', () => {
         const data = currentCharacter();
         if (!data) return;
-        const name = `${data.identity?.name || 'Character'} — pack`;
+        const name = `${data.identity?.name || 'Character'} pack`;
         const ext = blankExtension({ name });
         ext.blocks = blocksFromCharacter(data);
         ext.description = `Lifted from ${data.identity?.name || 'a character'}: classes, race, feature groups and trackers.`;
@@ -1719,7 +1701,7 @@ Hit Die: d12.
         openEntries.clear();
         asJson = false; error = null;
       } catch (err) {
-        error = `The JSON does not parse — ${err.message}. Fix it, or Cancel to drop the edit.`;
+        error = `The JSON is not valid: ${err.message}. Fix it, or press Cancel to discard the edit.`;
       }
     }
     render();
@@ -1739,17 +1721,17 @@ Hit Die: d12.
 
   async function save() {
     if (asJson) {
-      try { draft = normalizeExtension(JSON.parse(jsonText)); } catch (err) { error = `The JSON does not parse — ${err.message}.`; render(); return; }
+      try { draft = normalizeExtension(JSON.parse(jsonText)); } catch (err) { error = `The JSON is not valid: ${err.message}.`; render(); return; }
     }
-    if (!draft.name.trim()) { error = 'Give the pack a name.'; render(); return; }
+    if (!draft.name.trim()) { error = 'Enter a pack name.'; render(); return; }
     draft.id = slugId(draft.id) || slugId(draft.name);
     if (!draft.id) { error = 'The name has no letters or digits to make an id from.'; render(); return; }
     if (draftIsNew && runtime.store.list().some((e) => e.id === draft.id)) {
-      error = `A pack with the id “${draft.id}” is already here. Change the id, or edit that one instead.`;
+      error = `A pack with the id “${draft.id}” already exists. Change the id, or edit that pack instead.`;
       render(); return;
     }
     if (runtime.bundled.some((e) => e.id === draft.id)) {
-      error = `“${draft.id}” is a bundled pack's id. Pick another so the two do not shadow each other.`;
+      error = `“${draft.id}” is the id of a bundled pack. Choose another id.`;
       render(); return;
     }
     try {
@@ -1761,8 +1743,8 @@ Hit Die: d12.
     } catch (err) {
       notice = null;
       error = err.name === 'QuotaExceededError'
-        ? 'This browser is out of space — remove a pack or a character and try again.'
-        : `Could not save — ${err.message}`;
+        ? 'This browser is out of space. Remove a pack or a character and try again.'
+        : `Could not save: ${err.message}`;
       render();
     }
   }
@@ -1795,7 +1777,7 @@ Hit Die: d12.
       try {
         if (bundledIds.has(id)) await store.setEnabled(id, on, { bundled: true });
         else if (localIds.has(id)) await store.setEnabled(id, on);
-      } catch (err) { failed.push(`${id}: could not switch — ${err.message}`); }
+      } catch (err) { failed.push(`${id}: could not switch it (${err.message})`); }
     }
     // The campaign rules every character shares travel with the library.
     if (lib.campaignRules) writeShared(lib.campaignRules);
@@ -1809,15 +1791,15 @@ Hit Die: d12.
   function libraryNotice(lib, r) {
     const origin = [lib.from ? `from ${lib.from}` : '', lib.exportedAt ? `exported ${String(lib.exportedAt).slice(0, 10)}` : '']
       .filter(Boolean).join(', ');
-    const parts = [`${r.added} added`, `${r.updated} updated`, `${r.unchanged} already current`];
-    return `Library${origin ? ` (${origin})` : ''}: ${parts.join(', ')}; switches${r.rules ? ' and the shared campaign rules' : ''} applied.`;
+    const parts = [`${r.added} added`, `${r.updated} updated`, `${r.unchanged} unchanged`];
+    return `Library${origin ? ` (${origin})` : ''}: ${parts.join(', ')}. On/off settings${r.rules ? ' and shared campaign rules' : ''} applied.`;
   }
 
   async function importLibrary(lib, label = 'the library') {
     const r = await applyLibrary(lib);
     runtime.refresh();
     notice = libraryNotice(lib, r);
-    error = r.failed.length ? `${label}: ${r.failed.length} pack${r.failed.length === 1 ? ' was' : 's were'} not imported — ${r.failed.slice(0, 6).join('; ')}.` : null;
+    error = r.failed.length ? `${label}: ${r.failed.length} pack${r.failed.length === 1 ? ' was' : 's were'} not imported: ${r.failed.slice(0, 6).join('; ')}.` : null;
     showPaste = false;
     say('ok', notice);
     if (error) say('err', error);
@@ -1830,14 +1812,14 @@ Hit Die: d12.
     const verdict = inspectExtension(doc);
     if (!verdict.ok) { error = `${label}: ${verdict.error}`; notice = null; render(); return verdict; }
     if (runtime.bundled.some((e) => e.id === verdict.summary.id)) {
-      error = `${label} has the same id as the bundled pack “${verdict.summary.name}”. Change its id first (edit the file's "id"), or copy the bundled one and edit that.`;
+      error = `${label} has the same id as the bundled pack “${verdict.summary.name}”. Change the "id" in the file, or copy the bundled pack and edit the copy.`;
       render(); return { ok: false, error };
     }
     try {
       const row = await runtime.store.save(doc, { origin: 'import' });
       runtime.refresh();
       notice = `${row.replaced ? 'Updated' : 'Imported'} ${row.name} rev ${row.revision} (${describeSummary(row)}).`
-        + (verdict.warnings?.length ? ` Note — ${verdict.warnings.join('; ')}.` : '');
+        + (verdict.warnings?.length ? ` Note: ${verdict.warnings.join('; ')}.` : '');
       error = null; showPaste = false;
       say('ok', notice);
     } catch (err) {
@@ -1845,8 +1827,8 @@ Hit Die: d12.
       // how "Imported All akashic veils" came to sit above "out of space".
       notice = null;
       error = err.name === 'QuotaExceededError'
-        ? 'This browser is out of space — remove a pack or a character and try again.'
-        : `Could not store ${label} — ${err.message}`;
+        ? 'This browser is out of space. Remove a pack or a character and try again.'
+        : `Could not save ${label}: ${err.message}`;
       say('err', error);
     }
     render();
@@ -1855,7 +1837,7 @@ Hit Die: d12.
 
   async function importFile(file) {
     let doc;
-    try { doc = JSON.parse(await file.text()); } catch (err) { error = `${file.name} is not valid JSON — ${err.message}`; render(); return { ok: false, error }; }
+    try { doc = JSON.parse(await file.text()); } catch (err) { error = `${file.name} is not valid JSON: ${err.message}`; render(); return { ok: false, error }; }
     return importDoc(doc, file.name);
   }
 
@@ -1908,7 +1890,7 @@ Hit Die: d12.
       ? `Imported ${done.length} pack${done.length === 1 ? '' : 's'}${updated ? ` (${updated} updated)` : ''}: ${names}.`
       : null;
     error = failed.length
-      ? `${failed.length} file${failed.length === 1 ? ' was' : 's were'} not imported — ${failed.slice(0, 6).join('; ')}${failed.length > 6 ? `; and ${failed.length - 6} more` : ''}.`
+      ? `${failed.length} file${failed.length === 1 ? ' was' : 's were'} not imported: ${failed.slice(0, 6).join('; ')}${failed.length > 6 ? `; and ${failed.length - 6} more` : ''}.`
       : null;
     if (notice) say('ok', notice);
     if (error) say('err', error);
@@ -1919,7 +1901,7 @@ Hit Die: d12.
 
   function importText(text) {
     let doc;
-    try { doc = JSON.parse(text); } catch (err) { error = `That is not valid JSON — ${err.message}`; render(); return { ok: false, error }; }
+    try { doc = JSON.parse(text); } catch (err) { error = `That is not valid JSON: ${err.message}`; render(); return { ok: false, error }; }
     return importDoc(doc, 'the pasted pack');
   }
 
@@ -1942,7 +1924,7 @@ Hit Die: d12.
     }
     const lib = buildLibrary({ packs, enabled, from: globalThis.location?.host || '', campaignRules: readShared() });
     downloadFile(`extension-library-${lib.exportedAt.slice(0, 10)}.json`, JSON.stringify(lib));
-    notice = `Exported ${packs.length} pack${packs.length === 1 ? '' : 's'} and the switches as one library file.`;
+    notice = `Exported ${packs.length} pack${packs.length === 1 ? '' : 's'} and their on/off settings as one library file.`;
     error = null;
     render();
   }

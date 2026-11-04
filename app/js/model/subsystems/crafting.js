@@ -378,7 +378,7 @@ export function recomputeCrafting(model) {
     const sale = p.zeroProfit ? cost : Math.max(ceilExact(value * (1 - discount / 100)), cost);
 
     const itemDC = resolve(p, 'itemDC', `${where} item DC`);
-    for (const a of p.dcAdjustments || []) resolve(a, 'value', `${where} DC — ${a.label || 'adjustment'}`);
+    for (const a of p.dcAdjustments || []) resolve(a, 'value', `${where} DC: ${a.label || 'adjustment'}`);
     const adjustments = (p.dcAdjustments || []).filter((a) => a.enabled !== false);
     const bypasses = (p.bypassed || []).filter((b) => b.enabled !== false);
     const perBypass = Number(cr.dcPerBypass) || 0;

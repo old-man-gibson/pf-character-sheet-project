@@ -237,7 +237,7 @@ console.log('\nlevels earned by XP or milestones');
   check('xp: no level up before it is earned', levelUp(c), false);
   check('xp: an award is a play action', [awardXp(c, 24000), c.data.identity.xp, c.playActions[0]?.label], [true, 75000, '+24,000 XP']);
   check('xp: the level does not move on its own', c.data.identity.level, 8);
-  check('xp: levelling is a press', [levelUp(c), c.data.identity.level, c.playActions[0]?.label], [true, 9, 'Levelled up to 9']);
+  check('xp: levelling is a press', [levelUp(c), c.data.identity.level, c.playActions[0]?.label], [true, 9, 'Leveled up to 9']);
   c.undoPlay();
   check('xp: and undone like one', c.data.identity.level, 8);
   c.set('campaign.xpTrack', 'fast');
@@ -311,7 +311,7 @@ console.log('\nmythic tiers from trials, and a ladder of the campaign\'s own');
     const o = new Character(old);
     check('an older sheet keeps the tier its trials gave', [o.data.identity.mythicTier, o.data.mythic.trialTier], [3, 3]);
   }
-  check('the tables say trials in all', mythicTierReached(c.data, 3), { head: 'Trials', value: 8, title: 'Tier 3 after 8 trials in all (4 for this tier)' });
+  check('the tables say trials in all', mythicTierReached(c.data, 3), { head: 'Trials', value: 8, title: 'Tier 3 after 8 trials in total (4 for this tier)' });
   check('a typed tier still overrides', (c.set('mythic.tierOverride', 5), c.data.identity.mythicTier), 5);
   c.set('mythic.tierOverride', null);
 
@@ -533,7 +533,7 @@ console.log('\nthe lowest level, and no ceiling on the highest');
   const box = () => renderOverviewPanel(c, { draft: {}, buildView: true }).match(/<input[^>]*data-set="identity\.level"[^>]*>/)?.[0] || '';
   check('the level box starts at the lowest', box().includes('min="3"'), true);
   c.set('campaign.minLevel', 5);
-  check('a level below it is kept and flagged', [c.data.identity.level, box().includes('min="5"'), box().includes('Below this campaign\'s lowest level, 5')],
+  check('a level below it is kept and flagged', [c.data.identity.level, box().includes('min="5"'), box().includes('Below the campaign\'s lowest level of 5.')],
     [3, true, true]);
   check('a new sheet: the table\'s 3rd to 20th unless asked', [blankDocument({ level: 1 }).identity.level, blankDocument({ level: 25 }).identity.level],
     [3, 20]);

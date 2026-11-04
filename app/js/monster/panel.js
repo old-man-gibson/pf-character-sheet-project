@@ -249,13 +249,13 @@ export function renderStatBlockPanel(model, ctx = {}) {
       ${(c.raceTraits || []).some((t) => String(t.name || '').trim() || String(t.text || '').trim()) ? `<h4 class="sb-section">${m ? 'Special Abilities' : 'Race traits'}</h4>
       ${(c.raceTraits || []).filter((t) => String(t.name || '').trim() || String(t.text || '').trim()).map((t) => `<div class="sb-ability"><b>${esc(t.name || '—')}</b> ${shown(model, t.text)}</div>`).join('')}` : ''}
       ${m?.description ? `<h4 class="sb-section">Description</h4><div class="sb-line sb-prose">${shown(model, m.description)}</div>` : ''}
-      <p class="hint">Every figure here is computed from the sheet now. A score changed on the Stats tab, a buff ticked on the dashboard or a condition on the Overview changes this block as it changes everything else. Hover a number for its working.</p>
+      <p class="hint">Every number here comes from the sheet and updates with scores, buffs and conditions. Hover over a number to see how it is calculated.</p>
     </section>`;
 
     const systems = dashSystemCards(model);
     const systemsPanel = systems ? `<section class="panel span2 sb-systems">
       <h3>From the sub-systems</h3>
-      <p class="hint">What the creature holds on its sub-system tabs, as the session dashboard shows it. The pips and squares spend from the same pool the tab holds. The ⚙ tab manager turns a sub-system's tab on. The class row's <em>Systems</em> toggles on the Overview mark a system before anything is typed into it.</p>
+      <p class="hint">The creature's sub-system resources, as shown on the session dashboard. Pips and squares spend from the same pool as the tab. Turn a sub-system's tab on in the ⚙ tab, or mark it with the <em>Systems</em> toggles on the Overview's class rows.</p>
       <div class="grid dashboard">${systems}</div>
     </section>` : '';
 
@@ -318,7 +318,7 @@ function editPanel(model, m, ctx) {
     if (!m) {
       return `<section class="panel span2">
         <h3>Monster fields</h3>
-        <p class="hint">This character has no monster block. The lines a Bestiary entry has and a character sheet does not (CR and XP, senses and aura, spell-like abilities, ecology, description) are left off. Giving it a block puts those fields on this tab to fill in. Nothing else about the character changes.</p>
+        <p class="hint">This character has no monster block. A block adds the stat block fields a character sheet lacks (CR and XP, senses and aura, spell-like abilities, ecology, description) to this tab. Nothing else about the character changes.</p>
         <button data-action="monster-block">Give this character a monster block</button>
       </section>`;
     }
@@ -327,7 +327,7 @@ function editPanel(model, m, ctx) {
     const subtypes = Array.isArray(m.subtypes) ? m.subtypes.join(', ') : String(m.subtypes || '');
     const body = `<section class="panel span2 sb-edit">
       <h3>Monster fields</h3>
-      <p class="hint">The fields the block prints that no other tab holds. Scores, AC columns, saves, hit points, attacks, feats, skills and the special abilities are on their own tabs: Stats, Overview, Equipment, Feats &amp; Mythic, Skills, and the race-trait rows on the Overview. This block reads them from there. Prose fields take <code>{…}</code> formulas. A DC written as <code>{= 10 + con.mod + floor(level / 2)}</code> follows the score.</p>
+      <p class="hint">Stat block fields that no other tab has. Scores, AC, saves, hit points, attacks, feats, skills and special abilities come from their own tabs. Text fields accept <code>{…}</code> formulas; a DC written as <code>{= 10 + con.mod + floor(level / 2)}</code> updates with the score.</p>
       <div class="sb-fields">
         ${field('CR', t('cr', '1/2, 5, 30…'))}
         ${field('XP', num('monster.xp', m.xp ?? 0))}
@@ -361,10 +361,10 @@ function editPanel(model, m, ctx) {
         ${field('Description', p('description', 5))}
       </div>
       <div class="pair" style="margin-top:8px">
-        ${check('monster.abp', m.abp, 'Automatic Bonus Progression applies', 'Off for a creature read off a page — its natural armour and saves are its own. On for an NPC built like a character, who has the ladder like anyone else.')}
+        ${check('monster.abp', m.abp, 'Automatic Bonus Progression applies', 'Off for a creature from a stat block, whose natural armor and saves are its own. On for an NPC built like a character.')}
         ${removeAction('monster-unblock', {}, {
     what: 'the monster block',
-    title: 'Take the monster block off this sheet; every other tab is untouched',
+    title: 'Remove the monster block. Other tabs do not change.',
     text: 'Remove the block',
     style: 'margin-left:auto',
     arm: 'monster-block',
@@ -381,7 +381,7 @@ function unreadPanel(model, m) {
     if (!rows.length) return '';
     return `<section class="panel span2">
       <h3>Not read <span class="badge">${rows.length}</span></h3>
-      <p class="hint">Lines of the pasted block the reader could not place. Copy a line into the field it belongs in above, or on the Overview, then remove it. A line kept here is saved with the creature.</p>
+      <p class="hint">Lines from the pasted block that were not recognized. Copy each line into the right field above or on the Overview, then remove it. Lines left here are saved with the creature.</p>
       <div class="tablewrap"><table class="gridtab"><tbody>
         ${rows.map((r, ri) => `<tr><td>${itemText('monster.unread', ri, 'text', r.text)}</td>${rowTools('monster.unread', ri)}</tr>`).join('')}
       </tbody></table></div>

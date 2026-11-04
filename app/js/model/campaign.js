@@ -609,7 +609,7 @@ export function mythicTierReached(d, tier) {
   if (rules.mythicTier === 'trials') {
     const per = mythicTrialSteps(d);
     const total = per.slice(1, tier + 1).reduce((a, b) => a + b, 0);
-    return { head: 'Trials', value: total, title: `Tier ${tier} after ${total} trial${total === 1 ? '' : 's'} in all (${per[tier]} for this tier)` };
+    return { head: 'Trials', value: total, title: `Tier ${tier} after ${total} trial${total === 1 ? '' : 's'} in total (${per[tier]} for this tier)` };
   }
   return { head: 'Level', value: '', title: 'Awarded by the GM' };
 }
@@ -681,7 +681,7 @@ export function tierUp(model) {
 export function levelUp(model) {
   const p = levelProgress(model.data);
   if (!p?.ready) return false;
-  model.play(`Levelled up to ${p.next}`, () => {
+  model.play(`Leveled up to ${p.next}`, () => {
     if (p.mode === 'milestones') model.data.identity.milestones = p.have - p.need;
     model.set('identity.level', p.next);
   });

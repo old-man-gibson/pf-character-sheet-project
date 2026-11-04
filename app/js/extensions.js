@@ -90,8 +90,8 @@ export const BLOCK_KINDS = {
   template: { label: 'Feature group', lands: 'A template with its features (Template tab)' },
   tracker: { label: 'Tracker', lands: 'Trackers tab' },
   veil: { label: 'Veil', lands: 'Its chakra slot on the Akashic tab (shaped, essence 0)' },
-  archetype: { label: 'Archetype', lands: 'Its class on the sheet: replaced features leave the Progression ladder and Template group, the new ones go in; a pill on the class row removes it and restores them' },
-  options: { label: 'Option menu', lands: 'The class feature it names on the Progression tab, as the menu its cells pick from; and its own Template group' },
+  archetype: { label: 'Archetype', lands: 'Its class. Replaced features are removed from the Progression tab and Template group, and the new ones are added. The pill on the class row removes the archetype' },
+  options: { label: 'Option menu', lands: 'The class feature it names on the Progression tab, as a menu of choices, and its own Template group' },
   note: { label: 'Note', lands: 'Extras & Notes' },
 };
 
@@ -1538,7 +1538,7 @@ export function applyOptions(model, block) {
     // Naming the class and the feature is claim enough: where the column
     // already picks from this menu because of that, adding it changes nothing.
     if (model.classFeatureColumnOptions(target, column).some((n) => lower(n) === lower(block.name))) {
-      return `${target}'s ${column} column already picks from “${block.name}” — the menu names the class and the feature, so it needed no adding.`;
+      return `${target}'s ${column} column already picks from “${block.name}”. The menu names the class and the feature, so nothing was added.`;
     }
     const index = group.columns.indexOf(column);
     model.setClassFeatureColumnOptions(target, index, [...model.classFeatureColumnOptions(target, column), block.name]);
@@ -1547,7 +1547,7 @@ export function applyOptions(model, block) {
 
   // A menu with no column to hang on is not copied anywhere: it stays in its
   // pack, and takes effect the moment the class that has that feature arrives.
-  return `Nothing on this sheet picks from “${block.name}” yet — it is for ${
+  return `Nothing on this sheet picks from “${block.name}” yet. It is for ${
     [target || 'a class', block.feature].filter(Boolean).join('’s ')}, and its ${
     block.options.length} option(s) are offered as soon as that feature has a column on the Progression tab.`;
 }
