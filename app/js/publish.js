@@ -330,13 +330,13 @@ export function publishDocument(doc) {
  */
 export function describePublish(report) {
   const n = report.carried;
-  const entries = (k) => `${k} entr${k === 1 ? 'y' : 'ies'}`;
-  const parts = [n ? `${entries(n)} carried from packs` : 'no pack text carried'];
-  // The three shortfalls are told apart because the fixes differ: an outline
-  // is the catalogue's choice, a blank is a pack to correct, and an unknown
-  // is a pack this browser does not have switched on.
-  if (report.outline.length) parts.push(`${entries(report.outline.length)} by name only`);
-  if (report.blank.length) parts.push(`${entries(report.blank.length)} in a pack with no text`);
-  if (report.unknown.length) parts.push(`${entries(report.unknown.length)} not in any loaded pack`);
-  return `${parts.join('; ')}.`;
+  const say = (k, one, many) => `${k} ${k === 1 ? one : many}.`;
+  const parts = [n ? say(n, 'entry includes pack text', 'entries include pack text') : 'No pack text included.'];
+  // An outline and a blank both reach a reader as a name with no text, so they
+  // are counted together. An unknown is a pack this browser does not have
+  // switched on.
+  const textless = report.outline.length + report.blank.length;
+  if (textless) parts.push(say(textless, 'entry has no text in its pack', 'entries have no text in their packs'));
+  if (report.unknown.length) parts.push(say(report.unknown.length, 'entry was not found in any pack', 'entries were not found in any pack'));
+  return parts.join(' ');
 }
