@@ -100,10 +100,10 @@ const DECK_TABLE = new Set(['round', 'inHand', 'inDeck', 'inPlay', 'inDiscard', 
 /** The groups, in the order the browser shows them. */
 export const VALUE_SECTIONS = [
   { key: 'mine', label: 'Named by you', blurb: 'Every {name = …} written in prose on this character.' },
-  { key: 'tracker', label: 'Trackers', blurb: 'Each tracker under the id on its own row — that id never changes when the tracker is renamed.' },
+  { key: 'tracker', label: 'Trackers', blurb: 'Each tracker under the id shown on its row. The id does not change when the tracker is renamed.' },
   { key: 'character', label: 'The character', blurb: 'Level, size, initiative, BAB, mythic tier; speeds, class levels, the unarmed strike, wealth, and feat tags.' },
-  { key: 'ability', label: 'Abilities', blurb: 'Score, modifier, and the temporary pair.' },
-  { key: 'defence', label: 'Health, armour, saves', blurb: 'As the sheet totals them.' },
+  { key: 'ability', label: 'Abilities', blurb: 'Score, modifier, temporary score and temporary modifier.' },
+  { key: 'defence', label: 'Health, armor, saves', blurb: 'The sheet’s totals.' },
   { key: 'offence', label: 'Attack', blurb: 'The attack numbers.' },
   { key: 'skill', label: 'Skills', blurb: 'One heading per skill: skill.<name> (the total), .ranks and .classSkill.' },
   { key: 'power', label: 'Spheres of Power', blurb: 'Caster level, casting numbers and spell points; per magic sphere: CL, DC, talents.' },
@@ -113,8 +113,8 @@ export const VALUE_SECTIONS = [
   { key: 'psionic', label: 'Psionics', blurb: 'Power points, and each manifesting class’s manifester level.' },
   { key: 'akashic', label: 'Akashic', blurb: 'Essence: the pool, and what is invested in each receptacle.' },
   { key: 'cards', label: 'Cardcasting', blurb: 'The deck as it is built, the table in play, and each manipulation taken.' },
-  { key: 'companion', label: 'Companions', blurb: 'One heading per companion in use. The first of a kind reads as <kind>.* (eidolon.hd); later ones are numbered (eidolon2.hd, eidolon3.hd).' },
-  { key: 'sheet', label: 'Spreadsheet names', blurb: 'The workbook’s own named ranges, kept so a formula pasted out of one still works — StrMod is str.tempMod, Fort is saves.fortitude. Nothing here is a number you cannot already get another way.' },
+  { key: 'companion', label: 'Companions', blurb: 'One heading per companion. The first of a kind is <kind>.* (eidolon.hd); later ones are numbered (eidolon2.hd, eidolon3.hd).' },
+  { key: 'sheet', label: 'Spreadsheet names', blurb: 'The workbook’s named ranges, so a formula pasted from a spreadsheet still works. StrMod is str.tempMod and Fort is saves.fortitude.' },
   { key: 'other', label: 'Everything else', blurb: '' },
 ];
 
@@ -128,19 +128,19 @@ export const VALUE_SECTIONS = [
  * as by weapon, and is the one thing here that has to be taught.
  */
 export const TARGET_SECTIONS = [
-  { key: 'weapon', label: 'Weapons and damage', blurb: 'Attack and damage on the weapon rows — all of them, one kind of them, or one weapon.' },
+  { key: 'weapon', label: 'Weapons and damage', blurb: 'Attack and damage for all weapons, one kind of weapon, or one weapon.' },
   { key: 'attack', label: 'Attack', blurb: 'The three attack numbers on the Overview.' },
-  { key: 'defence', label: 'Health, armour, saves', blurb: 'Hit points, the armour classes, the three saves, and the defence boxes — damage reduction, energy resistance, immunities.' },
-  { key: 'ability', label: 'Ability scores', blurb: 'The score itself — so everything built on it moves with it.' },
-  { key: 'skill', label: 'Skills', blurb: 'Each skill by its slugged name, and every skill at once.' },
-  { key: 'character', label: 'The character', blurb: 'Initiative, movement rates, levels in a class, and actions a turn.' },
-  { key: 'tracker', label: 'Trackers', blurb: 'How big a pool is — its max and min, never what is currently in it.' },
+  { key: 'defence', label: 'Health, armor, saves', blurb: 'Hit points, armor class, the three saves, damage reduction, energy resistance and immunities.' },
+  { key: 'ability', label: 'Ability scores', blurb: 'The ability score. Everything based on it changes too.' },
+  { key: 'skill', label: 'Skills', blurb: 'Each skill by name, or every skill at once.' },
+  { key: 'character', label: 'The character', blurb: 'Initiative, movement rates, class levels and actions per turn.' },
+  { key: 'tracker', label: 'Trackers', blurb: 'A tracker’s max and min, not its current value.' },
   { key: 'power', label: 'Spheres of Power', blurb: 'Casting numbers; per magic sphere: CL, DC.' },
   { key: 'might', label: 'Spheres of Might', blurb: 'Per combat sphere: attack bonus, DC.' },
   { key: 'guile', label: 'Spheres of Guile', blurb: 'Per skill sphere: ranks, DC.' },
-  { key: 'vancian', label: 'Vancian magic', blurb: 'One casting class’s caster level, or every one of them.' },
-  { key: 'psionic', label: 'Psionics', blurb: 'One manifesting class’s manifester level, or every one of them.' },
-  { key: 'companion', label: 'Companions', blurb: 'One heading per companion in use; later companions of a kind are numbered.' },
+  { key: 'vancian', label: 'Vancian magic', blurb: 'One casting class’s caster level, or all of them.' },
+  { key: 'psionic', label: 'Psionics', blurb: 'One manifesting class’s manifester level, or all of them.' },
+  { key: 'companion', label: 'Companions', blurb: 'One heading per companion. Later companions of a kind are numbered.' },
   { key: 'other', label: 'Everything else', blurb: '' },
 ];
 
@@ -257,9 +257,9 @@ function targetHeading(t, family) {
     case 'weapon': return weaponHeading(t);
     case 'defence':
       if (head === 'hp') return { key: 'hp', label: 'Hit points', rank: 0 };
-      if (head === 'ac') return { key: 'ac', label: 'Armour class', rank: 1 };
+      if (head === 'ac') return { key: 'ac', label: 'Armor class', rank: 1 };
       if (head === 'saves') return { key: 'saves', label: 'Saves', rank: 2 };
-      return { key: 'lists', label: 'Defences', rank: 3 };
+      return { key: 'lists', label: 'Defenses', rank: 3 };
     case 'ability': return { key: head, label: ABILITY_NAMES[head] || head, rank: ABILITY_ORDER[head] };
     case 'skill':
       return t.family || second === 'pointsPerLevel'
@@ -356,9 +356,9 @@ function valueHeading(name, family, info, scope = null) {
     case 'ability': return { key: head, label: ABILITY_NAMES[head] || head, rank: ABILITY_ORDER[head] };
     case 'defence':
       if (head === 'hp') return { key: 'hp', label: 'Hit points', rank: 0 };
-      if (head === 'ac') return { key: 'ac', label: 'Armour class', rank: 1 };
+      if (head === 'ac') return { key: 'ac', label: 'Armor class', rank: 1 };
       if (head === 'saves') return { key: `saves.${second}`, label: SAVE_NAMES[second] || titled(second), rank: 2 };
-      return { key: 'lists', label: 'Defences', rank: 3 };
+      return { key: 'lists', label: 'Defenses', rank: 3 };
     case 'skill': return { key: second, label: info.skills?.[second] || titled(second) };
     case 'power':
     case 'might':
@@ -505,7 +505,7 @@ export function workingHtml(source, scope, knownNames = null) {
   if (w.reads.length) {
     rows.push(`<div class="fx-reads">reads ${w.reads.map((r) => `<button type="button"
       class="tag fx-pick${r.known ? '' : ' fx-unknown'}" data-fx-insert="${esc(r.name)}"
-      title="${esc(r.known ? `${r.name} = ${formatNumber(r.value)} — click to put it in the box above`
+      title="${esc(r.known ? `${r.name} = ${formatNumber(r.value)}. Click to add it to the box above.`
     : contextualNote(r.name) || `${r.name} is not a value this character has`)}">${esc(r.name)}${
   r.known ? `<span class="fx-val">${esc(formatNumber(r.value))}</span>` : ''}</button>`).join('')}</div>`);
   }
@@ -525,9 +525,7 @@ export function scratchpadHtml(draft, scope, knownNames) {
   const src = String(draft ?? '');
   return `<section class="panel span2">
     <h3>Try one</h3>
-    <p class="hint">Nothing typed here is saved or changes the character — it is a place to see what
-      an expression comes to before committing it to a tracker or a feature. Every value below is
-      this character&#39;s own.</p>
+    <p class="hint">Test a formula against this character. Nothing typed here is saved.</p>
     <input class="mono fx-try" data-fx-draft placeholder="floor(level / 2) + wis.mod"
       value="${esc(src)}" aria-label="Try a formula" spellcheck="false">
     ${src.trim()
@@ -558,12 +556,10 @@ export function ownFormulasHtml(html) {
   if (!html) return '';
   return `<section class="panel span2" data-fx-section="own">
     <h3>Your own formulas</h3>
-    <p class="hint">A place for the formulas that are not about any one field: a house rule, a
-      number your table agreed on, a value several other formulas share. This box counts —
-      unlike the one above — and reads exactly like any description on the sheet:
-      <code>{qi.max = wis.mod + level}</code> names a value for the rest of the character to
-      read, <code>{saves.will += 2}</code> sends a bonus where it belongs, <code>{= 2 + con.mod}</code>
-      shows what something comes to. What you write here appears below with everything else.</p>
+    <p class="hint">Formulas that do not belong to one field, such as a house rule or a value
+      several formulas share. Unlike the box above, this text is saved and works like any
+      description: <code>{qi.max = wis.mod + level}</code> names a value,
+      <code>{saves.will += 2}</code> adds a bonus, and <code>{= 2 + con.mod}</code> shows a result.</p>
     ${html}
   </section>`;
 }
@@ -579,12 +575,12 @@ export function browserHtml(groups, total, query, own = '') {
     <h3>Values you can read
       <span class="badge">${searching ? `${shown} of ${whole}` : `${whole}`}</span>
     </h3>
-    <p class="hint">Every name this character publishes, with what it is worth right now.
-      Click one to drop it into the box above.</p>
+    <p class="hint">Every value on this character and its current number. Click one to add it to
+      the box above.</p>
     ${/* A box of this list's own, because the list is a long way down the
           tab from the one at the top: a reader who has scrolled to it is
           looking for a value, not for a formula. Both boxes apply. */''}
-    <input class="fx-search" data-fx-value-query placeholder="Find a value — wis.mod, skill.stealth, sphere.dark.cl"
+    <input class="fx-search" data-fx-value-query placeholder="Find a value, e.g. wis.mod or skill.stealth"
       value="${esc(own)}" aria-label="Find a value you can read" spellcheck="false">
     ${shown ? groups.map((g) => `<details class="fx-group" ${g.key === 'mine' || searching ? 'open' : ''}>
       <summary><strong>${esc(g.label)}</strong> <span class="badge">${g.items.length}</span>
@@ -620,32 +616,31 @@ export function targetsHtml(groups, total, query, own = '') {
     <h3>Bonuses you can send
       <span class="badge">${searching ? `${shown} of ${whole}` : `${whole}`}</span>
     </h3>
-    <p class="hint">Every destination <code>{… += …}</code> accepts on this character. Click one
-      to copy the whole token — paste it into the feat, talent or feature that grants the bonus
-      and it lands here, showing in gold beside the field. A destination is written to, not read:
-      these names are not values and will not resolve in the box above.</p>
-    <input class="fx-search" data-fx-target-query placeholder="Find a destination — will, damage, sphere.dark.cl, every skill"
+    <p class="hint">Every stat a <code>{… += …}</code> bonus can be added to on this character.
+      Click one to copy the token, then paste it into the feat, talent or feature that grants the
+      bonus. The bonus shows in gold beside the stat. These names only receive bonuses and cannot
+      be read in the box above.</p>
+    <input class="fx-search" data-fx-target-query placeholder="Find a destination, e.g. will or damage"
       value="${esc(own)}" aria-label="Find a bonus you can send" spellcheck="false">
     ${shown ? groups.map((g) => `<details class="fx-group" ${searching ? 'open' : ''}>
       <summary><strong>${esc(g.label)}</strong> <span class="badge">${g.items.length}</span>
         ${g.blurb ? `<span class="hint"> ${esc(g.blurb)}</span>` : ''}</summary>
       ${groupBody(g, (it) => `<button type="button" class="fx-name-chip fx-target"
         data-fx-copy="{${esc(it.name)} += 2}"
-        title="${esc(`{${it.name} += 2} — ${it.label}${it.reaches ? ` (reaches ${it.reaches})` : ''}. Click to copy.`)}">
+        title="${esc(`{${it.name} += 2}: ${it.label}${it.reaches ? ` (reaches ${it.reaches})` : ''}. Click to copy.`)}">
         <span class="n">${esc(it.name)}</span><span class="v">${esc(it.label)}</span>
         ${it.reaches ? `<span class="badge">${it.reaches}</span>` : ''}
       </button>`)}
     </details>`).join('')
     : `<p class="empty">No destination on this character matches “${esc([query, own].filter(Boolean).join(' '))}”.</p>`}
-    <p class="hint"><strong>A weapon destination is a shape, not a list.</strong>
-      <code>weapon.&lt;which&gt;.&lt;what&gt;</code> — where <em>which</em> is
+    <p class="hint"><strong>Weapon destinations</strong> use
+      <code>weapon.&lt;which&gt;.&lt;what&gt;</code>. <em>which</em> is
       <code>melee</code>, <code>ranged</code> or <code>cmb</code>, a weapon group
-      (<code>heavy_blades</code>), or one weapon’s own short name, and <em>what</em> is
+      (<code>heavy_blades</code>), or one weapon’s short name. <em>what</em> is
       <code>attack</code>, <code>damage</code>, <code>damage.crit</code> (on a crit only) or
-      <code>damage.mult</code> (multiplied by the crit). Leave <em>which</em> out to reach every
-      weapon: <code>{damage += 2}</code>, <code>{weapon.attack += 1}</code>. A shape that matches
-      nothing today is still right — <code>{weapon.ranged.damage += 2}</code> on a character
-      carrying no bow starts working the day one is bought.</p>
+      <code>damage.mult</code> (multiplied on a crit). Leave out <em>which</em> to apply to every
+      weapon: <code>{damage += 2}</code>, <code>{weapon.attack += 1}</code>. A bonus that matches
+      no weapon yet applies when a matching weapon is added.</p>
     <p class="hint"><strong><code>target</code>:</strong> inside the formula, <code>target</code> is
       the stat the bonus is added to, and a formula that uses it is evaluated once per destination.
       Its parts have the same names as when the stat is read directly: on a skill,
@@ -676,28 +671,28 @@ function whereHtml(where, place, cls = '') {
 /** What each kind of problem is called, and the one-line version of the fix. */
 const PROBLEM_KINDS = {
   cycle: {
-    label: 'Goes round in a circle',
-    lead: 'These wait on each other, so none of them can be worked out.',
+    label: 'Circular definition',
+    lead: 'These depend on each other, so none of them can be calculated.',
   },
   duplicate: {
     label: 'Defined more than once',
-    lead: 'One name, two meanings — only the first is in force.',
+    lead: 'Only the first definition is used.',
   },
   shadow: {
     label: 'Name already taken',
-    lead: 'The sheet works this one out itself, so a definition cannot take it.',
+    lead: 'This is a built-in name and cannot be redefined.',
   },
   orphan: {
-    label: 'Nothing defines it',
-    lead: 'Something still asks for this name after whatever defined it went away.',
+    label: 'Not defined',
+    lead: 'This name is used but not defined anywhere.',
   },
   misdirected: {
-    label: 'Bonus goes nowhere',
-    lead: 'A forwarded bonus with nothing at the other end of it.',
+    label: 'Bonus has no destination',
+    lead: 'This bonus is added to a stat that does not exist.',
   },
   broken: {
     label: 'Does not work',
-    lead: 'A formula the sheet cannot work out.',
+    lead: 'The sheet cannot calculate this formula.',
   },
 };
 
@@ -764,12 +759,10 @@ export function myFormulasHtml(rows, query) {
       <span class="badge">${query ? `${matches.length} of ${rows.length}` : rows.length}</span>
       ${broken.length ? `<span class="badge err">${broken.length} not working</span>` : ''}
     </h3>
-    <p class="hint">Everything written on this sheet, wherever it lives. This is the same list your
-      GM sees — formulas are text, so there is nothing hidden in them.</p>
+    <p class="hint">Every formula on this character. Your GM sees the same list.</p>
     ${rows.length === 0
-    ? `<p class="empty">Nothing yet. Name a value in any description — write
-        <code>{qi.max = wis.mod + level}</code> into a class feature — and it appears here,
-        and in the list below, for the rest of the character to read.</p>`
+    ? `<p class="empty">No formulas yet. Write a formula such as
+        <code>{qi.max = wis.mod + level}</code> in any description and it appears here.</p>`
     : matches.length === 0
       ? `<p class="empty">No formula here matches “${esc(query)}”.</p>`
       : matches.map((r) => `<div class="fx-row${r.status === 'error' ? ' bad' : ''}">
@@ -811,9 +804,8 @@ export function forwardedHtml(rows, query) {
     <h3>Forwarded bonuses
       <span class="badge">${query ? `${matches.length} of ${rows.length}` : rows.length}</span>
     </h3>
-    <p class="hint">Bonuses written as <code>{skill.bluff += …}</code> in one place and added
-      somewhere else. Each lands on the number named here, and shows in gold beside the field
-      it lands on.</p>
+    <p class="hint">Bonuses written as <code>{skill.bluff += …}</code> in one place and added to
+      another stat. Each one shows in gold beside the stat it is added to.</p>
     ${matches.length === 0
     ? `<p class="empty">No forwarded bonus here matches &ldquo;${esc(query)}&rdquo;.</p>`
     : matches.map((r) => `<div class="fx-row${r.error ? ' bad' : ''}">
@@ -823,7 +815,7 @@ export function forwardedHtml(rows, query) {
           ${whereHtml(r.where, r.place, 'badge')}
           ${r.error ? '<span class="badge err">not working</span>' : ''}
           ${!r.error && r.dropped?.length
-    ? `<span class="badge err">${esc(r.dropped.join(', '))} goes nowhere</span>` : ''}
+    ? `<span class="badge err">${esc(r.dropped.join(', '))} not found</span>` : ''}
           <span class="fx-rowval">${r.error ? '—'
     : esc(r.shown ?? `${r.value > 0 ? '+' : ''}${formatNumber(r.value)}`)}</span>
         </div>
@@ -851,9 +843,8 @@ function egHtml(source, scope) {
 function formsHtml(scope) {
   return `<section class="panel span2">
     <h3>Making your own value</h3>
-    <p class="hint">Anywhere you can type a description — a class feature, a note, a trait, a veil,
-      a weapon&#39;s properties — braces turn part of the sentence into a number the sheet keeps up
-      to date. There are four of them, and that is the whole of the syntax.</p>
+    <p class="hint">In any description field, text in braces becomes a number the sheet keeps up
+      to date. There are four forms.</p>
     <div class="fx-forms">
       ${TOKEN_FORMS.map((f) => `<div class="fx-form">
         <code class="fx-code fx-formcode">${esc(f.form)}</code>
@@ -862,27 +853,27 @@ function formsHtml(scope) {
         <code class="fx-code fx-formeg">${esc(f.eg)}</code>
       </div>`).join('')}
     </div>
-    <p class="hint">A name may be a dotted label — <code>qi.max</code>, <code>arms.hp</code> — and
-      names may read each other in any order, wherever on the character they are written. Define
+    <p class="hint">A name can contain dots, such as <code>qi.max</code> or <code>arms.hp</code>.
+      Names can read each other in any order and from anywhere on the character:
       <code>{burn.max = 18}</code> in one feature and
-      <code>{qi.max = floor((burn.max + qi.base) / 4)}</code> in another, and they resolve.
-      A field that understands formulas carries a soft gold bar down its right edge.</p>
+      <code>{qi.max = floor((burn.max + qi.base) / 4)}</code> in another both work.
+      Fields that accept formulas have a gold bar on their right edge.</p>
     <div class="fx-walk">
       <div class="fx-walkstep"><span class="fx-stepno">1</span>
-        <div><strong>Write it once, in the ability it belongs to.</strong>
+        <div><strong>Write it in the ability it belongs to.</strong>
           <code class="fx-code">Ki pool ${'{'}ki.max = floor(level / 2) + wis.mod${'}'}</code>
           <p class="hint">The feature now reads &ldquo;Ki pool ${
-  esc(formatNumber(workings('floor(level / 2) + wis.mod', scope).value ?? 0))}&rdquo; and follows
-          the character. Hover it to see the formula, click to edit it.</p></div></div>
+  esc(formatNumber(workings('floor(level / 2) + wis.mod', scope).value ?? 0))}&rdquo; and updates
+          with the character. Hover over it to see the formula; click to edit it.</p></div></div>
       <div class="fx-walkstep"><span class="fx-stepno">2</span>
         <div><strong>Use the name anywhere else.</strong>
-          <code class="fx-code">${'{'}ki.max${'}'}</code> in another feature,
-          <code class="fx-code">ki.max</code> in any formula field — no braces there, because the
-          whole field is already an expression.</div></div>
+          <code class="fx-code">${'{'}ki.max${'}'}</code> in another feature, or
+          <code class="fx-code">ki.max</code> in a formula field. Formula fields do not need
+          braces.</div></div>
       <div class="fx-walkstep"><span class="fx-stepno">3</span>
-        <div><strong>Give it pips.</strong>
+        <div><strong>Make it a tracker.</strong>
           <p class="hint">On the Trackers tab, add a tracker with <code>ki.max</code> as its max.
-          It is now a pool you can spend, and it resizes itself when your Wisdom or level changes.</p></div></div>
+          The pool updates when your Wisdom or level changes.</p></div></div>
     </div>
   </section>`;
 }
@@ -895,12 +886,12 @@ function linksHtml() {
   const forms = [
     ['An address', 'https://example.com/map', 'Shown as typed.'],
     ['Words as a link', '[the map](https://example.com/map)',
-      'The words in square brackets are the link. The address in round brackets is where it goes, and is on its tooltip.'],
+      'The words in square brackets are the link text. The address in round brackets is the link target and shows in its tooltip.'],
   ];
   return `<section class="panel span2">
     <h3>Links</h3>
-    <p class="hint">The fields that work out {…} formulas also make links of web addresses once you
-      leave the field. Click a link to open it in a new tab; click anywhere else on the text to edit it.</p>
+    <p class="hint">Fields that accept {…} formulas also turn web addresses into links. Click a
+      link to open it in a new tab; click elsewhere on the text to edit it.</p>
     <div class="rowlist">
       ${forms.map(([name, source, what]) => `<div class="item">
         <div class="t">${esc(name)}</div>
@@ -908,8 +899,8 @@ function linksHtml() {
         <div class="fx-linkeg"><code class="fx-code">${esc(source)}</code> <span class="d">shows as</span> ${linkedText(source)}</div>
       </div>`).join('')}
     </div>
-    <p class="hint">Only http:// and https:// addresses are links. A full stop, a comma or a closing
-      bracket right after an address stays out of it. The words in square brackets are shown as
+    <p class="hint">Only http:// and https:// addresses become links. A period, comma or closing
+      bracket right after an address is not part of the link. Text in square brackets is shown as
       typed, so keep {…} formulas outside the brackets.</p>
   </section>`;
 }
@@ -951,8 +942,8 @@ function functionsHtml(scope) {
   }
   return `<section class="panel span2">
     <h3>Functions <span class="badge">${FUNCTION_HELP.length}</span></h3>
-    <p class="hint">These are all of them. Names are not case-sensitive, so
-      <code>FLOOR</code> and <code>floor</code> are the same call.</p>
+    <p class="hint">Function names are not case-sensitive: <code>FLOOR</code> and
+      <code>floor</code> are the same.</p>
     ${groups.map((g) => `<div class="fx-fngroup">
       <h4>${esc(g.name)}</h4>
       ${g.items.map((f) => `<div class="fx-fn-row">
@@ -987,15 +978,13 @@ function familiesHtml() {
  */
 function contextualHtml() {
   return `<section class="panel span2">
-    <h3>Names that only exist somewhere</h3>
-    <p class="hint">Almost every value belongs to the character and can be read from anywhere.
-      These belong to the <em>place they are written</em>, and will not resolve outside it —
-      not in another feature, not in a tracker, and not in the try-it box at the top of this tab.
-      When one is flagged in red, that is what has happened.</p>
+    <h3>Names that only work in one place</h3>
+    <p class="hint">These names only work in the field where they are written. Anywhere else,
+      including the box at the top of this tab, they are flagged in red.</p>
     <table class="fx-table"><tbody>
       ${CONTEXTUAL_VALUES.map((v) => `<tr>
         <td class="fx-fam"><code class="fx-code">${esc(v.names)}</code></td>
-        <td><strong>Only in ${esc(v.where)}</strong> — ${esc(v.what)}</td>
+        <td><strong>Only in ${esc(v.where)}.</strong> ${esc(v.what)}</td>
       </tr>`).join('')}
     </tbody></table>
   </section>`;
@@ -1010,34 +999,34 @@ function contextualHtml() {
  */
 function rulesHtml() {
   const rules = [
-    ['A name is character-wide.',
-      'Defined once, readable everywhere — trackers, weapon tokens, skill formulas, other prose. Order does not matter; the sheet works out what depends on what.'],
-    ['A name cannot take one the sheet already owns.',
-      'Writing {level = 30} is refused outright and told to you, rather than showing 30 where it is written while every formula reading level goes on getting the real number. That goes for a branch of one too — str already holds str.mod, so it cannot be redefined either.'],
-    ['One name, defined once.',
-      'Define a name twice and the first one wins, both are flagged, and Needs attention shows you both so you can delete the one you did not mean. First rather than last, so that pasting in a new page cannot quietly change what an existing name is worth.'],
-    ['Definitions must not wait on each other.',
-      'If a reads b and b reads a, neither can be worked out; the loop is reported once, naming every member, rather than as several unrelated faults.'],
-    ['A total is also a family.',
-      'Where a number has parts, the parts hang off its own name and the name goes on meaning the number: saves.will is the save, saves.will.luck is what luck is worth in it, and ac.total and ac are the same thing. So a formula written before a total grew parts never has to be revisited.'],
-    ['Capitals do not matter.',
-      'Level, level and LEVEL are the same value, and so are skill.senseMotive and skill.sense_motive’s spelling in either case. Names are shown in the list the way the sheet publishes them, but nothing is ever refused for the case it was typed in.'],
+    ['Names apply to the whole character.',
+      'A name defined once can be read in trackers, weapons, skill formulas and other text. Order does not matter.'],
+    ['Built-in names cannot be redefined.',
+      'Writing {level = 30} is refused and flagged. A name with built-in parts is also refused: str cannot be redefined because str.mod exists.'],
+    ['Define each name once.',
+      'If a name is defined twice, the first definition is used and both are listed under Needs attention. The first is kept so that pasting new text cannot change an existing value.'],
+    ['Definitions cannot depend on each other in a loop.',
+      'If a reads b and b reads a, neither can be calculated. The loop is reported once, with every name in it.'],
+    ['Totals have named parts.',
+      'A total’s parts use its name as a prefix, and the name still means the total: saves.will is the save and saves.will.luck is its luck bonus. ac.total and ac are the same value.'],
+    ['Names are not case-sensitive.',
+      'Level, level and LEVEL are the same value. The list shows names as the sheet spells them.'],
     ['Spreadsheet names still work.',
-      'The workbook this sheet was imported from had its own names — StrMod, Fort, MythicTier, VeilEssenceHands — and they are published alongside. A formula you already had working can be pasted in as it stands. They are listed under Spreadsheet names, with the value each one is another name for.'],
+      'Named ranges from the imported workbook, such as StrMod, Fort and MythicTier, also work, so a formula from the spreadsheet can be pasted as is. They are listed under Spreadsheet names.'],
     ['A tracker’s id is not its name.',
-      'The id is slugged from the name the tracker was created with and never changes afterwards, so renaming a tracker cannot break a formula pointing at it. Each tracker’s ✎ editor spells out its own id.'],
-    ['A few names only exist in one kind of field.',
-      'self inside a tracker, essence.self inside a veil, target inside a bonus. They are the easiest thing here to get wrong, so they have a table of their own above.'],
-    ['Bonuses to the core stats are worked out first.',
-      'A bonus to an ability score, save, armour class, attack, initiative, hit points, class level, speed or caster level is worked out from the sheet as it stood before any bonus, so one cannot feed another or itself. A bonus to anything worked out after those — skills, companions, weapons, trackers — reads them with those bonuses in: {skill.appraise += int.mod} counts an {int.score += 2} written elsewhere, and a companion’s Hit Dice follow a {spheres.cl += 1}.'],
+      'The id is made from the tracker’s first name and never changes, so renaming a tracker does not break formulas. The ✎ editor shows the id.'],
+    ['Some names only work in one kind of field.',
+      'self in a tracker, essence.self in a veil and target in a bonus. See the table above.'],
+    ['Bonuses to core stats are calculated first.',
+      'A bonus to an ability score, save, armor class, attack, initiative, hit points, class level, speed or caster level is calculated from values before any bonus, so these bonuses cannot affect each other. Bonuses to skills, companions, weapons and trackers are calculated after, and include the core bonuses: {skill.appraise += int.mod} includes an {int.score += 2} written elsewhere.'],
     ['target is the stat a bonus is added to.',
-      'In a forwarded bonus, target is the destination stat, and the formula is evaluated once per destination: {skill -= if(target.ranks == 0, 2, 0)} gives −2 to untrained skills and 0 to the rest. Values are read from before any bonus is applied, and saves and armour classes without their Other column, so a bonus cannot change its own input. Stats calculated after bonuses are applied (skills, weapons, trackers and others) expose only values bonuses do not change, such as a skill’s ranks and classSkill; asking for anything else gives an error listing what is available.'],
-    ['A tracker’s note shows values but does not publish them.',
-      'Notes are worked out after the trackers they read, so a {name = …} in one displays but is not readable elsewhere. Put character-wide names in a feature or a note on Lore instead.'],
-    ['Comparisons are worth 1 and 0.',
-      'So (level >= 11) + (level >= 14) counts how many thresholds have been passed — which is usually shorter than nesting if()s.'],
-    ['Nothing here can reach the page.',
-      'Formulas are parsed and walked, never executed as code: no eval, no network, no DOM, no other characters. Length, size and depth are capped, so a formula cannot hang the sheet. That is why you are allowed to write them at all.'],
+      'In a forwarded bonus, target is the destination stat, and the formula is evaluated once per destination: {skill -= if(target.ranks == 0, 2, 0)} gives −2 to untrained skills and 0 to the rest. Values are read from before any bonus is applied, and saves and armor class without their Other column, so a bonus cannot change its own input. Stats calculated after bonuses are applied (skills, weapons, trackers and others) expose only values bonuses do not change, such as a skill’s ranks and classSkill; asking for anything else gives an error listing what is available.'],
+    ['Names in a tracker’s note only work in that note.',
+      'Tracker notes are calculated after the trackers, so a {name = …} in a note is shown but cannot be read elsewhere. Define shared names in a feature or a note on Lore.'],
+    ['Comparisons count as 1 and 0.',
+      'True is 1 and false is 0, so (level >= 11) + (level >= 14) counts how many thresholds have been passed.'],
+    ['Formulas cannot run code.',
+      'Formulas are parsed, never run as code, and cannot access the network, the page or other characters. Length and depth are limited so a formula cannot freeze the sheet.'],
   ];
   return `<section class="panel span2">
     <h3>Rules worth knowing</h3>
@@ -1053,8 +1042,7 @@ export function referenceHtml(scope, open) {
   return `<section class="panel span2 fx-ref">
     <details ${open ? 'open' : ''} data-fx-ref>
       <summary><h3 style="display:inline">Reference</h3>
-        <span class="hint"> — the four forms, links, where they work, every operator and function,
-        and the rules that are not guessable</span></summary>
+        <span class="hint"> Formula syntax, links, operators, functions and rules.</span></summary>
       <div class="grid" style="margin-top:10px">
         ${formsHtml(scope)}
         ${linksHtml()}
@@ -1096,11 +1084,9 @@ export function formulaPanelHtml({
   return `<div class="grid fx-tab">
     <section class="panel span2 fx-intro">
       <h3>Formulas</h3>
-      <p class="hint">A formula is an expression written where a number would go — in a tracker&#39;s
-        max, in a field, or inside braces in the middle of a sentence. The sheet keeps it up to
-        date: change your Wisdom and everything that read it moves. You can name your own values
-        and build on them, and everything you write stays as text you (and your GM) can read.</p>
-      <input class="fx-search" data-fx-query placeholder="Search values, destinations and formulas — wis, damage, tracker.burn"
+      <p class="hint">A formula is an expression used in place of a number: in a tracker&#39;s max,
+        in a field, or in braces inside text. The sheet updates it when the values it reads change.</p>
+      <input class="fx-search" data-fx-query placeholder="Search values, destinations and formulas"
         value="${esc(query)}" aria-label="Search values, destinations and formulas" spellcheck="false">
     </section>
     ${problemsHtml(problems)}
