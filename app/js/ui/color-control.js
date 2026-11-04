@@ -24,7 +24,7 @@ import { THEME_ACCENT, TRACKER_PALETTE, normalizeHex } from '../tracker-style.js
  * @param opts.pair      put the hex box and the picker on a line of their own
  */
 export function colorControl(key, value, {
-  label = 'Color', none = 'Theme default', noneCss = '', fallback = THEME_ACCENT.hex, pair = false,
+  label = 'Colour', none = 'Theme default', noneCss = '', fallback = THEME_ACCENT.hex, pair = false,
 } = {}) {
   const hex = normalizeHex(value);
   const k = esc(key);

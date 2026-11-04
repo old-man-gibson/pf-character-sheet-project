@@ -199,7 +199,7 @@ export function renderProgressionPanel(model, ctx) {
       ${classActionsPanel(model)}
       ${collapsible(model, 'prog-levels', `<section class="panel span2">
         <h3>Level progression
-          ${gestalt ? '<button data-action="add-track" title="Add another class track.">+ Class track</button>' : ''}
+          ${gestalt ? '<button data-action="add-track" title="Tristalt and beyond">+ Class track</button>' : ''}
         </h3>
         <div class="tablewrap"><table class="gridtab prog">
           <thead><tr>
@@ -212,13 +212,13 @@ export function renderProgressionPanel(model, ctx) {
                 <option value="" selected disabled hidden>Fill column…</option>
                 ${classNames.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}
               </select></th>`).join('')}
-            <th class="num" title="Best hit die among the classes at that level">HP</th>
+            <th class="num" title="Best hit die among the classes that level">HP</th>
             <th class="num" title="Best skill ranks">Ranks</th>
             <th class="num">Fort</th><th class="num">Ref</th><th class="num">Will</th>
           </tr></thead>
           <tbody>${p.levels.map((row) => `<tr class="${row.level > level ? 'future' : ''}">
             <td class="num">${esc(row.level)}</td>
-            ${tracks.map((t) => `<td${!gestalt && t ? ' class="future" title="Not used with gestalt off."' : ''}>${classCell(row, t)}</td>`).join('')}
+            ${tracks.map((t) => `<td${!gestalt && t ? ' class="future" title="Not read with gestalt off"' : ''}>${classCell(row, t)}</td>`).join('')}
             <td class="num derived">${row.computed?.hp ? `d${row.computed.hp}` : ''}</td>
             <td class="num derived">${row.computed?.ranks || ''}</td>
             <td class="num derived">${row.computed?.fort || ''}</td>
@@ -228,30 +228,33 @@ export function renderProgressionPanel(model, ctx) {
         </table></div>
         <p class="hint">
           Class tracks pick from the classes on the Overview. HP, ranks and saves per level
-          are read-only. ${gestalt ? 'They use the best of the classes chosen on each row'
-    : 'With gestalt off, they come from the first track\'s class only'}
-          (good saves ½, poor ⅓). Rows past level ${level} are planned. Class features are
-          in the groups below. Ability score increases are on the <strong>Stats</strong> tab.
+          are read-only. ${gestalt ? 'They are computed gestalt-style from the classes chosen on that row'
+    : 'Gestalt is off in the campaign rules, so they come from the first track\'s class alone, and only the first track counts'}
+          (good saves ½, poor ⅓). Rows past level ${level} are plans. Class features live
+          in the groups below. Ability-boosting choices live on the <strong>Stats</strong> tab.
         </p>
         <p class="hint">
           <strong>Rule groups.</strong> Under each feature column's name, <em>+ level rule</em>
-          adds a named, colored schedule of the levels the column grants on.
-          Write <code>odd</code>, <code>even</code>, <code>2, +4</code> (2 and every 4 after),
+          adds a named, coloured schedule. The schedule says which levels the column grants on.
+          Write <code>odd</code>, <code>even</code>, <code>2, +4</code> (2 and every 4 thereafter),
           <code>1, 2, +2</code> (1st and every even level), <code>5-10</code>, or a list.
-          Terms add up from left to right: <code>2, +4, 3</code> adds level 3 to that schedule,
-          and <code>odd, -13</code> removes level 13. A column with no rule grants at every level.
+          Terms add up left to right. <code>2, +4, 3</code> is that schedule plus a
+          one-off at 3. <code>odd, -13</code> takes level 13 away. A column with no rule
+          grants at every level.
         </p>
         <p class="hint">
-          <strong>Several rules can share one column</strong>. For example, give a kineticist's
-          Wild Talent column <code>{Infusions, odd}</code> and <code>{Utility, even}</code>. Each
-          level is then colored and tagged by the group that grants it; a single group is not
-          tagged. <em>+ names</em> / <em>− names</em> under the column changes this. The ▾ beside
-          the column's name collapses its groups to their names. Typing the full braced form into
-          either box fills both. Rules count the <em>class's</em> own levels; start a rule with
-          <code>char:</code> to count character levels. Anything that is not a level list is a
-          formula over <code>classLevel</code> / <code>charLevel</code>, e.g.
-          <code>classLevel % 3 == 1</code>. Reached levels with nothing filled in are outlined and
-          counted on the group header. Levels not reached yet are faintly marked.
+          <strong>Several rules can share one column</strong>. Give a kineticist's Wild Talent
+          column <code>{Infusions, odd}</code> and <code>{Utility, even}</code>. Each level
+          is then tinted and tagged by the group that grants it. A lone group goes untagged.
+          <em>+ names</em> / <em>− names</em> under the column overrides that either way. The ▾
+          beside the column's name folds its groups down to their coloured names. Typing the
+          whole braced form into either box fills both. Levels count the <em>class's</em> own
+          levels. Start a rule with <code>char:</code> to count character levels instead.
+          Anything that is not a level list is treated as a formula over
+          <code>classLevel</code> / <code>charLevel</code>, e.g. <code>classLevel % 3 == 1</code>.
+          A level you have reached that grants something you have not filled in is outlined
+          and counted on the group header. A level you have not reached yet is only faintly
+          marked.
         </p>
       </section>`)}
       ${alignedPanel(model)}
@@ -311,8 +314,8 @@ function classFeatureGroups(model, ctx) {
       return collapsible(model, `progfeat-${name}`, `<section class="panel featpanel">
         <h3>${esc(name)} features
           <span class="badge">${orphaned ? 'not in progression' : `levels ${rows.length ? `${rows[0].level}–${rows[rows.length - 1].level}` : '—'}`}</span>
-          ${due ? `<span class="badge due" title="Reached levels with nothing filled in.">${due} to pick</span>` : ''}
-          ${parked.length ? `<span class="badge" title="Written for ${esc(name)} level${parked.length === 1 ? '' : 's'} ${parked.join(', ')}, which this character no longer has. It is kept and returns when the class reaches those levels again.">${parked.length} parked</span>` : ''}
+          ${due ? `<span class="badge due" title="Levels you have reached that grant something you have not filled in">${due} to pick</span>` : ''}
+          ${parked.length ? `<span class="badge" title="Written for ${esc(name)} level${parked.length === 1 ? '' : 's'} ${parked.join(', ')}, which this character no longer has. Kept, and back the moment the class is that long again.">${parked.length} parked</span>` : ''}
           ${orphaned ? groupDelete(name, g, ctx.armedRemove ?? null) : ''}
         </h3>
         <div class="tablewrap"><table class="gridtab featgrid" style="width:${total}px" data-colresize="off">
@@ -370,7 +373,7 @@ function packOffers(className, offers) {
     return `<div class="cfoffers">
       <div class="offerhead">
         <span>In your packs</span>
-        <span class="hint">Named on the ladder and included in a pack. Open one to read it. Adding it copies its text here so you can edit it.</span>
+        <span class="hint">Named on the ladder and carried by a pack. Open one to read it. Adding copies its text here, where you can edit it.</span>
         ${offers.length > 1 ? `<button data-action="add-cfnote-pack" data-class="${esc(className)}">+ Add all ${offers.length}</button>` : ''}
       </div>
       ${offers.map((o) => `<details class="cfoffer">
@@ -412,8 +415,8 @@ function classFeatureNotes(model, className) {
       return {
         at, future,
         badge: `<span class="badge${future ? ' due' : ''}" title="${future
-          ? `Gained at level ${at}. A bonus written here does not apply yet.`
-          : `Gained at level ${at}`}">Lv ${at}</span>`,
+          ? `Arrives at level ${at}. A bonus written here is not applying yet.`
+          : `Arrived at level ${at}`}">Lv ${at}</span>`,
       };
     };
     return `<div class="cfnotes">
@@ -423,7 +426,7 @@ function classFeatureNotes(model, className) {
     title: '',
     text: `
         ${open ? '▾' : '▸'} What they do <span class="badge">${notes.length}</span>
-        ${offers.length ? `<span class="badge offer" title="Named on the ladder, not written here, and included in an active pack.">${offers.length} in your packs</span>` : ''}
+        ${offers.length ? `<span class="badge offer" title="Named on the ladder, not written up here, and carried by a pack you have switched on">${offers.length} in your packs</span>` : ''}
       `,
   })}
       ${open ? `${notes.length ? `<div class="cfnotelist" data-cfnotes="${esc(className)}">${notes.map((f, i) => {
@@ -444,10 +447,10 @@ function classFeatureNotes(model, className) {
         </span>
         ${shut ? '' : prose(model, `data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'text' }))}"`, f.text, 3, 'grow', null, {
     inactive: when.future,
-    inactiveTitle: `This feature is gained at level ${when.at}, so its bonus does not apply yet.`,
+    inactiveTitle: `This feature arrives at level ${when.at}, so the bonus is not applying yet.`,
   })}
       </div>`;
-      }).join('')}</div>` : '<p class="empty">Nothing yet. A class added from a pack adds its features\' text here.</p>'}
+      }).join('')}</div>` : '<p class="empty">Nothing yet — a class added from a pack brings its features\' text here.</p>'}
       ${packOffers(className, offers)}
       <div style="margin-top:6px">
         <button data-action="add-cfnote" data-class="${esc(className)}">+ Add feature text</button>
@@ -518,7 +521,7 @@ function featureColumnHead(model, className, col, index, tableKey) {
 
     const ruleTitle = (rule) => {
       const basis = rule.basis === 'char' ? 'character' : 'class';
-      return rule.kind === 'error' ? `Rule not understood: ${rule.error}. Granting every level.`
+      return rule.kind === 'error' ? `Rule not understood — ${rule.error}. Granting every level.`
         : rule.kind === 'formula' ? `Formula over ${basis} level: ${rule.expr}`
           : `Grants at ${basis} levels ${summariseLevels(levelRuleLevels(rule))}`;
     };
@@ -538,8 +541,8 @@ function featureColumnHead(model, className, col, index, tableKey) {
       const missing = chosen && !menuNames.some((n) => same(n, chosen));
       return `<select class="colmenu gmenu${missing ? ' bad' : ''}" style="--gc:${esc(grp.color)}"
         data-cfgmenu="${esc(className)}|${index}|${gi}"
-        title="${esc(missing ? `“${chosen}” is not available. Its pack is off or not installed.`
-    : `The menu ${grp.name || 'this group'}'s cells pick from. Blank uses the column's menu.`)}">
+        title="${esc(missing ? `“${chosen}” is not switched on — its pack is off or not installed.`
+    : `What ${grp.name || 'this group'}'s cells pick from. Left alone, the column's menu.`)}">
         <option value=""${chosen ? '' : ' selected'}>— column's menu —</option>
         ${names.map((n) => `<option value="${esc(n)}"${same(n, chosen) ? ' selected' : ''}>${esc(n)}</option>`).join('')}
       </select>`;
@@ -552,7 +555,7 @@ function featureColumnHead(model, className, col, index, tableKey) {
     const groupRowFields = (grp, gi, rule, title) => {
       return `<span class="rulegroup" style="--gc:${esc(grp.color)}">
         <input type="color" value="${esc(grp.color)}" data-cfgcolor="${esc(className)}|${index}|${gi}"
-          aria-label="Color for ${esc(grp.name || col)}" title="Group color">
+          aria-label="Colour for ${esc(grp.name || col)}" title="Group colour">
         <input type="text" class="gname" value="${esc(grp.name)}" placeholder="name"
           data-cfgname="${esc(className)}|${index}|${gi}" spellcheck="false">
         <input type="text" class="grule ${rule.kind === 'error' ? 'bad' : ''}" value="${esc(grp.rule)}"
@@ -572,8 +575,8 @@ function featureColumnHead(model, className, col, index, tableKey) {
       ${folded ? `<span class="rulechips">${groups.map(groupChip).join('')}</span>` : `${groups.map(groupRow).join('')}
       ${featureColumnMenu(model, className, col, index)}
       <button class="addgroup" data-action="add-rule-group" data-class="${esc(className)}" data-col="${index}"
-        title="${groups.length ? 'Add another schedule to this column.'
-    : 'Limit this column to certain levels, such as &quot;odd&quot;, &quot;even&quot; or &quot;2, +4&quot;.'}">${groups.length ? '+ rule group' : '+ level rule'}</button>
+        title="${groups.length ? 'Another schedule sharing this column'
+    : 'Limit this column to certain levels — try "odd", "even", "2, +4"'}">${groups.length ? '+ rule group' : '+ level rule'}</button>
       ${groups.length ? foldButton(model, `cftags-${className}-${col}`, {
     open: named,
     cls: 'addgroup',
@@ -613,10 +616,10 @@ function featureField(ctx, model, className, col, row, field, multi) {
       : !field.on ? `slot-off${field.stranded ? ' kept' : ''}`
         : `slot-on${field.due ? ' due' : ''}${field.planned ? ' planned' : ''}`;
     const title = !cell.ruled ? ''
-      : field.group?.orphan ? `“${field.group.name}” is no longer a rule group on this column. The text is kept but cannot be edited here.`
-        : !field.on ? (field.stranded ? 'Outside every rule on this column. The text is kept but cannot be edited here.'
+      : field.group?.orphan ? `“${field.group.name}” is no longer a rule group on this column — text kept, but not editable here.`
+        : !field.on ? (field.stranded ? 'Outside every rule on this column — text kept, but not editable here.'
           : `No ${col} at this level.`)
-          : `${label}${field.due ? ': nothing chosen yet' : field.planned ? ': not reached yet' : ''}`;
+          : `${label}${field.due ? ' — nothing chosen yet' : field.planned ? ' — not reached yet' : ''}`;
 
     // Whether the column names its groups is groupNamesShown's call. Text left
     // behind by a group since removed is always named: nothing else says whose.
@@ -701,14 +704,14 @@ function featureColumnMenu(model, className, col, index) {
     const missing = chosen && !all.some((c) => same(c.name, chosen));
     const claimed = chosen && !model.classFeatureColumnOptionsChosen(className, col);
     return `<select class="colmenu${missing ? ' bad' : ''}" data-cfmenu="${esc(className)}|${index}"
-      title="${esc(missing ? `“${chosen}” is not available. Its pack is off or not installed.`
+      title="${esc(missing ? `“${chosen}” is not switched on — its pack is off or not installed.`
     : claimed ? `“${chosen}” names this class and this feature, so this column picks from it. Choose another, or none.`
       : chosen ? `Cells in this column pick from “${chosen}”.`
-        : 'Pick entries from a pack menu instead of typing them.')}">
+        : 'Pick from a menu a pack provides, rather than typing each entry.')}">
       <option value=""${chosen ? '' : ' selected'}>— no menu —</option>
       ${names.map((n) => `<option value="${esc(n)}"${same(n, chosen) ? ' selected' : ''}>${esc(n)}</option>`).join('')}
     </select>${layered.map((n) => `<span class="colmenu layered" title="${
-      esc(`“${n}” adds to the menu above. Its entries take priority, and the entries it replaces are removed.`)}">+ ${esc(n)}</span>`).join('')}`;
+      esc(`“${n}” is layered over the menu above — its entries win, and the ones it replaces drop out.`)}">+ ${esc(n)}</span>`).join('')}`;
   }
 
   /** A cell that picks from a menu: the names on offer, and what the one written means. */
@@ -724,7 +727,7 @@ function menuField(ctx, ref, field, menu, placeholder, atLevel) {
         .filter(Boolean).join(' · ')
         + (tooSoon ? `\n\nThis is a ${chosen.minLevel}th-level entry, written at ${atLevel}th.` : '')
         + (chosen.text ? `\n\n${chosen.text}` : '')
-      : `${offered} of ${menu.options.length} available at this level (${menu.name})`;
+      : `${offered} of ${menu.options.length} on offer at this level — ${menu.name}`;
     // A locked cell never opens its list, so it does not ask for one written.
     const list = field.on ? ` list="${menuListId(ctx, menu, atLevel)}"` : '';
     return `<input type="text" class="cfeat pick${tooSoon ? ' early' : ''}"${list} data-cfeat="${ref}"
@@ -766,7 +769,7 @@ function sessionNotesPanel(model) {
     date: today, title: `Session ${notes.length + 1}`, body: '',
   })}</span></h3>
         ${shown.map(({ n, i }) => card(n, i)).join('')
-    || '<p class="empty">No sessions yet. Add one after each game.</p>'}
+    || '<p class="empty">No sessions yet. Add one after a game: what happened, who you met, what to follow up.</p>'}
         <p class="hint">Newest first. The play log's lines from a session's date are listed under it.</p>
       </section>`;
   }
@@ -784,10 +787,10 @@ export function renderExtrasPanel(model, ctx) {
             ${removeButton('notes', i, { what: 'note' })}
           </div>
           ${itemArea(model, 'notes', i, 'body', n.body, 4)}
-        </div>`).join('') || '<p class="empty">No notes yet.</p>'}
+        </div>`).join('') || '<p class="empty">No notes yet — jot anything here: links, ideas, things to ask the GM.</p>'}
         <div style="margin-top:8px">${addButton('notes', 'Add note', { title: '', body: '' })}</div>
-        <p class="hint">Plain text. Accepts inline formulas such as <code>{= level * 2}</code>.
-          Web addresses (http:// or https://) become links; click one to open it, or elsewhere to edit.
+        <p class="hint">Plain text, with inline formulas if you want them: <code>{= level * 2}</code>.
+          Web addresses (http:// or https://) are links: click one to open it, anywhere else to edit.
           <code>[words](https://…)</code> makes the words the link.</p>
       </section>
 
@@ -811,9 +814,10 @@ export function renderExtrasPanel(model, ctx) {
         <div style="margin-top:8px">${addButton(list, 'Add approval', { name: '', approvedBy: '', link: '' })}</div>
         <label class="fld tall" style="margin-top:10px"><span>Notes</span>
           ${prose(model, 'data-set="extras.approvalNotes"', x.approvalNotes, 3, 'grow')}</label>
-        <p class="hint">Custom archetypes, feats and items that needed GM approval, and where the
-          approval is recorded. Hover over the short columns to see their full text. The notes box
-          accepts {…} formulas.</p>
+        <p class="hint">Custom archetypes, feats and items that needed a sign-off, and where the
+          approval lives. The two short columns show their full text on hover, so a long name
+          is cut on screen but never lost. The Link column takes the rest of the row, because
+          a URL cannot be abbreviated. The notes box reads {…} like the rest of the sheet.</p>
       </section>
       ${systemExtrasPanel(model, x, 'extras', 'ExtrasNotes')}
     </div>`;

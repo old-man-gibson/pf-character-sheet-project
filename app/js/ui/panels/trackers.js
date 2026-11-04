@@ -55,13 +55,13 @@ export function renderTrackersPanel(model, ctx) {
             <input class="mono" data-draft="minFormula" placeholder="Min (optional, e.g. -floor(qi.max / 2))" value="${esc(draft.minFormula || '')}">
             <input data-draft="refresh" placeholder="Refresh (Daily)" value="${esc(draft.refresh)}">
             <select data-draft="fill" aria-label="Fill or drain"
-              title="Fill shows the amount spent; Drain shows the amount left.">
-              <option value="spent" ${draft.fill !== 'remaining' ? 'selected' : ''}>Fill: shows the amount spent</option>
-              <option value="remaining" ${draft.fill === 'remaining' ? 'selected' : ''}>Drain: shows the amount left</option>
+              title="Fill lights up as the pool is spent; Drain shows what is left">
+              <option value="spent" ${draft.fill !== 'remaining' ? 'selected' : ''}>Fill — lights up as it is spent</option>
+              <option value="remaining" ${draft.fill === 'remaining' ? 'selected' : ''}>Drain — shows what is left</option>
             </select>
           </div>
           ${preview}
-          <input data-draft="note" placeholder="Note (optional), e.g. {= self.current * level}"
+          <input data-draft="note" placeholder="Note (optional) — {= self.current * level} reads the pool as it fills"
             value="${esc(draft.note || '')}" aria-label="Note">
           <div><button class="primary" data-action="add-tracker">Add tracker</button></div>
         </div>
@@ -73,25 +73,25 @@ export function renderTrackersPanel(model, ctx) {
     return `<div class="pair" style="margin-top:8px">
           <span class="hint">Built-in pools:</span>
           ${missing.map((p) => `<button data-action="add-system-pool" data-pool="${esc(p.pool)}"
-            title="${esc(`A tracker for ${p.what}. Its maximum is the sheet's count, now ${p.max}.`)}">+ ${esc(p.name)} (${p.max})</button>`).join('')}
+            title="${esc(`A tracker for ${p.what}: its maximum is the sheet's own count, now ${p.max}`)}">+ ${esc(p.name)} (${p.max})</button>`).join('')}
         </div>`;
   })()}
         <p class="hint">
-          Formulas are plain text and are never run as code. Your GM can see every formula in
-          the Formula Audit tab.
+          Formulas are plain text and are never executed as code. They are parsed and
+          evaluated in a sandbox. Every formula is visible to your GM in the Formula Audit tab.
           Functions: <code>floor</code> <code>ceil</code> <code>round</code> <code>min</code>
           <code>max</code> <code>sum</code> <code>abs</code> <code>clamp</code> <code>if</code>
           <code>mod</code> <code>iterations</code> <code>dice</code> <code>step</code> <code>tags</code>.
           <button data-view data-action="formulas" class="linkish"
-            title="Open the formula guide."
-            >ƒx Formulas</button> explains each function, lets you test a formula, and lists
-          every value with its current number.
+            title="The guide, a scratchpad, and every value with its current number"
+            >ƒx Formulas</button> explains each function, has a box to try one in, and lists
+          every value this character can read with its current number.
         </p>
         <p class="hint">
           <strong>Min</strong> is 0 unless you give it a formula. A negative min makes a two-sided
-          meter that goes below zero, for example max <code>floor((burn.max + qi.max) / 4)</code>
-          and min <code>-floor((burn.max + qi.max) / 4)</code> for a ±7 pool. Edit custom trackers
-          later with ✎.
+          meter that runs below zero. Example: max <code>floor((burn.max + qi.max) / 4)</code>
+          and min <code>-floor((burn.max + qi.max) / 4)</code> for a ±7 pool. Custom trackers
+          can be edited later with ✎.
         </p>
         <details>
           <summary class="hint" style="cursor:pointer">Available values (${names.length})</summary>
@@ -213,7 +213,7 @@ function trackerRow(model, ctx, t) {
         <div class="tname">${esc(t.name)}
           ${t.source === 'player' ? (t.pool ? '<span class="badge">built-in</span>' : '<span class="badge player">custom</span>')
   : `<span class="badge">from sheet${t.edited ? ', edited' : ''}</span>`}
-          ${protectedTracker ? `<span class="badge" title="${esc(t.pool ? (poolDef(t.pool, model.data)?.held || 'Every caster has this pool while their system grants points.')
+          ${protectedTracker ? `<span class="badge" title="${esc(t.pool ? (poolDef(t.pool, model.data)?.held || 'Every caster carries this pool while their system grants points')
     : 'Every character has Mythic Power from level 8')}">required</span>` : ''}
           ${t.refresh ? `<span class="badge">${esc(t.refresh)}</span>` : ''}
           ${draining ? '<span class="badge">drains</span>' : ''}
@@ -315,7 +315,7 @@ export function trackerVisual(t, style, resolvedZones, {
       ? `<div class="blocked" style="left:${pct(live)};width:${pct(1 - live)}" title="${esc(heldTitle)}"></div>` : '';
     return `<div class="bar ${twoSided ? 'two-sided' : ''}" ${interactive ? `data-pool-bar="${esc(ref)}"` : ''}${
       interactive && blocked ? ` data-pool-span="${live.toFixed(5)}"` : ''}
-          title="${esc(title)}${interactive ? '. Click to set.' : ''}">
+          title="${esc(title)}${interactive ? ' — click to set' : ''}">
         ${layout.bands.map((b) => `<div class="band" style="left:${at(b.from)};width:${at(b.to - b.from)};background:${rgba(b.color, 0.22)}"
           ${b.label ? `title="${esc(b.label)}"` : ''}></div>`).join('')}
         ${fill}
@@ -455,7 +455,7 @@ export function meterVisual(spec, { pool = null } = {}) {
 export function meterStyleButton(ctx, key) {
   const open = ctx.editMeter === key;
   return `<button class="tiny" data-meter-edit="${key}" aria-pressed="${open}"
-      style="margin-left:auto" title="${open ? 'Done' : 'Change how this tracker looks.'}">${open ? 'Done' : '✎ Style'}</button>`;
+      style="margin-left:auto" title="${open ? 'Done' : 'Change how this is drawn'}">${open ? 'Done' : '✎ Style'}</button>`;
 }
 
 /**
@@ -476,7 +476,7 @@ export function meterStyleEditor(model, ctx, key) {
         <button class="primary" data-action="save-meter" data-key="${esc(key)}">Save</button>
         <button data-action="cancel-meter">Cancel</button>
         <button data-action="reset-meter" data-key="${esc(key)}"
-          title="Return to the default bar.">Reset to default</button>
+          title="Back to the bar every character starts with">Reset to default</button>
       </div>
     </div>`;
 }
@@ -517,8 +517,8 @@ function trackerEditRow(model, ctx, t) {
         </div>
         ${previewBox(model, 'edit', d.maxFormula, d.minFormula)}
         ${trackerNoteField(model, t, d.note)}
-        ${t.source === 'sheet' ? `<p class="hint">Copied from the workbook’s Resource Tracker. Reset
-          restores the workbook’s version.</p>` : ''}
+        ${t.source === 'sheet' ? `<p class="hint">Seeded from the sheet’s Resource Tracker. Your
+          changes are saved against it. Reset restores the sheet’s version.</p>` : ''}
         <div class="tstyle" data-tstyle-for="${esc(t.id)}">${trackerStyleEditor(model, ctx, t)}</div>
         <div style="display:flex;gap:6px">
           <button class="primary" data-action="save-tracker" data-id="${esc(t.id)}">Save</button>
@@ -541,15 +541,16 @@ function trackerEditRow(model, ctx, t) {
 function trackerNoteField(model, t, value) {
   const facts = Object.keys(model.trackerScope(t).self);
   return `<label class="fld tall tnote-edit">
-      <span>Note: shown under the tracker; formulas update as it changes</span>
+      <span>Note — shown under the tracker, formulas resolve as it fills</span>
       ${prose(model, `data-tedit="note"`, value, 2, '', model.trackerScope(t))}
       <span class="hint">
         <code>self</code> is this tracker: ${facts.map((k) => `<code>self.${k}</code>`).join(' ')}.
-        Elsewhere on the character, use
+        Elsewhere on the character the same numbers are
         <code>tracker.${esc(t.id)}.max</code> and the other fields under that id. The id is set when the
-        tracker is created and does not change when it is renamed.<br>
+        tracker is created and does not change on a rename.<br>
         Example for Burn: <code>Nonlethal {= self.current * level}, +{= self.current} to DCs</code>.
-        A <code>{name = …}</code> written here shows its value but cannot be read elsewhere.
+        A <code>{name = …}</code> written here shows its value but is not published to the rest
+        of the character. A note reads the pool; it does not define it.
       </span>
     </label>`;
 }
@@ -569,7 +570,7 @@ export function trackerStyleEditor(model, ctx, t) {
       <div class="zone-row">
         <input class="mono" data-zone="${i}|from" placeholder="from (e.g. 0)" value="${esc(z.from)}" aria-label="Zone ${i + 1} from">
         <input class="mono" data-zone="${i}|to" placeholder="to (e.g. ${esc(zoneExample)})" value="${esc(z.to)}" aria-label="Zone ${i + 1} to">
-        <input type="color" data-zonepick="${i}" value="${esc(z.color)}" aria-label="Zone ${i + 1} color">
+        <input type="color" data-zonepick="${i}" value="${esc(z.color)}" aria-label="Zone ${i + 1} colour">
         <input class="mono hexin" data-zone="${i}|color" value="${esc(z.color)}" aria-label="Zone ${i + 1} hex" maxlength="7">
         <input data-zone="${i}|label" placeholder="label (optional)" value="${esc(z.label)}" aria-label="Zone ${i + 1} label">
         ${removeControl(`data-zone-remove="${i}"`, { what: `zone ${i + 1}` })}
@@ -581,25 +582,25 @@ export function trackerStyleEditor(model, ctx, t) {
         <select data-tstyle="shape" aria-label="Shape">
           <option value="pips" ${s.shape === 'pips' ? 'selected' : ''}>Pips</option>
           <option value="bar" ${s.shape === 'bar' ? 'selected' : ''}>Bar</option>
-          <option value="squares" ${s.shape === 'squares' ? 'selected' : ''}>Squares: a small grid, then a count</option>
+          <option value="squares" ${s.shape === 'squares' ? 'selected' : ''}>Squares — a small block, then a count</option>
         </select>
         <span class="tlabel">Fill</span>
         <select data-tstyle="fill" aria-label="Fill direction" ${twoSided ? 'disabled title="Two-sided meters always show their position"' : ''}>
           <option value="spent" ${s.fill === 'spent' ? 'selected' : ''}>Fills up as it is spent</option>
-          <option value="remaining" ${s.fill === 'remaining' ? 'selected' : ''}>Drains: shows the amount left</option>
+          <option value="remaining" ${s.fill === 'remaining' ? 'selected' : ''}>Drains — shows what is left</option>
         </select>
       </div>
-      ${colorField('color', s.color, { label: twoSided ? 'Color (above 0)' : 'Color', none: 'Theme accent', noneCss: THEME_ACCENT.css })}
+      ${colorField('color', s.color, { label: twoSided ? 'Colour (above 0)' : 'Colour', none: 'Theme accent', noneCss: THEME_ACCENT.css })}
       ${colorField('gradientTo', s.gradientTo, { label: 'Fade to', none: 'No gradient', noneCss: null })}
-      ${twoSided ? colorField('negativeColor', s.negativeColor, { label: 'Color (below 0)', none: 'Theme red', noneCss: THEME_NEGATIVE.css }) : ''}
+      ${twoSided ? colorField('negativeColor', s.negativeColor, { label: 'Colour (below 0)', none: 'Theme red', noneCss: THEME_NEGATIVE.css }) : ''}
       ${twoSided ? colorField('negativeGradientTo', s.negativeGradientTo, { label: 'Fade to (below 0)', none: 'No gradient', noneCss: null }) : ''}
       <div class="tstyle-row" style="align-items:flex-start">
         <span class="tlabel" style="padding-top:5px">Zones</span>
         <div style="flex:1;display:grid;gap:5px">
           ${zoneRows}
           <div><button data-add-zone>+ Zone</button>
-            <span class="hint">Highlight a value or range in its own color. Bounds are formulas, such as
-              <code>floor(${esc(zoneExample)})</code> for a range a third of the way up. A labeled zone
+            <span class="hint">Highlight a value or range in its own colour. Bounds are formulas, for example
+              <code>floor(${esc(zoneExample)})</code> for a band a third of the way up. A labelled zone
               shows its name on the ${t.meter ? 'meter' : 'tracker'} while the value is inside it.</span></div>
         </div>
       </div>
@@ -632,9 +633,9 @@ export function stylePreviewHtml(model, ctx, t) {
   const visual = t.meter
     ? meterVisual({ ...t, style, resolvedZones: zones })
     : (trackerVisual(t, style, zones, { interactive: false })
-      || '<span class="hint">(no pips for this range; use the bar)</span>');
+      || '<span class="hint">(no pips for this range — try the bar)</span>');
   const note = tooManyPips
-    ? `<div class="hint">More than ${PIP_LIMIT} steps, so this shows as a bar.</div>` : '';
+    ? `<div class="hint">Over ${PIP_LIMIT} steps to draw, so this one stays a bar.</div>` : '';
   return `${visual}${note}${bad.length ? `<div class="terr">${esc(bad.join('; '))}</div>` : ''}`;
 }
 

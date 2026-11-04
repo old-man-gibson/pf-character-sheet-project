@@ -170,7 +170,7 @@ export function altTrainingPrereq(model, technique) {
     // Advanced Magic Training casts as a Low caster, or Mid with the mythic one.
     if (c.training?.magic?.mythicAmt) return met('Mythic Advanced Magic Training casts as Mid.');
     return casters.length
-      ? unmet(`${casters.map((x) => x.name).join(', ')}: none casts at Mid or High.`)
+      ? unmet(`${casters.map((x) => x.name).join(', ')} — none casts at Mid or High.`)
       : unmet('No spherecasting class on the Magic Spheres tab.');
   }
   if (key === 'vancian') {

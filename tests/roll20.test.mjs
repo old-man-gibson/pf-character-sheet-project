@@ -149,16 +149,16 @@ console.log('a spec reads the totals the sheet shows');
     ],
   };
   check('the character is named first',
-    abilityRollSpec(c, 'str').name, 'Angou: Str check');
+    abilityRollSpec(c, 'str').name, 'Angou — Str check');
   check('an ability check is its modifier',
-    rollText(abilityRollSpec(c, 'str'), 'plain'), '/roll 1d20+4 Angou: Str check');
+    rollText(abilityRollSpec(c, 'str'), 'plain'), '/roll 1d20+4 Angou — Str check');
   check('an unknown ability is not a roll', abilityRollSpec(c, 'luck'), null);
-  check('a save', rollText(saveRollSpec(c, 'will'), 'plain'), '/roll 1d20+11 Angou: Will save');
+  check('a save', rollText(saveRollSpec(c, 'will'), 'plain'), '/roll 1d20+11 Angou — Will save');
   check('an unknown save is not a roll', saveRollSpec(c, 'sanity'), null);
 
   check('a skill reads its own bonus, not its ranks',
-    rollText(skillRollSpec(c, 0), 'plain'), '/roll 1d20+12 Angou: Perception');
-  check('a variant skill is named whole', skillRollSpec(c, 1).name, 'Angou: Craft (Weapons)');
+    rollText(skillRollSpec(c, 0), 'plain'), '/roll 1d20+12 Angou — Perception');
+  check('a variant skill is named whole', skillRollSpec(c, 1).name, 'Angou — Craft (Weapons)');
   check('a skill carries its situational note and its training gate',
     skillRollSpec(c, 1).notes,
     [{ label: 'Note', text: '+2 with a whetstone' },
@@ -217,14 +217,14 @@ console.log('an alternate is the same attack with a different ability in the slo
     ['1d20+22', '1d20+17', '1d20+12']);
   // The ability is the whole difference between the two, so the title says it.
   check('the title names the ability', attackRollSpec(c, 'altMelee').name,
-    'Angou: Melee attack (Dex)');
+    'Angou — Melee attack (Dex)');
   check('a primary mode does not need to', attackRollSpec(c, 'melee').name,
-    'Angou: Melee attack');
+    'Angou — Melee attack');
   check('an alt maneuver still does not iterate',
     attackRollSpec(c, 'altCmb').rolls, [{ label: 'Maneuver', formula: '1d20+20' }]);
   check('two abilities in one slot are both named',
     attackRollSpec({ ...c, attack: { ...c.attack, modes: { ...c.attack.modes, altMelee: { stat1: 'Dex', stat2: 'Wis' } } } }, 'altMelee').name,
-    'Angou: Melee attack (Dex + Wis)');
+    'Angou — Melee attack (Dex + Wis)');
 }
 
 console.log('initiative, and the two places a concentration check lives');
@@ -235,17 +235,17 @@ console.log('initiative, and the two places a concentration check lives');
     training: { magic: { concentration: 17, globalCL: 14 } },
     vancian: { classes: [{ name: 'Oracle', concentration: 21, casterLevel: 11 }, { concentration: 4 }] },
   };
-  check('initiative', rollText(initiativeRollSpec(c), 'plain'), '/roll 1d20+9 Angou: Initiative');
+  check('initiative', rollText(initiativeRollSpec(c), 'plain'), '/roll 1d20+9 Angou — Initiative');
   check('a sheet with no hit points block is not a roll', initiativeRollSpec({}), null);
 
   check('the Spheres side has one global figure',
     rollText(concentrationRollSpec(c, 'magic'), 'template'),
-    '&{template:default} {{name=Angou: Concentration}} {{Concentration=[[1d20+17]]}} {{Caster level=14}}');
+    '&{template:default} {{name=Angou — Concentration}} {{Concentration=[[1d20+17]]}} {{Caster level=14}}');
   check('a prepared class has its own',
     rollText(concentrationRollSpec(c, 'vancian:0'), 'plain'),
-    '/roll 1d20+21 Angou: Oracle concentration (Caster level: 11)');
+    '/roll 1d20+21 Angou — Oracle concentration (Caster level: 11)');
   check('an unnamed class still rolls', concentrationRollSpec(c, 'vancian:1').name,
-    'Angou: Concentration');
+    'Angou — Concentration');
   check('a class that is not there is not a roll', concentrationRollSpec(c, 'vancian:9'), null);
   check('nor is a source that does not exist', concentrationRollSpec(c, 'psionics'), null);
   // Shaken and its kin are worded at attacks, saves, skills and ability checks.
@@ -287,9 +287,9 @@ console.log('the dispatcher covers every button on the sheet');
     rollSpec(c, 'eidolon', 'init'), null);
   // A weapon added a moment ago has no costing yet, but it has an attack.
   check('an uncosted weapon still rolls its attack',
-    rollText(rollSpec(c, 'weapon', 0), 'plain'), '/roll 1d20cs>19+9 A: Dagger');
+    rollText(rollSpec(c, 'weapon', 0), 'plain'), '/roll 1d20cs>19+9 A — Dagger');
   check('roll20Text is spec and text in one', roll20Text(c, 'save', 'fortitude', null, 'plain'),
-    '/roll 1d20+9 A: Fortitude save');
+    '/roll 1d20+9 A — Fortitude save');
 }
 
 /* ------------------------------------------------------------------ *
@@ -401,7 +401,7 @@ console.log('a question the sheet cannot answer becomes a Roll20 query');
     by('Crit damage'), `4d6+14+(${QUERY})*2`);
   check('and the roll says what it will ask',
     spec.notes.find((n) => n.label === 'Question')?.text,
-    'Deathgrip: answer the same way each time you are asked');
+    'Deathgrip — answer the same way each time you are asked');
   check('the questions are listed for a caller that would rather ask them',
     spec.queries.map((q) => q.label), ['Deathgrip']);
 
@@ -545,15 +545,15 @@ console.log('a companion rolls on its own sheet');
   const spec = (ref) => companionRollSpec(d, 'familiar', ref);
 
   check('the companion is the actor, its master the possessive',
-    spec('init').name, 'Test Subject’s Hoot: Initiative');
+    spec('init').name, 'Test Subject’s Hoot — Initiative');
   check('initiative is its own Dex plus its own bonus',
     spec('init').rolls[0].formula, '1d20+5');
-  check('a save', rollText(spec('save:will'), 'plain'), '/roll 1d20+2 Test Subject’s Hoot: Will save');
+  check('a save', rollText(spec('save:will'), 'plain'), '/roll 1d20+2 Test Subject’s Hoot — Will save');
   check('an unknown save is not a roll', spec('save:sanity'), null);
   check('an ability check is the companion’s own modifier',
     spec('ability:dex').rolls[0].formula, '1d20+3');
   // 4 ranks + 3 Dex + 3 for a class skill.
-  check('a skill', rollText(spec('skill:0'), 'plain'), '/roll 1d20+10 Test Subject’s Hoot: Acrobatics');
+  check('a skill', rollText(spec('skill:0'), 'plain'), '/roll 1d20+10 Test Subject’s Hoot — Acrobatics');
   check('a row that is not there is not a roll', spec('skill:999'), null);
   check('nor is a ref that means nothing', spec('nonsense'), null);
 

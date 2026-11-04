@@ -141,7 +141,7 @@ function companionPoolDef(d, id) {
     id: `${id}_spell_points`,
     name: `${who} Spell Points`,
     match: null,
-    what: `${who}’s spell points, from its tab`,
+    what: `${who}’s spell points, worked out on its tab`,
     held: 'Kept while this companion casts',
     has: (doc) => !!companionById(doc, id)?.b?.calc?.casting,
     max: (doc) => Number(companionById(doc, id)?.b?.calc?.casting?.spellPoints) || 0,

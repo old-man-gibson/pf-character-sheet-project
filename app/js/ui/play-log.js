@@ -53,7 +53,7 @@ export function playLogPanel(model, ctx, { span = true } = {}) {
   const draft = ctx.draft?.logNote ?? '';
   const query = ctx.logQuery ?? '';
   return `<section class="panel${span ? ' span2' : ''} playlog">
-    <h3>Play log <span class="badge" title="The last ${LOG_MAX} lines are kept; older lines are removed.">${lines.length} of ${LOG_MAX}</span></h3>
+    <h3>Play log <span class="badge" title="The last ${LOG_MAX} lines are kept; older ones drop off">${lines.length} of ${LOG_MAX}</span></h3>
     <div class="pair">
       <input type="text" data-draft="logNote" value="${esc(draft)}" placeholder="Add a note: Session 12, the hydra"
         aria-label="A note for the play log" style="flex:1 1 12rem">
@@ -63,7 +63,7 @@ export function playLogPanel(model, ctx, { span = true } = {}) {
       aria-label="Search the play log" style="margin-top:6px">
     <p class="hint logcount" hidden></p>
     <ol class="logl">${logLinesHtml(lines, { limit: all ? Infinity : SHOWN })}</ol>`
-    : '<p class="empty">Nothing yet. Damage, healing, rests, spending and undos are logged here.</p>'}
+    : '<p class="empty">Nothing yet. Damage, healing, rests, spends and their undos are written here as they happen.</p>'}
     ${lines.length > SHOWN ? `<button class="linkish" data-view data-action="log-all">${all ? 'Show the latest' : `Show all ${lines.length}`}</button>` : ''}
   </section>`;
 }

@@ -59,7 +59,7 @@ export function shadowReason(name, builtin) {
   }
   if (builtin.has(name)) {
     return `"${name}" is a value the sheet works out for itself, so it cannot be defined here. `
-      + 'Pick a name of your own, such as my.' + String(name).split('.').pop()
+      + 'Pick a name of your own — a dotted one such as my.' + String(name).split('.').pop()
       + ' never collides.';
   }
   const parts = String(name).split('.');
@@ -441,7 +441,7 @@ export const FORMULA_FIELDS = [
     collect: (model) => Object.entries(SAVE_NAMES).flatMap(([k, label]) => {
       const save = model.data.saves?.[k];
       return SAVE_BONUS_TYPES.flatMap(([key]) => (stringFormula(save?.bonuses?.[key]) ? [{
-        id: `save-${k}-${key}`, place: `statCell:saves.${k}.bonuses.${key}`, name: `${label}: ${bonusColumnName(key)}`,
+        id: `save-${k}-${key}`, place: `statCell:saves.${k}.bonuses.${key}`, name: `${label} — ${bonusColumnName(key)}`,
         formula: save.bonuses[key], value: save.bonusesResolved?.[key], error: save.bonusErrors?.[key],
       }] : []));
     }),
@@ -451,7 +451,7 @@ export const FORMULA_FIELDS = [
     collect: (model) => {
       const d = model.data.defenses;
       return AC_BONUS_TYPES.flatMap(([key]) => (stringFormula(d?.acBonuses?.[key]) ? [{
-        id: `ac-${key}`, place: `statCell:defenses.acBonuses.${key}`, name: `AC: ${bonusColumnName(key)}`,
+        id: `ac-${key}`, place: `statCell:defenses.acBonuses.${key}`, name: `AC — ${bonusColumnName(key)}`,
         formula: d.acBonuses[key], value: d.acBonusesResolved?.[key], error: d.acBonusErrors?.[key],
       }] : []));
     },
@@ -468,7 +468,7 @@ export const FORMULA_FIELDS = [
     collect: (model) => Object.entries(model.data.otherFormulas || {})
       .filter(([key, text]) => stringFormula(text) && offsetKey(key))
       .map(([key, text]) => ({
-        id: `other-${key}`, place: `offset:${key}`, name: `${offsetLabel(key)}: Other`,
+        id: `other-${key}`, place: `offset:${key}`, name: `${offsetLabel(key)} — Other`,
         formula: text, value: offsetOf(model, key), error: offsetError(model, key),
       })),
   },
@@ -520,7 +520,7 @@ export const FORMULA_FIELDS = [
     collect: (model) => {
       const hp = model.data.hp || {};
       return [
-        ['fcb', 'Favored class hit points'], ['toughness', 'Toughness per level'],
+        ['fcb', 'Favoured class hit points'], ['toughness', 'Toughness per level'],
         ['misc', 'Misc hit points'], ['deathBonus', 'Death threshold'],
       ].filter(([key]) => stringFormula(hp[key])).map(([key, name]) => ({
         id: `hp-${key}`, place: `hp:${key}`, name,
@@ -536,20 +536,20 @@ export const FORMULA_FIELDS = [
       const cr = model.data.crafting || {};
       const fields = [
         ...(cr.speedIncreases || []).map((s, i) => ({
-          id: `crafting-speed-${i}`, name: `Speed increase: ${s.label || `#${i + 1}`}`, obj: s, field: 'value',
+          id: `crafting-speed-${i}`, name: `Speed increase — ${s.label || `#${i + 1}`}`, obj: s, field: 'value',
           place: `craftNumber:crafting.speedIncreases|${i}|value`,
         })),
         ...(cr.costReductions || []).map((r, i) => ({
-          id: `crafting-reduction-${i}`, name: `Cost reduction: ${r.label || `#${i + 1}`}`, obj: r, field: 'value',
+          id: `crafting-reduction-${i}`, name: `Cost reduction — ${r.label || `#${i + 1}`}`, obj: r, field: 'value',
           place: `craftNumber:crafting.costReductions|${i}|value`,
         })),
         ...(cr.projects || []).flatMap((p, i) => {
           const item = p.name || `Project ${i + 1}`;
           return [
-            { id: `crafting-value-${i}`, name: `${item}: market value`, obj: p, field: 'value', place: `craftNumber:crafting.projects|${i}|value` },
-            { id: `crafting-dc-${i}`, name: `${item}: item DC`, obj: p, field: 'itemDC', place: `craftNumber:crafting.projects|${i}|itemDC` },
+            { id: `crafting-value-${i}`, name: `${item} — market value`, obj: p, field: 'value', place: `craftNumber:crafting.projects|${i}|value` },
+            { id: `crafting-dc-${i}`, name: `${item} — item DC`, obj: p, field: 'itemDC', place: `craftNumber:crafting.projects|${i}|itemDC` },
             ...(p.dcAdjustments || []).map((a, j) => ({
-              id: `crafting-dc-${i}-${j}`, name: `${item}: DC ${a.label || `adjustment ${j + 1}`}`, obj: a, field: 'value',
+              id: `crafting-dc-${i}-${j}`, name: `${item} — DC ${a.label || `adjustment ${j + 1}`}`, obj: a, field: 'value',
               place: `craftNumber:crafting.projects.${i}.dcAdjustments|${j}|value`,
             })),
           ];
@@ -586,11 +586,11 @@ export const FORMULA_FIELDS = [
       const own = String(b.name || '').trim() || `Buff ${i + 1}`;
       return [
         ...BUFF_MOD_KEYS.filter(([key]) => stringFormula(b[key])).map(([key, label]) => ({
-          id: `buff-${i}-${key}`, place: `buff:${i}:${key}`, name: `${own}: ${label}`,
+          id: `buff-${i}-${key}`, place: `buff:${i}:${key}`, name: `${own} — ${label}`,
           formula: b[key], value: b[`${key}Num`], error: b[`${key}Error`],
         })),
         ...(b.bonuses || []).flatMap((row, j) => (row && stringFormula(row.value) ? [{
-          id: `buff-${i}-bonus-${j}`, place: `buff:${i}:bonuses.${j}.value`, name: `${own}: ${row.target || 'bonus'}`,
+          id: `buff-${i}-bonus-${j}`, place: `buff:${i}:bonuses.${j}.value`, name: `${own} — ${row.target || 'bonus'}`,
           formula: row.value, value: row.valueNum, error: row.valueError,
         }] : [])),
       ];
@@ -617,7 +617,7 @@ export const FORMULA_FIELDS = [
         .filter(([, , raw, r]) => r && stringFormula(raw) && !PLAIN_NUMBER.test(raw.trim()))
         .map(([path, label, raw, r]) => ({
           id: `companion-${kind}-${i}-${path}`, place: `companionCell:${kind}:${i}:${path}`,
-          name: `${who}: ${label}`, where: `the ${COMPANION_LABELS[kind]} tab`,
+          name: `${who} — ${label}`, where: `the ${COMPANION_LABELS[kind]} tab`,
           formula: raw, value: r.value, error: r.error,
         }));
     })),

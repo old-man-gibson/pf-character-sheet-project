@@ -500,7 +500,7 @@ function abilityText(a, model = null) {
   const has = possessedSpheres(model);
   const mine = a.bySphere.filter((s) => has.has(s.sphere.toLowerCase()));
   const head = mine.length
-    ? `From the spheres you have (${mine.map((s) => s.sphere).join(', ')}):`
+    ? `From the spheres you possess — ${mine.map((s) => s.sphere).join(', ')}:`
     : `None of the spheres you possess adds one yet. (${a.bySphere.map((s) => s.sphere).join(', ')} each would.)`;
   return [a.text, head, ...mine.map((s) => `${s.sphere}: ${s.text}`)].filter(Boolean).join('\n\n');
 }
@@ -613,7 +613,7 @@ export function sphereBasePick(sphere, picked = '', model = null) {
     return {
       sphere: s.name,
       label: `${s.name} Sphere (${entry.name})`,
-      text: `${entry.text}\n\n${entry.ability}: granted by also having the ${entry.share} sphere.`,
+      text: `${entry.text}\n\n${entry.ability} — granted by also possessing the ${entry.share} sphere.`,
     };
   }
   const names = opened.length <= 3 ? opened : [];

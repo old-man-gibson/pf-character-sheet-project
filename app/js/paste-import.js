@@ -2268,7 +2268,7 @@ export function readSphere(lines, pre = new Set()) {
         + `${talents.length} talent${talents.length === 1 ? '' : 's'} in `
         + `${new Set(talents.map((x) => x.group)).size} group(s)`
         + `${tagged ? `, ${tagged} tagged` : ''}${sourced ? `, ${sourced} from a named source` : ''}.`
-      : 'A sphere page with no name; nothing read.'],
+      : 'A sphere page with no name — nothing read.'],
   };
 }
 
@@ -2387,7 +2387,7 @@ export function readManeuver(lines, pre = new Set()) {
       ? `${kind === 'stance' ? 'Stance' : 'Maneuver'} ${name}${discipline ? ` (${discipline}` : ' (no discipline named'}${entry.level ? `, level ${entry.level}` : ''}): `
         + `${filled} cell${filled === 1 ? '' : 's'}${text ? ' and its description' : ', no description'}.`
         + (dropped.length ? ` Its ${dropped.join(' and ')} line${dropped.length === 1 ? ' has' : 's have'} no cell on a card and ${dropped.length === 1 ? 'was' : 'were'} left out.` : '')
-      : 'A martial ability box with no name; nothing read.'],
+      : 'A martial ability box with no name — nothing read.'],
   };
 }
 
@@ -2729,6 +2729,6 @@ export function readArchetype(lines, pre = new Set()) {
   const rep = new Set(block.features.flatMap((f) => f.replaces));
   const alt = new Set(block.features.flatMap((f) => f.alters));
   const menus = block.features.filter((x) => x.options.length);
-  report.push(`Archetype ${name} for ${className || 'an unnamed class (set it in the block form)'}: ${block.features.length} feature(s)${menus.length ? ` (${menus.map((x) => `${x.name}: ${x.options.length} options`).join('; ')})` : ''}${rep.size ? `; replaces ${[...rep].join(', ')}` : ''}${alt.size ? `; alters ${[...alt].join(', ')}` : ''}${block.stacksWith.length ? `; combines with ${block.stacksWith.join(', ')}` : ''}.`);
+  report.push(`Archetype ${name} for ${className || 'a class the text does not name — set it in the block form'}: ${block.features.length} feature(s)${menus.length ? ` (${menus.map((x) => `${x.name}: ${x.options.length} options`).join('; ')})` : ''}${rep.size ? `; replaces ${[...rep].join(', ')}` : ''}${alt.size ? `; alters ${[...alt].join(', ')}` : ''}${block.stacksWith.length ? `; combines with ${block.stacksWith.join(', ')}` : ''}.`);
   return { name, blocks, report, used };
 }

@@ -80,7 +80,7 @@ function openSocket() {
   socket = ws;
   ws.addEventListener('open', () => {
     socketTries = 0;
-    status('connected; waiting for the player’s sheet…');
+    status('connected — waiting for the player’s sheet…');
     ws.send(JSON.stringify({ type: 'hello' }));
   });
   ws.addEventListener('message', (e) => {
@@ -88,7 +88,7 @@ function openSocket() {
     try { msg = JSON.parse(e.data); } catch { return; }
     if (!msg || typeof msg !== 'object') return;
     if (msg.type === 'render') draw(msg);
-    else if (msg.type === 'owner') status(msg.online ? (root.innerHTML ? '' : 'the player’s sheet is open; waiting for the cards…') : 'the player’s sheet is closed; actions here will not run until it is open', !msg.online);
+    else if (msg.type === 'owner') status(msg.online ? (root.innerHTML ? '' : 'the player’s sheet is open — waiting for a render…') : 'the player’s sheet is closed: nothing pressed here will run until it is back', !msg.online);
     else if (msg.type === 'waiting') status('waiting for the player’s sheet to draw this…');
     else if (msg.type === 'revoked') { revoked = true; sheetGone('The player took this companion back.'); }
   });
@@ -97,7 +97,7 @@ function openSocket() {
     if (revoked) return;
     if (e.code === 4001) { revoked = true; sheetGone('This control link was replaced by a newer one.'); return; }
     if (e.code === 1008 || e.code === 4003) { revoked = true; sheetGone('This control link does not open the character.'); return; }
-    status('connection lost; reconnecting…', true);
+    status('the relay dropped — reconnecting…', true);
     const wait = Math.min(30000, 1000 * 2 ** Math.min(socketTries++, 5));
     setTimeout(openSocket, wait);
   });
@@ -110,7 +110,7 @@ function status(text, off = false) {
 
 function send(msg) {
   if (control) {
-    if (!socket || socket.readyState !== WebSocket.OPEN) { status('not connected; the action was not sent', true); return; }
+    if (!socket || socket.readyState !== WebSocket.OPEN) { status('not connected — the press was not sent', true); return; }
     const { type, ...rest } = msg;
     try { socket.send(JSON.stringify({ type: type === 'cards:action' ? 'action' : type.replace(/^cards:/, ''), ...rest })); } catch { /* closing */ }
     return;
@@ -149,7 +149,7 @@ function draw(msg) {
   const heading = String(msg.title || 'Card table');
   document.title = heading;
   title.textContent = heading;
-  status(view === 'table' ? 'the table, visible to everyone' : view === 'hand' ? 'your hand, not for a shared screen' : 'the GM’s hand; actions run on the player’s sheet');
+  status(view === 'table' ? 'the table — what everyone may see' : view === 'hand' ? 'your hand — keep this one off the stream' : 'the GM’s hand — presses run on the player’s sheet');
   empty.hidden = true;
   const html = `${SHEET_LINK}<div class="cardwin ${view}">${msg.html || ''}</div>`;
   const features = control ? `${SHEET_LINK}<div class="cardwin features">${msg.features || '<p class="empty">No features to show.</p>'}</div>` : null;
@@ -239,7 +239,7 @@ async function copyText(text, name) {
   clearTimeout(copiedTimer);
   copied.innerHTML = '';
   const line = document.createElement('div');
-  line.append(failed ? 'The clipboard is not available. Select and copy: ' : 'Copied for Roll20: ');
+  line.append(failed ? 'The clipboard is not available here — select and copy: ' : 'Copied for Roll20: ');
   const b = document.createElement('b');
   b.textContent = name;
   line.append(b);

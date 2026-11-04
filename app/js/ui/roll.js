@@ -33,7 +33,7 @@ export function rollButton(model, kind, ref, what, cs = null) {
   const shown = spec.rolls.slice(0, 3).map((r) => r.formula).join(' · ')
     + (spec.rolls.length > 3 ? ' …' : '');
   return `<button class="d20" data-roll="${esc(kind)}|${esc(String(ref))}" data-rollwhat="${esc(what)}"
-      title="${esc(`Copy for Roll20: ${shown}`)}"
+      title="${esc(`Copy for Roll20 — ${shown}`)}"
       aria-label="${esc(`Copy a Roll20 roll for ${what}`)}">${D20_ICON}</button>`;
 }
 

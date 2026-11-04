@@ -107,7 +107,7 @@ function grantedFeatsSection(model, ctx) {
       </div>
       <p class="hint">
         ${hasMajor
-          ? 'A Major Drawback gives the Drawback feat.'
+          ? 'A Major Drawback buys the Drawback feat.'
           : 'The Drawback row appears once a Major Drawback is taken on the Overview.'}
         ${specialty ? 'The Specialty feat is mandatory, so it is always here.'
     : 'No Specialty feat: background skills are in use.'} Oath and
@@ -115,7 +115,8 @@ function grantedFeatsSection(model, ctx) {
         ${c.altTraining?.calc?.counts?.feat
     ? `Technique feats (${c.altTraining.calc.counts.feat} from
         <strong>${esc(c.altTraining.calc.technique)}</strong>) are listed on the
-        <strong>Alternate Training</strong> tab, beside the levels that grant them.` : ''}
+        <strong>Alternate Training</strong> tab, beside the levels that grant them. Each is
+        kept in that one place, so the two lists cannot disagree.` : ''}
       </p>`;
 }
 
@@ -199,7 +200,7 @@ function featGroupTable(model, ctx, group, g) {
           ${fixed ? '' : `${fromLevelHead()}`}
           <th class="fnote">Notes</th><th></th></tr></thead>
         <tbody>${group.entries.map((f, i) => `<tr data-featdrop="${g}|${i}"${plannedRow(ahead(f), featLevel(group, f))}>
-          <td class="grip"><span class="grip" data-featgrip title="${fixed ? 'Drag to another level' : 'Drag to reorder, or onto another group'}">&#10495;</span></td>
+          <td class="grip"><span class="grip" data-featgrip title="${fixed ? 'Drag to another level' : 'Drag to reorder — or onto another group'}">&#10495;</span></td>
           <td data-stack="name">${vmcAt(f)
     ? `<span class="vmcslot" title="Variant multiclass feature, set on Progression">VMC ${esc(vmcClass(model.data))}: ${
       esc(String(feature(vmcAt(f)).name ?? '').trim() || 'not set')}</span>`
@@ -218,7 +219,7 @@ function featGroupTable(model, ctx, group, g) {
           ${fixed ? rows.rowToolsMoveOnly(list, i) : rows.rowToolsDragged(list, i)}
         </tr>`).join('')}
         ${group.entries.length ? '' : `<tr class="featempty" data-featdrop="${g}|0">
-          <td colspan="${fixed ? 5 : 6}" class="empty">No feats here yet. Add one, or drag one here.</td>
+          <td colspan="${fixed ? 5 : 6}" class="empty">No feats here yet — add one, or drag one in.</td>
         </tr>`}</tbody>
       </table></div>
       ${fixed ? '' : `<div style="margin-top:8px">
@@ -282,16 +283,18 @@ export function renderFeaturesPanel(model, ctx) {
       ${featured}${main}
       <div class="addgroup">
         ${rows.addButton('featGroups', 'Add group', { name: 'New group', entries: [] })}
-        <span class="hint">Groups match the columns on the workbook's Feats tab, such as Level Up,
-          Oaths, Attunement and Class. Drag a feat by its grip to reorder it or move it to another
-          group. Level Up has one slot per odd level from 1 to 19; its feats can move between
-          levels but cannot be added, removed or dragged out.</span>
+        <span class="hint">Groups mirror the columns on the sheet's Feats tab: Level Up,
+          Oaths, Attunement, Class, and so on. The first group stands on its own. The rest
+          stack under the granted feats. Drag a feat by its grip to reorder it, or drop it on
+          another group to move it there. Level Up has one slot per odd level, 1 to 19. Its
+          feats move between levels but cannot be added, removed or dragged out.</span>
       </div>
 
       ${rules.mythic ? '' : `<section class="panel span2 mythicoff">
         <h3>Mythic <span class="badge">off</span></h3>
-        <p class="hint">Mythic is off in this character's campaign rules, so the tier is 0 and
-          nothing mythic counts. What you wrote is kept and counts again when mythic is turned on.
+        <p class="hint">Mythic is off for this character in its campaign rules, so the tier is 0
+          and nothing mythic counts. What was written here is kept, and comes back when mythic
+          is turned on again.
           <button data-view data-action="campaign-rules">Campaign rules…</button></p>
       </section>`}
       ${rules.mythic ? `${rows.collapsible(model, 'mythic', `<section class="panel span2">
@@ -302,22 +305,22 @@ export function renderFeaturesPanel(model, ctx) {
             ${fields.autoNum('data-set="mythic.tierOverride"', m.tierOverride, {
     placeholder: m.computedTier ?? 0, width: '3.6rem', auto: !awarded, label: 'Mythic tier',
     title: awarded
-      ? 'The tier awarded by the GM. Blank is 0. The campaign rules on the ⚙ tab set where the tier comes from.'
-      : trials ? 'The tier reached through trials with Tier up. Enter a number to override it.'
-        : 'Automatic from level. Enter a number to override it.',
+      ? 'The tier the GM has awarded (for trials, say). Blank is 0. The campaign rules on the ⚙ tab set where the tier comes from.'
+      : trials ? 'The tier the trials have been taken to with Tier up; enter a number to override.'
+        : 'Automatic from level; enter a number to override.',
   })}
             <span class="value">→ ${esc(c.identity.mythicTier ?? 0)}</span></span>`)}
           ${trials ? fields.field('Trials completed', `<span class="pair">
             <input type="number" min="0" value="${esc(trials.have)}" data-set="mythic.trials" data-kind="number"
               aria-label="Trials completed" style="width:4.2rem">
-            <span class="hint">${trials.next === null ? `tier ${trials.tier}, the highest`
+            <span class="hint">${trials.next === null ? `tier ${trials.tier}, the last`
     : trials.ready ? `tier ${trials.next} is earned`
       : `${trials.toward} of ${trials.need} for tier ${trials.next}, ${trials.short} to go`}</span>
-            ${trials.ready ? `<button class="levelup" data-action="tier-up" title="Go up to tier ${trials.next}. You can undo it.">Tier up to ${trials.next}</button>` : ''}</span>`) : ''}
+            ${trials.ready ? `<button class="levelup" data-action="tier-up" title="Take tier ${trials.next}: one step, undone like a play action">Tier up to ${trials.next}</button>` : ''}</span>`) : ''}
           ${fields.field(`Bonus HP / tier (path: ${MYTHIC_PATH_HP[String(m.path || '').trim()] ?? '—'})`,
     fields.autoNum('data-set="mythic.bonusHpPerTier"', m.bonusHpPerTier, {
       placeholder: MYTHIC_PATH_HP[String(m.path || '').trim()] ?? 0, width: '3.6rem', auto: true,
-      title: 'From the path. Enter a number to override it.', label: 'Bonus hit points per mythic tier',
+      title: 'From the path; enter a number to override it.', label: 'Bonus hit points per mythic tier',
     }))}
           ${fields.field('Base path ability', fields.text('mythic.basePathAbility', m.basePathAbility))}
           ${fields.field('Mythic Paragon', `<label class="chk">
@@ -328,19 +331,19 @@ export function renderFeaturesPanel(model, ctx) {
         <p class="hint">
           Tier comes from character level: 8→1, 10→2, 12→3, 14→4, then one per level to
           20→10. Bonus HP/tier is ${(Number(model.mythicHp) || 0) / (c.identity.mythicTier || 1)}
-          × ${esc(c.identity.mythicTier ?? 0)} = <strong>${model.mythicHp}</strong> hit points, added
-          to the maximum on the Hit points panel. Path values: Champion/Guardian 5,
-          Marshal/Trickster 4, Archmage/Hierophant 3. Mythic Paragon treats the tier as 2 higher
-          for every ability, feat and spell that depends on it: <code>mythic.tier</code> in a
-          formula, Amazing Initiative, power uses and the surge die. Rows reached, picks and feat
-          slots still use the actual tier (<code>mythic.baseTier</code>).
+          × ${esc(c.identity.mythicTier ?? 0)} = <strong>${model.mythicHp}</strong> hit points. That is
+          counted into the maximum on the Hit points panel. Path values: Champion/Guardian 5,
+          Marshal/Trickster 4, Archmage/Hierophant 3. Mythic Paragon makes every ability, feat
+          and spell that depends on the tier read it 2 higher: <code>mythic.tier</code> in a
+          formula, Amazing Initiative, the power uses and the surge die. The rows reached, the
+          picks and the feat slots still go by the tier itself (<code>mythic.baseTier</code>).
         </p>
         ${rows.collapsibleSub(model, 'mythic-paths', `Additional paths${(m.paths || []).length ? ` <span class="badge">${m.paths.length}</span>` : ''}`, `
           <div class="tablewrap"><table class="mythic stacked">
             <thead><tr>
               <th>Path</th>
               <th title="The path's 1st-tier base ability, gained with the path">Base path ability</th>
-              <th title="What grants the path, such as the Dual Path ability or feat, or a GM ruling.">Granted by</th>
+              <th title="What grants the path: the Dual Path ability or feat, a GM's ruling">Granted by</th>
               <th class="noslot"></th>
             </tr></thead>
             <tbody>${(m.paths || []).map((p, i) => `<tr data-rowkey="mythpaths">
@@ -351,9 +354,9 @@ export function renderFeaturesPanel(model, ctx) {
             </tr>`).join('')}</tbody>
           </table></div>
           ${rows.addButton('mythic.paths', 'Add path', { path: '', basePathAbility: '', grantedBy: 'Dual Path' })}
-          <p class="hint">Additional paths, from Dual Path or other sources. Bonus HP per tier uses
-            the first path above. Each path ability row below shows its path; the Path cell lists
-            every path here.</p>`, 'mythpaths')}
+          <p class="hint">A second or later path, from Dual Path or anything else that grants one.
+            Bonus HP per tier follows the first path above. Each path ability row below says
+            which path it came from; the Path cell offers every path listed here.</p>`, 'mythpaths')}
         ${rows.collapsibleSub(model, 'mythic-abilities', 'Mythic path abilities', `
           <div class="tablewrap"><table class="mythic stacked">
             <!-- Six columns and one of them prose. The tier, the level it is
@@ -365,7 +368,7 @@ export function renderFeaturesPanel(model, ctx) {
             </colgroup>
             <thead><tr>
               <th class="num">Tier</th>
-              <th class="num" title="${esc(reachedHead === 'Trials' ? 'Total trials completed when this tier is reached' : 'The character level this tier is reached at')}">${reachedHead}</th>
+              <th class="num" title="${esc(reachedHead === 'Trials' ? 'The trials completed in all when this tier is reached' : 'The character level this tier is reached at')}">${reachedHead}</th>
               <th>Path</th>
               <th>Ability</th>
               <th title="What the path ability does. Formulas work here.">Effect</th>
@@ -387,11 +390,11 @@ export function renderFeaturesPanel(model, ctx) {
             }).join('')}</tbody>
           </table></div>
           <p class="hint">
-            ${tiers.length === 10 ? 'Ten' : tiers.length} tier${tiers.length === 1 ? '' : 's'}, one row each, with the ${reachedHead === 'Trials' ? 'trials' : 'character level'} each is reached at. A
+            ${tiers.length === 10 ? 'Ten' : tiers.length} tier${tiers.length === 1 ? '' : 's'}, one row each, beside the ${reachedHead === 'Trials' ? 'trials' : 'character level'} it is reached at. A
             <strong>+2 ability increase</strong> comes at every even tier, so only
-            those rows have a Stat. The same increases are on the
-            <strong>Stats</strong> tab; editing either one changes both. Rows above
-            tier ${tier} are grayed and do not count yet.
+            those rows offer a Stat. The same increases are on the
+            <strong>Stats</strong> tab. Either place edits the one set. Rows above
+            tier ${tier} are greyed. They are planned, not counted yet.
           </p>`, 'mythladder')}
 
         ${rows.collapsibleSub(model, 'mythic-feats', 'Mythic Feats', `
@@ -405,9 +408,9 @@ export function renderFeaturesPanel(model, ctx) {
             </colgroup>
             <thead><tr>
               <th class="num">Tier</th>
-              <th class="num" title="${esc(reachedHead === 'Trials' ? 'Total trials completed when this tier is reached' : 'The character level this tier is reached at')}">${reachedHead}</th>
-              <th title="${esc(rules.mythicLadder === 'core' ? 'What the tier grants: a mythic feat on odd tiers, nothing on even tiers.'
-    : 'What the tier grants: a feat on odd tiers, an RP power on even tiers.')}">Grants</th>
+              <th class="num" title="${esc(reachedHead === 'Trials' ? 'The trials completed in all when this tier is reached' : 'The character level this tier is reached at')}">${reachedHead}</th>
+              <th title="${esc(rules.mythicLadder === 'core' ? 'What the tier hands over: a mythic feat on odd tiers, none on even ones'
+    : 'What the tier hands over — a feat on odd tiers, an RP power on even ones')}">Grants</th>
               <th>Name</th>
               <th title="What the granted feat does. Formulas work here.">Effect</th>
             </tr></thead>
@@ -428,14 +431,16 @@ export function renderFeaturesPanel(model, ctx) {
             }).join('')}</tbody>
           </table></div>
           <p class="hint">
-            ${rules.mythicLadder === 'core' ? `Odd tiers grant a mythic feat. On the core ladder, even tiers grant
-            no feat; their +2 ability increase is in the ladder above, and anything written in an even row
-            is not used.` : 'Odd tiers grant a mythic feat. Even tiers grant an RP power.'}
-            <strong>Grants</strong> is what the tier gives, <strong>Name</strong> is what you
-            took, and <strong>Effect</strong> is what it does. A long effect is folded to one line;
-            ▸ opens it. Formulas work here and in the path abilities above: write “{= tier * 2}”
-            for a value or “{fort += 2}” for a bonus. A bonus written above tier ${tier} does not
-            apply until that tier is reached.
+            ${rules.mythicLadder === 'core' ? `Odd tiers grant a mythic feat. Even tiers grant none on the core
+            ladder: their +2 to an ability is in the ladder above, and anything written in an even row
+            waits.` : 'Odd tiers grant a mythic feat. Even tiers grant an RP power.'}
+            <strong>Grants</strong> is what the tier hands over. <strong>Name</strong> is
+            what you took for it. <strong>Effect</strong> says what that does. A long effect
+            starts folded to one line, like a talent's note; its ▸ opens it, and the
+            sheet remembers which you left open. Formulas work here and in the path abilities
+            above. Write “{= tier * 2}” for a value, or “{fort += 2}” to send a bonus
+            somewhere. A bonus written above tier ${tier} does not apply until that tier
+            is reached.
           </p>`, 'mythladder')}
       </section>`)}
 
@@ -475,7 +480,7 @@ function mythicTierGrantsPanel(model, tier) {
       <td>${(MYTHIC_TIER_GRANTS[t] || []).map((name) => chip(name, t)).join(' ')}</td>
     </tr>`;
     const now = tier >= 1 ? [
-      eff !== tier ? `Counts as tier ${eff} (Mythic Paragon)` : '',
+      eff !== tier ? `Reads as tier ${eff} (Mythic Paragon)` : '',
       `Mythic power ${MYTHIC_BASE_ABILITIES['Mythic Power'].value(eff)}`,
       `Surge ${MYTHIC_BASE_ABILITIES.Surge.value(eff)}`,
       tier >= 2 ? `Initiative ${MYTHIC_BASE_ABILITIES['Amazing Initiative'].value(eff).replace(' initiative', '')}` : '',
@@ -486,14 +491,14 @@ function mythicTierGrantsPanel(model, tier) {
       <h3>What each tier grants <span class="badge">tier ${tier}</span></h3>
       <p class="mythnow">${esc(now)}</p>
       <table class="mythtiers">
-        <thead><tr><th class="num">Tier</th><th class="num" title="${esc(reachedHead === 'Trials' ? 'Total trials completed when this tier is reached' : 'The character level this tier is reached at')}">${reachedHead === 'Trials' ? 'Trials' : 'Lvl'}</th><th>Base abilities gained or improved</th></tr></thead>
+        <thead><tr><th class="num">Tier</th><th class="num" title="${esc(reachedHead === 'Trials' ? 'The trials completed in all when this tier is reached' : 'The character level this tier is reached at')}">${reachedHead === 'Trials' ? 'Trials' : 'Lvl'}</th><th>Base abilities gained or improved</th></tr></thead>
         <tbody>${Array.from({ length: campaignRules(model.data).maxTier }, (_, i) => row(i + 1)).join('')}</tbody>
       </table>
       ${rows.collapsibleSub(model, 'mythic-base-text', 'The rules, in brief', `
         <dl class="mythtext">${names.map((name) => `<dt>${esc(name)}</dt><dd>${esc(MYTHIC_BASE_ABILITIES[name]?.text || '')}</dd>`).join('')}</dl>`, 'mythbase')}
-      <p class="hint">Hover over a name for its rule. Amazing Initiative adds to Initiative from
-        tier 2, Hard to Kill changes the death threshold, and Mythic Power is the tracker of that
-        name. Apply the rest yourself.</p>
+      <p class="hint">Hover a name for its rule. Amazing Initiative is counted into Initiative
+        from tier 2, Hard to Kill into the death threshold, and Mythic Power is the tracker
+        of that name. The rest are applied at the table.</p>
     </section>`;
   }
 
@@ -511,7 +516,7 @@ function mythicTraditionPanel(model, ctx, m) {
         ${!filled('drawback1') ? '<span class="badge err">Drawback 1 is mandatory</span>' : ''}
         <label class="chk" style="margin-left:auto">
           <input type="checkbox" ${m.flowingPower ? 'checked' : ''} data-set="mythic.flowingPower" data-kind="bool">
-          <span title="Its controls are on the Overview with the buffs.">Flowing Power</span></label>
+          <span title="Its controls are on the Overview, with the buffs: the increase, the round's damage and the free rounds">Flowing Power</span></label>
       </h3>
       <div class="tablewrap"><table class="tradition stacked">
         <thead><tr><th class="slot">Slot</th><th class="choice">Choice</th><th>Notes</th></tr></thead>
@@ -529,9 +534,9 @@ function mythicTraditionPanel(model, ctx, m) {
       </table></div>
       <p class="hint">
         One mandatory drawback unlocks one boon. Each further drawback, up to two,
-        unlocks another. The quality has both a bonus and a drawback. The name and note
-        accept <code>{name = expr}</code> formulas, so a boon that grants a pool can define
-        it there.
+        unlocks another. The quality carries both a bonus and a drawback. The name and
+        the note both resolve <code>{name = expr}</code>, so a boon that grants a pool
+        can define it where it is written down.
       </p>
     </section>`;
 }

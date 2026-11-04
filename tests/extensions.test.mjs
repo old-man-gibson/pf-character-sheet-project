@@ -1053,7 +1053,7 @@ console.log('spheres -- a whole sphere as a shared table, tags and all');
     [true, false, false]);
   const shown = sphereBasePick('Divination', 'Alternate Divination', nico);
   check('and is shown the shares for the spheres she has, and no others',
-    [shown.label, /Death: Divine Undead/.test(shown.text), /Divine Time|Divine Warp/.test(shown.text), /\(Death\):$/m.test(shown.text.split('\n\n')[1])],
+    [shown.label, /Death: Divine Undead/.test(shown.text), /Divine Time|Divine Warp/.test(shown.text), /Death:$/m.test(shown.text.split('\n\n')[1])],
     ['Divination Sphere (Alternate Divinations)', true, false, true]);
   // One alternate divination, named outright -- not a talent, and not the
   // whole ability either.
@@ -1883,9 +1883,9 @@ console.log('copying a bundled pack -- what it costs, said before the Save');
 
   check('a small pack says nothing', copyCost(small), null);
   const line = copyCost(big);
-  ok('a big one says it costs nothing where it is', line.includes('uses no browser storage'));
+  ok('a big one says it costs nothing where it is', line.includes('costs no storage at all'));
   ok('names the size the copy would take', line.includes(packSize(big)));
-  ok('and that editing is not what spends it', line.includes('until you save'));
+  ok('and that editing is not what spends it', line.includes('only Save spends anything'));
 }
 
 console.log('the pack list -- filed by author, found by name, author or contents');

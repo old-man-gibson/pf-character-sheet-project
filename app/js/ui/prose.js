@@ -21,7 +21,7 @@ import { hasLink, linkedText } from './links.js';
 
 const PROSE_HINT = 'Formulas work here: {= 2 + con.mod} shows a value, '
   + '{qi.max = wis.mod} names one, {qi.max} reuses it. '
-  + 'Links work too: https://… or [words](https://…).';
+  + 'So do links: https://… on its own, or [words](https://…).';
 
 export function itemArea(model, list, i, field, value, rows = 3, local = null, opts = {}) {
   return prose(model, `data-item="${list}|${i}|${field}"`, value, rows, '', local, opts);
@@ -78,7 +78,7 @@ export function tokenTitle(model, seg, scope, local = null) {
   if (seg.kind === 'ref') {
     const def = (model.inlineDefinitions || []).find((d) => d.name === seg.name);
     return def
-      ? `{${seg.name}}: defined as ${workingLine(def.expr, scope)}${sentTo(model, seg.name)}`
+      ? `{${seg.name}} — defined as ${workingLine(def.expr, scope)}${sentTo(model, seg.name)}`
       : `{${seg.name}}`;
   }
   // A forwarded bonus says where it goes before it says how it was worked
@@ -88,8 +88,8 @@ export function tokenTitle(model, seg, scope, local = null) {
     const op = seg.sign < 0 ? '-=' : '+=';
     const as = seg.type ? ` as ${seg.type}` : '';
     const token = `{${seg.targets.join(', ')} ${op} …${as}}`;
-    if (seg.values) return `${eachLine(model, seg)}: ${token} ${eachWorking(model, seg, local)}`;
-    return `${fmt(seg.value)}${seg.type ? ` ${seg.type}` : ''} to ${targetLabels(model, seg.targets)}: `
+    if (seg.values) return `${eachLine(model, seg)} — ${token} ${eachWorking(model, seg, local)}`;
+    return `${fmt(seg.value)}${seg.type ? ` ${seg.type}` : ''} to ${targetLabels(model, seg.targets)} — `
       + `${token} ${workingLine(seg.expr, scope)}`;
   }
   const label = seg.kind === 'define' ? `{${seg.name} = …}` : '{= …}';
@@ -220,7 +220,7 @@ export function renderedProse(model, text, local = null, { inactive = false, ina
     if (seg.error) {
       const label = seg.kind === 'define' ? `{${seg.name} = ${seg.expr}}`
         : seg.kind === 'ref' ? `{${seg.name}}` : `{= ${seg.expr}}`;
-      return `<span class="tok err" title="${esc(label)}: ${esc(seg.error)}">${esc(seg.raw)}</span>`;
+      return `<span class="tok err" title="${esc(label)} — ${esc(seg.error)}">${esc(seg.raw)}</span>`;
     }
     // A bonus always shows its sign. It is a change to a number somewhere
     // else, and a bare "2" in the middle of a sentence does not say whether
