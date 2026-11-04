@@ -13,14 +13,14 @@ import {
   FORWARD_STATS, MANEUVER_FIELDS, SAVE_BONUS_TYPES, SHEET_ALIASES, armorParts, gearBonusToken, skillLabel,
   abpGroupTotal, columnTypes, resolveAbility, statMod,
 } from '../rules.js';
-import { deathThreshold, effectiveMythicTier, mythicPowerUses, surgeDie } from '../rules.js';
+import { deathThreshold, effectiveMythicTier, fmt, mythicPowerUses, surgeDie } from '../rules.js';
 import {
   COMPANION_ALIASES, COMPANION_FAMILIES, COMPANION_KINDS, COMPANION_LABELS, COMPANION_TARGETS, companionArmor,
   companionAttackKey, companionById, companionHeading, companionInUse, companionNameTest, companionScope,
   companionSkillKey,
 } from '../companions.js';
 import {
-  collectContributions, collectDefinitions, collectUses, hasTokens, plainTokens, renderTokens,
+  collectContributions, collectDefinitions, collectUses, hasTokens, nameTarget, plainTokens, renderTokens,
   resolveContributions, resolveDefinitions,
 } from '../inline.js';
 import {
@@ -537,18 +537,36 @@ export function characterScope(model) {
 
   // Character-wide inline names ({qi.max = …}) become dotted paths in the
   // scope. They never overwrite a built-in value.
-  for (const [name, value] of Object.entries(model.inlineNames || {})) {
+  //
+  // A name may sit under another name that has a value of its own:
+  // {kinetic.fist = …} and {kinetic.fist.maximized = …}. The outer one then
+  // becomes a branch carrying a `total`, as `saves.will` does, so both read.
+  // Only a branch the names made can take one; a built-in value is never
+  // turned into a branch (shadowReason refuses a name hung off one anyway).
+  const names = model.inlineNames || {};
+  const madeHere = new WeakSet();
+  const branch = (value) => {
+    const b = value === undefined ? {} : { total: value };
+    madeHere.add(b);
+    return b;
+  };
+  for (const [name, value] of Object.entries(names)) {
     const parts = name.split('.');
     let node = s;
     let clash = false;
     for (let i = 0; i < parts.length - 1; i++) {
       const k = parts[i];
-      if (node[k] === undefined) node[k] = {};
-      else if (typeof node[k] !== 'object' || node[k] === null) { clash = true; break; }
+      if (node[k] === undefined) node[k] = branch();
+      else if (typeof node[k] !== 'object' || node[k] === null) {
+        if (!Object.prototype.hasOwnProperty.call(names, parts.slice(0, i + 1).join('.'))) { clash = true; break; }
+        node[k] = branch(node[k]);
+      }
       node = node[k];
     }
     const leaf = parts[parts.length - 1];
-    if (!clash && node[leaf] === undefined) node[leaf] = value;
+    if (clash) continue;
+    if (node[leaf] === undefined) node[leaf] = value;
+    else if (madeHere.has(node[leaf]) && !('total' in node[leaf])) node[leaf].total = value;
   }
 
   addSheetAliases(s, c);
@@ -1295,6 +1313,15 @@ export function stackingNote(x) {
 }
 
 /**
+ * One bonus from forwardedInto as a line of text: "+1 from Level 8: += 1".
+ * `to` names the destination, where one line lists several.
+ */
+export function forwardedLine(x, to = '') {
+  return `${fmt(x.value)}${x.type ? ` ${x.type}` : ''}${to ? ` to ${to}` : ''} from ${x.where}`
+    + `: ${x.sign < 0 ? '-=' : '+='} ${x.expr}${stackingNote(x)}`;
+}
+
+/**
  * Resolve every {name = expr} on the character into `this.inlineNames`,
  * available to trackers, weapon tokens, skill formulas and other inline
  * tokens through the formula scope.
@@ -1306,6 +1333,7 @@ export function stackingNote(x) {
 export function resolveInlineNames(model, { late = false } = {}) {
   const sources = model.proseSources();
   const defs = collectDefinitions(sources);
+  const bonuses = collectContributions(sources);
   // Base scope excludes inline names (they are being computed) and skill
   // totals (skills may read names, so names must not read skills — that
   // rules out cycles between the two).
@@ -1318,7 +1346,6 @@ export function resolveInlineNames(model, { late = false } = {}) {
   // and the sheet would show two different numbers for the same word.
   const builtin = new NameIndex(flatNames(base));
   base.skill = {};
-  const { values, errors, duplicates } = resolveDefinitions(defs, base);
 
   // A definition may not take a name the sheet already works out. The scope
   // merge has always refused to overwrite one, but refusing quietly is the
@@ -1328,10 +1355,22 @@ export function resolveInlineNames(model, { late = false } = {}) {
   const shadowed = [];
   for (const d of defs) {
     const reason = shadowReason(d.name, builtin);
-    if (!reason) continue;
-    shadowed.push({ name: d.name, path: d.path, reason });
-    delete values[d.name];
-    errors.push({ name: d.name, path: d.path, error: reason, shadow: true });
+    if (reason) shadowed.push({ name: d.name, path: d.path, reason });
+  }
+
+  // Where a bonus may be sent. The sheet's own destinations are decided once
+  // a recompute, on its first pass, and kept, so what `target` read stays
+  // what the tooltips show. The names the character defines are destinations
+  // too -- `{infusion.spec += 1}` -- and are worked out with the names below.
+  const sheet = model.contributions?.targets?.sheet || model.contributions?.targets || model.forwardTargets();
+  const own = ownNameTargets(defs, shadowed, sheet);
+  const {
+    values, errors, duplicates, bonuses: named, before,
+  } = resolveDefinitions(defs, base, { list: bonuses, into: own.find });
+
+  for (const s of shadowed) {
+    delete values[s.name];
+    errors.push({ name: s.name, path: s.path, error: s.reason, shadow: true });
   }
 
   model.inlineNames = values;
@@ -1340,25 +1379,26 @@ export function resolveInlineNames(model, { late = false } = {}) {
   model.inlineDuplicates = duplicates;
   model.inlineShadowed = shadowed;
 
+  const targets = withNameTargets(model, sheet, own, before);
+  // Kept beside the answers: the view needs to call a destination by its
+  // name ("Bluff", not "skill.bluff") and rebuilding the list per tooltip
+  // would walk every skill again for every token on the tab.
+  model.forwardTargetList = targets.list;
+
   // Forwarded bonuses are worked out here too. The second recompute pass
   // re-resolves the names (a name may read a save that a bonus has just
   // moved) but keeps the amounts this pass arrived at for every bonus aimed
   // at a stat totalled before the prose: worked out again, one could feed
   // itself, and settle somewhere that depended on where it started.
   //
-  // Names first, bonuses second, and never the other way round. A bonus may
-  // be written in terms of a name the character defines; a name may not be
-  // written in terms of a bonus. One direction, so nothing can loop.
+  // Names first, bonuses second. A bonus may be written in terms of a name
+  // the character defines. A bonus sent *to* a name is the one exception: it
+  // is worked out with the names, in their dependency order, so a loop
+  // through it is reported as a circular definition (resolveDefinitions), and
+  // the amounts it came to are listed here as they are (`named`).
   if (!model.contributions) {
-    const targets = model.forwardTargets();
-    // Kept beside the answers: the view needs to call a destination by its
-    // name ("Bluff", not "skill.bluff") and rebuilding the list per tooltip
-    // would walk every skill again for every token on the tab.
-    model.forwardTargetList = targets.list;
-    model.contributions = resolveContributions(
-      collectContributions(sources), values, model.scope(), targets,
-    );
-  } else if (late) {
+    model.contributions = resolveContributions(bonuses, values, model.scope(), targets, null, named);
+  } else if (late || named.size) {
     // A bonus aimed only at something totalled later -- a skill, a
     // companion, a weapon, a tracker -- is worked out again, against a sheet
     // that now has the early bonuses in it. The first pass read everything
@@ -1369,20 +1409,63 @@ export function resolveInlineNames(model, { late = false } = {}) {
     // exception, were worked out without their bonuses for this (see
     // Character#computePass). `targets` is the first pass's, so what `target`
     // read stays what the tooltips show.
-    const before = model.contributions;
+    //
+    // A pass that only reads the names again keeps every amount, except the
+    // ones sent to names, which are what the names now came to.
+    const prior = model.contributions;
     const keep = (c, i) => {
-      const e = before.entries[i];
+      const e = prior.entries[i];
       if (!e || e.path !== c.path || e.raw !== c.raw) return null;
-      return [...e.lands, ...Object.keys(e.failed || {})].some(totalledEarly) ? e : null;
+      return !late || [...e.lands, ...Object.keys(e.failed || {})].some(totalledEarly) ? e : null;
     };
-    model.contributions = resolveContributions(
-      collectContributions(sources), values, model.scope(), before.targets || model.forwardTargets(), keep,
-    );
+    model.contributions = resolveContributions(bonuses, values, model.scope(), targets, keep, named);
   }
   // Every name the prose *reads*, kept beside every name it defines: the
   // parse of each expression is cached by source, so the second pass costs
   // little and orphans() becomes a set lookup rather than another walk.
   model.inlineUses = collectUses(sources);
+}
+
+/**
+ * The names the character defines, as destinations. `find(target)` is the
+ * name a bonus sent to `target` lands on, or null; it ignores case, as every
+ * destination does. A name the sheet refuses (shadowReason) is not one, and a
+ * sheet destination spelled the same way wins.
+ */
+function ownNameTargets(defs, shadowed, sheet) {
+  const refused = new Set(shadowed.map((s) => s.name));
+  const names = new Map();        // name -> where the definition in force is written
+  const folded = new Map();
+  for (const d of defs) {
+    if (refused.has(d.name) || names.has(d.name) || sheet.expand(d.name)) continue;
+    names.set(d.name, d.path);
+    if (!folded.has(d.name.toLowerCase())) folded.set(d.name.toLowerCase(), d.name);
+  }
+  const find = (t) => {
+    if (!names.size || sheet.expand(t)) return null;
+    return names.has(t) ? t : folded.get(String(t).toLowerCase()) ?? null;
+  };
+  return { names, find };
+}
+
+/**
+ * The sheet's destinations with the character's own names added: listed for
+ * the Formulas tab under where each is defined, expanded, and read as
+ * `target` (their value before bonuses, `before`). `sheet` stays on it, for
+ * the next pass to start from.
+ */
+function withNameTargets(model, sheet, own, before) {
+  if (!own.names.size) return sheet;
+  const listed = [...own.names].map(([name, path]) => ({
+    name, label: name, where: describeSource(path, model.data), mine: true,
+  }));
+  return {
+    ...sheet,
+    sheet,
+    list: [...sheet.list, ...listed],
+    expand: (t) => sheet.expand(t) || (own.find(t) ? [own.find(t)] : null),
+    targetOf: (key, scope) => (own.names.has(key) ? nameTarget(before[key]) : sheet.targetOf(key, scope)),
+  };
 }
 
 /**

@@ -352,7 +352,8 @@ written, so `{qi.max = floor((burn.max + qi.base) / 4)}` in one feature can read
 `{burn.max = 18}` from another. Named values are **character-wide**: they show in
 the Trackers tab's available-values list and can be read by tracker maxes,
 weapon `[[…]]`/`{{…}}` tokens, skill-rank formulas, crafting amounts and other
-inline tokens.
+inline tokens. One name can extend another: `{kinetic.fist = dice(4, 8)}` and
+`{kinetic.fist.maximized = 32}` are two names, and both can be read everywhere.
 
 ```
 Elemental Arms: AC {arms.ac = 10 + con.mod + 2}, hardness {arms.hardness = con.mod},
@@ -431,6 +432,23 @@ recompute have anywhere to *put* an arriving bonus:
 | `defenses.weakness`, `weakness.fire`, … | vulnerability, the same way |
 | `immune.sleep`, `immune.fire`, … | an immunity, which is a switch rather than an amount: any positive number grants it, and `-=` suppresses one that was typed in |
 | `familiar.*`, `animalCompanion.*`, `eidolon.*` | a companion's own numbers — see below |
+| any name you defined, e.g. `infusion.spec` | your own `{name = …}` — see below |
+
+**Your own names.** A bonus can be sent to a name you defined with `{name = …}`. The
+name's value is its formula plus the bonuses sent to it, and every formula that reads
+the name gets that total:
+
+```
+Level 5: Infusion Specialization {infusion.spec = 1}
+Level 8: Infusion Specialization {infusion.spec += 1}
+```
+
+`infusion.spec` is 2 from level 8. A bonus written on a level the character has not
+reached does not apply. Bonuses stack the same way as anywhere else. A bonus that reads
+the name it is sent to, by name or as `target`, reads the value before bonuses. A bonus
+that reads it back through another name is a loop and is reported as a circular
+definition. The name must hold a number; a bonus to a name holding dice text is
+refused. Hovering the name's value lists the bonuses added to it.
 
 **Caster levels count separately unless marked.** The Spheres caster level, each Vancian
 class's caster level and each manifesting class's manifester level are separate numbers.

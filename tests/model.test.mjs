@@ -4350,6 +4350,64 @@ console.log('the formula lookup finds names, values, destinations and functions'
   check('and no match says so', /Nothing by that name/.test(formulaDrawerResults(c, 'zzzq')), true);
 }
 
+console.log('a name can sit under another name, and a name you define takes forwarded bonuses');
+{
+  const { renderedProse } = await import('../app/js/ui/prose.js');
+  const { targetGroups } = await import('../app/js/formula-guide.js');
+  const c = new Character(blankDocument({ name: 'Namer' }));
+  c.set('identity.level', 8);
+  const notes = 'Fist {kinetic.fist = dice(4, 6)}, maximized {kinetic.fist.maximized = 24}. Spec {infusion.spec = 1}.';
+  c.set('formulaNotes', notes);
+  const read = (n) => evaluateFormula(n, c.scope());
+
+  // One name holding text with another under it: both read from the scope,
+  // which is what a weapon, a tracker and every formula field read.
+  check('a name and one under it both read', [read('kinetic.fist'), read('kinetic.fist.maximized')], ['4d6', 24]);
+  c.listAdd('equipment.weapons', { name: 'Fist', attackType: 'Melee', dice: '{kinetic.fist}',
+    special: '[[{kinetic.fist.maximized}]]' });
+  const fist = () => c.data.equipment.weapons.find((w) => w.name === 'Fist');
+  check('the weapon reads both', [fist().diceResolved, fist().calc.tokDmg.flat, fist().calc.errors],
+    ['4d6', 24, []]);
+  c.set('formulaNotes', 'Under first {kinetic.fist.maximized = 24}, then {kinetic.fist = dice(4, 6)}');
+  check('in either order', [read('kinetic.fist'), read('kinetic.fist.maximized')], ['4d6', 24]);
+
+  // A bonus sent to a name adds to it, everywhere it is read.
+  c.set('formulaNotes', `${notes} Level 8: {infusion.spec += 1}. DC {spec.dc = 10 + infusion.spec}`);
+  check('a bonus adds to a name', [c.inlineNames['infusion.spec'], read('infusion.spec')], [2, 2]);
+  check('and no bonus reports an error', c.contributions.errors, []);
+  check('a name reading it gets the total', c.inlineNames['spec.dc'], 12);
+  check('the name lists where it came from', c.forwardedInto('infusion.spec').from.map((f) => f.value), [1]);
+  check('the Formulas tab offers it as a destination, under where it is defined',
+    targetGroups(c.forwardTargetList, 'infusion').find((g) => g.key === 'mine')?.items
+      .map((it) => [it.name, it.label]), [['infusion.spec', 'the Formulas tab']]);
+  check('and so does the formula lookup', formulaLookup(c, 'infusion').targets.some((t) => t.name === 'infusion.spec'), true);
+  check('its tooltip lists the bonus', /Forwarded here: \+1\n\+1 from .*: \+= 1/.test(renderedProse(c, notes)), true);
+
+  // Stacking as anywhere else; `target` and the name itself read it before bonuses.
+  c.set('formulaNotes', `${notes} {infusion.spec += 2 as morale} {infusion.spec += 1 as morale} {infusion.spec -= 1}`);
+  check('two of one type count once, a penalty always', c.inlineNames['infusion.spec'], 1 + 2 - 1);
+  c.set('formulaNotes', `${notes} {infusion.spec += target * 2} {infusion.spec += infusion.spec}`);
+  check('target and the name read the value before bonuses', c.inlineNames['infusion.spec'], 1 + 2 + 1);
+
+  // What cannot work says so where it is written.
+  c.set('formulaNotes', `${notes} {kinetic.fist += 1}`);
+  check('a name holding text takes no bonus', c.contributions.errors.map((e) => e.error),
+    ['"kinetic.fist" is not a number, so a bonus cannot be added to it.']);
+  check('and keeps its value', c.inlineNames['kinetic.fist'], '4d6');
+  c.set('formulaNotes', '{loop.a = 1} {loop.b = loop.a + 1} {loop.a += loop.b}');
+  check('a bonus that reads its name back is a loop',
+    c.inlineErrors.some((e) => e.name === 'loop.a' && /^Circular definition/.test(e.error)), true);
+  c.set('formulaNotes', `${notes} {infusion.spek += 1}`);
+  check('a misspelt name is not a destination', c.contributions.errors.map((e) => e.error),
+    ['"infusion.spek" is not something a bonus can be forwarded to.']);
+
+  // Saved and reopened, it is the same number, not one more each time.
+  c.set('formulaNotes', `${notes} {infusion.spec += 1}`);
+  c.recompute(); c.recompute();
+  const reopened = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('recompute and reopen settle', [c.inlineNames['infusion.spec'], reopened.inlineNames['infusion.spec']], [2, 2]);
+}
+
 console.log('a weapon\u2019s dice follow its size, and the wielder\u2019s');
 {
   const W = { name: 'Longsword', attackType: 'Melee', dice: '1d8', damageAbility: 'Str', abilityMult: 1, miscDamage: 0, miscAttack: 0, enhancement: 0,

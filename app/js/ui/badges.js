@@ -9,7 +9,7 @@
 import { esc } from './html.js';
 import { exprField } from './rows.js';
 import { fmt, FORWARD_BY_DERIVED } from '../rules.js';
-import { stackingNote } from '../model/scope.js';
+import { forwardedLine } from '../model/scope.js';
 import { forwardedPopHtml } from './breakdown-popover.js';
 
 /* ----- the import offset, as a field -----
@@ -92,9 +92,7 @@ export function forwardedBadge(model, name, { tag = '', only = '', waiting = '',
   // A superseded bonus stays on the list, marked. It is the reason the one
   // above it is not adding to it, and a reader who cannot see it will write
   // it in again by hand.
-  const from = groups.flatMap((g) => (g.f?.from || [])
-    .map((x) => `${fmt(x.value)}${x.type ? ` ${x.type}` : ''}${many ? ` to ${g.name}` : ''} from ${x.where}`
-      + `: ${x.sign < 0 ? '-=' : '+='} ${x.expr}${stackingNote(x)}`));
+  const from = groups.flatMap((g) => (g.f?.from || []).map((x) => forwardedLine(x, many ? g.name : '')));
   const title = [waiting ? `Waiting: ${waiting}` : '', `Forwarded here${word ? ` (${word})` : ''}`, note, ...from]
     .filter(Boolean).join('\n');
   return `<span class="fwd${waiting ? ' waiting' : ''}"${pop} title="${esc(title)}">`

@@ -128,6 +128,7 @@ export const VALUE_SECTIONS = [
  * as by weapon, and is the one thing here that has to be taught.
  */
 export const TARGET_SECTIONS = [
+  { key: 'mine', label: 'Named by you', blurb: 'Every {name = …} on this character. A bonus adds to the name’s value.' },
   { key: 'weapon', label: 'Weapons and damage', blurb: 'Attack and damage for all weapons, one kind of weapon, or one weapon.' },
   { key: 'attack', label: 'Attack', blurb: 'The three attack numbers on the Overview.' },
   { key: 'defence', label: 'Health, armor, saves', blurb: 'Hit points, armor class, the three saves, damage reduction, energy resistance and immunities.' },
@@ -299,12 +300,15 @@ export function targetGroups(list, query = '') {
   for (const t of list || []) {
     if (t.unused) continue;
     listed += 1;
-    const family = classifyTarget(t.name, t.system);
+    // A name the character defined is filed as theirs, whatever it starts with,
+    // and described by where it is defined: its label is only the name again.
+    const family = t.mine ? 'mine' : classifyTarget(t.name, t.system);
     const heading = targetHeading(t, family);
-    const hay = `${t.name}\n${t.label}\n${heading?.label || ''}`.toLowerCase();
+    const label = t.mine ? t.where || '' : t.label;
+    const hay = `${t.name}\n${label}\n${heading?.label || ''}`.toLowerCase();
     if (!terms.every((q) => hay.includes(q))) continue;
     buckets.get(family).push({
-      name: t.name, label: t.label, reaches: t.family ? t.family.length : 0, heading,
+      name: t.name, label, reaches: t.family ? t.family.length : 0, heading,
     });
   }
   const groups = TARGET_SECTIONS
@@ -618,8 +622,8 @@ export function targetsHtml(groups, total, query, own = '') {
     </h3>
     <p class="hint">Every stat a <code>{… += …}</code> bonus can be added to on this character.
       Click one to copy the token, then paste it into the feat, talent or feature that grants the
-      bonus. The bonus shows in gold beside the stat. These names only receive bonuses and cannot
-      be read in the box above.</p>
+      bonus. The bonus shows in gold beside the stat. These names only receive bonuses. Apart from
+      names you defined, they cannot be read in the box above.</p>
     <input class="fx-search" data-fx-target-query placeholder="Find a destination, e.g. will or damage"
       value="${esc(own)}" aria-label="Find a bonus you can send" spellcheck="false">
     ${shown ? groups.map((g) => `<details class="fx-group" ${searching ? 'open' : ''}>
