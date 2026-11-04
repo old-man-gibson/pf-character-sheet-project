@@ -49,9 +49,9 @@ export function talentLegend() {
   if (!sphereCatalogue().spheres.length) return '';
   const item = (cls, text) => `<span class="tlegend-item"><i class="tmark ${cls}">✦</i> ${text}</span>`;
   return `<p class="tlegend" aria-label="What the ✦ marks mean">
-    ${item('base', 'a base sphere — shows what taking the sphere grants, or just the ability named in brackets')}
-    ${item('', 'a talent — shows its rules')}
-    ${item('pkg', 'a talent that grants a package you name in brackets, like Expanded Geomancing (Fire) — shows that package’s rules')}
+    ${item('base', 'a base sphere: shows what taking the sphere grants, or only the ability named in brackets')}
+    ${item('', 'a talent: shows its rules')}
+    ${item('pkg', 'a talent that grants a package you name in brackets, like Expanded Geomancing (Fire): shows that package’s rules')}
     ${item('third', 'a talent marked third-party, like [3PP]')}
     <span class="tlegend-item tlegend-hint">Hover a ✦ to read it.</span>
   </p>`;
@@ -115,7 +115,7 @@ export function foldingNote(model, binding, value, path, { name = '', below = ''
   const shut = said === undefined ? text.length > LONG_NOTE : !!said;
   const what = below ? 'the note and what the pack says' : 'the whole note';
   const caret = foldButton(model, key, {
-    open: !shut, cls: 'disclose catfold', title: shut ? `Show ${what}` : 'Fold it to one line',
+    open: !shut, cls: 'disclose catfold', title: shut ? `Show ${what}` : 'Collapse it to one line',
   });
   if (!shut) {
     return `<div class="notecell"><div class="noteline"><div class="notebox">${field}</div>${caret}</div>${below}</div>`;
@@ -197,8 +197,8 @@ function talentInfo(model, sphere, value) {
   const base = pick.base ? pick.entry : null;
   if (base) {
     return {
-      cls: 'base', head: base.label, sub: `${base.sphere} sphere — what taking it grants`, text: base.text,
-      aria: `${base.sphere} sphere — from the sphere catalogue`,
+      cls: 'base', head: base.label, sub: `${base.sphere} sphere: what taking it grants`, text: base.text,
+      aria: `${base.sphere} sphere, from the sphere catalog`,
     };
   }
   const hit = sphereTalent(sphere, value);
@@ -228,14 +228,14 @@ function talentInfo(model, sphere, value) {
   return {
     cls: pack ? 'pkg' : thirdParty ? 'third' : '',
     head: `${hit.name}${tags.length ? ` (${tags.join(', ')})` : ''}`,
-    sub: [hit.sphere, hit.group].filter(Boolean).join(' — '),
+    sub: [hit.sphere, hit.group].filter(Boolean).join(': '),
     prerequisites: hit.prerequisites,
     source: cited,
-    lead: pack ? `${pack.names.join(', ')} — the package this row names` : '',
+    lead: pack ? `${pack.names.join(', ')}: the package this row names` : '',
     // The whole entry, because a talent's text is the reason to look it up at
     // all and there is nowhere in a four-column table to put it.
     text: pack ? pack.text : hit.text,
-    aria: `${hit.name} — from the sphere catalogue`,
+    aria: `${hit.name}, from the sphere catalog`,
   };
 }
 
@@ -330,7 +330,7 @@ export function talentPopHtml(model, spec) {
     return `<div class="peek">
       <div class="bdhead"><span class="bdname">${esc(name)}</span><span class="bdsphere">${esc(sphere || 'no sphere')}</span></div>
       ${warn ? `<div class="bdsub peekwarn">${esc(warn)}</div>` : ''}
-      <div class="peektext">${note || info?.text ? richText(note || info.text) : '<span class="empty">Nothing written — open the note with ▸ to add one.</span>'}</div>
+      <div class="peektext">${note || info?.text ? richText(note || info.text) : '<span class="empty">Nothing written. Open the note with ▸ to add one.</span>'}</div>
       ${!note && info?.source ? `<div class="bdsub peeksource">${esc(info.source)}</div>` : ''}
     </div>`;
   }
@@ -347,12 +347,12 @@ export function talentPopHtml(model, spec) {
     const entry = manipulationEntry(row);
     const needs = entry ? [...entry.requires.map((r) => MANIPULATION_NEEDS[r] || r), entry.needs].filter(Boolean).join(', ') : '';
     return panel(entry?.name || name, [row?.group, needs && `needs ${needs}`].filter(Boolean).join(' · '),
-      [note ? 'Your note — open the row with ▸ to edit it' : ''],
-      note || entry?.text || '', note ? '' : (entry ? '' : 'Not in the catalogue'));
+      [note ? 'Your note. Open the row with ▸ to edit it.' : ''],
+      note || entry?.text || '', note ? '' : (entry ? '' : 'Not in the catalog'));
   }
   if (s?.k === 'note') {
     const where = String(s.p ?? '');
-    const hint = 'Note — click the line to open and edit it';
+    const hint = 'Note. Click the line to open and edit it.';
     // A sphere tab's note is a field of a row in a list, `list|index|field`.
     // The Alternate Training ladder keeps its notes by level under a plain
     // path, and says what the row is called itself.

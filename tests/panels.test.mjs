@@ -603,7 +603,7 @@ console.log('\nthe unarmed practitioner table folds, and the shared increases do
   ok('a 🥊 weapon brings it, folded, with the dice still showing',
     /data-collapse="unarmed-setup"/.test(shut) && !/usesBoxing/.test(shut) && /class="unarmed-dice">1d3</.test(shut));
   ok('and a second one points at the first rather than repeating it',
-    shut.match(/data-collapse="unarmed-setup"/g).length === 1 && /worked out under\s+Fist/.test(shut));
+    shut.match(/data-collapse="unarmed-setup"/g).length === 1 && /set up under\s+Fist/.test(shut));
   c.data.uiPrefs.collapsed['unarmed-setup'] = false;
   const seen = () => {
     const html = gear.renderGearPanel(c, {});
@@ -657,7 +657,7 @@ console.log('\nthe gear table: three cells a bonus, and the card grows with its 
     /data-fill="targets"/.test(to) && (to.match(/<option/g) || []).length === 2
       && /<option value="ac\.total" selected title="ac\.total">AC</.test(to));
   ok('the rest is a grouped picker showing plain names',
-    /<optgroup label="Armour class">/.test(all) && /<option value="ac\.total" selected title="ac\.total">AC</.test(all)
+    /<optgroup label="Armor class">/.test(all) && /<option value="ac\.total" selected title="ac\.total">AC</.test(all)
       && /<optgroup label="Skills">[\s\S]*<option value="skill\.bluff"[^>]*>Bluff</.test(all));
   ok('the working scores stay off it', !/dex\.temp/.test(all));
   const bad = html.match(/<select class="target invalid"[^>]*bonuses\.1\.target[\s\S]*?<\/select>/)?.[0] || '';
@@ -1096,7 +1096,7 @@ console.log('\nevery × is the one ×');
     '<button class="danger" data-remove="x|0" title="Remove" aria-label="Remove">×</button>');
   const ask = (armed) => removeButton('vancian.prepared', 1, { what: 'Fireball', armed });
   check('one that asks twice is armed under list|i', ask(null).includes('data-remove-armed="vancian.prepared|1"'), true);
-  check('and says so on the hover', ask(null).includes('title="Remove Fireball — asks twice"'), true);
+  check('and says so on the hover', ask(null).includes('title="Remove Fireball (click twice)"'), true);
   check('armed, it reads sure?', [ask('vancian.prepared|1').includes('class="danger armed"'),
     ask('vancian.prepared|1').endsWith('>sure?</button>')], [true, true]);
   check('another key armed leaves it a ×', ask('vancian.prepared|0').endsWith('>×</button>'), true);
@@ -1148,7 +1148,7 @@ console.log('\nevery moved number is the one moved number');
   const { movedValue } = await import('../app/js/ui/rows.js');
   check('down: red, with what it was and what moved it on the hover',
     movedValue('12', -2, { base: '14', sources: 'Shaken' }),
-    '<strong class="adj" title="Base 14 — with Shaken applied">12</strong>');
+    '<strong class="adj" title="Base 14. Shown with Shaken applied.">12</strong>');
   check('up: green', movedValue('16', 2, { base: '14', sources: 'Bull' }).includes('class="adj up"'), true);
   check('not moved: the figure as it is', movedValue('14', 0, { base: '14' }), '14');
   check('kept: its own classes either way', movedValue('+3', 0, { tag: 'span', cls: 'mod', keep: true }), '<span class="mod">+3</span>');
@@ -1203,7 +1203,7 @@ console.log('\nthe card table has three faces: the tab, a table window, a hand w
   ok('and never shows the card Read the Cards turned up', !table.includes(`data-card="${peeked}"`));
   ok('the table window still has the field: in play, the deck, mana, the piles, the log', ['f-play', 'f-deck', 'f-mana', 'f-piles', 'f-log'].every((z) => table.includes(z)));
   ok('the piles hold the banished under the exile, on the tab and on the table window', sheet.includes('<h3>Banished') && table.includes('<h3>Banished'));
-  ok('and every card offers banishing among its moves', /<option value="banished">banished — until spell points recover<\/option>/.test(hand));
+  ok('and every card offers banishing among its moves', /<option value="banished">banished until spell points recover<\/option>/.test(hand));
   ok('the hand window has the hand, the controls and the peeked card, and nothing in play', hand.includes(`data-card="${inHand}"`) && /data-table="next\|/.test(hand)
     && hand.includes(`data-card="${peeked}"`) && !hand.includes('f-play') && !hand.includes('f-mana'));
   ok('a card in hand carries its Roll20 text for the window to copy, on the d20 and on Cast',
@@ -1247,11 +1247,11 @@ console.log('\nthe card table has three faces: the tab, a table window, a hand w
   c.data.cardcasting.cards[0].cost = '2';
   c.recompute();
   const rainbow = subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' });
-  ok('a two-colour face shows its discounted cost', /Rainbow Efficiency: 1 off for 2 colours — 1 to cast"[^>]*>→ 1</.test(rainbow));
+  ok('a two-colour face shows its discounted cost', /Rainbow Efficiency: 1 off for 2 colors. Costs 1 to cast."[^>]*>→ 1</.test(rainbow));
   c.tableStart();
   const bolt = c.data.cardcasting.table.hand.find((id) => id.startsWith('0#')) || c.data.cardcasting.table.deck.find((id) => id.startsWith('0#'));
   c.tableMove(bolt, 'hand');
-  ok('and the hand shows the cost to pay, the typed one on hover', /title="Typed 2; Rainbow Efficiency takes 1 off">1</.test(subsystems.cardTableView(c, ctx, 'hand')));
+  ok('and the hand shows the cost to pay, the typed one on hover', /title="Cost 2, reduced by 1 by Rainbow Efficiency.">1</.test(subsystems.cardTableView(c, ctx, 'hand')));
   c.tableEnd();
 }
 
@@ -1308,7 +1308,7 @@ console.log('\na squad member takes its own deck manipulations');
   c.tableMove(bolt, 'hand');
   c.tablePlay(bolt, 'ongoing');
   const control = subsystems.cardTableView(c, ctx, 'control', cc.id);
-  ok('the control view is the member\'s hand with its buttons, and says whose it is', control.includes('controlview') && control.includes(`data-card="${mend}"`) && new RegExp(`data-table="play\\|${mend}\\|cast"`).test(control) && /You are running Lira/.test(control));
+  ok('the control view is the member\'s hand with its buttons, and says whose it is', control.includes('controlview') && control.includes(`data-card="${mend}"`) && new RegExp(`data-table="play\\|${mend}\\|cast"`).test(control) && /You control Lira/.test(control));
   ok('the character\'s cards are not in that hand, and in play they take no press', !new RegExp(`class="mcard mini[^"]*" [^>]*data-card="${bolt}"[^]*?data-table="resolve\\|${bolt}`).test(control) && control.includes('f-play') && !control.includes(`data-table="resolve|${bolt}|"`));
   ok('no round controls, no windows, no peek, no spell points of the player\'s', !/data-table="next\|/.test(control) && !/data-table="window\|/.test(control) && !/data-table="peek\|/.test(control) && !/data-table="sp\|/.test(control) && !/data-table="exileRandom\|/.test(control));
   ok('the table window itself is unchanged by the member', subsystems.cardTableView(c, ctx, 'table').includes(`data-table="resolve|${bolt}|"`));
@@ -1347,8 +1347,8 @@ console.log('\na card with several modes asks on the way in');
   const open = subsystems.cardTableView(c, { ...ctx, castPick: bolt }, 'hand');
   const form = open.match(/<div class="mcard mini castpick"[^]*?<\/select>/)?.[0] || '';
   ok('opened, the chooser lists the modes with their dice and price, each with its own Roll20 text',
-    form.includes('<option value="0 SP" data-sp="0" data-copytext="&amp;{template:default} {{name=Bolt — Fire Blast}} {{0 SP=[[5d6]]}}')
-    && form.includes('<option value="boost (1 SP)" data-sp="1"') && /boost \(1 SP\) — 7d6 \(1 SP\)</.test(form));
+    form.includes('<option value="0 SP" data-sp="0" data-copytext="&amp;{template:default} {{name=Bolt: Fire Blast}} {{0 SP=[[5d6]]}}')
+    && form.includes('<option value="boost (1 SP)" data-sp="1"') && /boost \(1 SP\): 7d6 \(1 SP\)</.test(form));
   ok('with a points field and Cast, Ongoing and a way out', open.includes('name="sp"') && open.includes(`data-table="play|${bolt}|cast"`)
     && open.includes(`data-table="play|${bolt}|ongoing"`) && open.includes('data-table="pick||"'));
   ok('the chooser is the hand\'s: the table window never draws it', !subsystems.cardTableView(c, { ...ctx, castPick: bolt }, 'table').includes('castpick'));
@@ -1397,7 +1397,7 @@ console.log('\nthe squad on the deck and at the table');
   c.recompute();
   const ctx = { ...blankView(), tab: 'cardcasting', deckView: 'deck', rollFormat: 'template' };
   const deck = subsystems.cardcastingPanel(c, ctx);
-  ok('the deck view has a squad panel with the member and its deck', deck.includes('Squad — Multi-Headed Play') && deck.includes('<strong>Lira</strong>') && /badge ok[^>]*>combines</.test(deck));
+  ok('the deck view has a squad panel with the member and its deck', deck.includes('Squad: Multi-Headed Play') && deck.includes('<strong>Lira</strong>') && /badge ok[^>]*>combines</.test(deck));
   ok('each caster\'s deck is a view of its own: the character\'s faces and add buttons here', deck.includes('Nico’s deck') && deck.includes('Lira’s deck')
     && (deck.match(/data-add="cardcasting\.cards"/g) || []).length === 2 && deck.includes('data-item="cardcasting.cards|0|name"') && !deck.includes('data-item="cardcasting.cards|1|name"'));
   const hers = subsystems.cardcastingPanel(c, { ...ctx, deckView: `deck:${cc.id}` });

@@ -153,26 +153,26 @@ export const CONTEXTUAL_VALUES = [
     match: (name) => name === 'essence.self',
     names: 'essence.self',
     where: 'a veil’s own name or description',
-    what: 'the essence invested in that veil. Elsewhere, name the slot instead — essence.hands, essence.head — or read essence.total for the pool.',
+    what: 'The essence invested in that veil. Elsewhere, use the slot name (essence.hands, essence.head) or essence.total for the pool.',
   },
   {
     match: (name) => name === 'self' || name.startsWith('self.'),
     names: 'self.max, self.current, self.remaining, self.min, self.spent, self.pct, self.zone',
     where: 'a tracker’s own note, min and zone bounds',
-    what: 'that tracker, without naming itself. Elsewhere, name it — tracker.<id>.max — and note that a tracker’s max cannot use self at all, since that would be defining itself.',
+    what: 'That tracker’s own numbers. Elsewhere, use tracker.<id>.max. A tracker’s max cannot use self.',
   },
   {
     match: (name) => /^target(\.|$)/i.test(name),
     names: 'target, target.ranks, target.base, target.mod …',
     where: 'a forwarded bonus (the formula after += or -=)',
-    what: 'the stat the bonus is added to. A formula that uses target is evaluated once per destination: in {skill -= if(target.ranks == 0, 2, 0)} it is each skill in turn. target.<part> is the destination’s own name plus the part (on Bluff, target.ranks = skill.bluff.ranks; on Will, target.base = saves.will.base). target alone is the destination’s value before bonuses, where the sheet calculates it before applying them; saves and armour classes exclude their Other column. Outside a bonus, use the full name.',
+    what: 'The stat the bonus is added to. A formula that uses target is evaluated once per destination: in {skill -= if(target.ranks == 0, 2, 0)} it is each skill in turn. target.<part> reads that part of the destination (on Bluff, target.ranks = skill.bluff.ranks; on Will, target.base = saves.will.base). target alone is the destination’s value before bonuses are applied; for saves and armor class it leaves out the Other column. Outside a bonus, use the full name.',
   },
 ];
 
 /** Why a name is missing here, when it is a name that only exists somewhere. */
 export function contextualNote(name) {
   const c = CONTEXTUAL_VALUES.find((v) => v.match(String(name)));
-  return c ? `${name} only exists in ${c.where} — ${c.what}` : null;
+  return c ? `${name} only exists in ${c.where}. ${c.what}` : null;
 }
 
 /** Why this token is flagged, in words a player can act on. */
@@ -401,7 +401,7 @@ export function workings(source, scope) {
  */
 export function workingLine(source, scope) {
   const w = workings(source, scope);
-  if (w.error) return `${w.pretty} — ${w.error}`;
+  if (w.error) return `${w.pretty}: ${w.error}`;
   const steps = [w.pretty];
   if (w.substituted !== w.pretty) steps.push(w.substituted);
   if (w.display !== steps[steps.length - 1]) steps.push(w.display);
@@ -423,7 +423,7 @@ export const FUNCTION_HELP = [
     name: 'floor',
     sig: 'floor(n) · floor(n, step)',
     group: 'Rounding',
-    what: 'Rounds down. The workhorse — half your level, a third of your ranks, anything the rules say to round down. Given a step it rounds down to a multiple of it.',
+    what: 'Rounds down. Use it for half your level, a third of your ranks or anything else the rules round down. With a step, it rounds down to a multiple of the step.',
     eg: 'floor(level / 2)',
   },
   {
@@ -438,7 +438,7 @@ export const FUNCTION_HELP = [
   },
   {
     name: 'trunc', sig: 'trunc(n)', group: 'Rounding',
-    what: 'Throws the fraction away. The same as floor for positive numbers; a negative one rounds towards zero instead of down.',
+    what: 'Drops the fraction. The same as floor for positive numbers; negative numbers round toward zero.',
     eg: 'trunc(level / 3)',
   },
   {
@@ -448,34 +448,34 @@ export const FUNCTION_HELP = [
   },
   {
     name: 'sign', sig: 'sign(n)', group: 'Rounding',
-    what: '−1, 0 or 1, depending on which side of zero the number falls.',
+    what: '−1, 0 or 1, for a negative number, zero or a positive number.',
     eg: 'sign(str.mod)',
   },
 
   {
     name: 'min', sig: 'min(a, b, …)', group: 'Picking one',
-    what: 'The smallest of what it is given, which is how you write a cap: min(level, 20) never exceeds 20.',
+    what: 'The smallest value. Use it for a cap: min(level, 20) never exceeds 20.',
     eg: 'min(level, 20)',
   },
   {
     name: 'max', sig: 'max(a, b, …)', group: 'Picking one',
-    what: 'The largest, which is how you write a floor: max(1, …) keeps a pool from dropping below one.',
+    what: 'The largest value. Use it for a minimum: max(1, …) keeps a pool at 1 or more.',
     eg: 'max(1, wis.mod)',
   },
   {
     name: 'clamp', sig: 'clamp(n, low, high)', group: 'Picking one',
-    what: 'Holds a number inside a range, both ends at once.',
+    what: 'A number cannot fall below the lower number or go above the higher number.',
     eg: 'clamp(level - 4, 0, 10)',
   },
   {
     name: 'sum', sig: 'sum(a, b, …)', group: 'Picking one',
-    what: 'Adds everything up. Never shorter than writing + between them, but it reads better down a long list.',
+    what: 'Adds all the values. The same as writing + between them, but easier to read in a long list.',
     eg: 'sum(str.mod, dex.mod, con.mod)',
   },
 
   {
     name: 'if', sig: 'if(test, then, otherwise)', group: 'Choosing',
-    what: 'Picks between two answers. The branch not taken is never worked out, so it is safe to divide by something in one of them.',
+    what: 'Evaluates a condition. If the condition is true, the first result is used, otherwise the second result.',
     eg: 'if(mythic.tier = 0, 0, 3 + mythic.tier * 2)',
   },
   {
@@ -485,23 +485,23 @@ export const FUNCTION_HELP = [
   },
   {
     name: 'or', sig: 'or(a, b, …)', group: 'Choosing',
-    what: 'True when any one of them is.',
+    what: 'True when any one of them is true.',
     eg: 'or(level >= 20, mythic.tier >= 8)',
   },
   {
     name: 'not', sig: 'not(a)', group: 'Choosing',
-    what: 'Turns true into false and back.',
+    what: 'Turns true into false and false into true.',
     eg: 'not(level >= 5)',
   },
 
   {
     name: 'mod', sig: 'mod(score)', group: 'Pathfinder',
-    what: 'The ability-modifier rule, (score − 10) ÷ 2 rounded down. You rarely need it, because every ability already publishes its modifier as str.mod and the rest — it is here for a score the sheet does not hold.',
+    what: 'The ability modifier rule: (score − 10) ÷ 2, rounded down. Every ability already has its modifier as str.mod and so on; use this for a score the sheet does not track.',
     eg: 'mod(18)',
   },
   {
     name: 'iterations', sig: 'iterations(bab)', group: 'Pathfinder',
-    what: 'How many attacks a base attack bonus buys: one, and another for every five points.',
+    what: 'Attacks based on the character’s base attack bonus: one, plus one additional attack at +6, +11 and +16 each.',
     eg: 'iterations(bab)',
   },
   {
@@ -511,12 +511,12 @@ export const FUNCTION_HELP = [
   },
   {
     name: 'step', sig: 'step("die", steps)', group: 'Pathfinder',
-    what: 'A die moved along the damage chain — 1, 1d2, 1d3, 1d4, 1d6, 1d8, 1d10, 2d6, 2d8, 3d6, 2d10, 4d6 … 16d6 — the way "one die size per five levels" asks. step("1", 2) is 1d3. The chain stops at its ends, and a die it does not list is an error rather than a guess.',
+    what: 'Moves a die along the damage chain (1, 1d2, 1d3, 1d4, 1d6, 1d8, 1d10, 2d6, 2d8, 3d6, 2d10, 4d6 … 16d6), as in "one die size per five levels". step("1d6", 2) is 1d6 -> 1d8 -> 1d10. The chain stops at its ends, and a die not on the chain is an error.',
     eg: 'step("1", floor(level / 5))',
   },
   {
     name: 'tags', sig: 'tags("name")', group: 'Pathfinder',
-    what: 'How many feats carry a tag in square brackets: tags("Chance") counts every [Chance] feat, granted feat and bought-off drawback. Only a tag inside brackets counts, and [Chance, Deck] counts once toward each. A tag nobody has is 0, where tags.chance would be an unknown value.',
+    what: 'Counts the feats, granted feats and bought-off drawbacks with a tag in square brackets: tags("Chance") counts every [Chance]. [Chance, Deck] counts once for each tag. A tag no feat has is 0, while tags.chance would be an unknown value.',
     eg: 'tags("Chance") + tags("Deck")',
   },
 ];
@@ -526,11 +526,11 @@ export const OPERATOR_HELP = [
   { op: '+  -  *  /', what: 'Add, subtract, multiply, divide.', eg: '10 + con.mod * 2' },
   { op: '%', what: 'The remainder after dividing. level % 4 is 0 on every fourth level.', eg: 'level % 4' },
   { op: '^', what: 'To the power of.', eg: '2 ^ 3' },
-  { op: '( )', what: 'Do this part first. × and ÷ already happen before + and −, so brackets are for when you want a different order.', eg: '(level + 4) / 2' },
-  { op: '<  >  <=  >=', what: 'Comparisons. They come out as yes or no, and count as 1 or 0 when you add them.', eg: 'level >= 11' },
-  { op: '=  !=', what: 'Equal and not equal. A single = is read as a comparison here, never as an assignment, because everyone types it that way out of spreadsheet habit.', eg: 'mythic.tier = 0' },
-  { op: '&&  ||', what: 'Both, and either. and(…) and or(…) do the same job in words.', eg: 'level >= 5 && con.mod > 0' },
-  { op: '? :', what: 'The short spelling of if(): "test ? this : that".', eg: 'level >= 11 ? 2 : 1' },
+  { op: '( )', what: 'Elements of the formula within parentheses are evaluated before others. See PEMDAS for further information.', eg: '(level + 4) / 2' },
+  { op: '<  >  <=  >=', what: 'Comparisons. They evaluate to true or false, or 1 or 0 when used arithmetically.', eg: 'level >= 11' },
+  { op: '=  !=', what: 'Equal and not equal. A single = is a comparison, never an assignment.', eg: 'mythic.tier = 0' },
+  { op: '&&  ||', what: 'And, or. and(…) and or(…) do the same.', eg: 'level >= 5 && con.mod > 0' },
+  { op: '? :', what: 'Short form of if(): "test ? this : that".', eg: 'level >= 11 ? 2 : 1' },
 ];
 
 /**
@@ -540,50 +540,50 @@ export const OPERATOR_HELP = [
  */
 export const VALUE_GUIDE = [
   { prefix: 'level, bab, initiative', what: 'The plain numbers: character level, base attack bonus, initiative.', eg: 'floor(level / 2)' },
-  { prefix: 'str.score, str.mod, str.temp, str.tempMod', what: 'Each ability four ways: the score, its modifier, the temporary score and its modifier. dex, con, int, wis and cha are the same.', eg: '10 + con.mod' },
-  { prefix: 'hp.total, hp.current, ac.total, ac.touch, ac.flatFooted, ac.cmd', what: 'What the sheet worked out for hit points, armour class and CMD.', eg: 'floor(hp.total / 4)' },
-  { prefix: 'saves.fortitude, saves.reflex, saves.will', what: 'The three saving throws, as the sheet totals them.', eg: 'saves.will + 2' },
-  { prefix: 'ac.armor, ac.shield, ac.ability', what: 'What the armour class is wearing: the armour’s own bonus, every active shield’s together, and the ability bonus after the armour has capped it.', eg: 'ac.shield * 2' },
-  { prefix: 'ac.armor.type, ac.armor.heavy, ac.maxDex, ac.acp', what: 'The armour worn, read further: how heavy it is (0 none, 1 light, 2 medium, 3 heavy, and ac.armor.light / medium / heavy as 1 or 0), its enhancement (ac.armor.enhancement, ac.shield.enhancement), the lowest Max Dex worn (99 when nothing caps it) and the armour check penalty.', eg: 'if(ac.armor.type >= 2, 2, 0)' },
-  { prefix: 'ac.shield1, ac.shield2 …', what: 'Where you keep several of a thing, each one takes the family name and a number from one — one per shield row, in the order the Equipment tab lists them. A row you are not holding reads 0, so the numbers always add up to ac.shield.', eg: 'ac.shield1' },
-  { prefix: 'ac.dodge, ac.natural, ac.deflection, ac.insight …', what: 'Every typed column of the Stats tab’s AC row, under the name on the column. One for each: dodge, natural, enhancement, deflection, circumstance, insight, luck, morale, sacred, profane, untyped, size, template and the ABP pair.', eg: 'if(ac.dodge > 0, 2, 0)' },
-  { prefix: 'saves.will.base, saves.will.ability, saves.will.luck …', what: 'The same for each save: its base save, its ability modifier, and every typed column by name — resistance, morale, trait, racial and the rest. The save’s own name still reads the total, so saves.will and saves.will.total are one number.', eg: 'saves.fortitude.resistance' },
+  { prefix: 'str.score, str.mod, str.temp, str.tempMod', what: 'Each ability four ways: score, modifier, temporary score and temporary modifier. dex, con, int, wis and cha work the same way.', eg: '10 + con.mod' },
+  { prefix: 'hp.total, hp.current, ac.total, ac.touch, ac.flatFooted, ac.cmd', what: 'The sheet’s totals for hit points, armor class and CMD.', eg: 'floor(hp.total / 4)' },
+  { prefix: 'saves.fortitude, saves.reflex, saves.will', what: 'The three saving throw totals.', eg: 'saves.will + 2' },
+  { prefix: 'ac.armor, ac.shield, ac.ability', what: 'The armor bonus, the combined bonus of every active shield, and the ability bonus after the armor’s Max Dex.', eg: 'ac.shield * 2' },
+  { prefix: 'ac.armor.type, ac.armor.heavy, ac.maxDex, ac.acp', what: 'More about the armor worn: its weight class (0 none, 1 light, 2 medium, 3 heavy; ac.armor.light / medium / heavy are 1 or 0), its enhancement (ac.armor.enhancement, ac.shield.enhancement), the lowest Max Dex worn (99 when nothing caps it) and the armor check penalty.', eg: 'if(ac.armor.type >= 2, 2, 0)' },
+  { prefix: 'ac.shield1, ac.shield2 …', what: 'One value per shield row, numbered from 1 in the order the Equipment tab lists them. A shield you are not holding reads 0, so they always add up to ac.shield.', eg: 'ac.shield1' },
+  { prefix: 'ac.dodge, ac.natural, ac.deflection, ac.insight …', what: 'Each typed column of the AC row on the Stats tab, by column name: dodge, natural, enhancement, deflection, circumstance, insight, luck, morale, sacred, profane, untyped, size, template and the ABP pair.', eg: 'if(ac.dodge > 0, 2, 0)' },
+  { prefix: 'saves.will.base, saves.will.ability, saves.will.luck …', what: 'Each save’s base, ability modifier and typed columns by name (resistance, morale, trait, racial and the rest). saves.will and saves.will.total are the same total.', eg: 'saves.fortitude.resistance' },
   { prefix: 'attack.melee, attack.ranged, attack.cmb', what: 'The attack numbers.', eg: 'attack.cmb + 4' },
   { prefix: 'skill.<name>', what: 'Any skill total, by its name in lower case with underscores for spaces.', eg: 'skill.perception + 5' },
-  { prefix: 'skill.<name>.ranks, skill.<name>.classSkill', what: 'Ranks in the skill, and 1 or 0 for class skill. skill.<name> alone is still the total.', eg: 'if(skill.stealth.ranks >= 10, 6, 3)' },
-  { prefix: 'speed.<type>', what: 'Each movement rate by its type in lower case — speed.land, speed.fly, speed.climb — as the Speed panel totals it, before conditions. A speed may read the speeds listed above it and not the ones below.', eg: 'floor(speed.land / 2)' },
-  { prefix: 'tags.<tag>', what: 'How many feats, granted feats and bought-off drawbacks carry each tag written in square brackets — tags.chance for [Chance]. Only tags somebody has are listed; tags("chance") reads the same count and is 0 for the rest.', eg: 'tags.deck * 2' },
-  { prefix: 'mythic.tier', what: 'Mythic tier, and 0 for a character who has none.', eg: 'if(mythic.tier = 0, 0, 3 + mythic.tier * 2)' },
-  { prefix: 'tracker.<id>.max .current .remaining .min .spent .pct', what: 'Every tracker publishes its numbers under the id shown on its own row. That id never changes when the tracker is renamed, so a formula pointing at one cannot be broken by renaming it.', eg: 'tracker.burn.max - 2' },
-  { prefix: 'familiar.*  animalCompanion.*  eidolon.*  conjured.*', what: 'A companion’s own numbers, on a character that has one, under the id shown on its tab: the kind’s bare name for the first of a kind, and the kind with a number appended — eidolon2, eidolon3 — for each one added after. The id stays with the creature through a rename or a reordering.', eg: 'eidolon.hd + eidolon2.hd' },
-  { prefix: 'sphere.<name>.dc .ranks .close .medium .long', what: 'Each skill sphere under its own name — sphere.body_control.dc, sphere.study.ranks. A guile sphere has no caster level to read: every number it produces comes off the ranks in its associated skill, and they differ sphere by sphere, which is why each gets a name of its own. operative.mod, operative.leverage and operative.plans are the ones that belong to the character rather than to a sphere.', eg: 'sphere.bluster.close' },
-  { prefix: 'spheres.cl .dc .msb .msd', what: 'The Spheres of Power casting numbers — caster level, global DC, magic skill bonus and defence — the same four caster.level, caster.dc, caster.msb and caster.msd read, under the names a bonus is sent to them by.', eg: 'floor(spheres.cl / 2)' },
+  { prefix: 'skill.<name>.ranks, skill.<name>.classSkill', what: 'Ranks in the skill, and 1 or 0 for class skill. skill.<name> alone is the total.', eg: 'if(skill.stealth.ranks >= 10, 6, 3)' },
+  { prefix: 'speed.<type>', what: 'Each movement rate by type in lower case (speed.land, speed.fly, speed.climb), as the Speed panel totals it before conditions. A speed can read the speeds listed above it, not below.', eg: 'floor(speed.land / 2)' },
+  { prefix: 'tags.<tag>', what: 'The number of feats, granted feats and bought-off drawbacks with each tag in square brackets: tags.chance for [Chance]. Only tags in use are listed; tags("chance") gives the same count, and 0 for an unused tag.', eg: 'tags.deck * 2' },
+  { prefix: 'mythic.tier', what: 'Mythic tier, or 0 for a non-mythic character.', eg: 'if(mythic.tier = 0, 0, 3 + mythic.tier * 2)' },
+  { prefix: 'tracker.<id>.max .current .remaining .min .spent .pct', what: 'Each tracker’s numbers, under the id shown on its row. The id does not change when the tracker is renamed, so formulas that use it keep working.', eg: 'tracker.burn.max - 2' },
+  { prefix: 'familiar.*  animalCompanion.*  eidolon.*  conjured.*', what: 'A companion’s numbers, under the id shown on its tab. The first of a kind uses the kind’s name; later ones add a number (eidolon2, eidolon3). The id stays the same when the companion is renamed or reordered.', eg: 'eidolon.hd + eidolon2.hd' },
+  { prefix: 'sphere.<name>.dc .ranks .close .medium .long', what: 'Each skill sphere by name: sphere.body_control.dc, sphere.study.ranks. Skill spheres have no caster level; their numbers come from the ranks in each sphere’s associated skill. operative.mod, operative.leverage and operative.plans belong to the character, not to a sphere.', eg: 'sphere.bluster.close' },
+  { prefix: 'spheres.cl .dc .msb .msd', what: 'The magic sphere casting numbers: caster level, global DC, magic skill bonus and magic skill defense. These are the same values as caster.level, caster.dc, caster.msb and caster.msd, under the names used to add a bonus to them.', eg: 'floor(spheres.cl / 2)' },
   { prefix: 'vancian.<class>.cl, vancian.cl', what: 'Each Vancian casting class’s caster level, by the block’s name, and vancian.cl for the highest of them.', eg: 'vancian.wizard.cl' },
   { prefix: 'manifester.<class>.level, manifester.level', what: 'Each manifesting class’s manifester level, and manifester.level for the highest.', eg: 'manifester.psion.level' },
-  { prefix: 'anything you named yourself', what: 'Every {name = …} you have written in prose, anywhere on the character. They sit in the same list as the built-in values and are read the same way — they are the point of the whole system.', eg: 'qi.max' },
-  { prefix: 'StrMod, Fort, MythicTier, VeilEssenceHands …', what: 'The workbook’s own named ranges, so a formula pasted out of a spreadsheet keeps working. Each is another name for a value above — StrMod is str.tempMod, the working modifier, which is the one the workbook meant. Only names that were checked against the source sheets are here; the rest were configuration cells and have no number to point at.', eg: 'floor(StrMod / 2)' },
+  { prefix: 'anything you named yourself', what: 'Every {name = …} you have written in text anywhere on the character. They are listed and read the same way as built-in values.', eg: 'qi.max' },
+  { prefix: 'StrMod, Fort, MythicTier, VeilEssenceHands …', what: 'The workbook’s named ranges, so a formula pasted from a spreadsheet still works. Each one is another name for a value above; StrMod is str.tempMod, the working modifier. Only names checked against the source workbooks are included.', eg: 'floor(StrMod / 2)' },
 ];
 
 /** Where formulas may be written — the other half of "how do I use this". */
 export const PLACES_GUIDE = [
   {
     where: 'Prose, inside braces',
-    what: 'Class features, template features, notes, background, traits, mythic abilities, weapon properties, gear notes, veils, cards, crafting notes — anywhere you can type a paragraph.',
+    what: 'Any text field, such as class features, notes, traits, weapon properties and cards.',
     eg: 'Hardness {arms.hardness = con.mod}, HP {arms.hp = 3 * con.mod}.',
   },
   {
     where: 'A tracker’s max and min',
-    what: 'On the Trackers tab. This is where a formula becomes a row of pips you can actually spend.',
+    what: 'On the Trackers tab. The result sets how many pips you can spend.',
     eg: '3 + mythic.tier * 2',
   },
   {
     where: 'A tracker’s zone bounds',
-    what: 'In a tracker’s ✎ editor: a danger band that moves with the character instead of sitting at a fixed number.',
+    what: 'In a tracker’s ✎ editor: a warning range that changes with the character instead of a fixed number.',
     eg: 'self.max - 2',
   },
   {
     where: 'Single-value fields',
-    what: 'Skill ranks bought, crafting amounts, a weapon’s dice, a speed bonus — anywhere the whole value may be an expression instead of a number.',
+    what: 'Skill ranks, crafting amounts, a weapon’s dice, a speed bonus and other fields where the whole value can be a formula.',
     eg: 'level * 100',
   },
 ];
@@ -593,35 +593,32 @@ export const TOKEN_FORMS = [
   {
     form: '{= expr}',
     name: 'Show a value',
-    what: 'Works it out and prints it where you wrote it. Nothing else on the sheet can see it.',
+    what: 'Calculates the value and shows it where you wrote it. Nothing else on the sheet can read it.',
     eg: 'A blast does {= floor(level / 2)}d6.',
   },
   {
     form: '{name = expr}',
     name: 'Name a value',
-    what: 'The same, and gives the answer a name the whole character can read — trackers, weapons, other formulas, anywhere. This is how you make your own variable.',
+    what: 'Calculates the value, shows it and gives it a name that trackers, weapons and other formulas can read. This is how you make your own variable.',
     eg: 'Qi pool {qi.max = wis.mod + level}.',
   },
   {
     form: '{name}',
     name: 'Reuse a value',
-    what: 'Prints a name you defined elsewhere. Define it once, quote it everywhere.',
+    what: 'Shows a value you named elsewhere.',
     eg: 'Spend {qi.max} qi at dawn.',
   },
   {
     form: '{dest += expr}',
     name: 'Forward a bonus',
-    what: 'Works it out, prints it, and adds it to something else — a skill, a save, AC, '
-      + 'an attack, an ability score, a class level, a tracker’s maximum, damage on some or '
-      + 'all of your weapons. '
-      + 'The rule lives in '
-      + 'the feature that grants it instead of '
-      + 'being copied into every column it touches. Several destinations at once, separated by '
-      + 'commas; -= for a penalty; end with "as size" (or morale, luck, …) and it will not '
-      + 'stack with another bonus of that type, or "as temp.size" to make it a temporary '
-      + 'one. "target.skill.bluff = …" says the same thing the long way. Inside the formula, '
-      + 'target is the stat being added to (target.ranks on a skill, target.base on a save); a '
-      + 'formula that uses it is evaluated once per destination.',
+    what: 'Calculates the value, shows it and adds it to another stat: a skill, a save, AC, '
+      + 'an attack, an ability score, a class level, a tracker’s maximum, or damage on some or '
+      + 'all weapons. The rule stays in the feature that grants it. Separate several '
+      + 'destinations with commas; use -= for a penalty. End with "as size" (or morale, luck, …) '
+      + 'so it does not stack with another bonus of that type, or "as temp.size" to make it '
+      + 'temporary. "target.skill.bluff = …" is the long form. Inside the formula, target is the '
+      + 'stat being added to (target.ranks on a skill, target.base on a save), and the formula '
+      + 'is evaluated once per destination.',
     eg: 'Mythic Social Grace {skill.bluff, skill.diplomacy += mythic.tier}.',
   },
 ];

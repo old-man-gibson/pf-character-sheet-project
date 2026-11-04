@@ -324,12 +324,12 @@ function addGear(out, doc) {
   }
   const armor = eq.armor;
   if (armor && armor.name) {
-    entry(out, 'armor.name', 'Gear', 'Armour worn', armor.name);
-    entry(out, 'armor.acBonus', 'Gear', 'Armour AC bonus', armor.acBonus ?? null);
-    entry(out, 'armor.enhancement', 'Gear', 'Armour enhancement', armor.enhancement ?? null);
-    entry(out, 'armor.maxDex', 'Gear', 'Armour max Dex', armor.maxDex ?? null);
-    entry(out, 'armor.acp', 'Gear', 'Armour check penalty', armor.acp ?? null);
-    entry(out, 'armor.active', 'Gear', 'Armour worn now', armor.active ?? null);
+    entry(out, 'armor.name', 'Gear', 'Armor worn', armor.name);
+    entry(out, 'armor.acBonus', 'Gear', 'Armor AC bonus', armor.acBonus ?? null);
+    entry(out, 'armor.enhancement', 'Gear', 'Armor enhancement', armor.enhancement ?? null);
+    entry(out, 'armor.maxDex', 'Gear', 'Armor max Dex', armor.maxDex ?? null);
+    entry(out, 'armor.acp', 'Gear', 'Armor check penalty', armor.acp ?? null);
+    entry(out, 'armor.active', 'Gear', 'Armor worn now', armor.active ?? null);
   }
   for (const kind of ['gear', 'other', 'shields']) {
     for (const row of eq[kind] || []) {

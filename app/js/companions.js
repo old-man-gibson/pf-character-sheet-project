@@ -1481,7 +1481,7 @@ export function companionScope(block) {
  * suite checks that they do, on every companion of every fixture, rather
  * than trusting the two to stay in step. Null for a name that is not one.
  */
-const ELSEWHERE = 'a rule written elsewhere on the sheet — see the gold badge';
+const ELSEWHERE = 'a bonus from elsewhere on the sheet (see the gold badge)';
 
 /**
  * What a companion's armour classes, CMD, CMB, initiative and attack are made
@@ -1509,8 +1509,8 @@ export function companionRecipe(b, k, stat) {
   const natural = () => {
     const form = Number(k.formNatural) || 0;
     return [
-      part('natural armour', (Number(k.tableNatural) || 0) - form, 'from the table'),
-      part(`${b.baseForm || 'base form'} natural armour`, form, 'the base form’s own'),
+      part('natural armor', (Number(k.tableNatural) || 0) - form, 'from the table'),
+      part(`${b.baseForm || 'base form'} natural armor`, form, 'the base form’s own'),
     ];
   };
   const special = () => part('special size', -size, 'the size modifier the other way round');
@@ -1533,7 +1533,7 @@ export function companionRecipe(b, k, stat) {
       part('flat-footed only', b.ac?.ff), ...natural(), forwarded('ff')];
     case 'cmd': return [base(10), part('BAB', k.bab), part('Str', mod('str')), part('Dex', mod('dex')), special(),
       part('bonus AC (all)', b.ac?.all), part('touch only', b.ac?.touch, 'dodge counts toward CMD'),
-      part('flat-footed only', Math.min(0, Number(b.ac?.ff) || 0), 'a penalty to AC applies to CMD; armour does not'),
+      part('flat-footed only', Math.min(0, Number(b.ac?.ff) || 0), 'a penalty to AC applies to CMD; armor does not'),
       part('CMD other', b.cmdOther), forwarded('cmd')];
     case 'ffCmd': return [base(10), part('BAB', k.bab), part('Str', mod('str')),
       part('Dex penalty', Math.min(0, mod('dex')), 'flat-footed loses the bonus, not a penalty'), special(),
@@ -1585,7 +1585,7 @@ export function companionBreakdown(kind, block, stat) {
       }
       return { label: 'Hit points', total: k.hpMax, parts: [...parts, part('bonus max HP', b.hp?.bonus), forwarded('hp')] };
     }
-    case 'ac': return recipe('Armour class', k.ac);
+    case 'ac': return recipe('Armor class', k.ac);
     case 'touch': return recipe('Touch AC', k.touch);
     case 'ff': return recipe('Flat-footed AC', k.flatFooted);
     case 'cmd': return recipe('CMD', k.cmd);
@@ -1755,7 +1755,7 @@ function parses(text) {
  */
 export const COMPANION_TARGETS = [
   ['hp', 'Hit points', 'hp'],
-  ['ac.total', 'Armour class', 'ac'],
+  ['ac.total', 'Armor class', 'ac'],
   ['ac.touch', 'Touch AC', 'touch'],
   ['ac.flatFooted', 'Flat-footed AC', 'ff'],
   ['cmd', 'CMD', 'cmd'],

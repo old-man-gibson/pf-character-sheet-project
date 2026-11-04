@@ -50,44 +50,44 @@ export const PALETTES = [
   {
     id: 'dark', name: 'Midnight', scheme: 'dark', pair: 'light', layout: 'top',
     swatch: ['#14161c', '#1c1f27', '#d4a24a', '#e6e8ef'],
-    blurb: 'The sheet as it has always been: gold on slate.',
+    blurb: 'Gold on slate.',
   },
   {
     id: 'light', name: 'Daylight', scheme: 'light', pair: 'dark', layout: 'top',
     swatch: ['#f4f5f8', '#ffffff', '#8a5f0d', '#1a1d26'],
-    blurb: 'The same sheet on white, for a bright room or a projector.',
+    blurb: 'Dark text on white.',
   },
   {
     id: 'workbench', name: 'Workbench', scheme: 'light', pair: 'workbench-dark', layout: 'side', fonts: true,
     swatch: ['#eef0ec', '#fafaf7', '#8b2b2e', '#1b1f24'],
-    blurb: 'The Homebrew Workbench’s look: ivory paper, oxblood headings, a serif for the names.',
+    blurb: 'Ivory background, dark red headings and serif names, like the Workbench.',
   },
   {
     id: 'workbench-dark', name: 'Workbench, dark', scheme: 'dark', pair: 'workbench', layout: 'side', fonts: true,
     swatch: ['#15171b', '#1e2127', '#e27578', '#e4e1da'],
-    blurb: 'The Workbench after hours: the same faces on charcoal.',
+    blurb: 'The Workbench fonts on charcoal.',
   },
   {
     id: 'parchment', name: 'Parchment', scheme: 'light', pair: 'dark', layout: 'top', fonts: true,
     swatch: ['#e6dcc3', '#f5ecd9', '#7a3e12', '#2c2416'],
-    blurb: 'Sepia and umber, set in a book face, like the rulebook it came out of.',
+    blurb: 'Sepia and brown with a book font.',
   },
   {
     id: 'slate', name: 'Slate', scheme: 'dark', pair: 'ink', layout: 'side',
     swatch: ['#0f141a', '#161d25', '#4fc3c9', '#d7e0e8'],
-    blurb: 'Cool grey-blue with a teal edge, quiet enough for a long session.',
+    blurb: 'Gray-blue with teal accents.',
   },
   {
     id: 'ink', name: 'Ink', scheme: 'light', pair: 'slate', layout: 'top',
     swatch: ['#ffffff', '#ffffff', '#1f3d7a', '#111111'],
-    blurb: 'Black on white, hard lines, no washes: the sheet as a printed form.',
+    blurb: 'Black on white with solid lines, like a printed form.',
   },
 ];
 
 /** The two places the tab rail can be. */
 export const LAYOUTS = [
-  { id: 'top', name: 'Tabs across the top', blurb: 'The bar pins under the header as you scroll.' },
-  { id: 'side', name: 'Tabs down the side', blurb: 'A rail on the left, like the Workbench. Wide screens only; narrow ones fall back to the bar.' },
+  { id: 'top', name: 'Tabs across the top', blurb: 'The tab bar stays under the header as you scroll.' },
+  { id: 'side', name: 'Tabs down the side', blurb: 'Tabs on the left side. On narrow screens, the tabs move to the top.' },
 ];
 
 /**
@@ -113,9 +113,9 @@ export const WIDTHS = [
  * how much of it: a left edge, a gentle wash, or a strong one.
  */
 export const ACTION_MARKS = [
-  { id: 'both', name: 'Tag and colour' },
+  { id: 'both', name: 'Tag and color' },
   { id: 'tag', name: 'Tag only' },
-  { id: 'colour', name: 'Colour only' },
+  { id: 'colour', name: 'Color only' },
   { id: 'none', name: 'Neither' },
 ];
 export const ACTION_TINTS = [

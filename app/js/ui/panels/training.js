@@ -68,7 +68,7 @@ export function guileClassBlock(model, g, cls, ci) {
 
 /** The syntax a ladder rule takes, for the tooltip on each rule box. */
 export const LADDER_RULE_HELP = 'The class levels this ladder gains a talent at: all, odd, even, 3, 5-10, '
-  + '"2, +2" (2nd and every 2 levels thereafter), -7 to leave a level out. Start with char: to '
+  + '"2, +2" (2nd and every 2 levels after), -7 to leave a level out. Start with char: to '
   + 'count character levels instead. A formula of classLevel and charLevel works too. Blank is none.';
 
   /**
@@ -96,7 +96,7 @@ export function poolField(list, ci, cls, home) {
       return `<label class="fld rulepick${error ? ' bad' : ''}" title="${esc(error ? `${error}. ${LADDER_RULE_HELP}` : LADDER_RULE_HELP)}">
             <span>${label}</span>
             ${itemText(list, ci, field, cls[field], placeholder)}
-            ${error ? '<span class="hint bad">not a rule — grants nothing</span>' : ''}</label>`;
+            ${error ? '<span class="hint bad">not a rule; grants nothing</span>' : ''}</label>`;
     };
     return `<label class="fld ratepick"><span>${home === 'guile' ? 'Expertise tier' : 'Talent pool'}</span>
             ${itemSelect(list, ci, 'expertise', cls.expertise ?? '', options, home === 'guile' ? '—' : null)}</label>
@@ -239,18 +239,18 @@ export function ladderTable(model, list, ci, cls, systems, spheres) {
       return blended ? side : null;
     };
     const why = (side, sphere) => (side === 'none'
-      ? ` — ${sphere} is not a sphere this class's talents count as, so it counts nowhere`
-      : side ? ` — counts as ${SYSTEM_NOUNS[side]}` : '');
+      ? `: ${sphere} is not a sphere this class's talents count as, so it is not counted`
+      : side ? `: counts as ${SYSTEM_NOUNS[side]}` : '');
     const heading = (which, label, other) => {
       const shrunk = layout[which].shrunk;
       if (!layout.toggles) {
-        const title = shrunk ? `This pool grants no ${label.toLowerCase()}s, so the ladder is drawn narrow` : '';
+        const title = shrunk ? `This pool grants no ${label.toLowerCase()}s, so the ladder is narrow.` : '';
         return `<th colspan="3" class="${which === 'utility' ? 'util' : ''}${shrunk ? ' shrunk' : ''}"${
           title ? ` title="${esc(title)}"` : ''}>${label}</th>`;
       }
       const on = layout.focus === which;
-      const title = on ? 'Back to both ladders side by side'
-        : `Give the ${label.toLowerCase()} ladder the room and narrow the ${other} one`;
+      const title = on ? 'Show both ladders side by side.'
+        : `Widen the ${label.toLowerCase()} ladder and narrow the ${other} ladder.`;
       return `<th colspan="3" class="${which === 'utility' ? 'util' : ''}${shrunk ? ' shrunk' : ''}">
               <button data-view type="button" class="ladderfocus" data-ladderfocus="${esc(key)}|${which}"
                 aria-pressed="${on}" title="${esc(title)}">${label}</button></th>`;
@@ -275,7 +275,7 @@ export function ladderTable(model, list, ci, cls, systems, spheres) {
               on ? `Talent #${Math.floor(lv.count)} at level ${lv.level}${why(side, lv.sphere)}` : '',
               uOn ? `Utility talent #${lv.utilityCount}${why(uSide, lv.utilitySphere)}` : '',
             ].filter(Boolean).join(' · ') || `Level ${lv.level} grants nothing`;
-            const cellTitle = (s, sphere) => (s === 'none' ? ` title="${esc(why(s, sphere).slice(3))}"` : '');
+            const cellTitle = (s, sphere) => (s === 'none' ? ` title="${esc(why(s, sphere).slice(2))}"` : '');
             return `<tr class="${lv.future ? 'future' : ''}">
               <td class="num" title="${esc(count)}">${lv.level}</td>
               <td class="${state}">${talentCell(model,
@@ -316,8 +316,8 @@ export function ladderStack(model, list, ci, cls, systems, spheres) {
     return talentLandsOn(sphere, systems) ?? 'none';
   };
   const why = (side, sphere) => (side === 'none'
-    ? ` — ${sphere} is not a sphere this class's talents count as, so it counts nowhere`
-    : side ? ` — counts as ${SYSTEM_NOUNS[side]}` : '');
+    ? `: ${sphere} is not a sphere this class's talents count as, so it is not counted`
+    : side ? `: counts as ${SYSTEM_NOUNS[side]}` : '');
   // One ladder's row: `u` is the [utility] ladder, whose fields carry the
   // prefix. `head` is what the level cell says.
   const row = (lv, li, u, head, extra = '') => {
@@ -421,8 +421,8 @@ export function singleLadderTable(model, slots, cls, spheres, systems = null) {
     // The running talent count used to be a column of its own; it says the
     // same thing as a tooltip on the level it belongs to.
     const count = on ? `Talent #${Math.floor(lv.count)} at level ${lv.level}${
-      side === 'none' ? ` — ${lv.sphere} is not a sphere this class's talents count as, so it counts nowhere`
-        : side ? ` — counts as ${SYSTEM_NOUNS[side]}` : ''}`
+      side === 'none' ? `: ${lv.sphere} is not a sphere this class's talents count as, so it is not counted`
+        : side ? `: counts as ${SYSTEM_NOUNS[side]}` : ''}`
       : `Level ${lv.level} grants no talent`;
     return `<tr class="${lv.future ? 'future' : ''}${on ? '' : ' emptyslot'}">
               <td class="num" data-stack="head" data-headlabel="Level" title="${esc(count)}">${esc(lv.level)}</td>
@@ -454,7 +454,7 @@ export function bonusTalentTable(model, list, rows, spheres, { guile = false, pl
         <thead><tr><th class="grip"></th><th>Talent</th><th>Sphere</th><th>Source</th>
           ${fromLevelHead()}<th>Notes</th>${guile ? `
           <th class="num" title="Had to be a [utility] talent">[u]</th>
-          <th class="num" title="Granted by a base sphere or a drawback — not a talent spent, so it buys no skill ranks">free</th>
+          <th class="num" title="Granted by a base sphere or a drawback. It is not a spent talent, so it gives no skill ranks.">free</th>
           ` : ''}<th></th></tr></thead>
         <tbody>${rows.map((e, i) => `<tr ${rowDrop(list, i)}${plannedRow(isAhead(rowLevel(e), Number(model.data.identity?.level) || 0), rowLevel(e))}>
           ${rowGrip()}
@@ -506,8 +506,8 @@ export function blendTicks(systems, home, index, counts = null, named = true) {
       const title = sys === home
         ? `This class's own talents, which always count as ${noun}.`
         : !named ? `Pick the class first: its talents count as ${noun} by the class's name.`
-        : `${on ? 'Untick to stop' : 'Tick to let'} this class's talents count as ${noun} as well — `
-          + `a row whose sphere is on the ${where[sys]} tab counts there${sys === 'guile' ? ' and buys skill ranks' : ''}.`;
+        : `${on ? 'Untick to stop' : 'Tick to let'} this class's talents count as ${noun} too. `
+          + `A row whose sphere is on the ${where[sys]} tab counts there${sys === 'guile' ? ' and gives skill ranks' : ''}.`;
       return `<label class="chk" title="${esc(title)}">
               <input type="checkbox"${on ? ' checked' : ''}${sys === home || !named ? ' disabled' : ` data-reach="${home}|${index}|${sys}"`}>
               <span class="hint">${noun}${n}</span></label>`;
@@ -515,7 +515,7 @@ export function blendTicks(systems, home, index, counts = null, named = true) {
     // Talents in a sphere of a kind the class does not reach count nowhere;
     // said here as well as on their rows, so a class folded shut still shows it.
     const lost = counts?.none
-      ? `<span class="hint bad" title="${esc('A talent whose sphere is of a kind this class does not count as is counted nowhere. Tick that kind, or change the sphere.')}">${counts.none} not counted</span>`
+      ? `<span class="hint bad" title="${esc('A talent in a sphere of a kind this class does not count as is not counted. Tick that kind, or change the sphere.')}">${counts.none} not counted</span>`
       : '';
     return `<label class="fld blendticks"><span>Counts as</span><span class="pair">${ticks}${lost}</span></label>`;
   }
@@ -575,7 +575,7 @@ export function blendedPanel(model, pairs) {
       const unset = !half.cls.effectiveType;
       return `<label class="fld ratepick${unset ? ' unset' : ''}"><span>${label} type</span>
           ${itemSelect(list, half.index, 'type', half.cls.type, types)}
-          ${unset ? `<span class="hint warn">Pick one — no ${casting ? 'caster level' : 'practitioner progression'} until then</span>` : ''}</label>
+          ${unset ? `<span class="hint warn">Pick one. No ${casting ? 'caster level' : 'practitioner progression'} until then.</span>` : ''}</label>
         ${abilityField(model, list, half.index, 'mod1', half.cls.mod1, casting ? 'Casting score' : 'Practitioner mod')}
         ${/* Only the casting half: spell points are what a second score adds to. */''}
         ${casting ? abilityField(model, list, half.index, 'mod2', half.cls.mod2, '2nd score') : ''}`;
@@ -621,18 +621,16 @@ export function blendedPanel(model, pairs) {
   }).join('')}
       <p class="hint">
         One pool of talents, spent on any kind ticked under <strong>Counts as</strong>. The
-        sphere on each row decides whether a talent is martial (Sphere BAB / DC), magical
-        (Sphere CL / DC) or a skill talent (ranks in the sphere's associated skill). Martial
-        and magical each keep their own type and ability score, since a blended class rarely
-        advances at the same rate in both. Skill talents read the one operative modifier. A skill
-        class keeps both its ladders here. Either ladder can be spent on any kind it reaches. A class
-        that reaches skill talents gains a [utility] ladder too. By default its any talents keep the
-        class's Talents / level, and its [utility] talents come at the levels you write (even, odd,
-        "2, +2"). You can instead choose a tier from the book's table, or Custom rules for both
-        ladders. Unticking skill hides that ladder and the setting without losing them. A talent in
-        a sphere of a kind the class does not reach is counted nowhere and is marked on its row.
-        This group heads the tab of every kind the class reaches and is the same on each. What you
-        type on one tab shows on the others.
+        sphere on each row sets whether a talent is martial (Sphere BAB / DC), magical
+        (Sphere CL / DC) or a skill talent (ranks in the sphere's associated skill). Martial and
+        magical each have their own type and ability score. Skill talents use the operative
+        modifier. A class with skill talents also gains a [utility] ladder: by default its Any
+        talents follow the class's Talents / level, and its [utility] talents come at the levels
+        you write (even, odd, "2, +2"). You can choose a tier from the table, or Custom rules for
+        both ladders, instead. Unticking skill hides that ladder and its setting without losing
+        them. A talent in a sphere of a kind the class cannot use is not counted and is marked on
+        its row. This group appears on the tab of every kind the class uses, and edits on one tab
+        show on the others.
       </p>
     </section>`;
   }

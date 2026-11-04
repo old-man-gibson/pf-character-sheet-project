@@ -159,7 +159,7 @@ check('it is escaped instead', attacked.includes('&quot; onmouseover='), true);
 console.log('empty and awkward characters still render');
 check('no names at all', typeof formulaPanelHtml({ names: [], scope: {}, audit: [] }), 'string');
 check('says so when nothing has been written',
-  formulaPanelHtml({ names, scope, audit: [] }).includes('Nothing yet'), true);
+  formulaPanelHtml({ names, scope, audit: [] }).includes('No formulas yet'), true);
 check('says so when the search finds no formula',
   myFormulasHtml(audit, 'zzz').includes('No formula here matches'), true);
 check('says so when the search finds no value',
@@ -179,7 +179,7 @@ console.log('the reference: links');
   const shown = [...ref.matchAll(/<a class="weblink" href="([^"]*)"[^>]*>([^<]*)<\/a>/g)].map((m) => [m[1], m[2]]);
   check('its examples are drawn as a field draws them: an address as typed, and words as a link',
     shown, [['https://example.com/map', 'https://example.com/map'], ['https://example.com/map', 'the map']]);
-  check('and the folded summary names it', ref.includes('the four forms, links, where they work'), true);
+  check('and the folded summary names it', ref.includes('Formula syntax, links,'), true);
 }
 
 console.log('a formula is judged where it lives, not against the character alone');
@@ -419,14 +419,14 @@ console.log('a family broken into what it is made of -- a heading each');
   check('a second of a kind reads under its own id', heading('companion', 'Wisp (Eidolon 2)')
     .items.every((i) => i.name.startsWith('eidolon2.')), true);
   check('and a companion\'s skills sit under a heading beside it',
-    heading('companion', 'Pip (Familiar) — skills')?.items.every((i) => i.name.startsWith('familiar.skill.')), true);
+    heading('companion', 'Pip (Familiar): skills')?.items.every((i) => i.name.startsWith('familiar.skill.')), true);
   check('a tracker is headed by its name, not its id',
     heading('tracker', 'Burn Pool')?.items.map((i) => i.name).includes('tracker.burn_pool.max'), true);
   check('the abilities are headed in the order a sheet lists them',
     group('ability').subs.map((s) => s.label),
     ['Strength', 'Dexterity', 'Constitution', 'Intelligence', 'Wisdom', 'Charisma']);
   check('hit points before armour, armour before the saves',
-    group('defence').subs.map((s) => s.label).slice(0, 5), ['Hit points', 'Armour class', 'Fortitude', 'Reflex', 'Will']);
+    group('defence').subs.map((s) => s.label).slice(0, 5), ['Hit points', 'Armor class', 'Fortitude', 'Reflex', 'Will']);
   check('level and size sit loose above the headings they have',
     group('character').loose.map((i) => i.name).includes('level'), true);
 

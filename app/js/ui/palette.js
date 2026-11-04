@@ -390,7 +390,7 @@ function equipment(model, add) {
       sub: bits(text(w.attackType), text(w.damageType), text(w.special),
         w.critRange ? threatText(Number(w.critRange) || 20, critMultOf(w.critMult)) : ''),
       sel: `[data-item^="equipment.weapons|${i}|"]`,
-      roll: { kind: 'weapon', ref: i, what: `${text(w.name)} — attack and damage` },
+      roll: { kind: 'weapon', ref: i, what: `${text(w.name)}: attack and damage` },
       keys: 'weapon attack damage',
     });
   });
@@ -696,7 +696,7 @@ function maneuvers(model, add) {
       add({
         kind: 'maneuver', title: dname, tab: 'maneuvers',
         value: `${(disc.entries || []).filter((e) => e.known).length} known`,
-        sub: bits('Discipline', disc.inCatalogue ? '' : 'not in the catalogue', clip(disc.notes, 50)),
+        sub: bits('Discipline', disc.inCatalogue ? '' : 'not in the catalog', clip(disc.notes, 50)),
         keys: 'discipline',
       });
     }
@@ -1084,26 +1084,26 @@ function commands(model, add) {
   const cmd = (title, action, sub, keys) => add({
     kind: 'command', title, action, sub, keys, tab: null, start: true, find: null,
   });
-  cmd('Save this version', 'save', 'Make this the version the sheet opens on', 'save version commit');
+  cmd('Save this version', 'save', 'Save this as the version the sheet opens on.', 'save version commit');
   cmd('Export JSON', 'export', 'Download the character as a file', 'export download backup json');
-  cmd('Export for Myth-Weavers (EXPERIMENTAL)', 'export-mw', 'A backup for the Myth-Weavers Pathfinder sheet',
+  cmd('Export for Myth-Weavers (EXPERIMENTAL)', 'export-mw', 'Download a backup for a Myth-Weavers Pathfinder sheet.',
     'export myth weavers mythweavers mw download backup');
   cmd('Import a character or workbook', 'import', 'Load a JSON or .xlsx', 'import load open file xlsx');
-  cmd('History', 'history', 'Earlier states of this sheet', 'history snapshots versions undo');
+  cmd('History', 'history', 'Snapshots and checkpoints of this character.', 'history snapshots versions undo');
   cmd(session ? 'Switch to Build view' : 'Switch to Session view', 'view-mode',
     session ? 'Everything, arranged for building' : 'Only the tabs that come up at the table',
     'view mode session build table');
-  cmd('Theme & layout', 'theme', 'Palettes, and where the tabs go', 'theme palette layout colour sidebar rail');
-  cmd('Switch light / dark', 'theme-flip', 'The same look on the other scheme', 'theme light dark switch toggle');
+  cmd('Theme & layout', 'theme', 'Change the colors and tab position.', 'theme palette layout colour color sidebar rail');
+  cmd('Switch light / dark', 'theme-flip', 'Use the light or dark version of this theme.', 'theme light dark switch toggle');
   cmd('Formulas guide', 'formulas', 'Values, destinations and every formula on the sheet', 'formula fx guide search values');
-  cmd('End encounter', 'rest-encounter', 'Trackers that come back after an encounter', 'rest encounter combat fight end refresh');
-  cmd('New day', 'rest-day', 'Hit points, daily trackers, slots, power points and companions back', 'rest sleep night day new refresh');
-  cmd('New week', 'rest-week', 'A new day, and weekly trackers too', 'rest week new refresh');
+  cmd('End encounter', 'rest-encounter', 'Reset trackers that refresh after an encounter.', 'rest encounter combat fight end refresh');
+  cmd('New day', 'rest-day', 'Restore hit points, daily trackers, spell slots, power points and companions.', 'rest sleep night day new refresh');
+  cmd('New week', 'rest-week', 'A new day, plus reset weekly trackers.', 'rest week new refresh');
   if ((model.data.vancian?.classes || []).length) {
-    cmd('New day — spell slots', 'vancian-new-day', 'Give back every prepared spell', 'new day spells rest');
+    cmd('New day: spell slots', 'vancian-new-day', 'Restore every prepared spell.', 'new day spells rest');
   }
   if ((model.data.psionics?.classes || []).length) {
-    cmd('New day — power points', 'psionics-new-day', 'Refill the power point pool', 'new day psionics rest');
+    cmd('New day: power points', 'psionics-new-day', 'Refill the power point pool.', 'new day psionics rest');
   }
   // A level or tier the campaign's rules say is earned, offered where the
   // buttons on the sheet are.
@@ -1111,10 +1111,10 @@ function commands(model, add) {
   if (lp?.ready) cmd(`Level up to ${lp.next}`, 'level-up', 'The next level is earned', 'level up levelling xp experience milestones');
   const tp = trialProgress(model.data);
   if (tp?.ready) cmd(`Tier up to ${tp.next}`, 'tier-up', 'The next mythic tier is earned', 'tier up mythic trials');
-  cmd('Campaign rules', 'campaign-rules', 'Rules for this character',
+  cmd('Campaign rules', 'campaign-rules', 'Open this character’s campaign rules.',
     'settings options campaign rules house table vmc variant multiclass multiclassing point buy age aging middle-aged old venerable background skills specialty adventuring hero points antihero mythic tier trials rate thresholds abp automatic bonus progression core unchained attunement legendary gifts xp experience milestones levelling highest maximum level gestalt multiclass hit points hp rolled average alternate training currency gold mana colossal size party file');
-  cmd('Show, hide and rearrange tabs', 'palette-tabs', 'The ⚙ tab manager', 'tabs manage hide show arrange settings');
-  cmd('Reset to the character as imported', 'reset', 'Asks first; named checkpoints are kept', 'reset revert discard');
+  cmd('Show, hide and rearrange tabs', 'palette-tabs', 'Open the ⚙ tab.', 'tabs manage hide show arrange settings');
+  cmd('Reset to the character as imported', 'reset', 'Named checkpoints are kept.', 'reset revert discard');
 }
 
 const SOURCES = [
