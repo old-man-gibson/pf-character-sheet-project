@@ -228,7 +228,7 @@ function talentInfo(model, sphere, value) {
   return {
     cls: pack ? 'pkg' : thirdParty ? 'third' : '',
     head: `${hit.name}${tags.length ? ` (${tags.join(', ')})` : ''}`,
-    sub: [hit.sphere, hit.group].filter(Boolean).join(' — '),
+    sub: [hit.sphere, hit.group].filter(Boolean).join(': '),
     prerequisites: hit.prerequisites,
     source: cited,
     lead: pack ? `${pack.names.join(', ')}: the package this row names` : '',

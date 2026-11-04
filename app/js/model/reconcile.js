@@ -441,7 +441,7 @@ export const FORMULA_FIELDS = [
     collect: (model) => Object.entries(SAVE_NAMES).flatMap(([k, label]) => {
       const save = model.data.saves?.[k];
       return SAVE_BONUS_TYPES.flatMap(([key]) => (stringFormula(save?.bonuses?.[key]) ? [{
-        id: `save-${k}-${key}`, place: `statCell:saves.${k}.bonuses.${key}`, name: `${label} — ${bonusColumnName(key)}`,
+        id: `save-${k}-${key}`, place: `statCell:saves.${k}.bonuses.${key}`, name: `${label}: ${bonusColumnName(key)}`,
         formula: save.bonuses[key], value: save.bonusesResolved?.[key], error: save.bonusErrors?.[key],
       }] : []));
     }),
@@ -451,7 +451,7 @@ export const FORMULA_FIELDS = [
     collect: (model) => {
       const d = model.data.defenses;
       return AC_BONUS_TYPES.flatMap(([key]) => (stringFormula(d?.acBonuses?.[key]) ? [{
-        id: `ac-${key}`, place: `statCell:defenses.acBonuses.${key}`, name: `AC — ${bonusColumnName(key)}`,
+        id: `ac-${key}`, place: `statCell:defenses.acBonuses.${key}`, name: `AC: ${bonusColumnName(key)}`,
         formula: d.acBonuses[key], value: d.acBonusesResolved?.[key], error: d.acBonusErrors?.[key],
       }] : []));
     },
@@ -549,7 +549,7 @@ export const FORMULA_FIELDS = [
             { id: `crafting-value-${i}`, name: `${item}: market value`, obj: p, field: 'value', place: `craftNumber:crafting.projects|${i}|value` },
             { id: `crafting-dc-${i}`, name: `${item}: item DC`, obj: p, field: 'itemDC', place: `craftNumber:crafting.projects|${i}|itemDC` },
             ...(p.dcAdjustments || []).map((a, j) => ({
-              id: `crafting-dc-${i}-${j}`, name: `${item} — DC ${a.label || `adjustment ${j + 1}`}`, obj: a, field: 'value',
+              id: `crafting-dc-${i}-${j}`, name: `${item}: DC ${a.label || `adjustment ${j + 1}`}`, obj: a, field: 'value',
               place: `craftNumber:crafting.projects.${i}.dcAdjustments|${j}|value`,
             })),
           ];
@@ -586,11 +586,11 @@ export const FORMULA_FIELDS = [
       const own = String(b.name || '').trim() || `Buff ${i + 1}`;
       return [
         ...BUFF_MOD_KEYS.filter(([key]) => stringFormula(b[key])).map(([key, label]) => ({
-          id: `buff-${i}-${key}`, place: `buff:${i}:${key}`, name: `${own} — ${label}`,
+          id: `buff-${i}-${key}`, place: `buff:${i}:${key}`, name: `${own}: ${label}`,
           formula: b[key], value: b[`${key}Num`], error: b[`${key}Error`],
         })),
         ...(b.bonuses || []).flatMap((row, j) => (row && stringFormula(row.value) ? [{
-          id: `buff-${i}-bonus-${j}`, place: `buff:${i}:bonuses.${j}.value`, name: `${own} — ${row.target || 'bonus'}`,
+          id: `buff-${i}-bonus-${j}`, place: `buff:${i}:bonuses.${j}.value`, name: `${own}: ${row.target || 'bonus'}`,
           formula: row.value, value: row.valueNum, error: row.valueError,
         }] : [])),
       ];
@@ -617,7 +617,7 @@ export const FORMULA_FIELDS = [
         .filter(([, , raw, r]) => r && stringFormula(raw) && !PLAIN_NUMBER.test(raw.trim()))
         .map(([path, label, raw, r]) => ({
           id: `companion-${kind}-${i}-${path}`, place: `companionCell:${kind}:${i}:${path}`,
-          name: `${who} — ${label}`, where: `the ${COMPANION_LABELS[kind]} tab`,
+          name: `${who}: ${label}`, where: `the ${COMPANION_LABELS[kind]} tab`,
           formula: raw, value: r.value, error: r.error,
         }));
     })),

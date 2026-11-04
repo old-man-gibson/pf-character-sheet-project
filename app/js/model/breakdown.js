@@ -273,11 +273,11 @@ function adjustmentParts(model, key, cs) {
     const share = through.get(entry);
     const indirect = share?.value || 0;
     if (value) {
-      const p = part(label, value, [kind, ...via].join(' — '));
+      const p = part(label, value, [kind, ...via].join(', '));
       if (indirect) p.lines = [part(share.label, indirect)];
       parts.push(p);
     } else if (indirect) {
-      parts.push(part(label, indirect, `${kind} — ${share.label}`));
+      parts.push(part(label, indirect, `${kind}, ${share.label}`));
     }
   }
   const shown = parts.reduce((t, p) => t + p.value + (p.lines || []).reduce((s, l) => s + l.value, 0), 0);

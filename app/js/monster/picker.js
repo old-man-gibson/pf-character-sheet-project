@@ -108,7 +108,7 @@ export function mountMonsterTool({ picker, welcome, adminToggle, add }) {
     const read = describeBlock(block);
     const notes = [...block.warnings, block.unread.length
       ? `${block.unread.length} line${block.unread.length === 1 ? '' : 's'} not placed` : ''].filter(Boolean);
-    preview.textContent = `${block.name ? `${block.name}: ` : ''}${read || 'nothing read yet'}${notes.length ? ` — ${notes.join('; ')}` : ''}`;
+    preview.textContent = `${block.name ? `${block.name}: ` : ''}${read || 'nothing read yet'}${notes.length ? `; ${notes.join('; ')}` : ''}`;
     preview.classList.toggle('err', !read);
   });
   form.addEventListener('submit', async (e) => {

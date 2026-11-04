@@ -401,7 +401,7 @@ export function workings(source, scope) {
  */
 export function workingLine(source, scope) {
   const w = workings(source, scope);
-  if (w.error) return `${w.pretty} — ${w.error}`;
+  if (w.error) return `${w.pretty}: ${w.error}`;
   const steps = [w.pretty];
   if (w.substituted !== w.pretty) steps.push(w.substituted);
   if (w.display !== steps[steps.length - 1]) steps.push(w.display);

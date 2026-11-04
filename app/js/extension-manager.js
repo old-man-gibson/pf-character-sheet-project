@@ -279,7 +279,7 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
         </label>
         <div class="main">
           <div class="name">${esc(s.name)} <span style="opacity:.55;font-weight:400">rev ${esc(s.revision)}${s.author ? ` · ${esc(s.author)}` : ''}</span></div>
-          <div class="meta">${esc(describeSummary(s))}${s.description ? ` — ${esc(s.description)}` : ''}${sourceLink(s.source)}${
+          <div class="meta">${esc(describeSummary(s))}${s.description ? ` · ${esc(s.description)}` : ''}${sourceLink(s.source)}${
   isBundled || !s.updatedAt ? '' : ` · ${s.origin === 'import' ? 'imported' : 'saved'} ${esc(String(s.updatedAt).slice(0, 10))}`}</div>
         </div>
         <div class="acts">
@@ -726,7 +726,7 @@ Hit Die: d12.
     return `<div class="found ${t.kind === 'skip' ? 'off' : ''}">
           <span class="kind">p. ${sec.page}</span>
           <span class="what"><strong>${esc(sec.heading)}</strong>
-            <span class="d">${esc(size)} — ${esc(peek)}</span></span>
+            <span class="d">${esc(size)}: ${esc(peek)}</span></span>
           <select data-pdf-kind="${i}">${kinds(t.kind)}</select>
           ${t.kind === 'talents' || t.kind === 'sphere' ? `<input type="text" data-pdf-sphere="${i}" value="${esc(t.sphere)}"
             placeholder="Sphere" title="The sphere these belong to" style="width:9rem"${t.sphere ? '' : ' class="needs"'}>` : ''}

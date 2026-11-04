@@ -284,7 +284,7 @@ export function workingTitle(b, extra = '') {
   // A part is something added and wears its sign; the number a sum starts
   // from -- the 10 under an AC -- is a number, and does not.
   const figure = (p) => (p.plain ? String(p.value) : fmt(p.value));
-  const row = (p, indent = '  ') => `${indent}${figure(p)}  ${p.label}${p.note ? ` — ${p.note}` : ''}`;
+  const row = (p, indent = '  ') => `${indent}${figure(p)}  ${p.label}${p.note ? ` (${p.note})` : ''}`;
   const lines = b.parts.map((p) => row(p));
   if (b.sum !== b.total) lines.push(`  ${fmt(b.total - b.sum)}  unaccounted for`);
   const moved = Array.isArray(b.adjustments) && b.adjustments.length > 0;

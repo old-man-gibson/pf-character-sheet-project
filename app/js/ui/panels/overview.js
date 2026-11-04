@@ -872,7 +872,7 @@ function dashVancianCard(model) {
     // Spell rows pack into columns, and every row's squares start at the same
     // left edge -- pip one top-left, filling rightward, whatever the count.
     const prow = ({ r, i }) => `<div class="dashspell">
-      <span class="sname" title="${esc(r.note ? `${r.name} — ${proseText(model, r.note)}` : r.name)}">${esc(r.name)}${r.classLevel ? ` <span class="dim">${esc(r.classLevel)}</span>` : ''}</span>
+      <span class="sname" title="${esc(r.note ? `${r.name}: ${proseText(model, r.note)}` : r.name)}">${esc(r.name)}${r.classLevel ? ` <span class="dim">${esc(r.classLevel)}</span>` : ''}</span>
       <span class="suses">${slotSpend({ pool: `slots:vancian.prepared|${i}`, total: r.uses, left: r.left, shape: 'squares', name: r.name })
         || '<span class="dim">—</span>'}</span>
     </div>`;
@@ -1023,7 +1023,7 @@ function dashManeuversCard(model) {
       const head = ['action', 'range', 'target', 'duration']
         .map((k) => entry[k].trim()).concat(save).filter(Boolean);
       return `<div class="statline">
-        <span class="label" title="${esc(e.name)}${entry.type || e.type ? ` — ${esc(entry.type || e.type)}` : ''}">${esc(e.name)}</span>
+        <span class="label" title="${esc(e.name)}${entry.type || e.type ? ` (${esc(entry.type || e.type)})` : ''}">${esc(e.name)}</span>
         <span class="value dim">${e.kind === 'stance' ? 'stance' : `L${e.level ?? '—'}`}</span>
       </div>
       ${head.length ? `<div class="dashtalent mnote">${head.map(shown).join(' · ')}</div>` : ''}
@@ -1388,7 +1388,7 @@ function harmMark(k, a) {
     if (!damage && !drain) return '';
     const bits = [damage ? `${damage} damage (${minus(-Math.floor(damage / 2))} mod)` : '', drain ? `${drain} drain` : ''].filter(Boolean);
     const collapse = abilityCollapse(k, a);
-    return `<span class="abharm${collapse ? ' bad' : ''}">${esc(bits.join(', '))}${collapse ? ` — ${esc(collapse)}` : ''}</span>`;
+    return `<span class="abharm${collapse ? ' bad' : ''}">${esc(bits.join(', '))}${collapse ? `; ${esc(collapse)}` : ''}</span>`;
   }
 
 /** The six damage and drain boxes, folded away until something is in them. */

@@ -1347,8 +1347,8 @@ console.log('\na card with several modes asks on the way in');
   const open = subsystems.cardTableView(c, { ...ctx, castPick: bolt }, 'hand');
   const form = open.match(/<div class="mcard mini castpick"[^]*?<\/select>/)?.[0] || '';
   ok('opened, the chooser lists the modes with their dice and price, each with its own Roll20 text',
-    form.includes('<option value="0 SP" data-sp="0" data-copytext="&amp;{template:default} {{name=Bolt — Fire Blast}} {{0 SP=[[5d6]]}}')
-    && form.includes('<option value="boost (1 SP)" data-sp="1"') && /boost \(1 SP\) — 7d6 \(1 SP\)</.test(form));
+    form.includes('<option value="0 SP" data-sp="0" data-copytext="&amp;{template:default} {{name=Bolt: Fire Blast}} {{0 SP=[[5d6]]}}')
+    && form.includes('<option value="boost (1 SP)" data-sp="1"') && /boost \(1 SP\): 7d6 \(1 SP\)</.test(form));
   ok('with a points field and Cast, Ongoing and a way out', open.includes('name="sp"') && open.includes(`data-table="play|${bolt}|cast"`)
     && open.includes(`data-table="play|${bolt}|ongoing"`) && open.includes('data-table="pick||"'));
   ok('the chooser is the hand\'s: the table window never draws it', !subsystems.cardTableView(c, { ...ctx, castPick: bolt }, 'table').includes('castpick'));

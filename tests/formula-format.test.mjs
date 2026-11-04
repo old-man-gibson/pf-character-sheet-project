@@ -161,7 +161,7 @@ check('three steps', workingLine('floor(level / 2) + wis.mod', scope),
 check('nothing to substitute', workingLine('3 + 4', scope), '3 + 4  =  7');
 check('nothing to work out', workingLine('12', scope), '12');
 check('one name only', workingLine('level', scope), 'level  =  20');
-check('an error explains itself', workingLine('floor(', scope).includes('—'), true);
+check('an error explains itself', /: \S/.test(workingLine('floor(', scope)), true);
 
 console.log('formatNumber');
 check('integer', formatNumber(15), '15');

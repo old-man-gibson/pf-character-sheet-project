@@ -1037,17 +1037,17 @@ for (const id of IDS) {
   check(`${id} a condition's penalty is a row under the condition's name`, row(ac, 'Blinded')?.value, -2);
   check(`${id} a size step is a row of its own`, row(ac, '1 size larger')?.value, -1);
   const ref = c.breakdown('reflex');
-  check(`${id} a share that came by a wider road says which`, row(ref, 'Shaken')?.note, 'condition — every save');
+  check(`${id} a share that came by a wider road says which`, row(ref, 'Shaken')?.note, 'condition, every save');
   check(`${id} a counted condition says how many`, row(ref, 'Energy Drain ×2')?.value, -2);
   check(`${id} a targeted row lands on its own save alone`,
     [row(ref, 'Haste')?.value, row(c.breakdown('will'), 'Haste')?.value], [1, undefined]);
   check(`${id} what a buff did through an ability is a line under its own, and no further broken down`,
     row(ref, 'Haste')?.lines, [{ label: 'through Dex', value: 2, note: '' }]);
   check(`${id} a source with only that to show gets it as its own line`,
-    [row(c.breakdown('melee'), 'Bull')?.value, row(c.breakdown('melee'), 'Bull')?.note], [2, 'buff — through Str']);
+    [row(c.breakdown('melee'), 'Bull')?.value, row(c.breakdown('melee'), 'Bull')?.note], [2, 'buff, through Str']);
   const cmd = c.breakdown('cmd');
   check(`${id} an AC penalty's second life on CMD is said out loud`,
-    row(cmd, 'Blinded')?.note, 'condition — an AC penalty applies to CMD too');
+    row(cmd, 'Blinded')?.note, 'condition, an AC penalty applies to CMD too');
   // ...where there was a Dexterity bonus to lose: a +0 modifier moves nothing,
   // and a line that adds nothing is not drawn. Blinded is counted before the
   // Dexterity buff, so the bonus it takes is the one the character had.
@@ -1069,11 +1069,11 @@ for (const id of IDS) {
   check(`${id} heads the temporary half with its net`,
     title.includes(`\n\n  ${net > 0 ? '+' : ''}${net}  Buffs and conditions\n`), true);
   check(`${id} and lists the entries after it`,
-    title.indexOf('\n  +1  Haste — buff') > title.indexOf('Buffs and conditions'), true);
+    title.indexOf('\n  +1  Haste (buff)') > title.indexOf('Buffs and conditions'), true);
   check(`${id} a base is a number in the title too`, title.includes('\n  10  Base\n'), true);
   const refTitle = workingTitle(c.breakdown('reflex'));
   check(`${id} a share through an ability is a line under its source, set in further`,
-    refTitle.includes('\n  +1  Haste — buff\n    +2  through Dex'), true);
+    refTitle.includes('\n  +1  Haste (buff)\n    +2  through Dex'), true);
   // Two things ticked that cancel are still two entries, under a net of 0:
   // the working says what is evenly matched rather than nothing at all.
   c.data.buffs = [{ name: 'Steady', on: true, attack: 2 }];
@@ -1084,7 +1084,7 @@ for (const id of IDS) {
   check(`${id} a buff and a condition that cancel are listed under a net of 0`,
     [melee.delta, melee.adjustments?.map((p) => [p.label, p.value]), melee.adjusted === melee.total],
     [0, [['Shaken', -2], ['Steady', 2]], true]);
-  check(`${id} and the title says so`, workingTitle(melee).includes('\n\n  0  Buffs and conditions\n  -2  Shaken — condition — every attack\n  +2  Steady — buff — every attack'), true);
+  check(`${id} and the title says so`, workingTitle(melee).includes('\n\n  0  Buffs and conditions\n  -2  Shaken (condition, every attack)\n  +2  Steady (buff, every attack)'), true);
   // A companion has no condition layer, and its working says nothing about one.
   c.data.eidolon[0].levelOverride = 8;
   c.recompute();
@@ -1842,10 +1842,10 @@ console.log('companions -- a typed box takes a formula');
   const who = 'Conjured Companion';
   check('each box written as a formula is audited, and a number or plain text is not',
     rows().map((r) => [r.name, r.value, r.status, r.place, r.where]), [
-      [`${who} — Bonus AC (all)`, 3, 'ok', 'companionCell:conjured:0:ac.all', 'the Conjured Companion tab'],
-      [`${who} — Initiative bonus`, k().scores.str.mod, 'ok', 'companionCell:conjured:0:initBonus', 'the Conjured Companion tab'],
-      [`${who} — Will misc`, 2, 'ok', 'companionCell:conjured:0:saves.will.misc', 'the Conjured Companion tab'],
-      [`${who} — Fly (good) bonus`, 30, 'ok', 'companionCell:conjured:0:speeds.1.bonus', 'the Conjured Companion tab'],
+      [`${who}: Bonus AC (all)`, 3, 'ok', 'companionCell:conjured:0:ac.all', 'the Conjured Companion tab'],
+      [`${who}: Initiative bonus`, k().scores.str.mod, 'ok', 'companionCell:conjured:0:initBonus', 'the Conjured Companion tab'],
+      [`${who}: Will misc`, 2, 'ok', 'companionCell:conjured:0:saves.will.misc', 'the Conjured Companion tab'],
+      [`${who}: Fly (good) bonus`, 30, 'ok', 'companionCell:conjured:0:speeds.1.bonus', 'the Conjured Companion tab'],
     ]);
   c.set('conjured.0.cmdOther', '2');
   check('a number kept as text counts, and is not listed as a formula',
@@ -2977,8 +2977,8 @@ console.log('a breakdown names the ability a number is actually built on');
     { name: 'Bull', on: true, bonuses: [{ target: 'str', value: 4 }] }];
   c.recompute();
   const row = (key, label) => c.breakdown(key).adjustments?.find((p) => p.label === label);
-  check('an initiative keyed to Wisdom says so', row('initiative', 'Owl')?.note, 'buff — through Wis');
-  check('and CMD names the Strength it adds', row('cmd', 'Bull')?.note, 'buff — through Str');
+  check('an initiative keyed to Wisdom says so', row('initiative', 'Owl')?.note, 'buff, through Wis');
+  check('and CMD names the Strength it adds', row('cmd', 'Bull')?.note, 'buff, through Str');
 }
 
 console.log('companion ids are unique across every kind, whatever a file says');
@@ -13914,13 +13914,13 @@ console.log('\ntalents per level -- each system\'s own three rates');
   c.recompute();
   const intMod = c.data.abilities.int.mod;
   const spec = c.cardRollSpec('cardcasting.cards|0');
-  check('a short effect joins the name, formulas resolved', spec.name, `Big Sky — Fire Blast (Chain Blast) — Reflex DC ${17 + intMod}`);
+  check('a short effect joins the name, formulas resolved', spec.name, `Big Sky: Fire Blast (Chain Blast) — Reflex DC ${17 + intMod}`);
   check('each dice entry is a roll with plain dice', spec.rolls, [
     { label: 'damage', formula: '8d6+15' }, { label: 'boost (1 SP)', formula: '15d6' },
   ]);
   check('an entry that is not dice travels as a note, before the cost', spec.notes[0], { label: 'aside', text: 'see the sphere' });
   check('cost with its colour, sphere with its tags, the mana a fused card carries',
-    spec.notes.slice(1), [{ label: 'Cost', text: '1 SP (Red)' }, { label: 'Sphere', text: 'Destruction — blast' }, { label: 'Mana', text: 'RU' }]);
+    spec.notes.slice(1), [{ label: 'Cost', text: '1 SP (Red)' }, { label: 'Sphere', text: 'Destruction, blast' }, { label: 'Mana', text: 'RU' }]);
   check('an instance on the table names the same card', c.cardRollSpec('0#1').name, spec.name);
   check('a card with no dice is notes alone', [c.cardRollSpec('cardcasting.cards|1').rolls, c.cardRollSpec('cardcasting.cards|1').notes.length], [[], 2]);
   const long = c.cardRollSpec('cardcasting.cards|3');
@@ -14009,8 +14009,8 @@ console.log('\na card moves between the deck and the sideboard, or is copied acr
   const deck = () => c.data.cardcasting.cards.map((x) => x.name);
   const side = () => c.data.cardcasting.sideboard.map((x) => x.name);
   check('a subtitle is the name\'s second half in the Roll20 text, and the effect a note of its own',
-    [c.cardRollSpec('cardcasting.cards|0').name, c.cardRollSpec('cardcasting.cards|0').notes.some((n) => n.label === 'Effect')], ['Big Sky — Explosive Orb (Fire Blast)', true]);
-  check('without one, a short effect still joins the name', c.cardRollSpec('cardcasting.cards|1').name, 'Desert — Fire Blast');
+    [c.cardRollSpec('cardcasting.cards|0').name, c.cardRollSpec('cardcasting.cards|0').notes.some((n) => n.label === 'Effect')], ['Big Sky: Explosive Orb (Fire Blast)', true]);
+  check('without one, a short effect still joins the name', c.cardRollSpec('cardcasting.cards|1').name, 'Desert: Fire Blast');
   check('to the sideboard', [c.moveCard('cardcasting.cards', 1, 'cardcasting.sideboard').ok, deck(), side()], [true, ['Big Sky'], ['Spare', 'Desert']]);
   check('back to the deck, with a copy to play', [c.moveCard('cardcasting.sideboard', 0, 'cardcasting.cards').ok, deck(), side(), c.data.cardcasting.cards[1].qty], [true, ['Big Sky', 'Spare'], ['Desert'], 1]);
   check('a copy leaves the original where it is, and carries no worked-out fields', [c.moveCard('cardcasting.cards', 0, 'cardcasting.sideboard', { copy: true }).ok, deck(), side(), 'calc' in c.data.cardcasting.sideboard[1]], [true, ['Big Sky', 'Spare'], ['Desert', 'Big Sky'], true]);
@@ -14173,7 +14173,7 @@ console.log('\na card cast in a mode: that mode rolls, and the points put into i
   c.tablePlay(t().hand[0], 'cast', { which: 'boost (1 SP)', sp: 1 });
   check('the picked mode is what rolled', [t().lastRoll.label, t().lastRoll.rolls.length], ['boost (1 SP)', 7]);
   check('the cost and the points on top both came off the tracker', before - left(), 2);
-  check('and the log says what the extra was for', t().log.some((l) => /Bolt — boost \(1 SP\)/.test(l)), true);
+  check('and the log says what the extra was for', t().log.some((l) => /Bolt: boost \(1 SP\)/.test(l)), true);
   c.tablePlay(t().hand[0], 'cast', { which: 'BIG (3 SP)', sp: 3 });
   check('a mode is matched by name, whatever the case', t().lastRoll.rolls.length, 11);
   c.tableDraw(1);

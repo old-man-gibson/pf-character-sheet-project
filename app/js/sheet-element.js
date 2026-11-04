@@ -1450,7 +1450,7 @@ export class CharacterSheetElement extends HTMLElement {
       this.character = await res.json();
       await this.whenReady();
     } catch (err) {
-      this.#fail(`Could not load character from ${esc(src)} — ${esc(err.message)}`);
+      this.#fail(`Could not load character from ${esc(src)}: ${esc(err.message)}`);
     }
   }
 
@@ -4219,7 +4219,7 @@ export class CharacterSheetElement extends HTMLElement {
         ${q.free
     ? `<input type="number" data-ask="${i}" value="${esc(q.answers?.[0]?.text ?? '0')}" step="1">`
     : `<select data-ask="${i}">${(q.answers || []).map((a, j) => `
-            <option value="${esc(a.text)}"${j === 0 ? ' selected' : ''}>${esc(a.label)} — ${esc(a.text)}</option>`).join('')}</select>`}
+            <option value="${esc(a.text)}"${j === 0 ? ' selected' : ''}>${esc(a.label)}: ${esc(a.text)}</option>`).join('')}</select>`}
       </label>`).join('')}
       <menu>
         <button value="cancel" data-askcancel>Cancel</button>

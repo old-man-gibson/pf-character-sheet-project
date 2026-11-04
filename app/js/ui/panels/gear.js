@@ -925,7 +925,7 @@ function craftCostPanel(cr) {
     return `<section class="panel">
       <h3>Crafting cost</h3>
       ${field('Base crafting cost', select('crafting.baseCostIndex',
-    String(cr.baseCostIndex ?? 0), presets.map((b, i) => [String(i), `${b.label} — ${b.percent}%`]), null))}
+    String(cr.baseCostIndex ?? 0), presets.map((b, i) => [String(i), `${b.label} (${b.percent}%)`]), null))}
       <details style="margin:6px 0">
         <summary class="hint" style="cursor:pointer">Edit base costs (${presets.length})</summary>
         <div class="tablewrap" style="margin-top:6px"><table class="craftlist stacked">

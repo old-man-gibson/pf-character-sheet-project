@@ -88,8 +88,8 @@ export function tokenTitle(model, seg, scope, local = null) {
     const op = seg.sign < 0 ? '-=' : '+=';
     const as = seg.type ? ` as ${seg.type}` : '';
     const token = `{${seg.targets.join(', ')} ${op} …${as}}`;
-    if (seg.values) return `${eachLine(model, seg)} — ${token} ${eachWorking(model, seg, local)}`;
-    return `${fmt(seg.value)}${seg.type ? ` ${seg.type}` : ''} to ${targetLabels(model, seg.targets)} — `
+    if (seg.values) return `${eachLine(model, seg)}: ${token} ${eachWorking(model, seg, local)}`;
+    return `${fmt(seg.value)}${seg.type ? ` ${seg.type}` : ''} to ${targetLabels(model, seg.targets)}: `
       + `${token} ${workingLine(seg.expr, scope)}`;
   }
   const label = seg.kind === 'define' ? `{${seg.name} = …}` : '{= …}';

@@ -1853,9 +1853,9 @@ export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0, who 
       t.mana = t.mana.filter((m) => !spent.includes(m));
       t.discard.push(...spent.map((m) => m.id));
     } else for (const m of spent) m.tapped = true;
-    tableLog(model, t, `${name} cast for ${cost}${check.ok ? '' : ` — ${check.why}`}; ${spent.length} mana ${p.manaGraveyard ? 'to the discard' : 'tapped'}${check.worth > 1 ? ' (attuned: two points each)' : ''}`);
+    tableLog(model, t, `${name} cast for ${cost}${check.ok ? '' : ` (${check.why})`}; ${spent.length} mana ${p.manaGraveyard ? 'to the discard' : 'tapped'}${check.worth > 1 ? ' (attuned: two points each)' : ''}`);
   } else {
-    tableLog(model, t, `${name} cast${cost ? ` for ${cost}` : ''}${check.ok ? '' : ` — ${check.why}`}`);
+    tableLog(model, t, `${name} cast${cost ? ` for ${cost}` : ''}${check.ok ? '' : ` (${check.why})`}`);
   }
 
   // The spell points themselves, from the caster's tracker if there is one.
@@ -1866,7 +1866,7 @@ export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0, who 
   // the card's first dice, if it has any.
   const extra = Math.max(0, Math.floor(Number(sp) || 0));
   const mode_ = which ? model.cardRolls(card).find((r) => r.label.toLowerCase() === String(which).toLowerCase()) : null;
-  if (extra > 0) spendSP(model, extra, `${name} — ${mode_?.label || 'augmented'}`, by.pool);
+  if (extra > 0) spendSP(model, extra, `${name}: ${mode_?.label || 'augmented'}`, by.pool);
   if (mode_) model.tableRoll(id, { quiet: true, which: mode_.label, who: caster });
   else rollFor(model, id, caster);
 
@@ -2178,7 +2178,7 @@ export function tableBoost(model, id, which) {
   if (!p?.table) return model;
   const roll = model.cardRolls(model.tableCard(id)).find((r) => r.label.toLowerCase() === String(which).toLowerCase());
   if (!roll) return model;
-  if (roll.sp > 0 && model.spellPointTracker()) spendSP(model, roll.sp, `${tableName(model, id)} — ${roll.label}`);
+  if (roll.sp > 0 && model.spellPointTracker()) spendSP(model, roll.sp, `${tableName(model, id)}: ${roll.label}`);
   return model.tableRoll(id, { which });
 }
 
@@ -2418,8 +2418,8 @@ export function cardRollSpec(model, ref, which = null, who = null) {
   // the card does.
   const shortEffect = !subtitle && effect && effect.length <= SHORT_EFFECT && !effect.includes('\n');
   const own = String(card.name || '').trim();
-  const name = subtitle ? [own, subtitle].filter(Boolean).join(' — ')
-    : own && shortEffect ? `${own} — ${effect}` : own || effect.split('\n')[0] || (card.mana ? `Mana (${card.mana})` : 'card');
+  const name = subtitle ? [own, subtitle].filter(Boolean).join(': ')
+    : own && shortEffect ? `${own}: ${effect}` : own || effect.split('\n')[0] || (card.mana ? `Mana (${card.mana})` : 'card');
 
   const rolls = [];
   const notes = [];
@@ -2444,7 +2444,7 @@ export function cardRollSpec(model, ref, which = null, who = null) {
     notes.push({ label: 'Cost', text: `${off ? `${effectiveCost(card)} SP (${cost} less ${off} for Rainbow Efficiency)` : `${cost} SP`}${words ? ` (${words})` : ''}` });
   }
   for (const [label, text] of cardStatLines(model, card, caster)) notes.push({ label, text });
-  const type = [String(card.sphere || '').trim(), String(card.tags || '').trim()].filter(Boolean).join(' — ');
+  const type = [String(card.sphere || '').trim(), String(card.tags || '').trim()].filter(Boolean).join(', ');
   if (type) notes.push({ label: 'Sphere', text: type });
   if (card.mana) notes.push({ label: 'Mana', text: String(card.mana) });
   if (effect && !shortEffect) {

@@ -1446,7 +1446,7 @@ function curveOptions() {
     const classes = psionicTables().classes || [];
     return psionicCurveTotals().map((total) => {
       const names = classes.filter((c) => c.total === total).map((c) => c.name);
-      return [total, names.length ? `${total} — ${names.join(', ')}` : `${total}`];
+      return [total, names.length ? `${total} (${names.join(', ')})` : `${total}`];
     });
   }
 
@@ -2648,7 +2648,7 @@ function memberDeckPanel(model, p, k, m) {
       ${lineHtml('Colors', inPlay.length ? manaChips(m.colors, '') : esc('none named; write “Colored Mana (WGB)” on its tradition'))}
       ${line('Switches', taken.length ? taken.join(', ') : 'none')}
       ${line('Identical-effect spread', `${d.spreadMin ?? 0}–${d.spreadMax ?? 0} copies (may differ by up to ${Number(m.mod) || 0})`)}
-      ${line('Effect cards', `${d.effectCards ?? 0} — ${(d.effects || []).length} distinct effect${(d.effects || []).length === 1 ? '' : 's'}`)}
+      ${line('Effect cards', `${d.effectCards ?? 0} (${(d.effects || []).length} distinct effect${(d.effects || []).length === 1 ? '' : 's'})`)}
       ${line('Mana point cards', `${d.manaCards ?? 0}${d.fused ? ` (${d.fused} fused onto an effect)` : ''}`)}
       ${inPlay.length ? `<div class="tally">${inPlay.map((c) => `<span class="t">${manaChips(c)}
         <span class="n">${tally[c]?.effects ?? 0}</span> effect${(tally[c]?.effects ?? 0) === 1 ? '' : 's'} ·
@@ -2691,7 +2691,7 @@ function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = 
       </div>
       ${String(card.subtitle || '').trim() ? `<div class="bar sub subtitle"><span>${esc(card.subtitle)}</span></div>` : ''}
       ${card.art ? `<div class="art"><img src="${esc(card.art)}" alt="" loading="lazy"></div>` : ''}
-      <div class="bar type"><span>${esc(card.sphere || (isMana ? 'Mana Point' : ''))}${card.tags ? ` — ${esc(card.tags)}` : ''}</span></div>
+      <div class="bar type"><span>${esc(card.sphere || (isMana ? 'Mana Point' : ''))}${card.tags ? `, ${esc(card.tags)}` : ''}</span></div>
       ${statsLine(model, card)}
       ${String(card.effect || '').trim() ? `<div class="text">${markKeywords(hasTokens(card.effect) ? renderedProse(model, card.effect) : esc(card.effect))}</div>` : ''}
       ${rolls}
@@ -2880,7 +2880,7 @@ function tableHead(s) {
         ? `Terrain Casting is on the tradition, and ${freedom} ignores it: no cast pays it.`
         : 'Terrain Casting: every cast pays one spell point more, or a casting-time step, or blights your square and the eight around it. Cast pays the point on a card with a cost and the step on an at-will one; … pays another way.');
     }
-    if (active && k.handMax) notes.push(`Tight Hand: ${t.hand.length} of ${k.handMax} in hand${tc.handOver ? ` — ${tc.handOver} over` : ''}.`);
+    if (active && k.handMax) notes.push(`Tight Hand: ${t.hand.length} of ${k.handMax} in hand${tc.handOver ? `, ${tc.handOver} over` : ''}.`);
     if (active && p.mods.gradualRamp) notes.push(`Gradual Ramp: ${t.manaPlayed} Mana Point card${t.manaPlayed === 1 ? '' : 's'} played this round (one allowed).`);
     if (active && p.mods.deckout && !t.deck.length) notes.push('Deckout: the deck is empty; 4 Constitution burn every turn it stays empty.');
     if (active && tc.missing) notes.push(`${tc.missing} cop${tc.missing === 1 ? 'y' : 'ies'} added to the deck since the shuffle. They join the deck at the next shuffle.`);
@@ -2946,7 +2946,7 @@ function castPicker(s, id, card, modes, casters = []) {
         ${who}
         ${modes.length ? `<label class="pickrow">Mode
           <select name="mode" aria-label="Mode">
-            ${modes.map((m) => `<option value="${esc(m.label)}" data-sp="${m.sp}"${copy(m.label) ? ` data-copytext="${esc(copy(m.label))}"` : ''}>${esc(m.label)}${m.formula ? ` — ${esc(m.formula)}` : m.source ? ` — ${esc(m.source)}` : ''}${m.sp ? ` (${m.sp} SP)` : ''}</option>`).join('')}
+            ${modes.map((m) => `<option value="${esc(m.label)}" data-sp="${m.sp}"${copy(m.label) ? ` data-copytext="${esc(copy(m.label))}"` : ''}>${esc(m.label)}${m.formula ? `: ${esc(m.formula)}` : m.source ? `: ${esc(m.source)}` : ''}${m.sp ? ` (${m.sp} SP)` : ''}</option>`).join('')}
           </select>
         </label>` : ''}
         <label class="pickrow">Spell points on top of the cost
@@ -3204,7 +3204,7 @@ function deckSummaryPanel(p, k) {
       ${line('Casting modifier', `${fmt(k.cam ?? 0)}${k.stat ? ` (${k.stat})` : ''}`)}
       ${line('Opening hand at initiative', `${k.openingHand ?? 2} (1 + modifier, at least 2); each redraw draws one fewer`)}
       ${line('Identical-effect spread', `${k.spreadMin ?? 0}–${k.spreadMax ?? 0} copies (may differ by up to ${k.cam ?? 0})`)}
-      ${line('Effect cards', `${k.effectCards ?? 0} — ${k.uniqueEffects ?? 0} distinct effect${k.uniqueEffects === 1 ? '' : 's'}`)}
+      ${line('Effect cards', `${k.effectCards ?? 0} (${k.uniqueEffects ?? 0} distinct effect${k.uniqueEffects === 1 ? '' : 's'})`)}
       ${line('Mana point cards', `${k.manaCards ?? 0}${k.fused ? ` (${k.fused} fused onto an effect)` : ''}`)}
       ${k.lifebound ? line('Lifebound value', `${k.lifebound} (HP ÷ 3 ÷ deck size, minimum 1)`) : ''}
       ${inPlay.length ? `<div class="tally">${inPlay.map((c) => `<span class="t">${manaChips(c)}
@@ -3310,7 +3310,7 @@ function deckManipulationsHead(model, p, k, own = '') {
     const featList = f.deckFeats.map((x) => x.replace(/\s*\[[^\]]*\]\s*/g, '').trim());
     const head = `<section class="panel span2 manip-head">
       <h3>Deck manipulations
-        <span class="badge ${left < 0 ? 'err' : ''}">${f.taken} of ${f.available} taken${left < 0 ? ` — ${-left} over` : left ? ` — ${left} left` : ''}</span>
+        <span class="badge ${left < 0 ? 'err' : ''}">${f.taken} of ${f.available} taken${left < 0 ? `, ${-left} over` : left ? `, ${left} left` : ''}</span>
         <span class="badge" title="${esc(featList.join(', ') || 'No feat or bought-off drawback is tagged [Deck]')}">${f.deckFeats.length} deck feat${f.deckFeats.length === 1 ? '' : 's'}</span>
         ${f.rainbow ? `<span class="badge">${f.rainbow === 2 ? 'Improved ' : ''}Rainbow Efficiency</span>` : ''}
       </h3>
@@ -3563,7 +3563,7 @@ function cardStatBars(model, list, i, card) {
     const feetWord = s.rangeFeet !== null && !/^\d+$/.test(s.range);
     const preview = [
       changed('save', s.save) ? ['Save', s.save] : null,
-      s.dcError ? ['DC', `${s.dc} — ${s.dcError}`, 'err'] : changed('dc', s.dc) ? ['DC', s.dc] : null,
+      s.dcError ? ['DC', `${s.dc}: ${s.dcError}`, 'err'] : changed('dc', s.dc) ? ['DC', s.dc] : null,
       feetWord ? ['Range', `${s.range} = ${s.rangeFeet} ft`] : changed('range', s.range) ? ['Range', s.range] : null,
       changed('target', s.target) ? ['Target', s.target] : null,
       changed('duration', s.duration) ? ['Duration', s.duration] : null,
