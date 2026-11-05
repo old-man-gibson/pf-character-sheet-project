@@ -23,7 +23,7 @@ import {
   group, minus, pct, round, signed,
 } from '../format.js';
 import {
-  ABILITIES, ABILITY_LABELS, ASURA_TALENTS_PER_ESSENCE, BRAWLERS_VEST_TALENTS, COMBAT_SPHERES,
+  ABILITIES, ABILITY_LABELS, ASURA_TALENTS_PER_ODD_ESSENCE, BRAWLERS_VEST_TALENTS, COMBAT_SPHERES,
   CRAFT_CHECK_MODES, CRAFT_SPEED_KINDS, CRAFT_SPEED_MULTIPLIER,
   CRAFT_TIME_BASES, GEAR_BONUS_TYPES, GEAR_BONUS_TYPE_SHORT, MONK_UNARMED_LADDER, SIZE_MODIFIERS,
   TALENTED_KNUCKLE_TALENTS, UNARMED_SPHERES, WEAPON_ATTACK_TYPES, WEAPON_CRIT_MULTS,
@@ -182,9 +182,9 @@ function practitionerUnarmedBlock(u, per, base) {
           <span class="label">Brawler's Vest <span class="badge">+${BRAWLERS_VEST_TALENTS}</span></span>
           <span class="value">${check(`${base}.brawlersVest`, u.brawlersVest)}</span></div>
       </div>
-      ${u.asuraEssence ? `<div class="statline" title="Essence invested in the Bands of the Asura veil. Each point counts as ${ASURA_TALENTS_PER_ESSENCE} Open Hand talents.">
+      ${u.asuraEssence ? `<div class="statline" title="Essence invested in the Bands of the Asura veil. Each odd point counts as ${ASURA_TALENTS_PER_ODD_ESSENCE} Open Hand talents.">
         <span class="label">Bands of the Asura <span class="badge">${u.asuraEssence} essence</span></span>
-        <span class="value">+${u.asuraEssence * ASURA_TALENTS_PER_ESSENCE} talents</span></div>` : ''}
+        <span class="value">+${u.asuraTalents ?? 0} talents</span></div>` : ''}
       ${editLine('Extra effective talents', `${base}.extraTalents`, u.extraTalents ?? 0)}
       <div class="statline"><span class="label">Count tradition talents too</span>
         <span class="value">${check(`${base}.includeTradition`, u.includeTradition)}</span></div>`;

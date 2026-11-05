@@ -1794,12 +1794,13 @@ export const UNARMED_SPHERES = ['Boxing', 'Brute', 'Open Hand', 'Wrestling'];
 /**
  * What else counts as unarmed talents, from the sheet's own cells: Talented
  * Knuckle is +2, a Brawler's Vest +4, and the Bands of the Asura veil (a
- * belt) adds Open Hand talents for the essence invested in it. Unorthodox
- * Unarmed Training names two more spheres per time it is taken.
+ * belt) adds 4 Open Hand talents for each odd point of essence invested in it
+ * (the 1st, 3rd, 5th...; the even points lower its flurry penalty instead).
+ * Unorthodox Unarmed Training names two more spheres per time it is taken.
  */
 export const TALENTED_KNUCKLE_TALENTS = 2;
 export const BRAWLERS_VEST_TALENTS = 4;
-export const ASURA_TALENTS_PER_ESSENCE = 4;
+export const ASURA_TALENTS_PER_ODD_ESSENCE = 4;
 export const ASURA_VEIL = /bands? of the asura/i;
 export const UNORTHODOX_FEAT = /unorthodox unarmed training/i;
 export const UNORTHODOX_SPHERES_PER_FEAT = 2;

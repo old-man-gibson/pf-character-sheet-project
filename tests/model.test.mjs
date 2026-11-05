@@ -6284,12 +6284,18 @@ console.log('unarmed practitioner damage');
   c.listAdd(free, { name: 'Unorthodox Unarmed Training', detail: '' });
   check('a second feat opens two more', [u().unorthodoxFeats, u().unorthodoxSlots], [2, 4]);
   c.listRemove(free, c.list(free).length - 1);
-  // The Bands of the Asura veil: 4 Open Hand talents per essence, only when it is shaped.
-  check('no essence in the Bands, nothing added', u().asuraEssence, 0);
+  // The Bands of the Asura veil: 4 Open Hand talents for each odd point of essence, only when it is shaped.
+  check('no essence in the Bands, nothing added', [u().asuraEssence, u().asuraTalents], [0, 0]);
   const asuraSlot = c.data.akashic.slots.findIndex((s) => (s.veils || []).some((v) => /asura/i.test(v.name)));
   const asuraVeil = c.data.akashic.slots[asuraSlot].veils.findIndex((v) => /asura/i.test(v.name));
-  c.setItem(`akashic.slots.${asuraSlot}.veils`, asuraVeil, 'essence', 2);
-  check('two essence in the Bands is eight Open Hand talents', [u().asuraEssence, u().perSphere['Open Hand'], u().effectiveTalents], [2, 3 + 8, 27]);
+  const asuraAt = (essence) => {
+    c.setItem(`akashic.slots.${asuraSlot}.veils`, asuraVeil, 'essence', essence);
+    return [u().asuraEssence, u().asuraTalents, u().perSphere['Open Hand'], u().effectiveTalents];
+  };
+  check('one essence in the Bands is four Open Hand talents', asuraAt(1), [1, 4, 3 + 4, 23]);
+  check('the second essence point adds no talents', asuraAt(2), [2, 4, 3 + 4, 23]);
+  check('the third essence point adds four more', asuraAt(3), [3, 8, 3 + 8, 27]);
+  check('the fourth essence point adds no talents', asuraAt(4), [4, 8, 3 + 8, 27]);
   c.setItem(`akashic.slots.${asuraSlot}.veils`, asuraVeil, 'essence', 0);
 
   c.set('training.combat.unarmed.sizeIncreases', 0);
