@@ -312,6 +312,17 @@ console.log('where a bonus can be sent -- the half a reader cannot see on the sh
   check('essence capacity is filed under Akashic',
     targetGroups([{ name: 'essence.cap', label: 'Essence capacity' }]).map((g) => [g.key, g.label, g.items.map((i) => i.name)]),
     [['akashic', 'Akashic', ['essence.cap']]]);
+  check('each pool is filed with its system, under a heading where the system has them',
+    targetGroups(['essence.pool', 'spheres.sp', 'pp.pool', 'operative.plans', 'unarmed.talents']
+      .map((name) => ({ name, label: name })))
+      .map((g) => [g.key, g.loose.map((i) => i.name), g.subs.map((s) => [s.label, s.items.map((i) => i.name)])]),
+    [
+      ['character', [], [['Unarmed strike', ['unarmed.talents']]]],
+      ['power', [], [['Casting', ['spheres.sp']]]],
+      ['guile', [], [['Operative', ['operative.plans']]]],
+      ['psionic', ['pp.pool'], []],
+      ['akashic', ['essence.pool'], []],
+    ]);
 
   const groups = targetGroups(targets);
   check('weapons and damage come first, because they are the unguessable ones',

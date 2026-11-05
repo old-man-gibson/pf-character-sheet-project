@@ -410,7 +410,11 @@ export function recomputeAkashic(model) {
     }
   }
 
-  const pool = Number(a.essence?.pool) || 0;
+  // A bonus sent to `essence.pool` ({essence.pool += 1} on a feat) adds to the
+  // typed daily pool. The sources are still checked against the typed figure.
+  const typedPool = Number(a.essence?.pool) || 0;
+  const poolForwarded = forwarded(model, 'essence.pool');
+  const pool = typedPool + poolForwarded;
   // The sheet's "Essence Boon" is the casting tradition's own pool taken as
   // essence rather than as spell points -- the same number, written twice.
   // Now that the Spheres tab works it out, it is computed here instead of
@@ -444,12 +448,13 @@ export function recomputeAkashic(model) {
     totalCap: cap,
     capForwarded,
     pool,
+    poolForwarded,
     sources,
     traditionBoon,
     // The pool is what the veilweaving classes and their sources come to, and
     // the sheet writes that total itself; where the two disagree the panel
     // says so rather than quietly picking one.
-    sourcesShort: sources - pool,
+    sourcesShort: sources - typedPool,
     temp,
     spSpent,
     spPool,
@@ -477,7 +482,7 @@ export function recomputeAkashic(model) {
 export function essenceScope(model) {
   const a = model.data.akashic;
   const out = {
-    pool: Number(a?.essence?.pool) || 0,
+    pool: Number(a?.calc?.pool ?? a?.essence?.pool) || 0,
     // `pool` stays the day's own essence so a formula written against it does
     // not move when spell points are condensed; `total` is the two together.
     temp: Number(a?.calc?.temp) || 0,

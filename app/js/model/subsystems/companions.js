@@ -540,6 +540,7 @@ export function companionBonuses(model, kind, b) {
   const at = (name) => (b.id ? forwarded(model, `${b.id}.${name}`) : 0);
   const out = { saves: {}, scores: {}, skill: {}, attackBy: {}, damageBy: {} };
   for (const [name, , path] of COMPANION_TARGETS) setPath(out, path, at(name));
+  if (kind === 'eidolon') out.evoPool = at('evoPool');
   for (const s of b.skills || []) {
     const key = companionSkillKey(s);
     if (key && key !== 'x' && out.skill[key] === undefined) out.skill[key] = at(`skill.${key}`);

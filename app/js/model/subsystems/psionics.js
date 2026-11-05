@@ -9,6 +9,7 @@
 import { statKeys, statMod } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { levelFollowingPin } from '../progression.js';
+import { forwarded } from '../scope.js';
 import { closestName, manifesterForwardKey } from '../util.js';
 
 let PSIONIC_TABLES = { powerLevels: [], curves: [], classes: [] };
@@ -264,7 +265,8 @@ export function recomputePsionics(model) {
   }
 
   p.bonusPoints = Math.max(0, Math.floor(Number(p.bonusPoints) || 0));
-  p.pool = pool + p.bonusPoints;
+  // A bonus sent to `pp.pool` lands beside the typed bonus points.
+  p.pool = Math.max(0, pool + p.bonusPoints + forwarded(model, 'pp.pool'));
   // Points spent today. The player's, so it is kept as spent, and only what
   // is shown is held to the pool as it stands (`spentNow`, `left`). It used to
   // be cut down to fit, so a pool that shrank for a moment came back with the

@@ -698,6 +698,10 @@ export function recomputeUnarmed(model) {
   if (u.talentedKnuckle) talents += TALENTED_KNUCKLE_TALENTS;
   if (u.brawlersVest) talents += BRAWLERS_VEST_TALENTS;
   talents += Number(u.extraTalents) || 0;
+  // A bonus sent to `unarmed.talents` counts like Extra effective talents. Not
+  // stored: the combat side saves its working, and this would save a 0 on
+  // every sheet. The badge reads it off the bonuses instead.
+  talents += forwarded(model, 'unarmed.talents');
 
   u.perSphere = per;
   u.effectiveTalents = Math.floor(talents);

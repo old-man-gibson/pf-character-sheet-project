@@ -152,11 +152,12 @@ export const trackerForwardKey = (id, edge = 'max') => `tracker.${id}.${edge}`;
  *
  * `early` is a family the recompute reads before the prose is (a class level
  * feeds the training pass, a speed resolves before the prose, the sphere and
- * casting numbers and the essence capacity are worked out early so a formula
- * can read them), so a bonus landing in one takes the second pass -- see
- * `forwardsEarly`. A family added here is early or not by saying so, rather
- * than by remembering a prefix list elsewhere. The fixed names (FORWARD_STATS, FORWARD_LATE) and
- * the companions, whose prefixes are their ids, are listed where they live.
+ * casting numbers, the daily pools and the unarmed strike's talents are
+ * worked out early so a formula can read them), so a bonus landing in one
+ * takes the second pass -- see `forwardsEarly`. A family added here is early
+ * or not by saying so, rather than by remembering a prefix list elsewhere.
+ * The fixed names (FORWARD_STATS, FORWARD_LATE) and the companions, whose
+ * prefixes are their ids, are listed where they live.
  */
 export const FORWARD_KEY_FAMILIES = [
   { prefix: 'skill', keyOf: skillForwardKey, early: false },
@@ -167,6 +168,9 @@ export const FORWARD_KEY_FAMILIES = [
   { prefix: 'vancian', keyOf: vancianForwardKey, early: true },
   { prefix: 'manifester', keyOf: manifesterForwardKey, early: true },
   { prefix: 'essence', keyOf: null, early: true },
+  { prefix: 'pp', keyOf: null, early: true },
+  { prefix: 'operative', keyOf: null, early: true },
+  { prefix: 'unarmed', keyOf: null, early: true },
   { prefix: 'tracker', keyOf: trackerForwardKey, early: false },
 ];
 

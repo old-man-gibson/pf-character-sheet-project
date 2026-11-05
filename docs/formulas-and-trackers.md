@@ -418,7 +418,13 @@ recompute have anywhere to *put* an arriving bonus:
 | `spheres.cl`, `spheres.dc`, `spheres.msb`, `spheres.msd` | the Spheres of Power caster level, global DC, MSB and MSD — beside the typed bonus on each line of Casting numbers. Caster level carries into the DC, concentration and every sphere's own CL |
 | `vancian.<class>.cl`, `vancian.cl` | one Vancian casting class's caster level, by the block's name (or its slot table's, if it has none), or every one of them. Caster level only: the slots are keyed to levels of the class, which is `class.<name>.level` |
 | `manifester.<class>.level`, `manifester.level` | one manifesting class's manifester level, or every one. Not the power points, for the same reason |
+| `spheres.sp` | Spheres of Power spell points. Added beside Bonus SP |
+| `pp.pool` | the power point pool. Added beside Bonus points |
 | `essence.cap` | essence capacity, the most essence a veil can hold. Added to the highest cap in the Veilweaving class table |
+| `essence.pool` | essence per day. Added to the typed pool |
+| `operative.plans`, `operative.utilityPlans`, `operative.leverage` | the operative's plans, utility plans and skill leverage uses. Leverage counts only once a sphere unlocks it |
+| `unarmed.talents` | talents counted for unarmed damage on the practitioner table. Added beside Extra effective talents |
+| `eidolon.evoPool` | an eidolon's evolution points. Added beside its Bonus points |
 | `tracker.<id>.max`, `tracker.<id>.min` | how big a resource pool is — not how full it is |
 | `initiative` | initiative |
 | `hp.total` | maximum hit points |

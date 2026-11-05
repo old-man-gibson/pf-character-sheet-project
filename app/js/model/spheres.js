@@ -1965,8 +1965,9 @@ export function recomputeTraining(model) {
       const own = casts(x) ? x.classLevelsCurrent ?? 0 : 0;
       return { name: x.name, sp: own ? own + statMod(c, x.mod1, x.mod2) : 0 };
     });
+    // A bonus sent to `spheres.sp` lands beside Bonus SP.
     m.totalSP = m.classSP.reduce((s, x) => s + x.sp, 0)
-      + (Number(m.bonusSP) || 0) + m.traditionSP;
+      + (Number(m.bonusSP) || 0) + forwarded(model, 'spheres.sp') + m.traditionSP;
 
     // Points condensed into temporary essence on the Akashic tab are spent
     // for the day: they are held against the pool here so what is left reads

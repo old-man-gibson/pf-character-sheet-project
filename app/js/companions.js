@@ -1000,6 +1000,7 @@ function bonusesFor(x) {
     ac: n(b.ac),
     touch: n(b.touch),
     ff: n(b.ff),
+    evoPool: n(b.evoPool),
     saves: map(b.saves),
     scores: map(b.scores),
     skill: map(b.skill),
@@ -1329,7 +1330,7 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     calc.canGrasp = shape ? shape.canGrasp : null;
   }
   if (kind === 'eidolon') {
-    const pool = (level >= 1 ? row.evoPool : 0) - penalty + (Number(b.bonusEvoPoints) || 0);
+    const pool = (level >= 1 ? row.evoPool : 0) - penalty + (Number(b.bonusEvoPoints) || 0) + fwd.evoPool;
     const spent = (b.evolutions || []).reduce((n, e) => n + (Number(e.cost) || 0), 0);
     calc.evoPool = Math.max(0, pool);
     calc.evoSpent = spent;
