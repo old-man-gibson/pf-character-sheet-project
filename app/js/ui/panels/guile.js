@@ -17,7 +17,7 @@
  * reason: the markup they return is whitespace-sensitive.
  */
 import { esc } from '../html.js';
-import { collapsible, bigStat, editLine, exprField, itemSelect, line, rowRemove } from '../rows.js';
+import { collapsible, bigStat, editLine, exprField, itemSelect, lineHtml, rowRemove } from '../rows.js';
 import { fillNotesButton, talentLegend } from '../talents.js';
 import { sphereForwardKey, talentsIn, DAILY_LEVERAGE_EXTRA, sideSphereNames } from '../../model.js';
 import { forwardedBadge } from '../badges.js';
@@ -351,7 +351,8 @@ function operativePanel(model, g) {
       <h4 class="subhead">Skill leverage</h4>
       ${lev.unlocked ? `
       <div class="bigstats" style="margin-bottom:8px">
-        ${bigStat('Uses', lev.pool ?? 0, `1 + a third of ${Number(model.data.identity.level) || 0} HD`)}
+        ${bigStat('Uses', { html: `${esc(lev.pool ?? 0)}${forwardedBadge(model, 'operative.leverage')}` },
+    `1 + a third of ${Number(model.data.identity.level) || 0} HD`)}
       </div>
       ${editLine('Extra uses', 'training.guile.leverageBonus', lev.bonus ?? 0)}
       <div class="statline"><span class="label">Daily-pool variant
@@ -368,8 +369,8 @@ function operativePanel(model, g) {
       <p class="hint">Every skill sphere unlocks it except Vocation, which has no base ability.</p>`}
 
       <h4 class="subhead">Plans</h4>
-      ${line('Plans prepared', plans.pool ?? 0, true)}
-      ${line('[utility] plans', plans.utilityPool ?? 0)}
+      ${lineHtml('Plans prepared', `${esc(plans.pool ?? 0)}${forwardedBadge(model, 'operative.plans')}`, true)}
+      ${lineHtml('[utility] plans', `${esc(plans.utilityPool ?? 0)}${forwardedBadge(model, 'operative.utilityPlans')}`)}
       ${editLine('[plan] talents', 'training.guile.planBonus', g.planBonus ?? 0)}
       ${editLine('[plan] [utility] talents', 'training.guile.utilityPlanBonus', g.utilityPlanBonus ?? 0)}
       <p class="hint">

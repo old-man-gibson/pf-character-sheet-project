@@ -458,7 +458,7 @@ function magicGlobalsPanel(model, m) {
       ${editLine('Bonus SP', 'training.magic.bonusSP', m.bonusSP)}
       ${line('Tradition SP', m.traditionSP ?? 0)}
       <div class="statline"><span class="label">Total SP</span>
-        <span class="value big">${m.totalSP} ${hint(m.totalSP, s.totalSP)}</span></div>
+        <span class="value big">${m.totalSP} ${hint(m.totalSP, s.totalSP)}${forwardedBadge(model, 'spheres.sp')}</span></div>
       ${m.spOnEssence ? `
       <div class="statline"><span class="label">Condensed to essence
         <span class="badge">${m.spOnEssence / SP_PER_TEMP_ESSENCE} temp essence</span></span>

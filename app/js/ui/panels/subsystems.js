@@ -278,7 +278,7 @@ function essencePanel(ctx, model, a) {
           </div>
           ${meterVisual(model.meterSpec('essence'))}
           <div class="ess-note">
-            ${temp ? `pool ${pool} + ${temp} temporary` : `${pool} essence per day`}
+            ${temp ? `pool ${pool} + ${temp} temporary` : `${pool} essence per day`}${forwardedBadge(model, 'essence.pool')}
           </div>
         </div>
 
@@ -1406,7 +1406,7 @@ export function psionicsPanel(model, ctx) {
     return `<div class="grid">
       <section class="panel span2">
         <h3>Power points
-          <span class="badge">${left} of ${pool}</span>
+          <span class="badge">${left} of ${pool}</span>${forwardedBadge(model, 'pp.pool')}
           ${p.spent ? `<span class="badge">${p.spent} spent today</span>` : ''}
           <span class="pair" style="margin-left:auto">
             <button data-action="psionics-new-day" title="Restore the whole pool.">New day</button>
@@ -1963,7 +1963,8 @@ function eidolonEvolutionsPanel(model, cc) {
     const over = (k.evoLeft ?? 0) < 0;
     return `<section class="panel span2">
       <h3>Evolutions
-        <span class="badge${over ? ' err' : ''}">${k.evoSpent ?? 0} of ${k.evoPool ?? 0} points</span>
+        <span class="badge${over ? ' err' : ''}">${k.evoSpent ?? 0} of ${k.evoPool ?? 0} points</span>${
+  b.id ? forwardedBadge(model, `${b.id}.evoPool`) : ''}
         <span class="pair" style="margin-left:auto">
           <label class="fld"><span>Bonus points</span>${num(`${p}.bonusEvoPoints`, b.bonusEvoPoints, 'style="width:3.6rem"')}</label>
         </span>

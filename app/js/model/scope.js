@@ -54,7 +54,8 @@ const FORWARD_EARLY = new Set(FORWARD_STATS.map(([name]) => name));
 
 /** The Spheres of Power casting numbers a bonus may be sent to, as `spheres.<suffix>`. */
 const SPHERES_TARGETS = [
-  ['cl', 'caster level'], ['dc', 'global DC'], ['msb', 'magic skill bonus'], ['msd', 'magic skill defence'],
+  ['cl', 'caster level'], ['dc', 'global DC'], ['msb', 'magic skill bonus'], ['msd', 'magic skill defense'],
+  ['sp', 'spell points'],
 ];
 
 /**
@@ -485,7 +486,7 @@ export function characterScope(model) {
   if (magic) {
     s.spheres = {
       cl: Number(magic.globalCL) || 0, dc: Number(magic.globalDC) || 0,
-      msb: Number(magic.msb) || 0, msd: Number(magic.msd) || 0,
+      msb: Number(magic.msb) || 0, msd: Number(magic.msd) || 0, sp: Number(magic.totalSP) || 0,
     };
   }
   const levelsOf = (rows, keyOf, field, leaf) => {
@@ -691,6 +692,10 @@ const TARGET_BRANCHES = [
   [/^speed\./, 'a speed'],
   [/^spheres\./, 'a Spheres of Power casting number'],
   [/^essence\.cap$/, 'essence capacity'],
+  [/^essence\.pool$/, 'the essence pool'],
+  [/^pp\.pool$/, 'the power point pool'],
+  [/^operative\./, 'an operative pool'],
+  [/^unarmed\.talents$/, 'unarmed strike talents'],
 ];
 
 /** Destinations totalled after the prose, which offer nothing a bonus may read. */
@@ -979,9 +984,22 @@ export function forwardTargets(model) {
 
   // The most essence one veil can hold. A talent or class feature that raises
   // it ("Capacity Increase") adds to the class blocks' cap; see recomputeAkashic.
+  // The daily pools beside it each land next to the bonus box the tab already
+  // has for them: the essence pool, power points, and the operative's plans
+  // and leverage. A system nobody plays with keeps them, unlisted.
   if (model.data.akashic) {
     add('essence.cap', 'Essence capacity', using.akashic ? null : { unused: true });
+    add('essence.pool', 'Essence per day', using.akashic ? null : { unused: true });
   }
+  if (model.data.psionics) add('pp.pool', 'Power points', using.psionic ? null : { unused: true });
+  if (training.guile) {
+    const guile = using.guile ? null : { unused: true };
+    add('operative.plans', 'Plans', guile);
+    add('operative.utilityPlans', 'Utility plans', guile);
+    add('operative.leverage', 'Skill leverage uses', guile);
+  }
+  // Talents counted for unarmed damage, beside the Extra effective talents box.
+  if (training.combat?.unarmed) add('unarmed.talents', 'Unarmed strike: effective talents');
 
   /*
    * The companions, every number of theirs that is rolled or asked for in a
@@ -1015,6 +1033,9 @@ export function forwardTargets(model) {
       for (const [prefix, label] of prefixes) {
         const under = (name) => `${prefix}.${name}`;
         for (const [name, what] of COMPANION_TARGETS) add(under(name), `${label}: ${what}`, mine);
+        // Only an eidolon has an evolution pool; it lands beside the bonus
+        // evolution points box.
+        if (kind === 'eidolon') add(under('evoPool'), `${label}: evolution points`, mine);
         // The character's names for the same numbers land on them as well,
         // unlisted, so a bonus written either way arrives.
         for (const [alias, name] of Object.entries(COMPANION_ALIASES)) expand.set(under(alias), [under(name)]);

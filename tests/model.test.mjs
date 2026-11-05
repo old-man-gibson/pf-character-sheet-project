@@ -3122,6 +3122,109 @@ console.log('essence.cap is a destination before the tab is in use');
     c.forwardTargets().list.find((t) => t.name === 'essence.cap')?.unused, true);
 }
 
+console.log('bonuses reach the daily pools that have a bonus box');
+{
+  // Each of these totals already adds a typed bonus box; a forwarded bonus
+  // lands beside it, shows as a gold badge, and holds through a reopen.
+  const c = new Character(blankDocument({ name: 'Pools', level: 9 }));
+  const note = (body) => {
+    const at = c.data.notes.length;
+    c.listAdd('notes', { title: 'Bonus', body });
+    return () => c.listRemove('notes', at);
+  };
+  const misdirected = () => c.formulaProblems().filter((p) => p.kind === 'misdirected');
+  const reopened = () => new Character(JSON.parse(JSON.stringify(c.toJSON())));
+
+  // Essence per day: the typed pool plus the bonus. The sources are still
+  // checked against the typed pool.
+  c.set('akashic.essence.pool', 10);
+  let drop = note('Extra Essence {essence.pool += 2}');
+  const k = () => c.data.akashic.calc;
+  check('essence.pool adds to the typed pool',
+    [k().pool, k().poolForwarded, c.scope().essence.pool, c.scope().essence.total, k().free], [12, 2, 12, 12, 12]);
+  check('the typed pool is kept as typed', c.data.akashic.essence.pool, 10);
+  check('the sources are checked against the typed pool', k().sourcesShort, k().sources - 10);
+  check('the Essence panel shows the bonus',
+    subsystemPanels.akashicPanel(c, {}).includes('data-fwd="essence.pool"'), true);
+  check('a reopened sheet has the same pool', reopened().data.akashic.calc.pool, 12);
+  drop();
+  check('and it goes with the bonus', k().pool, 10);
+
+  // Spell points, beside Bonus SP.
+  c.listAdd('training.magic.classes', {
+    name: 'Incanter', type: 'High', talentsPerLevel: null, mod1: 'Int', mod2: null, classLevelsOverride: 9,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null })),
+  });
+  const sp = c.data.training.magic.totalSP;
+  drop = note('{spheres.sp += 3}');
+  check('spheres.sp adds to the spell points',
+    [c.data.training.magic.totalSP, c.scope().caster.sp, c.scope().spheres.sp], [sp + 3, sp + 3, sp + 3]);
+  check('a reopened sheet has the same spell points', reopened().data.training.magic.totalSP, sp + 3);
+  drop();
+  check('and they go with the bonus', c.data.training.magic.totalSP, sp);
+
+  // Power points, beside Bonus points.
+  c.set('psionics.bonusPoints', 2);
+  drop = note('Psionic Talent {pp.pool += 3}');
+  check('pp.pool adds to the power points',
+    [c.data.psionics.pool, c.data.psionics.left, c.scope().pp.pool], [5, 5, 5]);
+  check('the bonus points box is kept as typed', c.data.psionics.bonusPoints, 2);
+  check('the Psionics panel shows the bonus',
+    subsystemPanels.psionicsPanel(c, {}).includes('data-fwd="pp.pool"'), true);
+  check('a reopened sheet has the same pool', reopened().data.psionics.pool, 5);
+  drop();
+
+  // The operative's plans and leverage.
+  const g = c.data.training.guile;
+  g.classes.push({ ...blankGuileClass('Envoy'), expertise: 'Virtuoso', classLevelsOverride: 9 });
+  c.recompute();
+  drop = note('{operative.leverage += 2}');
+  check('leverage takes no bonus until a sphere unlocks it', g.leverage.pool, 0);
+  drop();
+  Object.assign(g.classes[0].levels[1], { talent: 'Piercing Wit', sphere: 'Bluster' });
+  g.planBonus = 1;
+  c.recompute();
+  check('one plan talent is two plans, and leverage is 4 at 9 HD', [g.plans.pool, g.leverage.pool], [2, 4]);
+  drop = note('{operative.plans += 1} {operative.utilityPlans += 1} {operative.leverage += 2}');
+  check('each pool takes its bonus',
+    [g.plans.pool, g.plans.utilityPool, g.leverage.pool, c.scope().operative.leverage], [3, 1, 6, 6]);
+  check('a reopened sheet has the same pools',
+    (() => { const r = reopened().data.training.guile; return [r.plans.pool, r.plans.utilityPool, r.leverage.pool]; })(), [3, 1, 6]);
+  drop();
+
+  // Talents counted for unarmed damage, beside Extra effective talents.
+  const u = c.data.training.combat.unarmed;
+  const talents = u.effectiveTalents;
+  drop = note('{unarmed.talents += 2}');
+  check('unarmed.talents adds to the effective talents',
+    [u.effectiveTalents, c.scope().unarmed.talents], [talents + 2, talents + 2]);
+  check('but not to the talents a class progression counts', u.assocTalents, 0);
+  check('the box is kept as typed', Number(u.extraTalents) || 0, 0);
+  check('a reopened sheet counts the same',
+    reopened().data.training.combat.unarmed.effectiveTalents, talents + 2);
+  drop();
+
+  // An eidolon's evolution points, beside its Bonus points.
+  c.set('eidolon.0.levelOverride', 12);
+  c.set('eidolon.0.bonusEvoPoints', 2);
+  const e = () => c.data.eidolon[0].calc;
+  const evo = e().evoPool;
+  drop = note('Extra Evolution {eidolon.evoPool += 1}');
+  check('eidolon.evoPool adds to the evolution points', [e().evoPool, c.scope().eidolon.evoPool], [evo + 1, evo + 1]);
+  check('a reopened sheet has the same pool', reopened().data.eidolon[0].calc.evoPool, evo + 1);
+  check('only an eidolon has one',
+    c.forwardTargets().list.some((t) => /^(familiar|animalCompanion)\.evoPool$/.test(t.name)), false);
+  drop();
+
+  drop = note('{essence.pool += 1} {spheres.sp += 1} {pp.pool += 1} {operative.plans += 1}'
+    + ' {operative.utilityPlans += 1} {operative.leverage += 1} {unarmed.talents += 1} {eidolon.evoPool += 1}');
+  check('none of them is reported as having no destination', [misdirected(), c.contributions.errors], [[], []]);
+  drop();
+  check('the six are offered as destinations',
+    ['essence.pool', 'spheres.sp', 'pp.pool', 'operative.plans', 'operative.utilityPlans', 'operative.leverage',
+      'unarmed.talents', 'eidolon.evoPool'].filter((n) => !c.forwardTargets().list.some((t) => t.name === n)), []);
+}
+
 console.log('the Lifebound piles hold until a rest to regain spell points');
 {
   // "When you rest to regain spell points, remove all cards from your Stun,

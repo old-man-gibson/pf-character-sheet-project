@@ -107,7 +107,8 @@ function unarmedFold(model) {
     native)}</div>
     </div>`;
     const title = `🥊 Unarmed dice <strong class="unarmed-dice">${esc(u.dice ?? '—')}</strong>
-      <span class="hint">${esc(sub)}${u.improvedUnarmedStrike ? ' · gains Improved Unarmed Strike' : ''}</span>`;
+      <span class="hint">${esc(sub)}${u.improvedUnarmedStrike ? ' · gains Improved Unarmed Strike' : ''}</span>${
+  native ? '' : forwardedBadge(model, 'unarmed.talents')}`;
     return collapsibleSub(model, 'unarmed-setup', title, setup, 'unarmed-fold', true);
   }
 

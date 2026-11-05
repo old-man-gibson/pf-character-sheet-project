@@ -321,9 +321,10 @@ function recomputeGuilePools(model, g, level) {
     talents: planTalents,
     utilityTalents: utilityPlanTalents,
     // "1 + the number of plan talents you have without the [utility] tag",
-    // and only for a character who has any plan talent at all.
-    pool: planTalents || utilityPlanTalents ? 1 + planTalents : 0,
-    utilityPool: utilityPlanTalents,
+    // and only for a character who has any plan talent at all. A bonus sent
+    // to `operative.plans` or `.utilityPlans` adds to the pool itself.
+    pool: (planTalents || utilityPlanTalents ? 1 + planTalents : 0) + forwarded(model, 'operative.plans'),
+    utilityPool: utilityPlanTalents + forwarded(model, 'operative.utilityPlans'),
     counted: plan + utilityPlan,
     unknown: unnamedPlans.length,
   };
@@ -339,9 +340,12 @@ function recomputeGuilePools(model, g, level) {
     base: unlocking.length ? leveragePool(level) : 0,
     daily: !!g.leverageDaily,
     bonus: Number(g.leverageBonus) || 0,
+    // A bonus sent to `operative.leverage` counts like Extra uses: only once
+    // a sphere unlocks leverage.
+    forwarded: forwarded(model, 'operative.leverage'),
   };
   g.leverage.pool = g.leverage.base
-    ? g.leverage.base + g.leverage.bonus + (g.leverage.daily ? DAILY_LEVERAGE_EXTRA : 0)
+    ? g.leverage.base + g.leverage.bonus + g.leverage.forwarded + (g.leverage.daily ? DAILY_LEVERAGE_EXTRA : 0)
     : 0;
 }
 

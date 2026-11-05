@@ -134,14 +134,14 @@ export const TARGET_SECTIONS = [
   { key: 'defence', label: 'Health, armor, saves', blurb: 'Hit points, armor class, the three saves, damage reduction, energy resistance and immunities.' },
   { key: 'ability', label: 'Ability scores', blurb: 'The ability score. Everything based on it changes too.' },
   { key: 'skill', label: 'Skills', blurb: 'Each skill by name, or every skill at once.' },
-  { key: 'character', label: 'The character', blurb: 'Initiative, movement rates, class levels and actions per turn.' },
+  { key: 'character', label: 'The character', blurb: 'Initiative, movement rates, class levels, actions per turn and unarmed strike talents.' },
   { key: 'tracker', label: 'Trackers', blurb: 'A tracker’s max and min, not its current value.' },
-  { key: 'power', label: 'Spheres of Power', blurb: 'Casting numbers; per magic sphere: CL, DC.' },
+  { key: 'power', label: 'Spheres of Power', blurb: 'Casting numbers and spell points; per magic sphere: CL, DC.' },
   { key: 'might', label: 'Spheres of Might', blurb: 'Per combat sphere: attack bonus, DC.' },
-  { key: 'guile', label: 'Spheres of Guile', blurb: 'Per skill sphere: ranks, DC.' },
+  { key: 'guile', label: 'Spheres of Guile', blurb: 'Plans and leverage; per skill sphere: ranks, DC.' },
   { key: 'vancian', label: 'Vancian magic', blurb: 'One casting class’s caster level, or all of them.' },
-  { key: 'psionic', label: 'Psionics', blurb: 'One manifesting class’s manifester level, or all of them.' },
-  { key: 'akashic', label: 'Akashic', blurb: 'The most essence a veil can hold.' },
+  { key: 'psionic', label: 'Psionics', blurb: 'Power points, and one manifesting class’s manifester level or all of them.' },
+  { key: 'akashic', label: 'Akashic', blurb: 'Essence per day and the most essence a veil can hold.' },
   { key: 'companion', label: 'Companions', blurb: 'One heading per companion. Later companions of a kind are numbered.' },
   { key: 'other', label: 'Everything else', blurb: '' },
 ];
@@ -227,7 +227,8 @@ export function classifyTarget(name, system = '') {
   if (head === 'attack') return 'attack';
   if (head === 'skill') return 'skill';
   if (head === 'tracker') return 'tracker';
-  if (head === 'class' || head === 'initiative' || head === 'speed' || head === 'actions') return 'character';
+  if (head === 'class' || head === 'initiative' || head === 'speed' || head === 'actions'
+    || head === 'unarmed') return 'character';
   if (ABILITY_KEYS.has(head)) return 'ability';
   if (DEFENCE_KEYS.has(head)) return 'defence';
   if (head === 'sphere') return SPHERE_FAMILIES[system] || sphereFamily(name);
@@ -270,11 +271,13 @@ function targetHeading(t, family) {
       if (head === 'speed') return { key: 'speed', label: 'Speeds', rank: 1 };
       if (head === 'class') return { key: 'class', label: 'Class levels', rank: 2 };
       if (head === 'actions') return { key: 'actions', label: 'Actions', rank: 3 };
+      if (head === 'unarmed') return { key: 'unarmed', label: 'Unarmed strike', rank: 4 };
       return null;
     case 'tracker': return { key: second, label: t.under || second };
     case 'power':
     case 'might':
     case 'guile':
+      if (head === 'operative') return { key: 'operative', label: 'Operative', rank: 0 };
       if (head !== 'sphere') return { key: 'casting', label: 'Casting', rank: 0 };
       return { key: second, label: t.under || titled(second), rank: t.trained ? 1 : 2 };
     case 'companion': return companionHeadingFor(head, second, t.under);
