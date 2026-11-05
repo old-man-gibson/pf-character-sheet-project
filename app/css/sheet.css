@@ -3437,6 +3437,9 @@ input.tabname:hover, input.tabname:focus { border-color: var(--cs-line); }
 }
 .prose.grow .prose-view { font-size: 0.78rem; padding: 3px 5px; }
 .prose.editing .prose-view { display: none; }
+/* A field dragged to a height of its own: the read view keeps that height
+   too (see #keepBoxHeight in sheet-element.js) and scrolls a longer text. */
+.prose.has-height > .prose-view { overflow-y: auto; }
 /* A web address in what a player wrote (ui/links.js). The edit blue, which
    tests/themes.test.mjs holds to 4.5:1 on the view's own panel-2 ground in
    every palette. A long address breaks anywhere rather than run out of its
