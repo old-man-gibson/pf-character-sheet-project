@@ -112,7 +112,7 @@ export function renderStatsPanel(model, ctx) {
               <tr>
                 <th></th>
                 ${groups.map((g) => `${g.cols.map(([, label, full], i) => `<th class="num ${band(g, i)}" title="${esc(full)}">${esc(label)}</th>`).join('')}${
-                g.sum ? '<th class="num grouped groupend" title="What the group actually contributes after its cap">Used</th>' : ''}`).join('')}
+                g.sum ? '<th class="num grouped groupend" title="What the group adds after its cap.">Used</th>' : ''}`).join('')}
                 <th class="num" title="Bonuses forwarded here by a rule written somewhere else on the sheet">Fwd</th>
                 <th class="num">Total</th>
               </tr>
@@ -172,11 +172,11 @@ export function renderStatsPanel(model, ctx) {
               <tr>
                 <th></th>
                 ${BUILD_TEMPORARY.map(([, label, full]) => `<th class="num" title="${esc(full)}">${esc(label)}</th>`).join('')}
-                <th class="num" title="Bonuses forwarded here as temporary ones — written {str.temp += 2 as size}, or {str.score += 2 as temp.size}, somewhere else on the sheet">Fwd</th>
-                <th class="num" title="Everything the temporary columns add up to">Temp</th>
+                <th class="num" title="Temporary bonuses forwarded from elsewhere on the sheet, written as {str.temp += 2 as size} or {str.score += 2 as temp.size}.">Fwd</th>
+                <th class="num" title="Total of the temporary columns.">Temp</th>
                 <th class="num" title="Ability drain, entered on the Overview: it lowers the score">Drain</th>
-                <th class="num" title="Ability damage, entered on the Overview: each 2 points is −1 to the modifier, and the score stays">Dmg</th>
-                <th class="num" title="Temporary score less drain, used by every derived stat">Score</th>
+                <th class="num" title="Ability damage, entered on the Overview: every 2 points give −1 to the modifier; the score does not change.">Dmg</th>
+                <th class="num" title="Temporary score minus drain, used by every derived stat.">Score</th>
                 <th class="num">Mod</th>
               </tr>
             </thead>
@@ -202,12 +202,11 @@ export function renderStatsPanel(model, ctx) {
           </table>
         </div>
         <p class="hint">
-          Temporary bonuses feed the Temp Score used by every derived stat.
-          The permanent Total is not changed. <strong>Fwd</strong> is what a rule
-          written elsewhere on the sheet sends here. Write <code>{str.score += 2 as size}</code>
-          for a permanent one. Write <code>{str.temp += 2 as size}</code> or
-          <code>{str.score += 2 as temp.size}</code> for a temporary one. The badge points
-          back at the sentence that sent it.
+          Temporary bonuses add to the Temp Score used by every derived stat; the permanent
+          Total does not change. <strong>Fwd</strong> is a bonus forwarded from elsewhere on the
+          sheet. Write <code>{str.score += 2 as size}</code> for a permanent one, or
+          <code>{str.temp += 2 as size}</code> or <code>{str.score += 2 as temp.size}</code> for a
+          temporary one. The badge links to the text that added it.
         </p>
       </section>
       </div>
@@ -281,7 +280,7 @@ function defenceBonusPanel(model) {
     : typedOf[key] ? ' grouped groupend' : '');
   const cells = (block, resolved, errors, types, bind) => types.map(([key, , flags]) => {
     const off = flags && (flags.touch === false || flags.flatFooted === false);
-    const title = off ? `title="${flags.touch === false ? 'Armour-side: touch attacks ignore it' : 'Lost when flat-footed'}"` : '';
+    const title = off ? `title="${flags.touch === false ? 'Touch AC ignores it.' : 'Lost when flat-footed.'}"` : '';
     if (abpOf[key]) {
       return `<td class="num${groupClass(key)}" ${title}>
           ${roField(resolved?.[key] ?? 0, `From the ABP ladder at level ${c.identity.level}. With the typed bonus beside it, the pair stops at +${ABP_DEFENCE_CAP}.`,
@@ -289,14 +288,14 @@ function defenceBonusPanel(model) {
     'style="width:100%;min-width:4.4rem;box-sizing:border-box"')}</td>`;
     }
     const pairTitle = typedOf[key]
-      ? ` Counts with the ABP bonus beside it up to +${ABP_DEFENCE_CAP} in all; past +${ABP_DEFENCE_CAP} on its own, it stands alone.` : '';
+      ? ` Together with the ABP bonus beside it, at most +${ABP_DEFENCE_CAP}. A value above +${ABP_DEFENCE_CAP} applies alone.` : '';
     const over = typedOf[key] && abpGroupTotal(resolved?.[typedOf[key]], resolved?.[key]) < (Number(resolved?.[typedOf[key]]) || 0) + (Number(resolved?.[key]) || 0);
     return `<td class="num${groupClass(key)}${over ? ' over' : ''}" ${title}>
         ${exprField(bind(key), block?.[key] ?? 0, {
         width: '4.4rem',
         value: resolved?.[key],
         error: errors?.[key],
-        title: 'A number, or a formula — e.g. min(str.mod - dex.mod, 3 + floor(bab / 2)).' + pairTitle,
+        title: 'A number or a formula, e.g. min(str.mod - dex.mod, 3 + floor(bab / 2)).' + pairTitle,
       })}</td>`;
   }).join('');
 
@@ -304,10 +303,10 @@ function defenceBonusPanel(model) {
   // on hover -- and, for a typed bonus paired with an ABP one, the cap.
   const head = (types) => types.map(([key, label, flags]) => {
     const said = [bonusColumnName(key)];
-    if (flags?.touch === false) said.push('not counted against touch attacks');
-    else if (flags?.flatFooted === false) said.push('not counted while flat-footed');
-    if (typedOf[key]) said.push(`with the ABP bonus beside it, at most +${ABP_DEFENCE_CAP}`);
-    return `<th class="num${groupClass(key)}" title="${esc(said.join(' — '))}">${esc(label)}</th>`;
+    if (flags?.touch === false) said.push('does not apply to touch AC');
+    else if (flags?.flatFooted === false) said.push('lost while flat-footed');
+    if (typedOf[key]) said.push(`at most +${ABP_DEFENCE_CAP} together with the ABP bonus beside it`);
+    return `<th class="num${groupClass(key)}" title="${esc(`${said[0]}${said.length > 1 ? `: ${said.slice(1).join('; ')}` : ''}`)}">${esc(label)}</th>`;
   }).join('');
 
   return `<section class="panel span2">
@@ -334,23 +333,20 @@ function defenceBonusPanel(model) {
         </tr></tbody>
       </table></div>
       <p class="hint">
-        Each cell takes a number or a formula, so a conditional bonus can be written as
-        a rule. Example: Force Redirection's
-        <code>min(str.mod - dex.mod, 3 + floor(bab / 2))</code> updates when BAB changes.
-        A typed-in number would not. Formulas read abilities, level, BAB and any
-        name defined in prose. They show in the GM's Formula Audit.
+        Each cell accepts a number or a formula, such as
+        <code>min(str.mod - dex.mod, 3 + floor(bab / 2))</code>, which updates when BAB changes.
+        Formulas can read abilities, level, BAB and any name defined in text, and show in the
+        GM's Formula Audit.
       </p>
       <p class="hint">
-        Natural-armour and enhancement bonuses do not count against <strong>touch</strong>.
-        Dodge is lost while <strong>flat-footed</strong>. Both follow from the column,
-        so all three numbers move together. The three <strong>ABP</strong> columns follow the
-        character's level along the progression's ladder and are not typed. Each is paired
-        with the typed bonus of the same kind (resistance, deflection, enhanced natural
-        armour). The pair adds up to at most +${ABP_DEFENCE_CAP}. If the typed side is
-        past +${ABP_DEFENCE_CAP} by itself, it stands alone.${savesSheet || acSheet ? `
-        <strong>Sheet</strong> is what the imported workbook's total held beyond the columns
-        the export could read. Move it into the columns it belongs in. Once a table's Sheet
-        cells are all cleared, the column goes.` : ''}
+        Natural armor and enhancement bonuses do not apply to <strong>touch</strong> AC, and
+        dodge is lost while <strong>flat-footed</strong>. The three <strong>ABP</strong> columns
+        follow the character's level and cannot be typed. Each is paired with the typed bonus of
+        the same kind (resistance, deflection, enhanced natural armor), and the pair adds up to at
+        most +${ABP_DEFENCE_CAP}. A typed bonus above +${ABP_DEFENCE_CAP} applies alone.${savesSheet || acSheet ? `
+        <strong>Sheet</strong> is the part of the imported total that the export could not place
+        in a column. Move it into the right columns; the Sheet column disappears once its cells
+        are cleared.` : ''}
       </p>
     </section>`;
 }
@@ -408,11 +404,11 @@ function milestonePicksPanel(model) {
       <p class="hint">${mythic ? `
         <strong>Level/4</strong> is +1 at every fourth level. <strong>Mythic</strong> is
         +2 at every even tier. These are the same increases as the ladder on
-        <strong>Feats &amp; Mythic</strong>. Either place edits the one set.
-        Currently level ${level}, tier ${tier}. Anything past that is greyed and does not
+        <strong>Feats &amp; Mythic</strong>. Editing either one changes both.
+        Currently level ${level}, tier ${tier}. Anything past that is grayed and does not
         count yet.` : `
         <strong>Level/4</strong> is +1 at every fourth level. Currently level ${level}.
-        Anything past that is greyed and does not count yet. Mythic is off in the campaign
+        Anything past that is grayed and does not count yet. Mythic is off in the campaign
         rules, so its increases are not shown.`}
       </p>
     </section>`;
@@ -464,7 +460,7 @@ function abpPicksPanel(model) {
   const core = coreAbp(c);
   const steps = core ? CORE_PROWESS_LEVELS : { mental: MENTAL_PROWESS_LEVELS, physical: PHYSICAL_PROWESS_LEVELS };
   return `<section class="panel">
-      <h3>ABP — Mental &amp; Physical Prowess</h3>
+      <h3>ABP: Mental &amp; Physical Prowess</h3>
       <div class="tablewrap"><table class="build picks">
         <thead><tr><th class="num">Lvl</th><th>Mental</th><th>Physical</th></tr></thead>
         <tbody>${ABP_LEVELS.filter((l) => steps.mental.includes(l) || steps.physical.includes(l)).map((l) => {
@@ -493,9 +489,9 @@ function abpPicksPanel(model) {
       <p class="hint">
         +2 each. The two tracks advance on different levels, so most rows offer a
         choice on one side only. Levels 11 and 12 raise the ability chosen at 6 and 7
-        instead of offering a new choice. Rows above level ${level} are greyed. They
-        are planned but do not count toward the score yet.${core ? ` Core ABP stops at 18th:
-        19th and 20th bring legendary gifts instead, beside this panel.` : ''}
+        instead of offering a new choice. Rows above level ${level} are grayed and do not
+        count yet.${core ? ` Core ABP stops at 18th; 19th and 20th give legendary gifts
+        instead, shown beside this panel.` : ''}
       </p>
     </section>`;
 }
@@ -515,7 +511,7 @@ function abpAttunePanel(model) {
   const plus = (n) => (n ? ` <span class="badge ok">+${n}</span>` : '');
   const now = one ? `+${one}${two ? `, or +${two[0]} and +${two[1]} split across two` : ''}` : 'none before 4th level';
   const armour = [
-    e.armor?.active ? `${check('equipment.armor.attuned', e.armor.attuned, e.armor.name || 'Armour')}${plus(att.armor)}` : '',
+    e.armor?.active ? `${check('equipment.armor.attuned', e.armor.attuned, e.armor.name || 'Armor')}${plus(att.armor)}` : '',
     ...(e.shields || []).map((s, i) => (s?.active
       ? `${itemCheck('equipment.shields', i, 'attuned', s.attuned, s.name || `Shield ${i + 1}`)}${plus(att.shields?.[i])}` : '')),
   ].filter(Boolean);
@@ -523,19 +519,19 @@ function abpAttunePanel(model) {
     plus(att.weapons?.[i])}`);
   const gifts = level >= 20 ? LEGENDARY_GIFTS[19] + LEGENDARY_GIFTS[20] : level >= 19 ? LEGENDARY_GIFTS[19] : 0;
   return `<section class="panel">
-      <h3>ABP — Attunement &amp; legendary gifts</h3>
-      <h4 class="subhead">Armour attunement <span class="badge">${esc(now)}</span></h4>
-      <div class="attunelist">${armour.join(' ') || '<span class="hint">No armour or shield in use.</span>'}</div>
-      <p class="hint">${att.clothing ? `Nothing worn: your clothes take it, +${att.clothing} armour.`
-    : 'None ticked: the armour you wear takes it.'}</p>
+      <h3>ABP: Attunement &amp; legendary gifts</h3>
+      <h4 class="subhead">Armor attunement <span class="badge">${esc(now)}</span></h4>
+      <div class="attunelist">${armour.join(' ') || '<span class="hint">No armor or shield in use.</span>'}</div>
+      <p class="hint">${att.clothing ? `Nothing worn: your clothes get it, +${att.clothing} armor.`
+    : 'None ticked: the armor you wear gets it.'}</p>
       <h4 class="subhead">Weapon attunement <span class="badge">${esc(now)}</span></h4>
-      <div class="attunelist">${weapons.join(' ') || '<span class="hint">No weapons on the Gear tab.</span>'}</div>
+      <div class="attunelist">${weapons.join(' ') || '<span class="hint">No weapons on the Equipment tab.</span>'}</div>
       <p class="hint">Tick the weapon it is on${two ? ', or two to split it' : ''}. The higher of it and a weapon's own
         enhancement counts, on attack and damage.</p>
       <h4 class="subhead">Legendary gifts <span class="badge${gifts ? '' : ' future'}">${gifts ? `${gifts} to choose` : 'at 19th'}</span></h4>
       ${area('progressionPicks.legendaryGifts', c.progressionPicks?.legendaryGifts, 3)}
-      <p class="hint">Three at 19th and five more at 20th. Written down rather than worked out:
-        a gift that raises a number can say so in a formula, such as {str += 2}.</p>
+      <p class="hint">Three at 19th and five more at 20th. These are not calculated; a gift that
+        raises a number can do so with a formula, such as {str += 2}.</p>
     </section>`;
 }
 

@@ -65,7 +65,7 @@ export function openZip(bytes) {
   }
   if (eocd < 0) {
     throw new Error(bytes.length >= 8 && view.getUint16(0, true) === 0xcfd0
-      ? 'this is an old .xls workbook — re-export it as .xlsx'
+      ? 'this is an old .xls workbook; save it as .xlsx'
       : 'not a .xlsx file (no ZIP directory found)');
   }
 
@@ -411,7 +411,7 @@ export async function readWorkbook(input) {
   const workbookXml = await zip.text('xl/workbook.xml');
   if (workbookXml === null) {
     throw new Error(zip.has('mimetype')
-      ? 'this is an OpenDocument spreadsheet — re-export it as .xlsx'
+      ? 'this is an OpenDocument spreadsheet; save it as .xlsx'
       : 'not a spreadsheet: xl/workbook.xml is missing');
   }
 

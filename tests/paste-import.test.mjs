@@ -976,7 +976,7 @@ console.log('a plain homebrew archetype document -- no info box, title features 
     [f('Spatial').replaces, f('Spatial').alters], [['warriors grace@10', 'warriors grace@14'], []]);
   check('"At level 20"', f('Axiomatic').level, 20);
   ok('sub-entries under Topological Theory', /Opening Theorem: Whenever/.test(f('Topological Theory').text) && /Proven Lemma:/.test(f('Topological Theory').text));
-  ok('the report says the class is not named, and counts the menu', /Archetype Isougiri for a class the text does not name/.test(r.report[0]) && /Topological Iaijutsu Techniques: 2 options/.test(r.report[0]));
+  ok('the report says the class is not named, and counts the menu', /Archetype Isougiri for an unnamed class/.test(r.report[0]) && /Topological Iaijutsu Techniques: 2 options/.test(r.report[0]));
 }
 
 console.log('a scraper document -- structured markdown, read before anything is cleaned');

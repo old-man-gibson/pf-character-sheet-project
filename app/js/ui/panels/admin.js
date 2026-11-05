@@ -91,8 +91,8 @@ export function formulaButton(model, ctx) {
     return `<button data-view data-action="formulas" aria-pressed="${ctx.tab === 'formulas'}"
       class="${broken ? 'danger' : ''}"
       title="${broken
-    ? `Formulas — ${broken} on this character ${broken === 1 ? 'is' : 'are'} not working`
-    : 'Formulas: what you can read, what you have written, and how to write more'}"
+    ? `Formulas: ${broken} not working on this character`
+    : 'Open the Formulas tab.'}"
       >&fnof;x Formulas${broken ? ` (${broken})` : ''}</button>`;
   }
 
@@ -105,9 +105,9 @@ export function renderAuditPanel(model, ctx) {
         <span class="badge ${bad ? 'err' : 'ok'}">${rows.length} formula(s), ${bad} problem(s)</span>
       </h3>
       <p class="hint" style="margin-bottom:10px">
-        Every formula a player has entered on this character, exactly as written.
-        Formulas are parsed, never executed as code. Each can only read the values listed
-        under “reads”. Nothing here can reach the page, the network, or other characters.
+        Every formula entered on this character, as written. Formulas are parsed, never run
+        as code, and can only read the values listed under “reads”. They cannot access the
+        page, the network or other characters.
       </p>
       ${rows.length ? rows.map((r) => `
         <div class="audit-row ${r.status === 'error' ? 'error' : ''}">
@@ -125,6 +125,6 @@ export function renderAuditPanel(model, ctx) {
           <div class="hint">evaluates to: <strong>${r.error ? '—' : esc(r.value)}</strong>
             ${r.error ? `<span style="color:var(--cs-bad)"> ${esc(r.error)}</span>` : ''}</div>
         </div>`).join('')
-        : '<p class="empty">No player-authored formulas on this character.</p>'}
+        : '<p class="empty">No formulas on this character.</p>'}
     </section></div>`;
   }
