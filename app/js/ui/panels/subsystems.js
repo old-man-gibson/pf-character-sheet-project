@@ -285,7 +285,7 @@ function essencePanel(ctx, model, a) {
         <div class="ess-figs">
           ${essFig(k.base ?? 0, 'Base DC', 'before essence')}
           ${Number(a.steadyVeilDC) ? essFig(a.steadyVeilDC, 'Steady DC', 'steady veil') : ''}
-          ${essFig(k.totalCap ?? 0, 'Cap', 'per veil')}
+          ${essFig(k.totalCap ?? 0, 'Cap', 'per veil', forwardedBadge(model, 'essence.cap'))}
           ${essFig(k.shaped ?? 0, 'Shaped', `${slots} slot${slots === 1 ? '' : 's'}`)}
         </div>
 
@@ -306,9 +306,9 @@ function essencePanel(ctx, model, a) {
     </section>`;
   }
 
-  /** One fixed reading beside the gauge: the number first, then what it is. */
-function essFig(v, k, sub = '') {
-    return `<div class="essfig"><div class="v">${esc(v)}</div>
+  /** One fixed reading beside the gauge: the number first, then what it is. `badge` is markup after the number. */
+function essFig(v, k, sub = '', badge = '') {
+    return `<div class="essfig"><div class="v">${esc(v)}${badge}</div>
       <div class="k">${esc(k)}</div>
       <div class="sub">${sub ? esc(sub) : '&nbsp;'}</div></div>`;
   }

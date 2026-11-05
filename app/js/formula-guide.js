@@ -141,6 +141,7 @@ export const TARGET_SECTIONS = [
   { key: 'guile', label: 'Spheres of Guile', blurb: 'Per skill sphere: ranks, DC.' },
   { key: 'vancian', label: 'Vancian magic', blurb: 'One casting class’s caster level, or all of them.' },
   { key: 'psionic', label: 'Psionics', blurb: 'One manifesting class’s manifester level, or all of them.' },
+  { key: 'akashic', label: 'Akashic', blurb: 'The most essence a veil can hold.' },
   { key: 'companion', label: 'Companions', blurb: 'One heading per companion. Later companions of a kind are numbered.' },
   { key: 'other', label: 'Everything else', blurb: '' },
 ];

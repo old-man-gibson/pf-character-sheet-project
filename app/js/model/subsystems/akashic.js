@@ -10,6 +10,7 @@ import {
 } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { classPresence, tableSpelling } from '../progression.js';
+import { forwarded } from '../scope.js';
 import { sphereTalent, sphereTalentKnowledge } from '../spheres.js';
 import { closestName, normalizeName, slug, splitTags } from '../util.js';
 
@@ -388,9 +389,13 @@ export function recomputeAkashic(model) {
 
   applyVeilweaving(model, a);
   const base = Number(a.baseDC) || 0;
+  // A bonus sent to `essence.cap` ({essence.cap += 1} in a Capacity Increase
+  // talent) adds to the best class block's cap, and the veils are checked
+  // against the raised figure.
+  const capForwarded = forwarded(model, 'essence.cap');
   const cap = (a.classes || []).reduce(
     (m, c) => Math.max(m, (Number(c.essenceCap) || 0) + (Number(c.bonusCap) || 0)), 0,
-  );
+  ) + capForwarded;
   for (const c of a.classes || []) {
     c.totalCap = (Number(c.essenceCap) || 0) + (Number(c.bonusCap) || 0);
   }
@@ -437,6 +442,7 @@ export function recomputeAkashic(model) {
     base,
     traditions,
     totalCap: cap,
+    capForwarded,
     pool,
     sources,
     traditionBoon,

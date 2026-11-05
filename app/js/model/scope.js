@@ -690,6 +690,7 @@ const TARGET_BRANCHES = [
   [/^class\./, 'a class level'],
   [/^speed\./, 'a speed'],
   [/^spheres\./, 'a Spheres of Power casting number'],
+  [/^essence\.cap$/, 'essence capacity'],
 ];
 
 /** Destinations totalled after the prose, which offer nothing a bonus may read. */
@@ -975,6 +976,12 @@ export function forwardTargets(model) {
   };
   levelFamily('vancian.cl', model.data.vancian?.classes, vancianForwardKey, 'Vancian caster level');
   levelFamily('manifester.level', model.data.psionics?.classes, manifesterForwardKey, 'manifester level');
+
+  // The most essence one veil can hold. A talent or class feature that raises
+  // it ("Capacity Increase") adds to the class blocks' cap; see recomputeAkashic.
+  if (model.data.akashic) {
+    add('essence.cap', 'Essence capacity', using.akashic ? null : { unused: true });
+  }
 
   /*
    * The companions, every number of theirs that is rolled or asked for in a
