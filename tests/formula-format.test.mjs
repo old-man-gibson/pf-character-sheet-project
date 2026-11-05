@@ -76,6 +76,7 @@ check('flagging is HTML-safe', highlightFlagging('a < "<b>"', ['a']).includes('&
 
 console.log('contextualNote: why a name is missing, not just that it is');
 check('a veil name explains itself', contextualNote('essence.self').includes('veil'), true);
+check('and so does its bind', contextualNote('bound.self').includes('veil'), true);
 check('a tracker name too', contextualNote('self.max').includes('tracker'), true);
 check('bare self counts', contextualNote('self').includes('tracker'), true);
 check('an ordinary name has no note', contextualNote('wis.mod'), null);

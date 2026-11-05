@@ -4009,6 +4009,40 @@ console.log('essence names: no fold, no hiding, no essence.x');
   check('nothing unnamed is published', 'x' in e, false);
 }
 
+console.log('bound names: 1 when the veil is bound, under the essence names');
+{
+  const c = new Character(blankDocument({ name: 'Weaver' }));
+  c.set('akashic.slots', [
+    { slot: 'Hands', bound: true, twinveil: true, veils: [{ name: 'A', essence: 1 }, { name: 'B', essence: 2 }] },
+    { slot: 'Shoulders', bound: false, veils: [{ name: 'C', essence: 3, desc: 'Arms {asura_str = 4 * bound.self}' }] },
+    { slot: 'Belt', bound: true, veils: [] },
+  ]);
+  c.set('akashic.kheshig', [{ label: 'Weapon Veil (Kheshig)', slot: 'Hands', bound: true, veils: [{ name: 'K', essence: 2 }] }]);
+  c.set('akashic.otherReceptacles', [{ name: 'Totem', essence: 2, active: true }]);
+  const b = () => c.scope().bound;
+  check('a bound twinned slot binds both veils', [b().hands, b().hands2], [1, 1]);
+  check('an unbound slot reads 0', [b().shoulders, b().shoulders2], [0, 0]);
+  check('a bound slot with no veil in it reads 0', [b().belt, b().belt2], [0, 0]);
+  check('a Kheshig receptacle reads its own bind', b().weapon, 1);
+  check('another receptacle holds no veil, so 0', b().totem, 0);
+  check('the same names as essence, without the totals',
+    Object.keys(b()), Object.keys(c.scope().essence).filter((k) => !['pool', 'temp', 'total', 'used', 'free', 'cap'].includes(k)));
+  check('a formula can read it', c.renderProse('{= 2 * bound.hands}').map((s) => s.value), [2]);
+
+  const shoulders = c.data.akashic.slots[1].veils[0];
+  check('bound.self in a veil is that veil', [
+    c.renderProse('{= bound.self}', c.veilScope(c.data.akashic.slots[0].veils[1])).map((s) => s.value)[0],
+    c.renderProse('{= bound.self}', c.veilScope(shoulders)).map((s) => s.value)[0],
+    c.renderProse('{= bound.self}', c.veilScope(c.data.akashic.kheshig[0].veils[0])).map((s) => s.value)[0],
+  ], [1, 0, 1]);
+  check('without a veil there is no bound.self',
+    c.renderProse('{= bound.self}').map((s) => s.error !== undefined), [true]);
+  check('a definition in an unbound veil reads 0', c.renderProse('{asura_str}').map((s) => s.value), [0]);
+  c.setItem('akashic.slots', 1, 'bound', true);
+  check('binding the slot moves both the name and the definition',
+    [b().shoulders, c.renderProse('{asura_str}').map((s) => s.value)[0]], [1, 4]);
+}
+
 console.log('a chakra matches however the page wrote it');
 {
   const before = veilCatalogue();

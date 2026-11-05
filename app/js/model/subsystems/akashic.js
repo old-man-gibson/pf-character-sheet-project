@@ -491,6 +491,32 @@ export function essenceScope(model) {
     free: Number(a?.calc?.free) || 0,
     cap: Number(a?.calc?.totalCap) || 0,
   };
+  for (const [name, r] of receptacleNames(a)) out[name] = r.essence;
+  return out;
+}
+
+/**
+ * The `bound.*` names a formula can read: 1 when the veil in that receptacle
+ * is bound, 0 when it is not or the receptacle is empty. Same names as
+ * `essence.*` (bound.hands, bound.hands2, bound.weapon), without the totals.
+ */
+export function boundScope(model) {
+  const out = {};
+  for (const [name, r] of receptacleNames(model.data.akashic)) out[name] = r.bound;
+  return out;
+}
+
+/** The pool totals `essence.*` reserves ahead of any receptacle. */
+const ESSENCE_TOTALS = new Set(['pool', 'temp', 'total', 'used', 'free', 'cap']);
+
+/**
+ * Every receptacle by the name a formula reads it under, with its essence and
+ * whether its veil is bound. One walk for essenceScope and boundScope, so
+ * `essence.x` and `bound.x` always mean the same receptacle.
+ */
+function receptacleNames(a) {
+  const out = new Map();
+  const taken = (name) => ESSENCE_TOTALS.has(name) || out.has(name);
   // A receptacle with no name publishes nothing (it would be `essence.x`),
   // and one whose name is already taken -- "Pool" beside the pool total, a
   // second receptacle of the same name -- takes the next free `_2`, `_3`,
@@ -499,8 +525,8 @@ export function essenceScope(model) {
   const putFree = (key, value) => {
     if (!key) return;
     let name = key;
-    for (let n = 2; out[name] !== undefined; n++) name = `${key}_${n}`;
-    out[name] = value;
+    for (let n = 2; taken(name); n++) name = `${key}_${n}`;
+    out.set(name, value);
   };
   // Veils in a chakra slot are numbered along the chakra: hands, hands2, and
   // a second Hands slot goes on from hands3 rather than folding into the first.
@@ -513,21 +539,26 @@ export function essenceScope(model) {
     // Both names exist whether or not the slot is twinned, and an empty slot
     // reads zero -- the workbook published VeilEssenceShoulder2 even with
     // nothing in it, and a formula asking should get 0 rather than an error.
+    // A bound twinned slot binds both of its veils (the Twin Veil feat).
     const count = Math.max(2, veils.length);
     for (let i = 0; i < count; i++) {
       const at = from + i + 1;
       const name = at === 1 ? key : `${key}${at}`;
-      if (out[name] === undefined) out[name] = Number(veils[i]?.essence) || 0;
+      if (!taken(name)) {
+        out.set(name, { essence: Number(veils[i]?.essence) || 0, bound: slot.bound && veils[i] ? 1 : 0 });
+      }
     }
     along.set(key, from + count);
   }
   for (const r of a?.kheshig || []) {
     // "Weapon Veil (Kheshig)" -> essence.weapon
+    const veil = (r.veils || [])[0];
     putFree(named(String(r.label || '').replace(/\s*Veil\s*\(Kheshig\)\s*$/i, '')),
-      Number((r.veils || [])[0]?.essence) || 0);
+      { essence: Number(veil?.essence) || 0, bound: r.bound && veil ? 1 : 0 });
   }
+  // Other receptacles hold essence but no veil, so nothing in them is bound.
   for (const r of a?.otherReceptacles || []) {
-    putFree(named(r.name), Number(r.essence) || 0);
+    putFree(named(r.name), { essence: Number(r.essence) || 0, bound: 0 });
   }
   return out;
 }
@@ -732,7 +763,21 @@ export function veilDetails(veil) {
   };
 }
 
-/** The local scope a veil's own text resolves in. */
-export function veilScope(model, veil) {
-  return { essence: { self: Number(veil?.essence) || 0 } };
+/**
+ * The local scope a veil's own text resolves in: `essence.self`, its own
+ * essence, and `bound.self`, 1 when the slot it is shaped in is bound.
+ * `holder` is that slot or Kheshig receptacle; it is looked up when not given.
+ */
+export function veilScope(model, veil, holder = veilHolder(model, veil)) {
+  return {
+    essence: { self: Number(veil?.essence) || 0 },
+    bound: { self: veil && holder?.bound ? 1 : 0 },
+  };
+}
+
+/** The chakra slot or Kheshig receptacle a shaped veil sits in. */
+function veilHolder(model, veil) {
+  const a = model.data.akashic;
+  if (!veil || !a) return null;
+  return [...(a.slots || []), ...(a.kheshig || [])].find((h) => (h.veils || []).includes(veil)) || null;
 }

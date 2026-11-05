@@ -33,7 +33,7 @@ import { sphereTableNames, talentsIn } from './spheres.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
 import { tempHpGrant } from './stats/defenses.js';
 import { wealthView } from './stats/wealth.js';
-import { essenceScope } from './subsystems/akashic.js';
+import { boundScope, essenceScope, veilScope } from './subsystems/akashic.js';
 import { manipulationName } from './subsystems/cardcasting.js';
 import { trackerFacts, trackerShown } from './trackers.js';
 import { featLevel, featNames, isAhead, rowLevel } from './feats.js';
@@ -344,6 +344,9 @@ export function characterScope(model) {
     // Many veils scale something other than their DC off what is invested
     // in them, so these have to be readable from a formula.
     essence: essenceScope(model),
+    // Whether the veil in each receptacle is bound, 1 or 0, under the same
+    // names: a veil's chakra bind can switch an effect on or off.
+    bound: boundScope(model),
     // And off the veilweaving level, which the Akashic tab works out (see
     // applyVeilweaving): the level, the modifier, and the base DC before essence.
     veilweaving: {
@@ -1784,11 +1787,12 @@ export function proseSources(model) {
   // to be listed here or a veil that reads "{= con.mod + 2}" would stop
   // computing the moment its tab was modelled.
   //
-  // Each one also gets `essence.self`, which is what a veil that scales off
-  // its own investment wants to say without naming its own slot.
+  // Each one also gets `essence.self` and `bound.self`, which is what a veil
+  // that scales off its own investment or bind wants to say without naming
+  // its own slot.
   [...(d.akashic?.slots || []), ...(d.akashic?.kheshig || [])].forEach((holder, hi) => {
     (holder.veils || []).forEach((v, vi) => {
-      const local = { essence: { self: Number(v.essence) || 0 } };
+      const local = veilScope(model, v, holder);
       push(`veil:${hi}:${vi}:name`, v.name, local);
       push(`veil:${hi}:${vi}`, v.desc, local);
     });

@@ -562,6 +562,15 @@ names did:
 Both names exist for every slot whether or not it is twinned, and an empty one reads
 `0` rather than failing, so a formula written ahead of shaping the veil still works.
 
+`bound.<name>` uses the same names and is 1 when that veil is bound, 0 when it is not:
+`bound.hands`, `bound.hands2`, `bound.weapon`. A veil's own description can use
+`bound.self`. Both veils in a bound twinned slot are bound. Other receptacles hold no
+veil and read 0.
+
+```
+Carrying capacity as if Strength were {= 4 * bound.self} higher
+```
+
 `essence.self` is the one to reach for inside a veil's own description — it saves
 naming the slot, and it follows the veil if you move it. Angou's Bloodburst Blade
 came off the sheet reading *"Up to 5 Blood Points x 26 (Con Mod + Invested Essence
