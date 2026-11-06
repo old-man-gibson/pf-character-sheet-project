@@ -454,6 +454,22 @@ function controlKey(input) {
   return input.getRootNode().querySelectorAll(key).length === 1 ? key : null;
 }
 
+/** Text boxes the sheet sizes to their text, whose height is never the player's. */
+const SIZED_BY_SHEET = '.prose.grow textarea, textarea.cfeat, textarea.ro';
+
+/**
+ * Give a text box a height, and its prose field's read view the same one, so
+ * the field is one size whether it shows its text or its source.
+ */
+function setBoxHeight(box, height) {
+  box.style.height = height;
+  const wrap = box.closest('.prose');
+  const view = wrap?.querySelector(':scope > .prose-view');
+  if (!view) return;
+  view.style.height = height;
+  wrap.classList.add('has-height');
+}
+
 /**
  * Controls whose press opens a chooser of their own -- a select's list, a
  * colour or date picker. The control holds its chooser open, so a render
@@ -635,6 +651,10 @@ export class CharacterSheetElement extends HTMLElement {
   #faceHeights = new Map();
   /** Each face's last observed height, drawn or placeholder, for the hand-rolled anchoring in `#watchFaces`. */
   #faceBox = new Map();
+  /** Heights the player dragged text boxes to, by `controlKey`; see `#keepBoxHeight`. */
+  #boxHeights = new Map();
+  /** The text box the last press started on, and its height then ({ box, height }), or null. */
+  #boxPress = null;
   #faceSizer = null;
   /** The theme's panel surface colour, read once per theme: a computed-style read right after a render costs a style pass over the whole tree. */
   #surfaceCache = null;
@@ -1365,6 +1385,8 @@ export class CharacterSheetElement extends HTMLElement {
    * "back to whichever old state I last looked at".
    */
   #adoptDocument(doc) {
+    // Dragged box heights belong to this character's boxes, not the next one's.
+    if (doc?.id !== this.#model?.data?.id) this.#boxHeights.clear();
     this.#model = new Character(structuredClone(doc));
     // A new model starts with empty stacks, and what was kept for the old one
     // must not come back over this document on the next reload.
@@ -5074,6 +5096,11 @@ export class CharacterSheetElement extends HTMLElement {
     // because the player clicked somewhere else must not hand focus back to
     // the cell they were leaving.
     this.#lastPress = { target: path[0] || null, at: Date.now(), up: 0 };
+    // A press on a text box may be on its resize grip; `#onPointerUp` looks
+    // at the box's height again to tell.
+    const box = path[0];
+    this.#boxPress = box?.tagName === 'TEXTAREA' && !box.matches(SIZED_BY_SHEET)
+      ? { box, height: box.style.height } : null;
     // The list under the Undo button shuts the same way.
     if (this.#playMenu && !path.some((n) => n?.classList?.contains?.('playundo'))) {
       this.#playMenu = false;
@@ -5128,9 +5155,38 @@ export class CharacterSheetElement extends HTMLElement {
     // Only its own release: a later press off the sheet is never recorded,
     // and letting go of that must not make this one look a moment old again.
     if (this.#lastPress && !this.#lastPress.up) this.#lastPress.up = Date.now();
+    // A press that changed its text box's height was a drag of the grip.
+    const pressed = this.#boxPress;
+    this.#boxPress = null;
+    if (pressed?.box.isConnected && pressed.box.style.height !== pressed.height) this.#keepBoxHeight(pressed.box);
     const owed = this.#renderOwed;
     if (owed?.until === 'release') setTimeout(() => this.#payRender(owed), 0);
   };
+
+  /**
+   * Keep the height a text box was dragged to.
+   *
+   * A render builds every box again from markup that has no height in it, so
+   * a box the player had opened up went back to its rows on the next edit
+   * anywhere on the tab. Kept by `controlKey`, the name focus is put back by,
+   * for as long as this character is open; `#restoreBoxHeights` puts it back
+   * after each render. A prose field's read view takes the same height, so
+   * clicking in or out does not resize the field.
+   */
+  #keepBoxHeight(box) {
+    const key = controlKey(box);
+    if (!key) return;
+    this.#boxHeights.set(key, box.style.height);
+    setBoxHeight(box, box.style.height);
+  }
+
+  /** Put the kept heights back on the boxes a render has just drawn; see `#keepBoxHeight`. */
+  #restoreBoxHeights(root) {
+    for (const [key, height] of this.#boxHeights) {
+      const box = [...root.querySelectorAll(key)].find((el) => el.tagName === 'TEXTAREA');
+      if (box) setBoxHeight(box, height);
+    }
+  }
 
   /**
    * Arrow keys along the tab bar, which is the half of `role="tablist"` that
@@ -6189,17 +6245,25 @@ export class CharacterSheetElement extends HTMLElement {
         ta.addEventListener('input', () => grow(ta));
       }
       if (view) {
+        // Opening the source must not resize the field: a box with no height
+        // of the player's own takes the height its read view has.
+        const holdSize = () => {
+          if (wrap.classList.contains('editing') || wrap.classList.contains('grow')) return;
+          if (this.#boxHeights.has(controlKey(ta)) || !view.offsetHeight) return;
+          ta.style.height = `${view.offsetHeight}px`;
+        };
         view.addEventListener('mousedown', (e) => {
           // A press on a link is the browser's: its click opens the link, and
           // the field stays as it is. Anywhere else on the view edits.
           if (e.target.closest?.('a[href]')) return;
           e.preventDefault();
+          holdSize();
           wrap.classList.add('editing');
           grow(ta);
           ta.focus();
           try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch { /* ignore */ }
         });
-        ta.addEventListener('focus', () => { wrap.classList.add('editing'); grow(ta); });
+        ta.addEventListener('focus', () => { holdSize(); wrap.classList.add('editing'); grow(ta); });
         ta.addEventListener('blur', () => { wrap.classList.remove('editing'); grow(ta); });
       }
       if (!ta.classList.contains('cfeat')) {
@@ -6209,6 +6273,7 @@ export class CharacterSheetElement extends HTMLElement {
       }
     });
     growMany(pendingGrow);
+    this.#restoreBoxHeights(root);
     // Without the browser's own sizing, a face that scrolls into view sizes its boxes then.
     if (!nativeGrow) {
       root.querySelectorAll('.cardgrid .mcard').forEach((card) => {
