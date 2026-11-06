@@ -111,7 +111,7 @@ import { colorControl } from '../color-control.js';
 import { AGE_CATEGORIES, campaignRules, isAntihero, levelProgress, specialtyInPlay } from '../../model/campaign.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
-  addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
+  addButton, bigStat, editLine, exprField, grip, itemCheck, itemExpr, itemNum, itemSelect,
   itemText, line, lineHtml, movedInline, movedSub, movedTitle, movedValue, removeAction, removeButton,
   removeControl, rowRemove, rowTools, workingTitle,
 } from '../rows.js';
@@ -603,7 +603,7 @@ function dashResourcesCard(model) {
           title="Open the Trackers tab to add or edit trackers.">+ New tracker</button>
       </h3>
       <div class="dashtrackers">
-        ${trackers.map(trackerLine).join('') || '<p class="empty">No trackers yet. Add one on the Trackers tab.</p>'}
+        ${trackers.map((t) => trackerLine(t, { movable: true })).join('') || '<p class="empty">No trackers yet. Add one on the Trackers tab.</p>'}
       </div>
     </section>`;
   }
@@ -1360,7 +1360,7 @@ function languagesPanel(model) {
       </div>
       <div class="langlist">
         ${langs.map((l, li) => `<span class="lang" data-rowdrop="identity.languages|${li}" data-rowaxis="x">
-          <span class="grip" data-rowgrip title="Drag to reorder">&#10495;</span>
+          ${grip()}
           ${itemText('identity.languages', li, 'self', l, 'Language')}
           ${removeButton('identity.languages', li, { what: 'language', tiny: true })}
         </span>`).join('')}

@@ -16,7 +16,7 @@ import {
 } from '../format.js';
 import { forwardedBadge } from '../badges.js';
 import { prose, renderedProse } from '../prose.js';
-import { removeControl } from '../rows.js';
+import { grip, removeControl } from '../rows.js';
 import { colorControl } from '../color-control.js';
 import { evaluateFormula } from '../../formula.js';
 import { highlight, pretty, workingLine, workings } from '../../formula-format.js';
@@ -164,15 +164,19 @@ export const powerPointStepper = (left, pool) => poolStepper('pp', {
 /** A tracker's reference as the pool controls carry it. */
 export const trackerRef = (t) => `tracker:${t.id}`;
 
+/** What a tracker row carries to be dragged among the others (`#bindTrackerDrag`). */
+const trackerDrop = (t) => `data-trackerdrop="${esc(t.id)}"`;
+
 /**
  * A tracker as one line to play from: its name, its meter, and − n +. The
  * Overview's resources card is a list of these, and a panel that owns a pool
- * (a casting companion's spell points) shows its own the same way.
+ * (a casting companion's spell points) shows its own the same way. A
+ * `movable` line has a grip, for the card's list.
  */
-export function trackerLine(t) {
+export function trackerLine(t, { movable = false } = {}) {
   const { shown, range, draining } = trackerReading(t);
-  return `<div class="dashtracker${t.error ? ' invalid' : ''}">
-        <span class="tname" title="${esc(t.refresh || '')}">${esc(t.name)}</span>
+  return `<div class="dashtracker${t.error ? ' invalid' : ''}"${movable ? ` ${trackerDrop(t)}` : ''}>
+        <span class="tname" title="${esc(t.refresh || '')}">${movable ? grip('data-trackergrip') : ''}${esc(t.name)}</span>
         <div class="dashmeter">${trackerVisual(t, normalizeStyle(t.style), t.resolvedZones || [], { interactive: true })}</div>
         <span class="tracker-controls">
           ${poolStepper(trackerRef(t), {
@@ -208,9 +212,9 @@ function trackerRow(model, ctx, t) {
     ? `<span class="badge zonestate" style="border-color:${state.color};color:${state.color}" title="${esc(`${state.fromValue}–${state.toValue}`)}">${esc(state.label)}</span>`
     : '';
 
-  return `<div class="tracker ${t.error ? 'invalid' : ''} ${twoSided ? 'two-sided' : ''}">
+  return `<div class="tracker ${t.error ? 'invalid' : ''} ${twoSided ? 'two-sided' : ''}" ${trackerDrop(t)}>
       <div>
-        <div class="tname">${esc(t.name)}
+        <div class="tname">${grip('data-trackergrip')}${esc(t.name)}
           ${t.source === 'player' ? (t.pool ? '<span class="badge">built-in</span>' : '<span class="badge player">custom</span>')
   : `<span class="badge">from sheet${t.edited ? ', edited' : ''}</span>`}
           ${protectedTracker ? `<span class="badge" title="${esc(t.pool ? (poolDef(t.pool, model.data)?.held || 'Every caster has this pool while their system grants points.')

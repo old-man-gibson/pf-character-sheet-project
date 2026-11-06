@@ -371,7 +371,7 @@ function same(a, b) {
 
 /** The document a play action is compared on: saved fields only, trackers by id. */
 function playState(model) {
-  const { customTrackers, sheetTrackerState, ...data } = model.toJSON();
+  const { customTrackers, sheetTrackerState, trackerOrder, ...data } = model.toJSON();
   const trackers = {};
   for (const t of model.trackers || []) {
     if (t && t.id !== undefined && t.id !== null) trackers[t.id] = { current: t.current };

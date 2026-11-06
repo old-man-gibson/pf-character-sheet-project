@@ -9901,6 +9901,35 @@ console.log('tracker style -- colours, fill direction and zones are data on the 
   check('zones re-resolved on load', t2.resolvedZones[0].toValue, 2);
 }
 
+console.log('trackers keep the order they are dragged into');
+{
+  const doc = blankDocument({ name: 'tracker-order' });
+  doc.resources = [{ name: 'Ki', total: 5, uses: 0, refresh: 'Daily' }, { name: 'Grit', total: 3, uses: 1 }];
+  const c = new Character(doc);
+  c.addTracker({ name: 'Burn', maxFormula: '7' });
+  const ids = (m = c) => m.trackers.map((t) => t.id);
+  const saved = () => JSON.parse(JSON.stringify(c.toJSON()));
+  check('the sheet’s trackers come first, then the player’s', ids(), ['ki', 'grit', 'hero_points', 'burn']);
+  check('a character nobody has reordered saves no order', 'trackerOrder' in saved(), false);
+  c.moveTracker('burn', 0);
+  check('a tracker moves to the place it is dropped', ids(), ['burn', 'ki', 'grit', 'hero_points']);
+  c.moveTracker('ki', 3);
+  check('dropped after a later one, it lands after it', ids(), ['burn', 'grit', 'ki', 'hero_points']);
+  c.moveTracker('ki', 2);
+  check('dropped where it already is, nothing moves', ids(), ['burn', 'grit', 'ki', 'hero_points']);
+  c.stepTracker('grit', 1);
+  check('a step is still one play action, with no order in it', c.playStack.map((e) => e.changes.map((x) => x.path.join('.'))),
+    [['trackers.grit.current']]);
+  const back = new Character(saved());
+  check('the order is saved and read back, sheet and player trackers mixed', ids(back), ids());
+  check('and each keeps its own count', back.trackers.find((t) => t.id === 'grit').current, 2);
+  c.addTracker({ name: 'Focus', maxFormula: '2' });
+  check('one added since goes last in the saved order', saved().trackerOrder, ['burn', 'grit', 'ki', 'hero_points', 'focus']);
+  const partial = { ...saved(), trackerOrder: ['hero_points'] };
+  check('a tracker the saved order does not name goes after the ones it does',
+    ids(new Character(partial)), ['hero_points', 'ki', 'grit', 'burn', 'focus']);
+}
+
 console.log('zones as states -- Bryva\'s Satiety from percentages of the pool');
 {
   // Bryva's sheet already tracks Culinary Stamina (15 of 17, "Stuffed (88%)"

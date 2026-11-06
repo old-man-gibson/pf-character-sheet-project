@@ -1451,5 +1451,20 @@ console.log('\na companion skill’s Misc is a number-or-formula box showing wha
   ok('the box holds the formula and shows 3', cell.test(html));
   ok('and no skill Misc is a plain number box', !/type="number"[^>]*data-item="animalCompanion\.0\.skills\|\d+\|misc"/.test(html));
 }
+
+console.log('\nevery tracker row has a grip, on the Trackers tab and the session Resources card');
+{
+  const c = new Character(blankDocument({ name: 'Grips', level: 6 }));
+  c.addTracker({ name: 'Burn', maxFormula: '7' });
+  c.addTracker({ name: 'Focus', maxFormula: '2' });
+  const count = (html, re) => (html.match(re) || []).length;
+  const tab = trackers.renderTrackersPanel(c, { ...CTX, editTracker: null });
+  const card = overview.renderDashboardPanel(c, CTX);
+  const n = c.trackers.length;
+  check('Trackers tab: one drop row and one grip a tracker',
+    [count(tab, /data-trackerdrop="/g), count(tab, /<span class="grip" data-trackergrip /g)], [n, n]);
+  check('Resources card: the same',
+    [count(card, /class="dashtracker[^"]*" data-trackerdrop="/g), count(card, /<span class="grip" data-trackergrip /g)], [n, n]);
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
