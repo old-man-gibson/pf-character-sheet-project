@@ -946,15 +946,16 @@
   async function replaceWith(id, doc, warnings) {
     const entry = all().find((c) => c.id === id);
     const verdict = inspectDocument(doc);
-    const store = historyFor(id, { storageKey: editsKey(id) });
+    // Not `store`: that name is the helper below that writes the document.
+    const revisions = historyFor(id, { storageKey: editsKey(id) });
     const before = entry ? await currentDocument(entry) : null;
     const stored = { ...doc, id };
     if (!(await store(docKey(id), stored, verdict.summary.name))) return null;
     let kept = false;
     try {
-      if (before) { await store.checkpoint(before, 'before import'); kept = true; }
-      store.clearWorking();
-      await store.save(stored);
+      if (before) { await revisions.checkpoint(before, 'before import'); kept = true; }
+      revisions.clearWorking();
+      await revisions.save(stored);
     } catch { /* no database: the document is in, the history simply is not */ }
     // A bundled character replaced becomes one of this browser's own.
     library = library.some((c) => c.id === id)
@@ -990,11 +991,12 @@
     const verdict = inspectDocument(doc);
     if (!verdict.ok) { say('err', verdict.error); return null; }
     if (origin === 'import' && library.length) {
+      // The sheet already shows the file while the dialog is open. If it is
+      // not stored, the open character goes back on screen.
       askWhereToPut(verdict.summary).then((into) => {
-        if (into === undefined) { say('info', `${verdict.summary.name} was not imported.`); return; }
-        if (into) replaceWith(into, doc, warnings);
-        else addNew(doc, warnings, origin, verdict);
-      });
+        if (into === undefined) { select(); say('info', `${verdict.summary.name} was not imported.`); return null; }
+        return into ? replaceWith(into, doc, warnings) : addNew(doc, warnings, origin, verdict);
+      }).catch((err) => { select(); say('err', `Could not import ${verdict.summary.name}: ${err.message}`); });
       return null;
     }
     return addNew(doc, warnings, origin, verdict);
