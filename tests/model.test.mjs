@@ -1863,6 +1863,36 @@ console.log('companions -- a typed box takes a formula');
     [back.data.conjured[0].ac.all, back.data.conjured[0].calc.ac], ['floor(conjured.hd / 2)', k().ac]);
 }
 
+console.log('a companion skill’s Misc takes a number or a formula');
+{
+  const c = new Character(blankDocument('companion-skill-misc'));
+  c.set('animalCompanion.0.levelOverride', 6);
+  const b = () => c.data.animalCompanion[0];
+  const i = b().skills.findIndex((s) => s.name === 'Perception');
+  const before = b().skills[i].total;
+  c.setItem('animalCompanion.0.skills', i, 'misc', 'floor(animalCompanion.hd / 2)');
+  const hd = b().calc.hd;
+  check('the total reads what the formula came to', [b().skills[i].total, b().calc.typed[`skills.${i}.misc`]],
+    [before + Math.floor(hd / 2), { value: Math.floor(hd / 2), error: null }]);
+  check('the row keeps the formula as typed', b().skills[i].misc, 'floor(animalCompanion.hd / 2)');
+  const first = b().skills[0].total;
+  c.setItem('animalCompanion.0.skills', 0, 'misc', 2);
+  check('a number still counts as a number, and is not a formula',
+    [b().skills[0].total, b().calc.typed['skills.0.misc']], [first + 2, undefined]);
+  check('it is audited, with the way to the box',
+    c.audit().filter((r) => r.id.startsWith('companion-')).map((r) => [r.name, r.value, r.status, r.place]),
+    [['Animal Companion: Perception misc', Math.floor(hd / 2), 'ok', `companionCell:animalCompanion:0:skills.${i}.misc`]]);
+  c.setItem('animalCompanion.0.skills', 1, 'misc', 'animalCompanion.nosuch');
+  check('a broken one counts nothing and is a problem the Formulas tab lists',
+    [b().calc.typed['skills.1.misc'].value, c.formulaProblems()
+      .some((x) => x.places.some((pl) => pl.place === 'companionCell:animalCompanion:0:skills.1.misc'))], [0, true]);
+  c.setItem('animalCompanion.0.skills', 1, 'misc', 0);
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('what was typed is what is saved, and works out again on load',
+    [back.data.animalCompanion[0].skills[i].misc, back.data.animalCompanion[0].skills[i].total],
+    ['floor(animalCompanion.hd / 2)', b().skills[i].total]);
+}
+
 /*
  * A conjured companion's feats are slots: one per odd Hit Die, then a slot
  * for each bonus feat. They are drawn whether or not a row is stored, and a

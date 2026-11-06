@@ -1440,5 +1440,16 @@ console.log('\na character may have more than one template');
   check('two templates, each its own panel, and Add template once',
     [(html.match(/data-tmpl=/g) || []).length, (html.match(/Add template/g) || []).length], [2, 1]);
 }
+
+console.log('\na companion skill’s Misc is a number-or-formula box showing what it came to');
+{
+  const c = new Character(blankDocument({ name: 'Skill Misc', level: 6 }));
+  const i = c.data.animalCompanion[0].skills.findIndex((s) => s.name === 'Perception');
+  c.setItem('animalCompanion.0.skills', i, 'misc', '1 + 2');
+  const html = subsystems.companionPanel(c, 'animalCompanion');
+  const cell = new RegExp(`<span class="xf has-value"[^>]*>\\s*<input type="text"[^>]*value="1 \\+ 2"[^>]*data-item="animalCompanion\\.0\\.skills\\|${i}\\|misc" data-kind="expr"[^]*?<span class="xf-view"[^>]*>3</span>`);
+  ok('the box holds the formula and shows 3', cell.test(html));
+  ok('and no skill Misc is a plain number box', !/type="number"[^>]*data-item="animalCompanion\.0\.skills\|\d+\|misc"/.test(html));
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

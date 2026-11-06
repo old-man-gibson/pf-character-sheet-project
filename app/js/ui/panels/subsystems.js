@@ -74,7 +74,7 @@ import {
   CONJURED_BASE_FORMS, CONJURED_LEVEL_SOURCES, NATURAL_ATTACKS,
   abilityTextKey, companionAbilityText,
   companionAttackKey, companionScopeName, companionSkillKey, emptyCompanionFeat, hasArmorSlot, isOtherConjurationTalent,
-  wearsBarding,
+  skillMiscPath, wearsBarding,
 } from '../../companions.js';
 import { hasTokens } from '../../inline.js';
 import { getPath } from '../../model/util.js';
@@ -1890,15 +1890,16 @@ function companionSavesPanel(model, cc) {
 
 
 /**
- * One of a companion's typed bonus boxes (COMPANION_FORMULA_FIELDS), which
- * takes a formula as readily as a number: it shows what the formula came to
- * and opens on the formula when clicked into, as the character's own do.
+ * One of a companion's typed bonus boxes (COMPANION_FORMULA_FIELDS, a skill's
+ * Misc), which takes a formula as readily as a number: it shows what the
+ * formula came to and opens on the formula when clicked into, as the
+ * character's own do. A box in a list row passes its `data-item` binding.
  */
-function formulaBox(cc, path) {
+function formulaBox(cc, path, { binding = null, width = '100%' } = {}) {
     const { p, b, k, sn } = cc;
     const r = k.typed?.[path];
-    return exprField(`data-set="${p}.${path}"`, getPath(b, path) ?? 0, {
-      width: '100%',
+    return exprField(binding || `data-set="${p}.${path}"`, getPath(b, path) ?? 0, {
+      width,
       value: r && !r.error ? String(r.value) : null,
       error: r?.error || null,
       title: `A number or a formula, e.g. floor(${sn}.hd / 2)`,
@@ -2263,7 +2264,7 @@ function companionSkillsPanel(model, cc) {
           <td class="mid">${itemCheck(list, i, 'classSkill', s.classSkill)}</td>
           <td>${itemNum(list, i, 'ranks', s.ranks)}</td>
           ${fam ? `<td class="num derived">${s.masterRanks || 0}</td>` : ''}
-          <td>${itemNum(list, i, 'misc', s.misc)}${
+          <td>${formulaBox(cc, skillMiscPath(i), { binding: `data-item="${list}|${i}|misc"`, width: '3.2rem' })}${
             forwardedBadge(model, `${sn}.skill.${companionSkillKey(s)}`)}</td>
           <td class="num total"><span class="rollpair">${s.armorCheck
     ? `<span tabindex="0" data-tip="${esc(`Includes the armor check penalty, ${s.armorCheck}.`)}">${fmt(s.total ?? 0)}</span>`
