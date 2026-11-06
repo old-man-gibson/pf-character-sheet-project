@@ -1656,6 +1656,9 @@ export function toDocument(model) {
       .filter((t) => t.source === 'player')
       .map(({ resolvedZones, edited, rangeError, blocked, ...t }) => t),
     sheetTrackerState,
+    // Once the player has moved a tracker, the order is the live list's, so
+    // a tracker added since has its place in it.
+    ...(model.data.trackerOrder ? { trackerOrder: model.trackers.map((t) => t.id) } : {}),
     // The guile side sits inside `training` beside the two that predate it,
     // so it is stripped in place rather than as a block of its own. The two
     // older sides save most of their working -- an accident of their age --

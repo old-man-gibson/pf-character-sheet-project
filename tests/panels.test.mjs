@@ -1440,5 +1440,31 @@ console.log('\na character may have more than one template');
   check('two templates, each its own panel, and Add template once',
     [(html.match(/data-tmpl=/g) || []).length, (html.match(/Add template/g) || []).length], [2, 1]);
 }
+
+console.log('\na companion skill’s Misc is a number-or-formula box showing what it came to');
+{
+  const c = new Character(blankDocument({ name: 'Skill Misc', level: 6 }));
+  const i = c.data.animalCompanion[0].skills.findIndex((s) => s.name === 'Perception');
+  c.setItem('animalCompanion.0.skills', i, 'misc', '1 + 2');
+  const html = subsystems.companionPanel(c, 'animalCompanion');
+  const cell = new RegExp(`<span class="xf has-value"[^>]*>\\s*<input type="text"[^>]*value="1 \\+ 2"[^>]*data-item="animalCompanion\\.0\\.skills\\|${i}\\|misc" data-kind="expr"[^]*?<span class="xf-view"[^>]*>3</span>`);
+  ok('the box holds the formula and shows 3', cell.test(html));
+  ok('and no skill Misc is a plain number box', !/type="number"[^>]*data-item="animalCompanion\.0\.skills\|\d+\|misc"/.test(html));
+}
+
+console.log('\nevery tracker row has a grip, on the Trackers tab and the session Resources card');
+{
+  const c = new Character(blankDocument({ name: 'Grips', level: 6 }));
+  c.addTracker({ name: 'Burn', maxFormula: '7' });
+  c.addTracker({ name: 'Focus', maxFormula: '2' });
+  const count = (html, re) => (html.match(re) || []).length;
+  const tab = trackers.renderTrackersPanel(c, { ...CTX, editTracker: null });
+  const card = overview.renderDashboardPanel(c, CTX);
+  const n = c.trackers.length;
+  check('Trackers tab: one drop row and one grip a tracker',
+    [count(tab, /data-trackerdrop="/g), count(tab, /<span class="grip" data-trackergrip /g)], [n, n]);
+  check('Resources card: the same',
+    [count(card, /class="dashtracker[^"]*" data-trackerdrop="/g), count(card, /<span class="grip" data-trackergrip /g)], [n, n]);
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

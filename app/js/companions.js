@@ -30,7 +30,7 @@ import {
 } from './rules.js';
 import { parse } from './formula.js';
 import {
-  evaluateAmount, getPath, isLandSpeed, isPinned, normalizeName, setPath, slug, speedRow, speedRows,
+  evaluateAmount, getPath, isLandSpeed, isPinned, normalizeName, slug, speedRow, speedRows,
 } from './model/util.js';
 
 export const COMPANION_KINDS = ['familiar', 'animalCompanion', 'eidolon', 'conjured'];
@@ -1649,6 +1649,7 @@ export function companionBreakdown(kind, block, stat) {
  * kept as typed; the model works each one out (`calc.typed`) and the sums read
  * the answer through `withTypedNumbers`. A box added here is worked out and
  * audited with nothing else to change (see FORMULA_FIELDS in model/reconcile.js).
+ * Each skill row's Misc takes one too, under `skills.<row>.misc` (skillMiscPath).
  */
 export const COMPANION_FORMULA_FIELDS = {
   'ac.all': 'Bonus AC (all)',
@@ -1703,11 +1704,29 @@ export const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
  */
 export function withTypedNumbers(b, typed) {
   if (!b || !typed || !Object.keys(typed).length) return b;
-  const out = { ...b, ac: { ...(b.ac || {}) }, saves: { ...(b.saves || {}) } };
-  for (const k of ['fort', 'ref', 'will']) out.saves[k] = { ...(out.saves[k] || {}) };
-  for (const [path, r] of Object.entries(typed)) setPath(out, path, r.value);
+  // Each object or list on the way to a box is copied before it is written
+  // into, once, so the block's own rows (a skill's) keep what was typed.
+  const out = { ...b };
+  const copies = new Set([out]);
+  for (const [path, r] of Object.entries(typed)) {
+    const keys = path.split('.');
+    let at = out;
+    for (const key of keys.slice(0, -1)) {
+      let next = at[key];
+      if (!copies.has(next)) {
+        next = Array.isArray(next) ? [...next] : { ...(next || {}) };
+        copies.add(next);
+        at[key] = next;
+      }
+      at = next;
+    }
+    at[keys[keys.length - 1]] = r.value;
+  }
   return out;
 }
+
+/** A skill row's Misc box, as `calc.typed` and the Formula Audit name it. */
+export const skillMiscPath = (j) => `skills.${j}.misc`;
 
 /**
  * Work out a companion's formula boxes and its movement rows. `scope` is
@@ -1721,7 +1740,8 @@ export function companionFormulas(b, scope) {
   const typed = {};
   let s = null;
   const sc = () => (s ??= scope());
-  for (const path of Object.keys(COMPANION_FORMULA_FIELDS)) {
+  const paths = [...Object.keys(COMPANION_FORMULA_FIELDS), ...(b.skills || []).map((_, j) => skillMiscPath(j))];
+  for (const path of paths) {
     const raw = getPath(b, path);
     if (typeof raw !== 'string' || raw.trim() === '') continue;
     typed[path] = PLAIN_NUMBER.test(raw.trim())

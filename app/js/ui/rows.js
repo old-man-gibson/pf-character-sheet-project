@@ -246,13 +246,20 @@ export function rowToolsMoveOnly(list, i) {
 }
 
 /**
+ * The handle a drag starts from. `attr` is what the element binds it by:
+ * `data-rowgrip` for a list row (`#bindRowDrag`), `data-trackergrip` for a
+ * tracker (`#bindTrackerDrag`).
+ */
+export const grip = (attr = 'data-rowgrip') => `<span class="grip" ${attr} title="Drag to reorder">&#10495;</span>`;
+
+/**
  * The grip cell for a row of a dragged list, and the attribute that row
  * carries so the element knows which list and place it is. Any list can use
  * the pair: `#bindRowDrag` groups rows by the list they name, so two tables
  * on one tab never trade rows.
  */
 export const rowDrop = (list, i) => `data-rowdrop="${list}|${i}"`;
-export const rowGrip = () => '<td class="grip"><span class="grip" data-rowgrip title="Drag to reorder">&#10495;</span></td>';
+export const rowGrip = () => `<td class="grip">${grip()}</td>`;
 
 /**
  * Tools for a list whose order means nothing (rows that are summed, a race's

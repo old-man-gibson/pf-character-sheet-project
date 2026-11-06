@@ -333,6 +333,14 @@ export function loadTrackers(model) {
     seen.add(t.id);
     out.push(t);
   }
+  // The order the player put them in (moveTracker). A tracker the list does
+  // not name goes after the ones it does, in the order above.
+  const order = Array.isArray(model.data.trackerOrder) ? model.data.trackerOrder.map(String) : [];
+  if (order.length) {
+    const place = new Map(order.map((id, i) => [id, i]));
+    const at = (t) => place.get(String(t.id)) ?? order.length;
+    out.sort((a, b) => at(a) - at(b));
+  }
   return out;
 }
 
@@ -460,6 +468,24 @@ export function addTracker(model, { name, maxFormula, minFormula = null, current
   model.trackers.push(tracker);
   model.recompute();
   return tracker;
+}
+
+/**
+ * Move a tracker to place `to` in the list, for dragging it past another.
+ * `to` counts the list as it is now, as listMoveTo's does. From the first
+ * move on, the order is saved (`trackerOrder`, written by toDocument).
+ */
+export function moveTracker(model, id, to) {
+  const list = model.trackers;
+  const from = list.findIndex((t) => t.id === id);
+  if (from < 0) return model;
+  const target = Math.max(0, Math.min(list.length - 1, to > from ? to - 1 : to));
+  if (target === from) return model;
+  const [t] = list.splice(from, 1);
+  list.splice(target, 0, t);
+  model.data.trackerOrder = list.map((x) => x.id);
+  model.recompute();
+  return model;
 }
 
 /** Move a tracker by `delta`, staying inside its [min, max] range. */

@@ -571,7 +571,9 @@ export function recomputeCompanions(model, { bare = false } = {}) {
       calc.typed = typed;
       calc.speeds = armoredSpeeds(b.speeds, speeds, calc.armor);
       b.calc = calc;
-      b.skills = skills;
+      // The rows came back from the worked-out copy; each keeps its Misc as typed.
+      const own = b.skills || [];
+      b.skills = skills.map((s, j) => (own[j] && 'misc' in own[j] ? { ...s, misc: own[j].misc } : s));
       b.attacks = attacks;
     });
   }

@@ -6396,6 +6396,7 @@ export class CharacterSheetElement extends HTMLElement {
     this.#bindNoteDrag(root);
     this.#bindFeatDrag(root);
     this.#bindRowDrag(root);
+    this.#bindTrackerDrag(root);
 
     root.querySelectorAll('[data-cfcol]').forEach((input) => {
       input.addEventListener('change', () => {
@@ -7437,6 +7438,32 @@ export class CharacterSheetElement extends HTMLElement {
       },
       drop: (from, t) => {
         this.#model.listMoveTo(from.list, from.i, t.to);
+        this.#render();
+      },
+    });
+  }
+
+  /**
+   * Dragging a tracker past another, on the Trackers tab or the session
+   * view's Resources card: both are the one list, `model.trackers`. A drop
+   * lands only in the list the drag started in.
+   */
+  #bindTrackerDrag(root) {
+    const id = (row) => row.dataset.trackerdrop;
+    bindDrag({
+      handles: root.querySelectorAll('[data-trackergrip]'),
+      item: (handle) => handle.closest('[data-trackerdrop]'),
+      source: (row) => ({ id: id(row), list: row.parentElement }),
+      target: (el, point, from) => {
+        const row = el.closest('[data-trackerdrop]');
+        if (!row || row.parentElement !== from.list || id(row) === from.id) return null;
+        const at = this.#model.trackers.findIndex((t) => t.id === id(row));
+        if (at < 0) return null;
+        const after = half(row, point);
+        return { el: row, cls: side(after), to: at + (after ? 1 : 0) };
+      },
+      drop: (from, t) => {
+        this.#model.moveTracker(from.id, t.to);
         this.#render();
       },
     });

@@ -136,7 +136,7 @@ import {
   nudgeTemplateChild, removeTemplateTableColumn,
 } from './templates.js';
 import {
-  addSystemPool, addTracker, ensureMythicPower, isProtectedTracker, loadTrackers, missingSystemPools,
+  addSystemPool, addTracker, ensureMythicPower, isProtectedTracker, loadTrackers, missingSystemPools, moveTracker,
   recomputeBuffs, recomputeTrackers, removeTracker, seedTrackers, stepTracker, tierNow, updateTracker,
   endedText, tickBuffRounds,
 } from './trackers.js';
@@ -646,6 +646,7 @@ export class Character {
   updateTracker(...a) { return updateTracker(this, ...a); }
   isProtectedTracker(...a) { return isProtectedTracker(this, ...a); }
   removeTracker(...a) { return removeTracker(this, ...a); }
+  moveTracker(...a) { return moveTracker(this, ...a); }
   addSystemPool(...a) { return addSystemPool(this, ...a); }
   missingSystemPools(...a) { return missingSystemPools(this, ...a); }
   #recomputeBuffs(...a) { return recomputeBuffs(this, ...a); }

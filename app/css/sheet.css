@@ -3893,6 +3893,12 @@ table.build td.linked select:disabled {
 .trackerlist > .tracker > :first-child { margin-right: 3px; min-width: 0; }
 .trackerlist > .tracker > .tracker-controls { grid-column: 2 / -1; display: grid; grid-template-columns: subgrid; }
 .trackerlist > .tracker.editing { grid-template-columns: 1fr; }
+/* A tracker being dragged by its grip, and the edge it would land on, on this
+   tab and on the session view's Resources card (ui/drag.js). */
+.tracker .tname > .grip, .dashtracker .tname > .grip { margin-right: 4px; font-size: 0.8rem; letter-spacing: -2px; }
+.tracker.dragging, .dashtracker.dragging { opacity: 0.45; }
+.tracker.drop-before, .dashtracker.drop-before { box-shadow: 0 -3px 0 -1px var(--cs-accent); }
+.tracker.drop-after, .dashtracker.drop-after { box-shadow: 0 3px 0 -1px var(--cs-accent); }
 .pool { font-variant-numeric: tabular-nums; font-weight: 640; white-space: nowrap; }
 .pips { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 5px; }
 .pip {

@@ -1863,6 +1863,36 @@ console.log('companions -- a typed box takes a formula');
     [back.data.conjured[0].ac.all, back.data.conjured[0].calc.ac], ['floor(conjured.hd / 2)', k().ac]);
 }
 
+console.log('a companion skill’s Misc takes a number or a formula');
+{
+  const c = new Character(blankDocument('companion-skill-misc'));
+  c.set('animalCompanion.0.levelOverride', 6);
+  const b = () => c.data.animalCompanion[0];
+  const i = b().skills.findIndex((s) => s.name === 'Perception');
+  const before = b().skills[i].total;
+  c.setItem('animalCompanion.0.skills', i, 'misc', 'floor(animalCompanion.hd / 2)');
+  const hd = b().calc.hd;
+  check('the total reads what the formula came to', [b().skills[i].total, b().calc.typed[`skills.${i}.misc`]],
+    [before + Math.floor(hd / 2), { value: Math.floor(hd / 2), error: null }]);
+  check('the row keeps the formula as typed', b().skills[i].misc, 'floor(animalCompanion.hd / 2)');
+  const first = b().skills[0].total;
+  c.setItem('animalCompanion.0.skills', 0, 'misc', 2);
+  check('a number still counts as a number, and is not a formula',
+    [b().skills[0].total, b().calc.typed['skills.0.misc']], [first + 2, undefined]);
+  check('it is audited, with the way to the box',
+    c.audit().filter((r) => r.id.startsWith('companion-')).map((r) => [r.name, r.value, r.status, r.place]),
+    [['Animal Companion: Perception misc', Math.floor(hd / 2), 'ok', `companionCell:animalCompanion:0:skills.${i}.misc`]]);
+  c.setItem('animalCompanion.0.skills', 1, 'misc', 'animalCompanion.nosuch');
+  check('a broken one counts nothing and is a problem the Formulas tab lists',
+    [b().calc.typed['skills.1.misc'].value, c.formulaProblems()
+      .some((x) => x.places.some((pl) => pl.place === 'companionCell:animalCompanion:0:skills.1.misc'))], [0, true]);
+  c.setItem('animalCompanion.0.skills', 1, 'misc', 0);
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('what was typed is what is saved, and works out again on load',
+    [back.data.animalCompanion[0].skills[i].misc, back.data.animalCompanion[0].skills[i].total],
+    ['floor(animalCompanion.hd / 2)', b().skills[i].total]);
+}
+
 /*
  * A conjured companion's feats are slots: one per odd Hit Die, then a slot
  * for each bonus feat. They are drawn whether or not a row is stored, and a
@@ -9869,6 +9899,35 @@ console.log('tracker style -- colours, fill direction and zones are data on the 
   const t2 = c2.trackers.find((x) => x.id === 'burn');
   check('style restored', t2.style.gradientTo, '#a06fd6');
   check('zones re-resolved on load', t2.resolvedZones[0].toValue, 2);
+}
+
+console.log('trackers keep the order they are dragged into');
+{
+  const doc = blankDocument({ name: 'tracker-order' });
+  doc.resources = [{ name: 'Ki', total: 5, uses: 0, refresh: 'Daily' }, { name: 'Grit', total: 3, uses: 1 }];
+  const c = new Character(doc);
+  c.addTracker({ name: 'Burn', maxFormula: '7' });
+  const ids = (m = c) => m.trackers.map((t) => t.id);
+  const saved = () => JSON.parse(JSON.stringify(c.toJSON()));
+  check('the sheet’s trackers come first, then the player’s', ids(), ['ki', 'grit', 'hero_points', 'burn']);
+  check('a character nobody has reordered saves no order', 'trackerOrder' in saved(), false);
+  c.moveTracker('burn', 0);
+  check('a tracker moves to the place it is dropped', ids(), ['burn', 'ki', 'grit', 'hero_points']);
+  c.moveTracker('ki', 3);
+  check('dropped after a later one, it lands after it', ids(), ['burn', 'grit', 'ki', 'hero_points']);
+  c.moveTracker('ki', 2);
+  check('dropped where it already is, nothing moves', ids(), ['burn', 'grit', 'ki', 'hero_points']);
+  c.stepTracker('grit', 1);
+  check('a step is still one play action, with no order in it', c.playStack.map((e) => e.changes.map((x) => x.path.join('.'))),
+    [['trackers.grit.current']]);
+  const back = new Character(saved());
+  check('the order is saved and read back, sheet and player trackers mixed', ids(back), ids());
+  check('and each keeps its own count', back.trackers.find((t) => t.id === 'grit').current, 2);
+  c.addTracker({ name: 'Focus', maxFormula: '2' });
+  check('one added since goes last in the saved order', saved().trackerOrder, ['burn', 'grit', 'ki', 'hero_points', 'focus']);
+  const partial = { ...saved(), trackerOrder: ['hero_points'] };
+  check('a tracker the saved order does not name goes after the ones it does',
+    ids(new Character(partial)), ['hero_points', 'ki', 'grit', 'burn', 'focus']);
 }
 
 console.log('zones as states -- Bryva\'s Satiety from percentages of the pool');
