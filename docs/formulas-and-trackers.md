@@ -190,11 +190,12 @@ above it, and what a player cannot see from there is what their own numbers do t
 
 ### Names that only exist somewhere
 
-Almost every value belongs to the character and can be read from anywhere. Three do not:
+Almost every value belongs to the character and can be read from anywhere. Four do not:
 
 | Name | Only in | What it is |
 |---|---|---|
 | `essence.self` | a veil's own name or description | the essence invested in **that veil**. Elsewhere, name the slot — `essence.hands`, `essence.head` — or read `essence.total` for the pool. |
+| `bound.self` | a veil's own name or description | 1 if **that veil** is bound, 0 if not. Elsewhere, name the slot: `bound.hands`, `bound.head`. |
 | `self.max` `.current` `.remaining` `.min` `.spent` `.pct` `.zone` | a tracker's own note, min and zone bounds | that tracker, without naming itself. Elsewhere use `tracker.<id>.max`; and a tracker's **max** cannot use `self` at all, since that would be defining itself. |
 | `target`, `target.ranks`, `target.base`, … | a forwarded bonus — the formula after `+=` or `-=` | the stat the bonus is added to; the formula is evaluated once per destination. See [`target` in forwarded bonuses](#target-in-forwarded-bonuses). Outside a bonus, use the full name, e.g. `skill.bluff.ranks`. |
 

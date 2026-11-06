@@ -83,7 +83,7 @@ const SYSTEM_HEADS = {
   operative: 'guile',
   vancian: 'vancian',
   manifester: 'psionic', pp: 'psionic',
-  essence: 'akashic',
+  essence: 'akashic', bound: 'akashic',
   deck: 'cards',
 };
 
@@ -111,7 +111,7 @@ export const VALUE_SECTIONS = [
   { key: 'guile', label: 'Spheres of Guile', blurb: 'Operative modifier and pools; per skill sphere: ranks, DC, ranges.' },
   { key: 'vancian', label: 'Vancian magic', blurb: 'Each casting class’s caster level, and vancian.cl for the highest of them.' },
   { key: 'psionic', label: 'Psionics', blurb: 'Power points, and each manifesting class’s manifester level.' },
-  { key: 'akashic', label: 'Akashic', blurb: 'Essence: the pool, and what is invested in each receptacle.' },
+  { key: 'akashic', label: 'Akashic', blurb: 'Essence in the pool and in each receptacle, and whether each veil is bound (1 or 0).' },
   { key: 'cards', label: 'Cardcasting', blurb: 'The deck as it is built, the table in play, and each manipulation taken.' },
   { key: 'companion', label: 'Companions', blurb: 'One heading per companion. The first of a kind is <kind>.* (eidolon.hd); later ones are numbered (eidolon2.hd, eidolon3.hd).' },
   { key: 'sheet', label: 'Spreadsheet names', blurb: 'The workbook’s named ranges, so a formula pasted from a spreadsheet still works. StrMod is str.tempMod and Fort is saves.fortitude.' },
@@ -385,6 +385,7 @@ function valueHeading(name, family, info, scope = null) {
       return head === 'pp'
         ? { key: 'pp', label: 'Power points', rank: 0 } : { key: 'ml', label: 'Manifester levels', rank: 1 };
     case 'akashic':
+      if (head === 'bound') return { key: 'bound', label: 'Bound veils', rank: 2 };
       return ESSENCE_POOL.has(second)
         ? { key: 'pool', label: 'Essence', rank: 0 } : { key: 'receptacles', label: 'Receptacles', rank: 1 };
     case 'cards':
@@ -1024,7 +1025,7 @@ function rulesHtml() {
     ['A tracker’s id is not its name.',
       'The id is made from the tracker’s first name and never changes, so renaming a tracker does not break formulas. The ✎ editor shows the id.'],
     ['Some names only work in one kind of field.',
-      'self in a tracker, essence.self in a veil and target in a bonus. See the table above.'],
+      'self in a tracker, essence.self and bound.self in a veil, and target in a bonus. See the table above.'],
     ['Bonuses to core stats are calculated first.',
       'A bonus to an ability score, save, armor class, attack, initiative, hit points, class level, speed or caster level is calculated from values before any bonus, so these bonuses cannot affect each other. Bonuses to skills, companions, weapons and trackers are calculated after, and include the core bonuses: {skill.appraise += int.mod} includes an {int.score += 2} written elsewhere.'],
     ['target is the stat a bonus is added to.',

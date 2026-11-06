@@ -156,6 +156,12 @@ export const CONTEXTUAL_VALUES = [
     what: 'The essence invested in that veil. Elsewhere, use the slot name (essence.hands, essence.head) or essence.total for the pool.',
   },
   {
+    match: (name) => name === 'bound.self',
+    names: 'bound.self',
+    where: 'a veil’s own name or description',
+    what: '1 if that veil is bound, 0 if not. Elsewhere, use the slot name (bound.hands, bound.head).',
+  },
+  {
     match: (name) => name === 'self' || name.startsWith('self.'),
     names: 'self.max, self.current, self.remaining, self.min, self.spent, self.pct, self.zone',
     where: 'a tracker’s own note, min and zone bounds',

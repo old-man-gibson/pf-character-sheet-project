@@ -4009,6 +4009,40 @@ console.log('essence names: no fold, no hiding, no essence.x');
   check('nothing unnamed is published', 'x' in e, false);
 }
 
+console.log('bound names: 1 when the veil is bound, under the essence names');
+{
+  const c = new Character(blankDocument({ name: 'Weaver' }));
+  c.set('akashic.slots', [
+    { slot: 'Hands', bound: true, twinveil: true, veils: [{ name: 'A', essence: 1 }, { name: 'B', essence: 2 }] },
+    { slot: 'Shoulders', bound: false, veils: [{ name: 'C', essence: 3, desc: 'Arms {asura_str = 4 * bound.self}' }] },
+    { slot: 'Belt', bound: true, veils: [] },
+  ]);
+  c.set('akashic.kheshig', [{ label: 'Weapon Veil (Kheshig)', slot: 'Hands', bound: true, veils: [{ name: 'K', essence: 2 }] }]);
+  c.set('akashic.otherReceptacles', [{ name: 'Totem', essence: 2, active: true }]);
+  const b = () => c.scope().bound;
+  check('a bound twinned slot binds both veils', [b().hands, b().hands2], [1, 1]);
+  check('an unbound slot reads 0', [b().shoulders, b().shoulders2], [0, 0]);
+  check('a bound slot with no veil in it reads 0', [b().belt, b().belt2], [0, 0]);
+  check('a Kheshig receptacle reads its own bind', b().weapon, 1);
+  check('another receptacle holds no veil, so 0', b().totem, 0);
+  check('the same names as essence, without the totals',
+    Object.keys(b()), Object.keys(c.scope().essence).filter((k) => !['pool', 'temp', 'total', 'used', 'free', 'cap'].includes(k)));
+  check('a formula can read it', c.renderProse('{= 2 * bound.hands}').map((s) => s.value), [2]);
+
+  const shoulders = c.data.akashic.slots[1].veils[0];
+  check('bound.self in a veil is that veil', [
+    c.renderProse('{= bound.self}', c.veilScope(c.data.akashic.slots[0].veils[1])).map((s) => s.value)[0],
+    c.renderProse('{= bound.self}', c.veilScope(shoulders)).map((s) => s.value)[0],
+    c.renderProse('{= bound.self}', c.veilScope(c.data.akashic.kheshig[0].veils[0])).map((s) => s.value)[0],
+  ], [1, 0, 1]);
+  check('without a veil there is no bound.self',
+    c.renderProse('{= bound.self}').map((s) => s.error !== undefined), [true]);
+  check('a definition in an unbound veil reads 0', c.renderProse('{asura_str}').map((s) => s.value), [0]);
+  c.setItem('akashic.slots', 1, 'bound', true);
+  check('binding the slot moves both the name and the definition',
+    [b().shoulders, c.renderProse('{asura_str}').map((s) => s.value)[0]], [1, 4]);
+}
+
 console.log('a chakra matches however the page wrote it');
 {
   const before = veilCatalogue();
@@ -6284,12 +6318,18 @@ console.log('unarmed practitioner damage');
   c.listAdd(free, { name: 'Unorthodox Unarmed Training', detail: '' });
   check('a second feat opens two more', [u().unorthodoxFeats, u().unorthodoxSlots], [2, 4]);
   c.listRemove(free, c.list(free).length - 1);
-  // The Bands of the Asura veil: 4 Open Hand talents per essence, only when it is shaped.
-  check('no essence in the Bands, nothing added', u().asuraEssence, 0);
+  // The Bands of the Asura veil: 4 Open Hand talents for each odd point of essence, only when it is shaped.
+  check('no essence in the Bands, nothing added', [u().asuraEssence, u().asuraTalents], [0, 0]);
   const asuraSlot = c.data.akashic.slots.findIndex((s) => (s.veils || []).some((v) => /asura/i.test(v.name)));
   const asuraVeil = c.data.akashic.slots[asuraSlot].veils.findIndex((v) => /asura/i.test(v.name));
-  c.setItem(`akashic.slots.${asuraSlot}.veils`, asuraVeil, 'essence', 2);
-  check('two essence in the Bands is eight Open Hand talents', [u().asuraEssence, u().perSphere['Open Hand'], u().effectiveTalents], [2, 3 + 8, 27]);
+  const asuraAt = (essence) => {
+    c.setItem(`akashic.slots.${asuraSlot}.veils`, asuraVeil, 'essence', essence);
+    return [u().asuraEssence, u().asuraTalents, u().perSphere['Open Hand'], u().effectiveTalents];
+  };
+  check('one essence in the Bands is four Open Hand talents', asuraAt(1), [1, 4, 3 + 4, 23]);
+  check('the second essence point adds no talents', asuraAt(2), [2, 4, 3 + 4, 23]);
+  check('the third essence point adds four more', asuraAt(3), [3, 8, 3 + 8, 27]);
+  check('the fourth essence point adds no talents', asuraAt(4), [4, 8, 3 + 8, 27]);
   c.setItem(`akashic.slots.${asuraSlot}.veils`, asuraVeil, 'essence', 0);
 
   c.set('training.combat.unarmed.sizeIncreases', 0);

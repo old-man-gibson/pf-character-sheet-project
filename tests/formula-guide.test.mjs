@@ -212,7 +212,7 @@ check('one mixing character and veil values is fine too',
 check('a genuinely missing name is still caught',
   row('{broken_one}').unknownReferences, ['notAThing']);
 check('the row carries the scope it was written in',
-  row('{bloodburst_max}').locals, { essence: { self: 4 } });
+  row('{bloodburst_max}').locals, { essence: { self: 4 }, bound: { self: 0 } });
 
 const veilHtml = myFormulasHtml(veilRows, '');
 check('so the tab does not underline essence.self',

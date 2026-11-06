@@ -8,7 +8,7 @@
  */
 
 import {
-  ALT_ATTACK_OF, ASURA_TALENTS_PER_ESSENCE, ASURA_VEIL, ATTACK_TYPE_MODE, BRAWLERS_VEST_TALENTS,
+  ALT_ATTACK_OF, ASURA_TALENTS_PER_ODD_ESSENCE, ASURA_VEIL, ATTACK_TYPE_MODE, BRAWLERS_VEST_TALENTS,
   TALENTED_KNUCKLE_TALENTS, UNARMED_NATIVE_THRESHOLD, UNARMED_SPHERES, UNORTHODOX_FEAT,
   UNORTHODOX_SPHERES_PER_FEAT,
   addDice, diceAverage, diceString, fmt, ladderRung, parseDiceExpr, sizeAttackMod, statMod,
@@ -664,11 +664,17 @@ export function recomputeUnarmed(model) {
   // still carries the sheet's numbers (2 and 4) reads them as had.
   u.talentedKnuckle = !!u.talentedKnuckle;
   u.brawlersVest = !!u.brawlersVest;
-  // The Bands of the Asura veil: its invested essence, wherever it is shaped.
-  u.asuraEssence = [...(model.data.akashic?.slots || []), ...(model.data.akashic?.kheshig || [])]
+  // The Bands of the Asura veil, wherever it is shaped: its invested essence,
+  // and the Open Hand talents its odd points give (1 or 2 essence is 4
+  // talents, 3 or 4 is 8). Counted per veil, so two shaped copies each count
+  // their own odd points.
+  const asura = [...(model.data.akashic?.slots || []), ...(model.data.akashic?.kheshig || [])]
     .flatMap((h) => h.veils || [])
     .filter((v) => ASURA_VEIL.test(String(v?.name || '')))
-    .reduce((n, v) => n + (Number(v.essence) || 0), 0);
+    .map((v) => Number(v.essence) || 0);
+  u.asuraEssence = asura.reduce((n, e) => n + e, 0);
+  u.asuraTalents = asura.reduce((n, e) => n
+    + Math.ceil(Math.max(0, Math.floor(e)) / 2) * ASURA_TALENTS_PER_ODD_ESSENCE, 0);
   delete u.veilEssence;
   // The sheet counts class and bonus talents only, never tradition ones;
   // includeTradition is an explicit player toggle on top of that.
@@ -684,7 +690,7 @@ export function recomputeUnarmed(model) {
 
   const per = {};
   for (const s of UNARMED_SPHERES) per[s] = talentsIn(tally, s);
-  per['Open Hand'] += u.asuraEssence * ASURA_TALENTS_PER_ESSENCE;
+  per['Open Hand'] += u.asuraTalents;
 
   let talents = 0;
   if (u.usesBoxing) talents += per.Boxing;
