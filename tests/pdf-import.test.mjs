@@ -8,7 +8,7 @@
  *
  *  Run: node tests/pdf-import.test.mjs */
 import { outlineOf, sectionText, sectionOptions, readSections, guessKind, guessSphere } from '../app/js/pdf-import.js';
-import { readStructured, parsePaste } from '../app/js/paste-import.js';
+import { readStructured, parsePaste, readClassTable } from '../app/js/paste-import.js';
 
 let pass = 0;
 let fail = 0;
@@ -88,6 +88,95 @@ check('lines are joined into paragraphs, a short last line ending one',
 check('the printed page number is the one cited', [sec('Tech Talents').page, sec('Feats').page], [7, 9]);
 check('the footer and the page numbers are furniture, and gone',
   /draft 3|for our table|(^|\n)[789](\n|$)/.test(JSON.stringify(outline)), false);
+
+console.log('\na book set less evenly -- chapter running heads, moving page numbers, narrow spaces, ligature fonts, small capitals, a class table');
+/* Nine pages printed 98 to 106. Each chapter's running head is on three
+   pages, under the 40% that makes text furniture by itself. Page numbers sit
+   left on even pages and right-aligned on odd ones, so they move with their
+   digits. */
+const pageOf = (n, chapter, items) => ({ width: W, height: 800, items: [
+  line(chapter, n % 2 ? 600 - 40 - chapter.length * 5.5 : 40, 24, 11, 'f6'),
+  line(String(n), n % 2 ? 560 - String(n).length * 5.5 : 40, 780, 11, 'f8'),
+  ...items,
+] });
+/** Pieces of one line, each `gap` points after the last. */
+const pieces = (y, gap, ...parts) => {
+  let x = 40;
+  return parts.map(([str, size = 11, font = BODY_A]) => {
+    const it = line(str, x, y, size, font);
+    x += it.w + gap;
+    return it;
+  });
+};
+const LIG = 'f7'; // the heading face's second font object, holding "fi", "fl", "ff"
+const TH = 'f10'; // table header
+const tableRows = [
+  ['1st', '+0', '+2', '+0', '+2', 'Tinkering, gadgets'],
+  ['2nd', '+1', '+3', '+0', '+3', 'Trapfinding,'],
+  ['3rd', '+2', '+3', '+1', '+3', 'Gadget'],
+  ['4th', '+3', '+4', '+1', '+4', '—'],
+  ['5th', '+3', '+4', '+1', '+4', 'Bonus feat'],
+];
+const book = [
+  pageOf(98, 'Chapter 1: Gadgets', [
+    line('Gadgets', 40, 60, 24, 'f4'),
+    line('Battery (gadget)', 40, 90, 16, 'f4'), ...para('You may create a battery', 40, 112),
+    line('Fortified Coil (gadget)', 40, 170, 16, LIG), ...para('A coil that glows red', 40, 192),
+  ]),
+  pageOf(99, 'Chapter 1: Gadgets', [
+    line('Camera (gadget)', 40, 60, 16, 'f4'),
+    // Word spaces a tenth of the type size, and a hyphen kerned as close.
+    ...pieces(82, 1.1, ['You may'], ['shapeshift'], ['at will.']),
+    ...pieces(95, 0.9, ['Sphere'], ['-Specific drawbacks apply.']),
+    line('Reflex Lens (gadget)', 40, 140, 16, LIG), ...para('A lens that reflects', 40, 162),
+  ]),
+  pageOf(100, 'Chapter 1: Gadgets', [
+    line('Buffer Plate (gadget)', 40, 60, 16, LIG), ...para('A plate that soaks a blow', 40, 82),
+    line('Drone Arm (gadget)', 40, 140, 16, 'f4'), ...para('An arm for a drone', 40, 162),
+  ]),
+  pageOf(101, 'Chapter 2: Tinkers', [
+    line('Tinker', 40, 60, 24, 'f4'), ...para('Tinkers build things', 40, 90),
+    line('Table: The Tinker', 40, 150, 11, 'f5'),
+    line('Level', 40, 170, 10, TH), line('Base Attack', 80, 170, 10, TH), line('Bonus', 95, 182, 10, TH),
+    line('Fort', 150, 170, 10, TH), line('Save', 148, 182, 10, TH), line('Ref', 185, 170, 10, TH), line('Save', 183, 182, 10, TH),
+    line('Will', 215, 170, 10, TH), line('Save', 215, 182, 10, TH), line('Special', 260, 170, 10, TH),
+    ...tableRows.flatMap((r, i) => [44, 105, 152, 186, 217, 260].map((x, c) => line(r[c], x, 200 + i * 14, 11))),
+    line('trap sense +1', 260, 220, 11),
+  ]),
+  // The page number drawn twice, as a bold effect.
+  pageOf(102, 'Chapter 2: Tinkers', [
+    line('102', 40, 783, 18, 'f8'),
+    line('Tinkering (Ex)', 40, 60, 16, 'f4'), ...para('A tinker can fix anything', 40, 82),
+  ]),
+  pageOf(103, 'Chapter 2: Tinkers', [line('Gadgets (Ex)', 40, 60, 16, 'f4'), ...para('A tinker carries gadgets', 40, 82)]),
+  pageOf(104, 'Chapter 3: Items', [
+    line('Items', 40, 60, 24, 'f4'),
+    line('Wondrous Items', 40, 90, 16, 'f4'),
+    // Small capitals: an 11 pt capital, then 7.7 pt letters whose case means nothing.
+    line('H', 40, 120, 11, 'f9'), line('eadBanD', 45.5, 120, 7.7, 'f9'), line('oF', 75, 120, 7.7, 'f9'),
+    line('V', 85.2, 120, 11, 'f9'), line('ASt', 90.7, 120, 7.7, 'f9'),
+    ...para('Aura faint transmutation; CL 4', 40, 135),
+  ]),
+  pageOf(105, 'Chapter 3: Items', [line('Rings', 40, 60, 16, 'f4'), ...para('Rings go on fingers', 40, 82)]),
+  pageOf(106, 'Chapter 3: Items', [line('Staves', 40, 60, 16, 'f4'), ...para('Staves hold charges', 40, 82)]),
+];
+const book2 = outlineOf(book.map(shuffled), { title: 'The Test Handbook' });
+const sec2 = (name) => book2.sections.find((s) => s.heading === name);
+check('running heads that change by chapter are furniture', /Chapter \d/.test(JSON.stringify(book2)), false);
+check('page numbers are cited on odd pages as well as even, and none is left in the text',
+  [book2.sections.flatMap((s) => s.entries.map((e) => e.page)), /(^|\n)1?0\d(\n|$)/.test(book2.sections.map((s) => s.lead + s.entries.map((e) => e.text).join('\n')).join('\n'))],
+  [[98, 98, 99, 99, 100, 100, 102, 103, 104, 105, 106], false]);
+check('a heading in the ligature font is an entry, not a sub-heading', sec2('Gadgets').entries.map((e) => e.heading),
+  ['Battery (gadget)', 'Fortified Coil (gadget)', 'Camera (gadget)', 'Reflex Lens (gadget)', 'Buffer Plate (gadget)', 'Drone Arm (gadget)']);
+check('narrow word spaces are spaces; a hyphen kerned as close is not', sec2('Gadgets').entries[2].text,
+  'You may shapeshift at will.\n\nSphere-Specific drawbacks apply.');
+check('a small-capitals name is one line, title-cased', sec2('Items').entries[0].text.split('\n\n')[0], '**Headband of Vast**');
+const tinker = sec2('Tinker').lead;
+check('a class table is rebuilt as a tab-separated header and a line per level, under its caption',
+  tinker.split('\n\n')[1].split('\n').slice(0, 4),
+  ['Table: The Tinker', 'Level\tBase Attack Bonus\tFort Save\tRef Save\tWill Save\tSpecial', '1st\t+0\t+2\t+0\t+2\tTinkering, gadgets', '2nd\t+1\t+3\t+0\t+3\tTrapfinding, trap sense +1']);
+const tinkerTable = readClassTable(tinker.split('\n'));
+check('and the class reader takes it', [tinkerTable.rows.length, tinkerTable.rows[1].special, tinkerTable.rows[4].fort], [5, ['Trapfinding', 'trap sense +1'], '+4']);
 
 console.log('\nwhat a section is -- guessed from its heading, settled by a person');
 check('guesses', outline.sections.map(guessKind), ['sphere', 'talents', 'feats']);
