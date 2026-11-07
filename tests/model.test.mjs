@@ -4772,6 +4772,53 @@ console.log('a class-feature column or group takes its saved width with it');
   check('a removed group drops them all', widths(), undefined);
 }
 
+console.log('class feature groups and their columns move left and right');
+{
+  const c = new Character(blankDocument({ name: 'Order', level: 4 }));
+  const cls = (name, hd) => ({ name, hd, bab: 1, goodFort: true, goodRef: false, goodWill: false,
+    skillRanks: 2, archetypes: '', levelsOverride: null, systems: [] });
+  c.listAdd('classes', cls('Fighter', 10));
+  c.listAdd('classes', cls('Rogue', 8));
+  [1, 2].forEach((l) => c.setProgressionClass(l, 0, 'Fighter'));
+  [3, 4].forEach((l) => c.setProgressionClass(l, 0, 'Rogue'));
+  c.addClassFeatureColumn('Fighter', 'Bonus feat');
+  c.addClassFeatureColumn('Rogue', 'Talent');
+  c.addClassFeatureColumn('Rogue', 'Sneak attack');
+  c.setColumnWidth('progfeat-Fighter', 'Bonus feat', 700);
+  check('unmoved, the narrowest group comes first', c.classFeatureGroupOrder(), ['Rogue', 'Fighter']);
+  c.moveClassFeatureGroup(1, 0);
+  check('a moved group stays where it was put', c.classFeatureGroupOrder(), ['Fighter', 'Rogue']);
+  check('the whole order is saved', c.data.uiPrefs.featureGroupOrder, ['Fighter', 'Rogue']);
+  c.setColumnWidth('progfeat-Fighter', 'Bonus feat', 90);
+  c.setColumnWidth('progfeat-Fighter', 'Bonus feat', 900);
+  check('a width change does not reorder a saved order', c.classFeatureGroupOrder(), ['Fighter', 'Rogue']);
+  c.moveClassFeatureGroup(0, 0);
+  c.moveClassFeatureGroup(5, 0);
+  check('a move to its own place or from nowhere does nothing', c.classFeatureGroupOrder(), ['Fighter', 'Rogue']);
+  c.listAdd('classes', cls('Wizard', 6));
+  c.setProgressionClass(4, 1, 'Wizard');
+  c.addClassFeatureColumn('Wizard', 'Bonus feat');
+  check('a group added later goes after the saved ones', c.classFeatureGroupOrder(), ['Fighter', 'Rogue', 'Wizard']);
+  c.moveClassFeatureGroup(0, 3);
+  check('a move to the end counts the list before the move', c.classFeatureGroupOrder(), ['Rogue', 'Wizard', 'Fighter']);
+  c.setProgressionClass(4, 1, null);
+  c.listRemove('classes', 2);
+  c.removeClassFeatureGroup('Wizard');
+  check('a removed group leaves the saved order', c.data.uiPrefs.featureGroupOrder, ['Rogue', 'Fighter']);
+
+  c.setClassFeature('Rogue', 4, 'Sneak attack', '2d6');
+  c.setColumnWidth('progfeat-Rogue', 'Sneak attack', 150);
+  c.moveClassFeatureColumn('Rogue', 1, 0);
+  const rogue = () => c.data.progression.classFeatures.Rogue;
+  check('a moved column changes places', rogue().columns, ['Sneak attack', 'Talent']);
+  check('its cells and width go with it', [rogue().byLevel[4]['Sneak attack'], c.classFeatureColumnWidth('Rogue', 'Sneak attack')], ['2d6', 150]);
+  c.moveClassFeatureColumn('Rogue', 0, 2);
+  check('one place right is two along', rogue().columns, ['Talent', 'Sneak attack']);
+  c.moveClassFeatureColumn('Rogue', 1, 9);
+  c.moveClassFeatureColumn('Nobody', 0, 1);
+  check('past the end or for a class with no group, nothing moves', [rogue().columns, c.data.progression.classFeatures.Nobody], [['Talent', 'Sneak attack'], undefined]);
+}
+
 console.log('a formula in a leftover cell is read on every tab, Crafting included');
 {
   const c = new Character(blankDocument({ name: 'Leftovers', level: 3 }));

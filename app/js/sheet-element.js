@@ -6410,6 +6410,7 @@ export class CharacterSheetElement extends HTMLElement {
 
     this.#bindTemplateDrag(root);
     this.#bindNoteDrag(root);
+    this.#bindFeatureOrderDrag(root);
     this.#bindFeatDrag(root);
     this.#bindRowDrag(root);
     this.#bindTrackerDrag(root);
@@ -7549,6 +7550,70 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
+   * Dragging on the Progression tab: a class's feature group among the
+   * groups, and a feature column within its own class's table. Groups wrap
+   * across rows and columns sit side by side, so the left or right half of
+   * what is under the pointer decides the side. A column takes a drop
+   * anywhere over it, not only on its heading.
+   */
+  #bindFeatureOrderDrag(root) {
+    const groupAt = (el) => el?.closest('.featgroups > section.featpanel');
+    const groupIndex = (panel) => Number(panel.querySelector('[data-cfggrip]')?.dataset.cfggrip);
+    bindDrag({
+      handles: root.querySelectorAll('[data-cfggrip]'),
+      item: (handle) => groupAt(handle),
+      source: (panel) => groupIndex(panel),
+      target: (el, point, from) => {
+        const panel = groupAt(el);
+        if (!panel) return null;
+        const i = groupIndex(panel);
+        if (!Number.isInteger(i) || i === from) return null;
+        const after = half(panel, point, 'x');
+        return { el: panel, cls: side(after), to: i + (after ? 1 : 0) };
+      },
+      drop: (from, t) => {
+        this.#model.moveClassFeatureGroup(from, t.to);
+        this.#render();
+      },
+    });
+
+    const columnAt = (el) => {
+      const cell = el?.closest('table.featgrid td, table.featgrid th');
+      const head = cell?.closest('table.featgrid')?.tHead?.rows[0]?.cells[cell.cellIndex];
+      return head?.dataset.cfcoldrop ? head : null;
+    };
+    const parse = (head) => JSON.parse(head.dataset.cfcoldrop);
+    bindDrag({
+      handles: root.querySelectorAll('[data-cfcolgrip]'),
+      item: (handle) => handle.closest('th[data-cfcoldrop]'),
+      source: parse,
+      target: (el, point, from) => {
+        const head = columnAt(el);
+        if (!head) return null;
+        const t = parse(head);
+        if (t.c !== from.c || t.i === from.i) return null;     // one class at a time
+        const after = half(head, point, 'x');
+        return { el: head, cls: side(after), to: t.i + (after ? 1 : 0) };
+      },
+      drop: (from, t) => {
+        this.#model.moveClassFeatureColumn(from.c, from.i, t.to);
+        this.#render();
+      },
+    });
+  }
+
+  /**
+   * After a ◂ ▸ press re-renders, focus the same button at the item's new
+   * place, so the key can be pressed again. At an end that button is
+   * disabled, and focus goes to the other one of the pair.
+   */
+  #focusSideMove(button, at) {
+    const pair = [...this.shadowRoot.querySelectorAll(`[data-action="${button.dataset.action}"]`)]
+      .filter((b) => at(b) && !b.disabled);
+    (pair.find((b) => b.dataset.delta === button.dataset.delta) || pair[0])?.focus();
+  }
+
+  /**
    * Dragging on the Template tab.
    *
    * Two kinds of card move. A group is reordered among the groups; a
@@ -8509,6 +8574,25 @@ export class CharacterSheetElement extends HTMLElement {
         this.#model.removeClassFeatureColumn(button?.dataset.class, Number(button?.dataset.col));
         this.#render();
         break;
+      // ◂ ▸: one place left or right. `to` counts the list before the move,
+      // so one place right is two along.
+      case 'move-cf-group':
+      case 'move-cf-column': {
+        const cls = button?.dataset.class;
+        const i = Number(name === 'move-cf-group' ? button?.dataset.index : button?.dataset.col);
+        const delta = Number(button?.dataset.delta);
+        const to = delta < 0 ? i - 1 : i + 2;
+        if (name === 'move-cf-group') this.#model.moveClassFeatureGroup(i, to);
+        else this.#model.moveClassFeatureColumn(cls, i, to);
+        const focused = this.shadowRoot.activeElement === button;
+        this.#render();
+        if (focused) {
+          this.#focusSideMove(button, (b) => (name === 'move-cf-group'
+            ? Number(b.dataset.index) === i + delta
+            : b.dataset.class === cls && Number(b.dataset.col) === i + delta));
+        }
+        break;
+      }
       // Deleting a whole feature group takes a second click even now that
       // Ctrl+Z can put it back: it is a column of the player's own writing per
       // level, and twenty levels of it is more than a toast should be the only

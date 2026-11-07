@@ -17,7 +17,9 @@ import { orphans } from './reconcile.js';
 import { forwarded, scopeIfFormulas } from './scope.js';
 import { TEMPLATE_TYPES } from './templates.js';
 import { markUndo, rowLabel } from './undo.js';
-import { classForwardKey, closestName, isPinned, normalizeName, resolveNumberFields, slug } from './util.js';
+import {
+  classForwardKey, closestName, isPinned, moveItem, normalizeName, resolveNumberFields, slug,
+} from './util.js';
 
 /**
  * The key a rule group's text is stored under within a feature cell.
@@ -295,6 +297,58 @@ export function removeClassFeatureGroup(model, className) {
   delete p.classFeatures[className];
   // Its column widths go with it, as a rename carries them along.
   if (model.data.uiPrefs?.colWidths) delete model.data.uiPrefs.colWidths[`progfeat-${className}`];
+  const order = model.data.uiPrefs?.featureGroupOrder;
+  if (Array.isArray(order) && order.includes(className)) {
+    model.data.uiPrefs.featureGroupOrder = order.filter((n) => n !== className);
+  }
+  model.recompute();
+  return model;
+}
+
+/** A feature table column's width in px: the dragged width, or the default. */
+export function classFeatureColumnWidth(model, className, column) {
+  const saved = model.data.uiPrefs?.colWidths?.[`progfeat-${className}`]?.[column];
+  return Math.max(90, Number(saved) || 260);
+}
+
+/**
+ * The class feature groups in the order the Progression tab shows them:
+ * every class the progression names, any group kept after its class left,
+ * then General.
+ *
+ * Until the player moves one, the narrowest tables come first so that small
+ * ones can share a row. After a move the order is saved in
+ * `uiPrefs.featureGroupOrder`; a group added later goes after the saved ones.
+ */
+export function classFeatureGroupOrder(model) {
+  const p = model.data.progression;
+  if (!p) return [];
+  const names = progressionClasses(model);
+  for (const key of Object.keys(p.classFeatures || {})) {
+    const g = p.classFeatures[key];
+    if (!names.includes(key) && key !== 'General'
+      && (g.columns.length || Object.keys(g.byLevel).length)) names.push(key);
+  }
+  if (p.classFeatures?.General?.columns?.length) names.push('General');
+  const width = (name) => 46 + (p.classFeatures?.[name]?.columns || [])
+    .reduce((t, col) => t + classFeatureColumnWidth(model, name, col), 0);
+  const saved = Array.isArray(model.data.uiPrefs?.featureGroupOrder) ? model.data.uiPrefs.featureGroupOrder : [];
+  const rank = (name) => {
+    const i = saved.indexOf(name);
+    return i < 0 ? saved.length : i;
+  };
+  return names.sort((a, b) => rank(a) - rank(b) || width(a) - width(b));
+}
+
+/**
+ * Move a class feature group among the others. `from` and `to` are places in
+ * `classFeatureGroupOrder`, with `to` counted before the move. The whole
+ * order is saved, so a new group cannot reshuffle the ones already placed.
+ */
+export function moveClassFeatureGroup(model, from, to) {
+  const order = classFeatureGroupOrder(model);
+  if (!moveItem(order, from, to)) return model;
+  (model.data.uiPrefs ||= {}).featureGroupOrder = order;
   model.recompute();
   return model;
 }
@@ -560,6 +614,17 @@ export function addClassFeatureColumn(model, className, name, at = null) {
   if (!g || !name || g.columns.includes(name)) return model;
   if (at === null || at < 0 || at > g.columns.length) g.columns.push(name);
   else g.columns.splice(at, 0, name);
+  model.recompute();
+  return model;
+}
+
+/**
+ * Move a feature column within its class's table, with `to` counted before
+ * the move. Cells, rules, menus and widths are filed by the column's name,
+ * so only the order changes.
+ */
+export function moveClassFeatureColumn(model, className, from, to) {
+  if (!moveItem(model.data.progression?.classFeatures?.[className]?.columns, from, to)) return model;
   model.recompute();
   return model;
 }

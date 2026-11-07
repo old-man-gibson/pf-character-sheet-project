@@ -3658,6 +3658,16 @@ table.prog th .colname:hover { border-color: var(--cs-line); }
 }
 .featgroups .panel.featpanel { flex: 0 1 auto; min-width: 250px; max-width: 100%; }
 .featgroups .panel.collapsed { flex: 0 1 auto; }
+/* Moving a group or a column: its grip drags it, ◂ ▸ move it one place. A
+   panel heading pushes its buttons right; the pair stays beside the badges. */
+.sidemove { display: inline-flex; gap: 2px; flex: none; }
+.panel > h3 .sidemove button { margin-left: 0; padding: 1px 6px; }
+.featpanel.dragging, table.featgrid th.dragging { opacity: 0.45; }
+.featpanel.drop-before { box-shadow: -4px 0 0 0 var(--cs-accent); }
+.featpanel.drop-after { box-shadow: 4px 0 0 0 var(--cs-accent); }
+table.featgrid th.drop-before { box-shadow: inset 3px 0 0 var(--cs-accent); }
+table.featgrid th.drop-after { box-shadow: inset -3px 0 0 var(--cs-accent); }
+table.featgrid th .sidemove button { padding: 0 3px; font-size: 0.7rem; line-height: 1.2; }
 table.featgrid { table-layout: fixed; }
 table.featgrid td.featcell { vertical-align: top; padding: 2px 3px; }
 table.featgrid th { position: relative; overflow: hidden; }

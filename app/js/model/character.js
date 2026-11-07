@@ -61,6 +61,7 @@ import {
   addClassFeatureRuleGroup, addAligned, addAlignedGain, addProgressionTrack, alignedSteps, applyGestalt, classFeatureColumnOptions,
   classFeatureColumnOptionsChosen, classFeatureDue, classFeatureNoteLevel, classFeatureNotes,
   classFeatureNotesInCell, classFeatureNoteSuggestions, addClassFeatureNoteFromPack, classFeatureParked, moveClassFeatureNote,
+  classFeatureColumnWidth, classFeatureGroupOrder, moveClassFeatureColumn, moveClassFeatureGroup,
   blockClassName, classFeatureRows,
   classFeatureRuleGroups, classLevelAt, classLevelCount, classLevelsIn, classNames,
   featureGroup, fillProgressionTrack, grantingGroups, plannerHasClass, progressionClasses,
@@ -616,6 +617,10 @@ export class Character {
   classFeatureParked(...a) { return classFeatureParked(this, ...a); }
 
   removeClassFeatureGroup(...a) { return removeClassFeatureGroup(this, ...a); }
+  classFeatureGroupOrder(...a) { return classFeatureGroupOrder(this, ...a); }
+  moveClassFeatureGroup(...a) { return moveClassFeatureGroup(this, ...a); }
+  moveClassFeatureColumn(...a) { return moveClassFeatureColumn(this, ...a); }
+  classFeatureColumnWidth(...a) { return classFeatureColumnWidth(this, ...a); }
   setColumnWidth(...a) { return setColumnWidth(this, ...a); }
   removeClassFeatureColumn(...a) { return removeClassFeatureColumn(this, ...a); }
   #applyGestalt(...a) { return applyGestalt(this, ...a); }
