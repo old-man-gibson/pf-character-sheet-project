@@ -164,6 +164,22 @@ export function sphereTalents(name = null) {
 }
 
 /**
+ * What a talent cell suggests: with a sphere, that sphere's base pick and its
+ * talents; with none, every sphere's base pick and every talent. Base picks
+ * come first; each group is sorted by name. A sphere the catalogue does not
+ * have gives nothing.
+ */
+export function talentsAvailable({ sphere = '' } = {}) {
+  const named = String(sphere ?? '').trim();
+  const spheres = named ? [sphereEntry(named)].filter(Boolean) : SPHERE_CATALOGUE.spheres;
+  const byName = (a, b) => a.name.localeCompare(b.name);
+  const bases = spheres.map((s) => ({ name: `${s.name} Sphere`, sphere: s.name, base: true, tags: [] })).sort(byName);
+  const talents = spheres.flatMap((s) => s.talents.map((t) => ({ name: t.name, sphere: s.name, base: false, tags: t.tags })))
+    .sort(byName);
+  return [...bases, ...talents];
+}
+
+/**
  * Talents carrying a tag or a source, case-insensitively -- every `(counter)`
  * across every sphere, or everything a table wants to rule out because it
  * came from `[3PP]`. Both lists are searched, since which of the two a wiki

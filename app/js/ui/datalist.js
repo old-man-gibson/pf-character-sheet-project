@@ -1,15 +1,16 @@
 /**
  * ui/datalist.js -- the suggestions a catalogue cell offers as it is typed in.
  *
- * A cell typed against a catalogue -- a feat, a spell, a power -- points at a
- * datalist whose `data-fill` names the catalogue, and `data-classes` the
- * classes to narrow a spell or power list to. FILLERS says, catalogue by
+ * A cell typed against a catalogue -- a feat, a spell, a power, a sphere
+ * talent -- points at a datalist whose `data-fill` names the catalogue,
+ * `data-classes` the classes to narrow a spell or power list to, and
+ * `data-sphere` the sphere to narrow a talent list to. FILLERS says, catalogue by
  * catalogue, where the entries come from and how each is labelled; the
  * element only puts the answer into the list. A list that names no filler
  * (the veil and class-feature menus, which their panels draw whole) is left
  * alone. Pure, so the tests can reach it.
  */
-import { featsAvailable, powersAvailable, spellsAvailable } from '../model.js';
+import { featsAvailable, powersAvailable, spellsAvailable, talentsAvailable } from '../model.js';
 
 const DOT = ' · ';
 
@@ -28,6 +29,13 @@ export const FILLERS = {
     label: (e) => [e.discipline || e.element, e.points ? `${e.points} pp` : '', e.burn ? `burn ${e.burn}` : '']
       .filter(Boolean).join(DOT),
   },
+  // A row with its sphere picked is offered that sphere's talents, and the
+  // label leaves the sphere out; a row without one names each talent's sphere.
+  talents: {
+    pool: ({ sphere }) => talentsAvailable({ sphere }),
+    label: (e, { sphere }) => (e.base ? 'base sphere'
+      : [sphere ? '' : e.sphere, ...e.tags].filter(Boolean).join(DOT)),
+  },
 };
 
 /**
@@ -37,14 +45,15 @@ export const FILLERS = {
  * against thousands of feats. An empty query gives the first names in the
  * catalogue's order. Null for a list no filler serves.
  */
-export function datalistOptions(fill, { classes = [], query = '', max = 40 } = {}) {
+export function datalistOptions(fill, { classes = [], sphere = '', query = '', max = 40 } = {}) {
   const filler = Object.hasOwn(FILLERS, fill) ? FILLERS[fill] : null;
   if (!filler) return null;
+  const narrow = { classes, sphere: String(sphere || '').trim() };
   const q = String(query || '').trim().toLowerCase();
   const out = [];
-  for (const e of filler.pool({ classes })) {
+  for (const e of filler.pool(narrow)) {
     if (q && !e.name.toLowerCase().includes(q)) continue;
-    out.push({ value: e.name, label: filler.label(e) || '' });
+    out.push({ value: e.name, label: filler.label(e, narrow) || '' });
     if (out.length >= max) break;
   }
   return out;
