@@ -4202,6 +4202,79 @@ console.log('readied stances stay stances without the discipline pack');
   setManeuverCatalogue(before);
 }
 
+console.log('the essence pool cells take formulas');
+{
+  const c = new Character(blankDocument({ name: 'Veilweaver', level: 9 }));
+  const k = () => c.data.akashic.calc;
+  const reopened = () => new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  c.set('akashic.essence.pool', 'level + 1');
+  c.set('akashic.essence.featTraits', 'floor(level / 4)');
+  c.set('akashic.essence.fcb', 1);
+  check('a formula in a pool cell is worked out',
+    [k().typed.pool, k().typed.featTraits, k().pool, k().sources], [{ value: 10, error: null }, { value: 2, error: null }, 10, 3]);
+  check('essence.pool reads the worked-out pool', c.scope().essence.pool, 10);
+  check('the cells save what was typed',
+    [c.toJSON().akashic.essence.pool, c.toJSON().akashic.essence.featTraits, c.toJSON().akashic.calc], ['level + 1', 'floor(level / 4)', undefined]);
+  check('a reopened sheet works them out the same', [reopened().data.akashic.calc.pool, reopened().data.akashic.calc.sources], [10, 3]);
+  const html = subsystemPanels.akashicPanel(c, {});
+  check('the pool cell is a formula box showing what it came to',
+    [html.includes('data-set="akashic.essence.pool" data-kind="expr"'), html.includes('title="level + 1 = 10. Click to edit."')], [true, true]);
+  const audited = c.audit().find((r) => r.id === 'essence-featTraits');
+  check('and the Formulas tab lists it', [audited?.status, audited?.value, audited?.place], ['ok', 2, 'essence:featTraits']);
+
+  c.set('akashic.essence.fcb', 'floor(level +');
+  check('a broken formula adds nothing and says why', [k().typed.fcb.value, !!k().typed.fcb.error, k().sources], [0, true, 2]);
+  check('and is listed as broken', c.audit().find((r) => r.id === 'essence-fcb')?.status, 'error');
+
+  // The pool's own totals read 0 inside the pool cells, so a cell that reads
+  // them cannot climb from one recompute to the next.
+  c.set('akashic.essence.pool', 'essence.pool + essence.total + essence.free + 4');
+  c.recompute();
+  c.recompute();
+  check('a pool cell that reads the pool does not climb', [k().pool, reopened().data.akashic.calc.pool], [4, 4]);
+}
+
+console.log('a blank Radiant Dawn cell counts the Radiant Dawn maneuvers known');
+{
+  const before = maneuverCatalogue();
+  setManeuverCatalogue({ disciplines: [{ name: 'Radiant Dawn', entries: [
+    { level: 1, kind: 'maneuver', name: 'Dawn Strike', type: 'Strike' },
+    { level: 1, kind: 'stance', name: 'Morning Stance', type: 'Stance' },
+    { level: 2, kind: 'maneuver', name: 'Noon Strike', type: 'Strike' },
+    { level: 4, kind: 'maneuver', name: 'Zenith', type: 'Boost' },
+  ] }, { name: 'Golden Lion', entries: [{ level: 1, kind: 'maneuver', name: 'Roar', type: 'Boost' }] }] });
+  const c = new Character(blankDocument({ name: 'Rajah', level: 9 }));
+  const rd = () => c.data.akashic.calc.typed.radiantDawn.value;
+  c.set('maneuvers.disciplines', [
+    { name: 'radiant dawn', known: [], custom: [], notes: {} },
+    { name: 'Golden Lion', known: ['Roar'], custom: [], notes: {} },
+  ]);
+  check('none known, no essence', [rd(), c.data.akashic.calc.radiantDawn], [0, { known: 0, highest: 0, essence: 0 }]);
+  const path = 'maneuvers.disciplines.0';
+  c.toggleManeuver(path, 'Dawn Strike', true);
+  c.toggleManeuver(path, 'Morning Stance', true);
+  check('two known, highest level 1: capped at 1', rd(), 1);
+  c.toggleManeuver(path, 'Noon Strike', true);
+  check('three known, highest level 2: capped at 2', rd(), 2);
+  c.toggleManeuver(path, 'Zenith', true);
+  check('four known, highest level 4: one each, stances too', [rd(), c.data.akashic.calc.sources], [4, 4]);
+  check('other disciplines do not count', c.data.akashic.calc.radiantDawn.known, 4);
+  check('the cell shows the count as its placeholder',
+    subsystemPanels.akashicPanel(c, {}).includes('placeholder="auto: 4"'), true);
+
+  c.set('akashic.essence.radiantDawn', 6);
+  check('a number typed in the cell replaces the count', rd(), 6);
+  c.set('akashic.essence.radiantDawn', 'floor(level / 3)');
+  check('so does a formula', rd(), 3);
+  c.set('akashic.essence.radiantDawn', 0);
+  check('0, as a workbook leaves an empty cell, is counted', rd(), 4);
+  c.set('akashic.essence.radiantDawn', null);
+  check('and so is a cleared cell', rd(), 4);
+  check('a reopened sheet counts them the same',
+    new Character(JSON.parse(JSON.stringify(c.toJSON()))).data.akashic.calc.typed.radiantDawn.value, 4);
+  setManeuverCatalogue(before);
+}
+
 console.log('maneuver names match however a pack spelled them');
 {
   const before = maneuverCatalogue();

@@ -55,7 +55,7 @@ import {
   maneuverCatalogue, maneuverDetails, maneuverIsWritten, maneuverOwn, altTrainingLink,
   altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques, psionicCurveTotals, psionicTables,
   spellCatalogue, spellDetails, powerCatalogue, powerDetails, veilsAvailable, veilDetails, veilOwn,
-  slug, manifesterForwardKey, vancianForwardKey, poolTracker,
+  slug, manifesterForwardKey, vancianForwardKey, poolTracker, radiantDawnBlank,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST, nameDatalist, noteCell, packText, portraitHtml } from '../html.js';
 import {
@@ -321,7 +321,6 @@ function essFig(v, k, sub = '', badge = '') {
    */
 function akashicClassesPanel(a) {
     const list = 'akashic.classes';
-    const e = a.essence || {};
     // Only the filled class blocks are worth a row; the template's six leave
     // five empty ones behind on most sheets. A row added here is shown from
     // the start (`added`), so it can be filled in or removed.
@@ -377,14 +376,14 @@ function akashicClassesPanel(a) {
           <div class="subhead">Essence pool</div>
           <table class="build"><tbody>
             <tr><th scope="row">Pool</th>
-              <td class="num">${num('akashic.essence.pool', e.pool)}</td></tr>
+              <td class="num">${essenceCell(a, 'pool')}</td></tr>
             ${ESSENCE_SOURCES.map(([key, label]) => (key === 'boon' && a.calc?.traditionBoon ? `<tr>
               <th scope="row" title="The casting tradition's pool, taken as essence instead of spell points. Set it on the Magic Spheres tab.">
                 ${esc(label)}</th>
               <td class="num total">${a.calc.traditionBoon}</td>
             </tr>` : `<tr>
               <th scope="row">${esc(label)}</th>
-              <td class="num">${num(`akashic.essence.${key}`, e[key])}</td>
+              <td class="num">${essenceCell(a, key)}</td>
             </tr>`)).join('')}
             <tr${a.calc?.sourcesShort ? ` title="These sources add up to ${a.calc.sources}, but the daily pool above is ${a.calc.pool}. Change the pool if it is wrong."` : ''}>
               <th scope="row">Sources${a.calc?.sourcesShort ? ' <span class="badge err">≠ pool</span>' : ''}</th>
@@ -394,6 +393,28 @@ function akashicClassesPanel(a) {
       </div>
     </section>`;
   }
+
+/**
+ * One essence pool cell, a number or a formula. A blank Radiant Dawn cell
+ * counts the Radiant Dawn maneuvers and stances known.
+ */
+function essenceCell(a, key) {
+  const raw = a.essence?.[key];
+  const r = a.calc?.typed?.[key];
+  const shown = {
+    width: '4.6rem',
+    value: typeof raw === 'string' && raw.trim() && r && !r.error ? r.value : null,
+    error: r?.error || null,
+  };
+  if (key !== 'radiantDawn') return exprField(`data-set="akashic.essence.${key}"`, raw ?? 0, shown);
+  const rd = a.calc?.radiantDawn || {};
+  return exprField('data-set="akashic.essence.radiantDawn"', radiantDawnBlank(raw) ? '' : raw, {
+    ...shown,
+    kind: 'expr-or-null',
+    placeholder: `auto: ${rd.essence ?? 0}`,
+    title: `Blank gives 1 per Radiant Dawn maneuver or stance known, up to the highest level known (${rd.known ?? 0} known, highest level ${rd.highest ?? 0}). Or enter a number or a formula.`,
+  });
+}
 
   /**
    * The slot board.

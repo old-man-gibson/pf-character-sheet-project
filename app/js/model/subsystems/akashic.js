@@ -10,9 +10,9 @@ import {
 } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { classPresence, tableSpelling } from '../progression.js';
-import { forwarded } from '../scope.js';
+import { forwarded, scopeIfFormulas } from '../scope.js';
 import { sphereTalent, sphereTalentKnowledge } from '../spheres.js';
-import { closestName, normalizeName, slug, splitTags } from '../util.js';
+import { closestName, evaluateAmount, normalizeName, slug, splitTags } from '../util.js';
 
 // The level and the two DCs are worked out now; what a player pins is kept
 // in the `…Override` beside each (see applyVeilweaving).
@@ -410,9 +410,13 @@ export function recomputeAkashic(model) {
     }
   }
 
+  // The pool and its sources, each a number or a formula.
+  const radiantDawn = radiantDawnEssence(model);
+  const typed = essenceCells(model, a.essence, radiantDawn.essence);
+
   // A bonus sent to `essence.pool` ({essence.pool += 1} on a feat) adds to the
   // typed daily pool. The sources are still checked against the typed figure.
-  const typedPool = Number(a.essence?.pool) || 0;
+  const typedPool = typed.pool.value;
   const poolForwarded = forwarded(model, 'essence.pool');
   const pool = typedPool + poolForwarded;
   // The sheet's "Essence Boon" is the casting tradition's own pool taken as
@@ -422,7 +426,7 @@ export function recomputeAkashic(model) {
   // tradition grants nothing (a homebrew source the tradition never saw).
   const traditionBoon = Number(model.data.training?.magic?.traditionEssence) || 0;
   const sources = ESSENCE_SOURCES.reduce(
-    (t, [key]) => t + (key === 'boon' && traditionBoon ? traditionBoon : Number(a.essence?.[key]) || 0),
+    (t, [key]) => t + (key === 'boon' && traditionBoon ? traditionBoon : typed[key].value),
     0,
   );
   const used = essenceInvested([...(a.slots || []), ...(a.kheshig || [])])
@@ -451,6 +455,10 @@ export function recomputeAkashic(model) {
     poolForwarded,
     sources,
     traditionBoon,
+    // What each pool cell came to ({ value, error }), and what the Radiant
+    // Dawn maneuvers grant; a blank Radiant Dawn cell takes that figure.
+    typed,
+    radiantDawn,
     // The pool is what the veilweaving classes and their sources come to, and
     // the sheet writes that total itself; where the two disagree the panel
     // says so rather than quietly picking one.
@@ -466,6 +474,51 @@ export function recomputeAkashic(model) {
     shaped: (a.slots || []).reduce((n, s) => n + (s.veils || []).length, 0)
       + (a.kheshig || []).reduce((n, s) => n + (s.veils || []).length, 0),
   };
+}
+
+/** The essence pool cells a player fills in: the daily pool and each source. */
+export const ESSENCE_CELLS = ['pool', ...ESSENCE_SOURCES.map(([key]) => key)];
+
+/** The discipline whose maneuvers and stances grant essence. */
+export const ESSENCE_DISCIPLINE = 'Radiant Dawn';
+
+/**
+ * A Radiant Dawn cell that is blank, or the 0 a workbook import leaves in an
+ * empty cell, takes its figure from the maneuvers known.
+ */
+export const radiantDawnBlank = (raw) => raw === null || raw === undefined || raw === 0
+  || (typeof raw === 'string' && raw.trim() === '');
+
+/**
+ * The essence Radiant Dawn grants: one per Radiant Dawn maneuver or stance
+ * known, to a maximum of the highest level among them. Read off the entries
+ * recomputeManeuvers builds, so it runs before this.
+ */
+export function radiantDawnEssence(model) {
+  const want = normalizeName(ESSENCE_DISCIPLINE);
+  const known = new Map();
+  for (const d of model.data.maneuvers?.disciplines || []) {
+    if (normalizeName(d?.name) !== want) continue;
+    for (const e of d.entries || []) if (e.known) known.set(normalizeName(e.name), Number(e.level) || 0);
+  }
+  const highest = Math.max(0, ...known.values());
+  return { known: known.size, highest, essence: Math.min(known.size, highest) };
+}
+
+/**
+ * Each pool cell as `{ value, error }`: a number as typed, a formula worked
+ * out, a blank Radiant Dawn cell counted from the maneuvers. A formula here
+ * reads `essence.pool`, `essence.total` and `essence.free` as 0, because they
+ * are these cells added up; read as last time's figure they would climb on
+ * every recompute.
+ */
+function essenceCells(model, essence = {}, radiantDawn = 0) {
+  const scope = scopeIfFormulas(model, ESSENCE_CELLS.map((key) => essence?.[key]));
+  const own = scope && { ...scope, essence: { ...scope.essence, pool: 0, total: 0, free: 0 } };
+  return Object.fromEntries(ESSENCE_CELLS.map((key) => [key,
+    key === 'radiantDawn' && radiantDawnBlank(essence?.[key])
+      ? { value: radiantDawn, error: null }
+      : evaluateAmount(essence?.[key], own)]));
 }
 
 /**

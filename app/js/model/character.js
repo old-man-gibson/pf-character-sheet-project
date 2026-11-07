@@ -418,8 +418,9 @@ export class Character {
     this.#recomputeGuileSpheres();
     this.#recomputeEquipment();
     this.#recomputeCrafting();
-    this.#recomputeAkashic();
+    // Maneuvers first: a blank Radiant Dawn essence cell counts them.
     this.#recomputeManeuvers();
+    this.#recomputeAkashic();
     this.#recomputeVancian();
     this.#recomputePsionics();
     this.#recomputeCardcasting();
@@ -442,8 +443,8 @@ export class Character {
   #recomputeReadable({ bareCompanions = false } = {}) {
     this.#recomputeSphereRows();
     this.#recomputeGuileSpheres();
-    this.#recomputeAkashic();
     this.#recomputeManeuvers();
+    this.#recomputeAkashic();
     this.#recomputeVancian();
     this.#recomputePsionics();
     this.#recomputeCardcasting();
