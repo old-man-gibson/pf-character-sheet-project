@@ -770,6 +770,24 @@
 }
 .bdpop .bdrow:last-child { border-bottom: 0; }
 .bdpop .bdrow .k { color: var(--cs-muted); }
+/* A line that comes from a field elsewhere on the sheet is a button that goes
+   there. It keeps the row's look; the dotted label says it can be pressed. */
+.bdpop button.bdrow {
+  width: 100%; margin: 0; padding: 2px 0;
+  background: none; border: 0; border-radius: 0;
+  border-bottom: 1px dotted color-mix(in srgb, var(--cs-line) 70%, transparent);
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.bdpop .bdentry button.bdrow, .bdpop button.bdrow:last-child { border-bottom: 0; }
+.bdpop .bdlabel { text-decoration: underline dotted; text-underline-offset: 2px; }
+.bdpop button.bdrow:hover { background: var(--cs-accent-soft); }
+.bdpop button.bdrow:hover .k { color: var(--cs-accent); }
+/* The row is the target: no overhang into the rows around it, and a row tall
+   enough to press on its own. */
+@media screen and (pointer: coarse) {
+  .bdpop button.bdrow { min-height: 32px; align-items: center; }
+  .bdpop button.bdrow::before { content: none; }
+}
 .bdpop .bdrow .v { font-weight: 620; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* The note belongs to the label and goes under it, not beside: "capped by
    armour" on the same line pushes the figure off the right edge. */

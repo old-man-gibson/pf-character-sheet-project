@@ -137,7 +137,7 @@ import { pretty } from './formula-format.js';
 import {
   workingHtml, browserHtml, myFormulasHtml, forwardedHtml, valueGroups, targetsHtml, targetGroups,
 } from './formula-guide.js';
-import { formulaPlace } from './ui/formula-places.js';
+import { formulaPlace, knownPlace } from './ui/formula-places.js';
 import {
   historyFor, countChanges, requestPersistence, workingKey, SNAPSHOT_EVERY, AUTO_KEEP,
 } from './history.js';
@@ -3021,8 +3021,9 @@ export class CharacterSheetElement extends HTMLElement {
     });
     root.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse') return;
-      // A tap on a ladder cell's ⓘ is handled by the click that follows it.
-      if (e.target?.closest?.('[data-cfpeek]')) return;
+      // A tap on a ladder cell's ⓘ, or on a line of the panel that goes to
+      // where it comes from, is handled by the click that follows it.
+      if (e.target?.closest?.('[data-cfpeek], [data-bd-goto]')) return;
       // A tap on a folded note opens the note itself, which on a phone is the
       // better way to read it; a panel as well would be left standing on a
       // line the render that follows has already replaced.
@@ -3037,6 +3038,16 @@ export class CharacterSheetElement extends HTMLElement {
     root.addEventListener('click', (e) => {
       const btn = e.target?.closest?.('[data-cfpeek]');
       if (btn) { e.preventDefault(); this.#togglePeek(btn); return; }
+      // A line of the panel: put the panel away and go to the field the line
+      // comes from, the way the Formulas tab goes to where a formula is.
+      const go = e.target?.closest?.('[data-bd-goto]');
+      if (go && this.#bdPop?.contains(go)) {
+        e.preventDefault();
+        const place = go.dataset.bdGoto;
+        this.#closeBreakdown();
+        this.#formulaJump(place);
+        return;
+      }
       if (this.#bdPinned && !this.#bdPop?.contains(e.target)) this.#closeBreakdown();
     });
     root.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.#closeBreakdown(); });
@@ -3111,7 +3122,7 @@ export class CharacterSheetElement extends HTMLElement {
     const html = talent ? talentPopHtml(this.#model, el.dataset.tpop)
       : fwd ? badges.forwardedPop(this.#model, fwd, el.dataset.fwdx || '')
         : tip !== undefined ? (tip ? `${el.dataset.tiphead ? `<div class="bdhead"><span class="bdname">${esc(el.dataset.tiphead)}</span></div>` : ''}<div class="peektext">${esc(tip)}</div>` : '')
-          : (b ? breakdownHtml(b, el.dataset.bdx || '') : '');
+          : (b ? breakdownHtml(b, el.dataset.bdx || '', { goes: (place) => knownPlace(this.#model, place) }) : '');
     if (!html) { this.#closeBreakdown(); return; }
     const pop = this.#breakdownPanel();
     if (typeof pop.showPopover !== 'function') return;
@@ -7352,7 +7363,8 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
-   * Take a formula listed on the Formulas tab back to where it is written.
+   * Take a formula listed on the Formulas tab back to where it is written, or
+   * a line of a number's breakdown panel to the field it comes from.
    *
    * The palette's own jump does the travelling -- the tab, a folded panel
    * opened, the field lit up and the caret put in it. Some fields only exist

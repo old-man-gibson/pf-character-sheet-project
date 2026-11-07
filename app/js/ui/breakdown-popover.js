@@ -55,10 +55,15 @@ const MARGIN = 8;
  * Every string is escaped. A part's label can be an item's name, which is
  * whatever somebody typed into a spreadsheet cell, and a published sheet is
  * opened by people who did not type it.
+ *
+ * `goes(place)` says whether a part's `place` is one the sheet can go to
+ * (ui/formula-places.js `knownPlace`). Those parts are drawn as buttons
+ * carrying `data-bd-goto`, which the element turns into the jump.
  */
-export function breakdownHtml(b, extra = '') {
+export function breakdownHtml(b, extra = '', { goes = null } = {}) {
   if (!b) return '';
-  const parts = b.parts.map((p) => partRow(shown(p), p.label, p.note));
+  const to = (p) => (goes && p.place && goes(p.place) ? p.place : '');
+  const parts = b.parts.map((p) => partRow(shown(p), p.label, p.note, '', to(p)));
   if (b.sum !== b.total) parts.push(partRow(fmt(b.total - b.sum), 'unaccounted for', '', ' odd'));
   /*
    * Two halves. The permanent parts, which add up to the permanent total
@@ -78,7 +83,7 @@ export function breakdownHtml(b, extra = '') {
     const net = Number(b.delta) || 0;
     parts.push(partRow(net ? fmt(net) : '0', 'Buffs and conditions', '', ` bdtemp${dir(net) || ' even'}`));
     for (const p of b.adjustments) {
-      const lines = [partRow(fmt(p.value), p.label, p.note, dir(p.value))];
+      const lines = [partRow(fmt(p.value), p.label, p.note, dir(p.value), to(p))];
       for (const l of p.lines || []) lines.push(partRow(fmt(l.value), l.label, '', ` sub${dir(l.value)}`));
       parts.push(lines.length > 1 ? `<div class="bdentry">${lines.join('')}</div>` : lines[0]);
     }
@@ -109,8 +114,10 @@ export function breakdownHtml(b, extra = '') {
  * `shown` is the figure, when the badge says something other than the
  * amount -- a defence box's line, the temporary hit points still unspent --
  * and `waiting` and `note` are sentences about it, under the heading.
+ * `goes` is `breakdownHtml`'s: a row whose rule was written somewhere the
+ * sheet can go to is a button to it.
  */
-export function forwardedPopHtml(groups, { tag = '', waiting = '', shown: figure = '', note = '' } = {}) {
+export function forwardedPopHtml(groups, { tag = '', waiting = '', shown: figure = '', note = '', goes = null } = {}) {
   const live = (groups || []).filter((g) => g.f?.from?.length);
   if (!live.length) return '';
   const many = groups.length > 1;
@@ -121,7 +128,7 @@ export function forwardedPopHtml(groups, { tag = '', waiting = '', shown: figure
       `${x.sign < 0 ? '-=' : '+='} ${x.expr}`].filter(Boolean).join(' · ');
     const why = stackingNote(x).trim().replace(/^\((.*)\)$/, '$1');
     const idle = !x.counts || (x.column && x.adds <= 0);
-    return partRow(fmt(x.value), x.where, [said, why], idle ? ' idle' : '');
+    return partRow(fmt(x.value), x.where, [said, why], idle ? ' idle' : '', goes && x.path && goes(x.path) ? x.path : '');
   }));
   const subs = [waiting ? `Waiting: ${waiting}` : '', note].filter(Boolean);
   return `<div class="bdhead"><span class="bdname">Forwarded here${tag ? ` (${esc(tag)})` : ''}</span>`
@@ -136,14 +143,18 @@ const shown = (p) => (p.plain ? String(p.value) : fmt(p.value));
 /** Which way a share moved the number, as the class that colours it. */
 const dir = (value) => (value > 0 ? ' up' : value < 0 ? ' down' : '');
 
-/** One row: the figure, its label, and a note or a list of them under the label. */
-function partRow(value, label, note, cls = '') {
+/**
+ * One row: the figure, its label, and a note or a list of them under the
+ * label. A row with a `place` is a button that goes to the field it comes from.
+ */
+function partRow(value, label, note, cls = '', place = '') {
   const notes = [].concat(note || []).filter(Boolean)
     .map((n) => `<span class="bdnote">${esc(n)}</span>`).join('');
-  return `<div class="bdrow${cls}">`
-    + `<span class="k">${esc(label)}${notes}</span>`
-    + `<span class="v">${esc(value)}</span>`
-    + '</div>';
+  const body = `<span class="k">${place ? `<span class="bdlabel">${esc(label)}</span>` : esc(label)}${notes}</span>`
+    + `<span class="v">${esc(value)}</span>`;
+  return place
+    ? `<button type="button" class="bdrow go${cls}" data-bd-goto="${esc(place)}">${body}</button>`
+    : `<div class="bdrow${cls}">${body}</div>`;
 }
 
 /**

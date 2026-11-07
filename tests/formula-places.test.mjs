@@ -17,7 +17,9 @@
  *  Run: node tests/formula-places.test.mjs */
 import { blankDocument } from '../app/js/convert.js';
 import { Character } from '../app/js/model.js';
-import { formulaPlace, selectorAttribute } from '../app/js/ui/formula-places.js';
+import { formulaPlace, knownPlace, selectorAttribute } from '../app/js/ui/formula-places.js';
+import { BREAKDOWNS } from '../app/js/model/breakdown.js';
+import { fixtureIds, loadCharacter } from './fixtures.mjs';
 import * as overview from '../app/js/ui/panels/overview.js';
 import * as feats from '../app/js/ui/panels/feats.js';
 import * as combat from '../app/js/ui/panels/combat.js';
@@ -410,6 +412,72 @@ console.log('a companion is reached by id wherever it stands, the first of a kin
   c.listRemove('eidolon', 0);
   check('Wisp keeps its id at the head of the list', c.data.eidolon[0].id, 'eidolon2');
   checkPlace(c, 'eidolon:eidolon2:notes', 'the second eidolon, now first');
+}
+
+console.log('a line of a number\'s breakdown goes to the field it comes from');
+{
+  /** Every line of every breakdown, with the key it is a line of. */
+  const lines = (c) => [...BREAKDOWNS.keys()].flatMap((key) => {
+    const b = c.breakdown(key);
+    return [...b.parts, ...(b.adjustments || [])].map((p) => ({ ...p, of: key }));
+  });
+  /** Each place the lines name, checked once. */
+  const sweep = (c, label) => {
+    const seen = new Set();
+    for (const p of lines(c)) {
+      if (!p.place || seen.has(p.place)) continue;
+      seen.add(p.place);
+      check(`${label} ${p.of}: ${p.label} is a known place`, knownPlace(c, p.place), true);
+      checkPlace(c, p.place, `${label} ${p.of}: ${p.label}`);
+    }
+    return seen;
+  };
+  const c = everywhere();
+  const d = c.data;
+  c.setOffset('defenses.cmd', '-2');
+  d.classes[0].bab = 1;
+  d.defenses.miscCMD = 1;
+  d.defenses.miscAC = 1;
+  d.attack.miscBonus = 1;
+  d.hp.initMisc = 2;
+  d.hp.fcb = 3;
+  d.identity.size = 'Small';
+  d.equipment.armor = { ...d.equipment.armor, active: true, acBonus: 5 };
+  d.equipment.shields = [{ kind: 'Shield', name: 'Buckler', acBonus: 1, active: true }];
+  d.conditions = { ...(d.conditions || {}), shaken: true };
+  d.abilities.dex.drain = 2;
+  c.recompute();
+  const all = lines(c);
+  const placeOf = (key, label) => all.find((p) => p.of === key && p.label === label)?.place ?? null;
+  check('CMD: each line that comes from a field names it',
+    ['BAB', 'Dex', 'special size', 'misc CMD', 'Dodge', 'Other', 'Base'].map((l) => placeOf('cmd', l)),
+    ['overview:attack.babOverride', 'ability:dex', 'overview:identity.size', 'defenses:miscCMD',
+      'statCell:defenses.acBonuses.dodge', 'offset:defenses.cmd', null]);
+  check('AC: an ABP column goes to its typed partner; the armor and the shield',
+    ['ABP deflection', 'armor', 'shield', 'misc AC'].map((l) => placeOf('ac', l)),
+    ['statCell:defenses.acBonuses.deflection', 'armor', 'shield:0', 'defenses:miscAC']);
+  check('a save: its base and a typed column; an attack\'s misc',
+    [placeOf('will', 'Base'), placeOf('will', 'Morale'), placeOf('melee', 'misc')],
+    ['classes:0:goodWill', 'statCell:saves.will.bonuses.morale', 'overview:attack.miscBonus']);
+  check('a buff and a condition go to their rows',
+    [placeOf('melee', 'Rage'), placeOf('will', 'Shaken')], ['buff:0', 'condition:shaken']);
+  check('hit points: the dice, favored class, misc',
+    ['hit dice', 'favored class', 'misc'].map((l) => placeOf('hp', l)), ['classes:0:hd', 'hp:fcb', 'hp:misc']);
+  check('an ability\'s drain', placeOf('dex.temp', 'drain'), 'drain:dex');
+  sweep(c, 'test character');
+  // A rule written in a note, forwarded to a save: the line goes to the note.
+  d.notes.push({ title: 'Ward', body: '{saves.will += 2}' });
+  c.recompute();
+  const forwarded = lines(c).find((p) => p.of === 'will' && p.label === 'forwarded');
+  check('a forwarded bonus goes to where its rule is written', forwarded?.place, `note:${d.notes.length - 1}`);
+  if (forwarded) checkPlace(c, forwarded.place, 'the forwarded bonus\'s note');
+
+  // The roster: whatever lines a real character's numbers have.
+  for (const id of fixtureIds()) {
+    const r = new Character(loadCharacter(id));
+    const seen = sweep(r, id.slice(0, 8));
+    check(`${id.slice(0, 8)} has lines to go to`, seen.size > 5, true);
+  }
 }
 
 console.log('a place nobody can go to is not offered');

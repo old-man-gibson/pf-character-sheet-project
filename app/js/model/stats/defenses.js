@@ -349,7 +349,11 @@ export function conditionState(model) {
   settleTypedBuffs(model, buffRows);
   const buffStacking = {};
   for (const r of buffRows) {
-    buffsOn.push({ name: r.label, info: { key: `buff:${r.label}`, label: r.label, mods: r.mods, ability: r.ability }, count: 1 });
+    buffsOn.push({
+      name: r.label,
+      info: { key: `buff:${r.label}`, label: r.label, mods: r.mods, ability: r.ability, buffIndex: r.index },
+      count: 1,
+    });
     const lines = stackingSummary(r, r.type);
     if (lines.length) buffStacking[r.index] = lines;
   }

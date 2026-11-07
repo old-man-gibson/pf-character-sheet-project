@@ -1168,6 +1168,25 @@ console.log('the working, as the panel draws it');
   const plain = breakdownHtml({ ...b, sum: 43, parts: [{ label: 'Base', value: 10, note: '', plain: true }, ...b.parts.slice(1)] });
   check('a base is drawn without a sign', plain.includes('<span class="k">Base</span><span class="v">10</span>'), true);
   check('and the parts laid on it keep theirs', plain.includes('<span class="v">+6</span>'), true);
+
+  // A part from a field the sheet can go to is a button to it; one the sheet
+  // cannot go to, or a panel asked for without `goes`, stays a plain row.
+  const placed = {
+    ...b,
+    sum: 43,
+    parts: [{ ...b.parts[0] }, { ...b.parts[1], place: 'ability:dex' }, { ...b.parts[2], place: 'nowhere' }],
+  };
+  const goes = (place) => place === 'ability:dex';
+  const linked = breakdownHtml(placed, '', { goes });
+  check('a part with a known place is a button carrying it',
+    linked.includes('<button type="button" class="bdrow go" data-bd-goto="ability:dex"><span class="k"><span class="bdlabel">Dex</span>'), true);
+  check('a part whose place is not known is a plain row', linked.includes('data-bd-goto="nowhere"'), false);
+  check('without goes nothing is a button', breakdownHtml(placed).includes('<button'), false);
+  const movedLinked = breakdownHtml({
+    ...moved, adjustments: [{ label: 'Shaken', value: -2, note: 'condition', place: 'ability:dex' }],
+  }, '', { goes });
+  check('a buff or condition row keeps its colour as a button',
+    movedLinked.includes('<button type="button" class="bdrow go down" data-bd-goto="ability:dex">'), true);
 }
 
 console.log('...a forwarded bonus, in the same panel');
@@ -1208,6 +1227,12 @@ console.log('...a forwarded bonus, in the same panel');
   check('and its note goes under it', box.includes('<div class="bdsub">The box keeps what was typed.</div>'), true);
   check('one destination: no "to"', html.includes('to str.temp'), false);
   check('nothing forwarded draws nothing', [forwardedPopHtml(null), forwardedPopHtml([{ name: 'x', f: null }])], ['', '']);
+  // A rule written somewhere the sheet can go to is a button to it.
+  const written = { total: 1, from: [{ where: 'Ward, on Lore', path: 'note:0', value: 1, expr: '1', sign: 1, counts: true }] };
+  check('a row whose rule the sheet can go to is a button',
+    forwardedPopHtml([{ name: 'x', f: written }], { goes: () => true }).includes('<button type="button" class="bdrow go" data-bd-goto="note:0">'), true);
+  check('and a plain row without goes',
+    forwardedPopHtml([{ name: 'x', f: written }]).includes('<button'), false);
 }
 
 console.log('...and where the panel stands');
