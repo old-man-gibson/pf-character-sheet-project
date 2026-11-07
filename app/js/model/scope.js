@@ -16,8 +16,8 @@ import {
 import { deathThreshold, effectiveMythicTier, fmt, mythicPowerUses, surgeDie } from '../rules.js';
 import {
   COMPANION_ALIASES, COMPANION_FAMILIES, COMPANION_KINDS, COMPANION_LABELS, COMPANION_TARGETS, companionArmor,
-  companionAttackKey, companionById, companionHeading, companionInUse, companionNameTest, companionScope,
-  companionSkillKey,
+  companionAttackKey, companionBoxValue, companionById, companionHeading, companionInUse, companionNameTest,
+  companionScope, companionSkillKey,
 } from '../companions.js';
 import {
   collectContributions, collectDefinitions, collectUses, hasTokens, nameTarget, plainTokens, renderTokens,
@@ -815,8 +815,9 @@ function companionTargetFacts(model, key) {
     const comp = (model.data[kind] || []).find((b) => b?.id === id);
     if (!comp) continue;
     if (part !== 'skill' || !name) return { kind: 'a companion stat', late: true, values: {} };
-    const sk = (comp.skills || []).find((s) => companionSkillKey(s) === name) || {};
-    const own = Math.max(0, Number(sk.ranks) || 0);
+    const j = (comp.skills || []).findIndex((s) => companionSkillKey(s) === name);
+    const sk = comp.skills?.[j] || {};
+    const own = j < 0 ? 0 : Math.max(0, companionBoxValue(comp, `skills.${j}.ranks`));
     const master = kind === 'familiar' ? skillRanksNamed(model.data.skills, sk.name, sk.spec) : 0;
     return {
       kind: 'a companion skill',

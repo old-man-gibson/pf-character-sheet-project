@@ -1893,6 +1893,82 @@ console.log('a companion skill’s Misc takes a number or a formula');
     ['floor(animalCompanion.hd / 2)', b().skills[i].total]);
 }
 
+console.log('a companion’s bonus max HP, score, attack, ranks and evolution boxes take a formula');
+{
+  const c = new Character(blankDocument('companion-more-formulas'));
+  c.set('animalCompanion.0.levelOverride', 6);
+  c.listAdd('animalCompanion.0.attacks', { type: 'Bite', damage: '1d6', crit: '20/×2', primary: null, bonus: 0, dmgBonus: 0, qualities: '' });
+  const b = () => c.data.animalCompanion[0];
+  const k = () => b().calc;
+  const i = b().skills.findIndex((s) => s.name === 'Perception');
+  const hd = k().hd;
+  const before = {
+    hp: k().hpMax, str: k().scores.str.total, strMod: k().scores.str.mod, attack: k().totalAttack,
+    toHit: b().attacks[0].toHit, damage: b().attacks[0].damageBonus, spent: k().ranksSpent,
+  };
+  c.set('animalCompanion.0.hp.bonus', 'animalCompanion.hd');
+  c.set('animalCompanion.0.scores.str.misc', '1 + 1');
+  c.set('animalCompanion.0.attackBonus', 'floor(animalCompanion.hd / 3)');
+  c.setItem('animalCompanion.0.attacks', 0, 'bonus', '0 + 1');
+  c.setItem('animalCompanion.0.attacks', 0, 'dmgBonus', 'floor(animalCompanion.hd / 2)');
+  c.setItem('animalCompanion.0.skills', i, 'ranks', 'animalCompanion.hd');
+  const strUp = k().scores.str.mod - before.strMod;
+  check('the sums read what each formula came to',
+    [k().hpMax, k().scores.str.total, k().totalAttack, b().attacks[0].toHit, b().attacks[0].damageBonus,
+      b().skills[i].effectiveRanks, k().ranksSpent],
+    [before.hp + hd, before.str + 2, before.attack + strUp + Math.floor(hd / 3),
+      before.toHit + strUp + Math.floor(hd / 3) + 1, before.damage + Math.floor(hd / 2), hd, before.spent + hd]);
+  check('the rows keep the formulas as typed',
+    [b().attacks[0].bonus, b().attacks[0].dmgBonus, b().skills[i].ranks],
+    ['0 + 1', 'floor(animalCompanion.hd / 2)', 'animalCompanion.hd']);
+  check('the working shows the numbers',
+    [companionBreakdown('animalCompanion', b(), 'hp').parts.find((x) => /bonus/.test(x.label))?.value,
+      companionBreakdown('animalCompanion', b(), 'attack').parts.find((x) => /attack bonus/.test(x.label))?.value],
+    [hd, Math.floor(hd / 3)]);
+  c.data.notes = [{ body: '{animalCompanion.skill += if(target.ranks == 0, 0, 1)}' }];
+  c.recompute();
+  check('a bonus reads the ranks a formula came to', c.forwardedInto('animalCompanion.skill.perception')?.total, 1);
+  c.data.notes = [];
+
+  c.set('eidolon.0.levelOverride', 5);
+  const e = () => c.data.eidolon[0].calc;
+  const pool = e().evoPool;
+  const dex = e().scores.dex.total;
+  c.set('eidolon.0.bonusEvoPoints', 'floor(eidolon.hd / 2)');
+  c.set('eidolon.0.scores.dex.evo', '2 * 1');
+  check('an eidolon’s Evo and bonus evolution points too',
+    [e().evoPool, e().scores.dex.total], [pool + Math.floor(e().hd / 2), dex + 2]);
+
+  const rows = c.audit().filter((r) => r.id.startsWith('companion-')).map((r) => [r.name, r.value, r.status, r.place]);
+  check('each is audited, with the way to the box', rows, [
+    ['Animal Companion: Bonus max HP', hd, 'ok', 'companionCell:animalCompanion:0:hp.bonus'],
+    ['Animal Companion: Str misc', 2, 'ok', 'companionCell:animalCompanion:0:scores.str.misc'],
+    ['Animal Companion: Attack misc', Math.floor(hd / 3), 'ok', 'companionCell:animalCompanion:0:attackBonus'],
+    ['Animal Companion: Perception ranks', hd, 'ok', `companionCell:animalCompanion:0:skills.${i}.ranks`],
+    ['Animal Companion: Bite attack bonus', 1, 'ok', 'companionCell:animalCompanion:0:attacks.0.bonus'],
+    ['Animal Companion: Bite damage bonus', Math.floor(hd / 2), 'ok', 'companionCell:animalCompanion:0:attacks.0.dmgBonus'],
+    ['Eidolon: Dex evo', 2, 'ok', 'companionCell:eidolon:0:scores.dex.evo'],
+    ['Eidolon: Bonus evolution points', Math.floor(e().hd / 2), 'ok', 'companionCell:eidolon:0:bonusEvoPoints'],
+  ]);
+  c.setItem('animalCompanion.0.attacks', 0, 'dmgBonus', 'animalCompanion.nosuch');
+  check('a broken one counts nothing and is a problem the Formulas tab lists',
+    [b().attacks[0].damageBonus, c.formulaProblems()
+      .some((x) => x.places.some((pl) => pl.place === 'companionCell:animalCompanion:0:attacks.0.dmgBonus'))],
+    [before.damage, true]);
+  c.setItem('animalCompanion.0.attacks', 0, 'dmgBonus', 'floor(animalCompanion.hd / 2)');
+
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  const again = new Character(saved).data;
+  check('what was typed is what is saved, and works out again on load',
+    [saved.animalCompanion[0].hp.bonus, saved.animalCompanion[0].attacks[0].dmgBonus, saved.animalCompanion[0].skills[i].ranks,
+      again.animalCompanion[0].calc.hpMax, again.animalCompanion[0].attacks[0].toHit, again.eidolon[0].calc.evoPool],
+    ['animalCompanion.hd', 'floor(animalCompanion.hd / 2)', 'animalCompanion.hd',
+      k().hpMax, b().attacks[0].toHit, e().evoPool]);
+  check('and saves no worked-out numbers on the rows',
+    ['toHit', 'damageBonus', 'effectiveRanks'].some((key) => key in saved.animalCompanion[0].attacks[0]
+      || key in saved.animalCompanion[0].skills[i]), false);
+}
+
 /*
  * A conjured companion's feats are slots: one per odd Hit Die, then a slot
  * for each bonus feat. They are drawn whether or not a row is stored, and a

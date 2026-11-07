@@ -14,7 +14,7 @@ import {
   flatFootedLoss, skillLabel,
 } from '../rules.js';
 import {
-  COMPANION_FORMULA_FIELDS, COMPANION_KINDS, COMPANION_LABELS, PLAIN_NUMBER, companionHeading, skillMiscPath,
+  COMPANION_KINDS, COMPANION_LABELS, PLAIN_NUMBER, companionFormulaBoxes, companionHeading,
 } from '../companions.js';
 import { NameIndex, analyse, evaluateFormula, resolvePath } from '../formula.js';
 import { hasTokens, isTargetName } from '../inline.js';
@@ -597,19 +597,17 @@ export const FORMULA_FIELDS = [
     }),
   },
   {
-    // A companion's number-or-formula boxes (COMPANION_FORMULA_FIELDS), its
-    // skills' Misc and its movement rows' bonuses, each on its own kind's tab. The box keeps
-    // what was typed; the model left what it came to in calc.typed and
-    // calc.speeds. A number, typed or kept as text, is not a formula.
+    // A companion's number-or-formula boxes (companionFormulaBoxes: the fixed
+    // ones, its skills' and attacks') and its movement rows' bonuses, each on
+    // its own kind's tab. The box keeps what was typed; the model left what
+    // it came to in calc.typed and calc.speeds. A number, typed or kept as
+    // text, is not a formula.
     key: 'companionCell', source: 'player',
     collect: (model) => COMPANION_KINDS.flatMap((kind) => (model.data[kind] || []).flatMap((b, i) => {
       if (!b || typeof b !== 'object') return [];
       const who = companionHeading(kind, b);
       const boxes = [
-        ...Object.entries(COMPANION_FORMULA_FIELDS)
-          .map(([path, label]) => [path, label, getPath(b, path), b.calc?.typed?.[path]]),
-        ...(b.skills || []).map((s, j) => [skillMiscPath(j), `${skillLabel(s?.name, s?.spec) || `Skill ${j + 1}`} misc`,
-          s?.misc, b.calc?.typed?.[skillMiscPath(j)]]),
+        ...companionFormulaBoxes(b).map(([path, label]) => [path, label, getPath(b, path), b.calc?.typed?.[path]]),
         ...(b.speeds || []).map((sp, j) => {
           const r = b.calc?.speeds?.[j];
           return [`speeds.${j}.bonus`, `${sp?.type || `Speed ${j + 1}`} bonus`, sp?.bonus, r && { value: r.bonus, error: r.error }];

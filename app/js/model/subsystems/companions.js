@@ -7,8 +7,8 @@
 
 import {
   COMPANION_KINDS, COMPANION_TARGETS, CONJURED_ARCHETYPES, armoredSpeeds, companionAttackKey, companionEntries, companionFormulas,
-  companionSkillKey, computeCompanion, defaultCompanion, emptyCompanionFeat, LEGACY_SPEED_TYPES, legacySpeedRows,
-  seedSkills, withTypedNumbers,
+  companionSkillKey, computeCompanion, defaultCompanion, emptyCompanionFeat, keepTypedRows, LEGACY_SPEED_TYPES,
+  legacySpeedRows, seedSkills, withTypedNumbers,
 } from '../../companions.js';
 import { ABILITIES, abilityOf } from '../../rules.js';
 import { sheetReader } from '../document.js';
@@ -571,10 +571,10 @@ export function recomputeCompanions(model, { bare = false } = {}) {
       calc.typed = typed;
       calc.speeds = armoredSpeeds(b.speeds, speeds, calc.armor);
       b.calc = calc;
-      // The rows came back from the worked-out copy; each keeps its Misc as typed.
-      const own = b.skills || [];
-      b.skills = skills.map((s, j) => (own[j] && 'misc' in own[j] ? { ...s, misc: own[j].misc } : s));
-      b.attacks = attacks;
+      // The rows came back from the worked-out copy; each keeps its formula
+      // boxes as typed.
+      b.skills = keepTypedRows('skills', skills, b.skills);
+      b.attacks = keepTypedRows('attacks', attacks, b.attacks);
     });
   }
 }

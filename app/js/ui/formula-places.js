@@ -416,11 +416,11 @@ function placeOf(model, ref) {
     case 'deckManipulations': return deckPlace(set('cardcasting.manipulationsAvailable'), ['deck-manipulations']);
     // A companion's number-or-formula box or a movement row's bonus:
     // `companionCell:<kind>:<index>:<path>`, the index as the audit found it,
-    // a movement row's bonus as `speeds.<row>.bonus` and a skill's Misc as
-    // `skills.<row>.misc`.
+    // and a box on a list row as `<list>.<row>.<field>`: a movement row's
+    // bonus, a skill's ranks or Misc, an attack's Bonus or Dmg +.
     case 'companionCell': {
       if (!COMPANION_KINDS.includes(a) || !/^\d+$/.test(b) || !c) return null;
-      const row = /^(speeds)\.(\d+)\.(bonus)$/.exec(c) || /^(skills)\.(\d+)\.(misc)$/.exec(c);
+      const row = /^(speeds|skills|attacks)\.(\d+)\.(\w+)$/.exec(c);
       return companionPlace(model, a, Number(b), (p) => [row ? item(`${p}.${row[1]}`, row[2], row[3]) : set(`${p}.${c}`)]);
     }
     case 'trackerForm': return trackerPlace(a, b, c, parts[4]);

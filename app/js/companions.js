@@ -26,7 +26,7 @@
 import {
   ABILITIES, ABILITY_LABELS, ARMOR_SIZE_FACTORS, STANDARD_SKILLS, TYPE_RATES, abilityMod, abilityOf, armorCategory,
   boonStep, drawbackWeight,
-  recipePart, recipePlain, reducedSpeed, saveBase, sizeModifiers, skillTotal, sumParts,
+  recipePart, recipePlain, reducedSpeed, saveBase, sizeModifiers, skillLabel, skillTotal, sumParts,
 } from './rules.js';
 import { parse } from './formula.js';
 import {
@@ -1644,14 +1644,21 @@ export function companionBreakdown(kind, block, stat) {
 
 /**
  * The boxes on a companion that take a formula as readily as a number, each
- * with the name the Formula Audit gives it: the three AC buckets, CMD and CMB
- * other, initiative, each save's misc and the bonus feats. What was typed is
- * kept as typed; the model works each one out (`calc.typed`) and the sums read
- * the answer through `withTypedNumbers`. A box added here is worked out and
- * audited with nothing else to change (see FORMULA_FIELDS in model/reconcile.js).
- * Each skill row's Misc takes one too, under `skills.<row>.misc` (skillMiscPath).
+ * with the name the Formula Audit gives it: the bonus max HP, each score's
+ * Evo and Misc, the three AC buckets, CMD and CMB other, initiative, the
+ * attack misc, each save's misc, the bonus feats and the bonus evolution
+ * points. What was typed is kept as typed; the model works each one out
+ * (`calc.typed`) and the sums read the answer through `withTypedNumbers`. A
+ * box added here is worked out and audited with nothing else to change (see
+ * FORMULA_FIELDS in model/reconcile.js). The list rows' boxes are in
+ * COMPANION_ROW_FORMULA_FIELDS.
  */
 export const COMPANION_FORMULA_FIELDS = {
+  'hp.bonus': 'Bonus max HP',
+  ...Object.fromEntries(ABILITIES.flatMap((a) => [
+    [`scores.${a}.evo`, `${ABILITY_LABELS[a]} evo`],
+    [`scores.${a}.misc`, `${ABILITY_LABELS[a]} misc`],
+  ])),
   'ac.all': 'Bonus AC (all)',
   'ac.touch': 'Bonus AC (touch only)',
   'ac.ff': 'Bonus AC (flat-footed only)',
@@ -1661,8 +1668,63 @@ export const COMPANION_FORMULA_FIELDS = {
   'saves.fort.misc': 'Fortitude misc',
   'saves.ref.misc': 'Reflex misc',
   'saves.will.misc': 'Will misc',
+  attackBonus: 'Attack misc',
   bonusFeats: 'Bonus feats',
+  bonusEvoPoints: 'Bonus evolution points',
 };
+
+/**
+ * The boxes on a companion's list rows that take a formula, by list and
+ * field, with what the Formula Audit calls each after the row's name. The
+ * path of one is `<list>.<row>.<field>`: `skills.4.ranks`, `attacks.0.bonus`.
+ */
+export const COMPANION_ROW_FORMULA_FIELDS = {
+  skills: { ranks: 'ranks', misc: 'misc' },
+  attacks: { bonus: 'attack bonus', dmgBonus: 'damage bonus' },
+};
+
+/** A row's name in the Formula Audit: "Perception", "Bite", "Skill 3". */
+const rowName = {
+  skills: (s, j) => skillLabel(s?.name, s?.spec) || `Skill ${j + 1}`,
+  attacks: (a, j) => String(a?.name || a?.type || '').trim() || `Attack ${j + 1}`,
+};
+
+/**
+ * Every formula box on a block as `[path, label]`: the fixed boxes, then
+ * each list row's.
+ */
+export function companionFormulaBoxes(b) {
+  return [
+    ...Object.entries(COMPANION_FORMULA_FIELDS),
+    ...Object.entries(COMPANION_ROW_FORMULA_FIELDS).flatMap(([list, fields]) =>
+      (Array.isArray(b?.[list]) ? b[list] : []).flatMap((row, j) => Object.entries(fields)
+        .map(([field, what]) => [`${list}.${j}.${field}`, `${rowName[list](row, j)} ${what}`]))),
+  ];
+}
+
+/**
+ * Rows worked out from `withTypedNumbers`' copy, with each formula box put
+ * back as the block's own row typed it, so a formula is what is saved.
+ */
+export function keepTypedRows(list, rows, own) {
+  const fields = Object.keys(COMPANION_ROW_FORMULA_FIELDS[list]);
+  return rows.map((r, j) => {
+    const typed = own?.[j];
+    if (!typed) return r;
+    const out = { ...r };
+    for (const f of fields) if (f in typed) out[f] = typed[f];
+    return out;
+  });
+}
+
+/**
+ * What one formula box on a companion came to: the worked-out number for a
+ * formula, else the number typed.
+ */
+export function companionBoxValue(b, path) {
+  const r = b?.calc?.typed?.[path];
+  return r ? r.value : Number(getPath(b, path)) || 0;
+}
 
 /**
  * The five speed boxes a companion used to have, and the movement type each
@@ -1725,9 +1787,6 @@ export function withTypedNumbers(b, typed) {
   return out;
 }
 
-/** A skill row's Misc box, as `calc.typed` and the Formula Audit name it. */
-export const skillMiscPath = (j) => `skills.${j}.misc`;
-
 /**
  * Work out a companion's formula boxes and its movement rows. `scope` is
  * called only if there is a formula to read it for. Returns
@@ -1740,8 +1799,7 @@ export function companionFormulas(b, scope) {
   const typed = {};
   let s = null;
   const sc = () => (s ??= scope());
-  const paths = [...Object.keys(COMPANION_FORMULA_FIELDS), ...(b.skills || []).map((_, j) => skillMiscPath(j))];
-  for (const path of paths) {
+  for (const [path] of companionFormulaBoxes(b)) {
     const raw = getPath(b, path);
     if (typeof raw !== 'string' || raw.trim() === '') continue;
     typed[path] = PLAIN_NUMBER.test(raw.trim())
