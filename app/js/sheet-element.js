@@ -3053,7 +3053,11 @@ export class CharacterSheetElement extends HTMLElement {
     this.addEventListener('scroll', () => this.#closeBreakdown());
     // Leaving the sheet altogether. `pointerover` only fires on arrival, so
     // without this the last panel would be left standing over the host page.
-    this.addEventListener('pointerleave', () => this.#closeBreakdown());
+    // Mouse only: a touch fires `pointerleave` as the finger lifts, which
+    // closed the panel the same tap had just opened.
+    this.addEventListener('pointerleave', (e) => {
+      if (e.pointerType === 'mouse') this.#closeBreakdown();
+    });
   }
 
   /**

@@ -825,7 +825,9 @@
   .bdpop {
     --bd-sheet: 1;
     left: 8px; right: 8px; top: auto; bottom: 8px;
-    min-width: 0; max-width: none;
+    /* The UA gives a popover `width: fit-content`, which wins over left and
+       right and leaves a narrow box in the corner. */
+    width: auto; min-width: 0; max-width: none;
     border-radius: 12px; padding: 11px 14px;
     box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.6);
   }
