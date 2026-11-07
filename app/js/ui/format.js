@@ -30,6 +30,10 @@ export const signed = (n, format = String) => {
 /** A number as a page prints it when it carries no plus: a true minus. */
 export const minus = (n) => String(n).replace('-', '−');
 
+/** Names as a sentence lists them: "a", "a and b", "a, b and c". */
+export const andList = (names) => (names.length > 1
+  ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names.join(''));
+
 /**
  * Two names off a sheet, compared the way a reader would compare them.
  *

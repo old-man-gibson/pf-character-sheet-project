@@ -997,7 +997,7 @@ What the sheet computed, the tabs compute — from the tables its formulas read 
 |---|---|---|---|
 | **Level** | the master's, capped at 20 | levels in the master class named (or **Handle Animal** / **Ride** ranks for a Spheres companion) | levels in the master class named |
 | **HD / BAB / saves** | the master's; base saves never below +2 | the animal companion table, good/poor saves ticked per save | the eidolon table |
-| **Hit points** | half the master's maximum (doubled for a **Protector** from 11th) | 8 a die + Con each | 8 a die + Con each |
+| **Hit points** | half the master's maximum (doubled for a **Protector** from 11th, ticked or named in Archetypes) | 8 a die + Con each | 8 a die + Con each |
 | **Scores** | Int from the familiar table unless typed | Str/Dex bonus by level; +1 to a chosen score at 4/9/14/20 | Str/Dex bonus by level; +1 at 5/10/15; **Evo** column for the Ability Increase evolution, capped at 2 + 2 per six levels |
 | **Natural armour** | the familiar table's adjustment | the table's | the table's |
 | **Skills** | own ranks or the master's, whichever is higher | ranks from the table | HD × (6 + Int mod), the sheet's own cell |
@@ -1012,6 +1012,18 @@ with a feat named Multiattack), and Damage / Heal / Rest buttons over a hit-poin
 that spends temporary points first. Prose fields take inline formulas, and each companion
 reads from a formula as `familiar.hp`, `familiar.attack`, `eidolon.hd`,
 `eidolon.evoLeft`, `animalCompanion.str.mod`, and so on.
+
+**Archetypes.** The familiar's **Archetypes** field and the animal companion's
+**Archetype** field take one or more names, separated by commas, and suggest the archetypes
+in the loaded packs. When a pack has the archetype (a catalogue entry named
+"Valet (Familiar)" or "Bodyguard (Companion)", or an `archetype` block whose class is
+`Familiar` or `Animal Companion`), its features replace the table abilities their text
+names ("This replaces alertness.") and are added at their own level. A feature with the
+same name as a table ability replaces it. Each row shows the archetype and what it
+replaces, and the archetype's text when opened. Two archetypes that change the same
+ability get a warning. For an archetype that is not in any pack, open a table ability and
+type its replacement in **Replaced by**. A published sheet includes the archetypes it
+names, so a reader without the pack sees the same list.
 
 These boxes take a number or a formula: bonus max HP, ability Evo and Misc, the AC
 bonuses, CMD and CMB other, initiative bonus, attack Misc, each natural attack's Bonus

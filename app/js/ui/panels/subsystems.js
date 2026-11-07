@@ -62,7 +62,7 @@ import {
   CARD_CASTING_TIMES, CARD_DAMAGE_TYPES, CARD_DURATIONS, CARD_RANGES, CARD_SAVES, CARD_STAT_FIELDS, CARD_TARGETS,
   TERRAIN_CHOICES, stepCastingTime,
 } from '../../model/subsystems/cardcasting.js';
-import { round } from '../format.js';
+import { andList, round } from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, CASTING_SOURCES, ESSENCE_SOURCES, MANEUVER_FIELDS,
   PREP_STYLES, SIZE_MODIFIERS,
@@ -72,7 +72,7 @@ import {
 import {
   BODY_TYPES, COMPANION_LABELS, COMPANION_LEVEL_SOURCES, CONJURED_ARCHETYPES,
   CONJURED_BASE_FORMS, CONJURED_LEVEL_SOURCES, NATURAL_ATTACKS,
-  abilityTextKey, companionAbilityText,
+  abilityTextKey, companionAbilityText, companionArchetypeNames, namesProtector, takesArchetypes,
   companionAttackKey, companionScopeName, companionSkillKey, emptyCompanionFeat, hasArmorSlot, isOtherConjurationTalent,
   wearsBarding,
 } from '../../companions.js';
@@ -1627,7 +1627,7 @@ function companionLevelControls(model, cc) {
     const { kind, p, b, k } = cc;
     if (kind === 'familiar') {
       return `${field('Master level penalty', num(`${p}.masterLevelPenalty`, b.masterLevelPenalty, 'min="0"'))}
-        ${field('Protector archetype', check(`${p}.protector`, b.protector, 'doubles hit points from 11th'))}`;
+        ${namesProtector(b) ? '' : field('Protector archetype', check(`${p}.protector`, b.protector, 'doubles hit points from 11th'))}`;
     }
     const classes = model.progressionClasses();
     const source = kind === 'animalCompanion'
@@ -1652,6 +1652,19 @@ function companionLevelControls(model, cc) {
   }
 
 
+/**
+ * A companion's archetype field, suggesting the archetypes the packs carry for
+ * its kind. Several can be named, split by commas.
+ */
+function archetypeInput(cc, key) {
+    const { kind, p, b } = cc;
+    const names = companionArchetypeNames(kind);
+    const id = `${kind}-archetype-names`;
+    return `${text(`${p}.${key}`, b[key], '', names.length ? { list: id } : {})}${
+      names.length ? `<datalist id="${id}">${names.map((n) => `<option value="${esc(n)}"></option>`).join('')}</datalist>` : ''}`;
+  }
+
+
 function companionHeadPanel(model, cc) {
     const { kind, p, sn, roll, b, k, label } = cc;
     const saves = k.saves || {};
@@ -1661,11 +1674,11 @@ function companionHeadPanel(model, cc) {
     const w = (stat, shown) => working(model, `${sn}.${stat}`, shown);
     const identity = kind === 'familiar' ? `
         ${field('Creature', text(`${p}.creature`, b.creature, 'Owl, cat, thrush…'))}
-        ${field('Archetypes', text(`${p}.archetypes`, b.archetypes))}
+        ${field('Archetypes', archetypeInput(cc, 'archetypes'))}
         ${field('Special ability', text(`${p}.specialAbility`, b.specialAbility, 'What this familiar grants its master'))}`
       : kind === 'animalCompanion' ? `
         ${field('Creature', text(`${p}.creature`, b.creature, 'Wolf, roc, big cat…'))}
-        ${field('Archetype', text(`${p}.archetype`, b.archetype))}
+        ${field('Archetype', archetypeInput(cc, 'archetype'))}
         ${field('Body type', select(`${p}.bodyType`, b.bodyType, BODY_TYPES.map((t) => t.name)))}`
       : kind === 'conjured' ? `
         ${field('Base form', select(`${p}.baseForm`, b.baseForm, CONJURED_BASE_FORMS.map((f) => f.name)))}
@@ -1708,9 +1721,9 @@ function companionHeadPanel(model, cc) {
         ${bigStat('Will', { html: w('will', sv('will')) }, kind === 'familiar' ? 'master’s base' : ((k.formSaves || b.goodSaves)?.will ? 'good' : 'poor'))}
       </div>
       <p class="hint">${kind === 'familiar'
-    ? 'A familiar’s level is its master’s level. It uses the master’s BAB and base saves. It has half the master’s hit points. Its Intelligence and natural armor come from the familiar table.'
+    ? 'A familiar’s level is its master’s level. It uses the master’s BAB and base saves. It has half the master’s hit points. Its Intelligence and natural armor come from the familiar table. An archetype from a loaded pack replaces the abilities it names.'
     : kind === 'animalCompanion'
-      ? 'The level is the master’s levels in the class named, less any penalty. A Spheres companion uses ranks in Handle Animal or Ride instead. HD, BAB, saves, skill ranks, feats, natural armor, the Str/Dex bonus and bonus tricks follow the animal companion table.'
+      ? 'The level is the master’s levels in the class named, less any penalty. A Spheres companion uses ranks in Handle Animal or Ride instead. HD, BAB, saves, skill ranks, feats, natural armor, the Str/Dex bonus and bonus tricks follow the animal companion table. An archetype from a loaded pack replaces the abilities it names.'
       : kind === 'conjured'
         ? 'The level is the Conjuration sphere’s caster level from the Magic Spheres table, with its bonuses, less any penalty. A class’s levels can be used instead. HD, BAB, saves, skill points, feats and natural armor follow the Conjuration sphere’s companion table. The base form adds its own natural armor, saves and starting scores. Archetypes that change the progression are ticked below.'
         : 'The level is the master’s levels in the class named, less any penalty. HD, BAB, saves, feats, natural armor, the Str/Dex bonus, the evolution pool and the attack cap follow the eidolon table.'}
@@ -2441,19 +2454,34 @@ function companionItemsPanel(model, cc) {
  * drops away the moment there is something of their own to show instead.
  */
 function companionAbilityRow(model, cc, name) {
-    const { kind, p, b } = cc;
+    const { kind, p, b, k } = cc;
     const key = abilityTextKey(name);
+    // Where it came from when it is not the table's own: an archetype's
+    // feature, or one the player put in a table ability's place.
+    const from = k.abilityInfo && Object.hasOwn(k.abilityInfo, key) ? k.abilityInfo[key] : null;
     const mine = String(b.abilityNotes?.[key] ?? '');
-    const shared = companionAbilityText(name) || b.citedAbilities?.[key] || null;
+    const shared = (from?.archetype && from.text.trim() ? from : null)
+      || companionAbilityText(name) || b.citedAbilities?.[key] || null;
+    // The table ability a hand-made replacement stands in for. The row keeps
+    // its place and its fold under that name, so it stays open as it is renamed.
+    const tableKey = from?.wasKey || key;
     // Folded per companion by its stable id, so opening Evasion on one wolf
     // does not open it on the other three.
-    const foldKey = `${kind}-${b.id || cc.i}-ability-${key}`;
+    const foldKey = `${kind}-${b.id || cc.i}-ability-${tableKey}`;
     // Shut unless it has been opened: five of these are a list of what the
     // companion has, and a list you have to scroll past is not a list.
     const shut = isCollapsed(model, foldKey, true);
+    const lower = (list) => andList(list.map((n) => n.toLowerCase()));
+    const why = from?.archetype
+      ? [`${from.archetype}.`, from.replaces.length ? `Replaces ${lower(from.replaces)}.` : '',
+        from.changes.length ? `Changes ${lower(from.changes)}.` : ''].filter(Boolean).join(' ')
+      : from?.was ? `Replaces ${from.was.toLowerCase()}.` : '';
+    // A table ability can be replaced by hand, for an archetype no pack describes.
+    const byHand = !from?.archetype && takesArchetypes(kind);
     return `<div class="gainrow">
       <div class="item statline">
         <span class="value">${esc(name)}</span>
+        ${why ? `<span class="hint">${esc(why)}</span>` : ''}
         ${foldButton(model, foldKey, { open: !shut })}
       </div>
       ${shut ? '' : `<div class="gainbody">
@@ -2461,6 +2489,9 @@ function companionAbilityRow(model, cc, name) {
           ${esc(shared.text)}
           ${shared.source || shared.pack ? `<span class="packfrom">${esc(shared.source || shared.pack)}</span>` : ''}
         </div>` : ''}
+        ${byHand ? field('Replaced by', text(`${p}.replacedAbilities.${esc(tableKey)}`,
+    b.replacedAbilities && Object.hasOwn(b.replacedAbilities, tableKey) ? b.replacedAbilities[tableKey] : '',
+    'The ability that takes its place')) : ''}
         ${prose(model, `data-set="${p}.abilityNotes.${esc(key)}"`, mine, 2)}
       </div>`}
     </div>`;
@@ -2476,6 +2507,10 @@ function companionGainsPanel(model, cc) {
         <span class="label">Level ${g.level}</span>
         <div class="gains">${(g.abilities || [g.text]).map((n) => companionAbilityRow(model, cc, n)).join('')}</div>
       </div>`).join('')}</div>` : '<p class="empty">Nothing yet at this level.</p>'}
+      ${(k.archetypeClashes || []).map((c) => `<p class="hint warn">${esc(c.archetypes.join(' and '))} both change
+        ${esc(andList(c.abilities.map((n) => n.toLowerCase())))}, so they cannot be taken together.</p>`).join('')}
+      ${k.archetypesMissing?.length ? `<p class="hint">${esc(andList(k.archetypesMissing))}
+        ${k.archetypesMissing.length > 1 ? 'were' : 'was'} not found in any pack. Open an ability above to replace it by hand.</p>` : ''}
       <div class="fieldgrid" style="margin-top:8px">
         ${kind === 'familiar' ? `<label class="fld" style="grid-column:1/-1"><span>Familiar abilities</span>
           ${prose(model, `data-set="${p}.abilities"`, b.abilities, 3)}</label>` : ''}
