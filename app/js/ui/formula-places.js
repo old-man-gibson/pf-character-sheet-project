@@ -26,6 +26,10 @@
  *   buildView  the field is on the Overview's full page, which the session
  *              view replaces with its dashboard
  *
+ * The lines of a number's breakdown panel use the same places for the field
+ * each line comes from (`ability:dex`, `classes:0:goodFort`, `condition:shaken`),
+ * and the same jump.
+ *
  * Pure, like the palette's index: no element, no DOM. The element's
  * `#formulaJump` does the travelling. tests/formula-places.test.mjs renders
  * every tab a jump names, presses its openers, and checks the field is there.
@@ -78,6 +82,14 @@ const folded = (keys) => ({ expand: keys[0] || null, open: keys.map(shutFold) })
 function overviewPlace(sel, keys = []) {
   return { tab: 'overview', buildView: true, sel, ...folded(keys) };
 }
+
+/** The Overview's plain fields a breakdown line can come from, and the folds each is in. */
+const OVERVIEW_FIELDS = {
+  'identity.size': [],
+  'attack.babOverride': ['sg-offenses'],
+  'attack.miscBonus': ['sg-offenses'],
+  'hp.initMisc': ['sg-defenses'],
+};
 
 /** A field of the card caster's deck, which is the tab's second view. */
 function deckPlace(sel, keys = []) {
@@ -425,6 +437,28 @@ function placeOf(model, ref) {
     }
     case 'trackerForm': return trackerPlace(a, b, c, parts[4]);
 
+    /* ---------------- fields a breakdown line comes from ---------------- */
+    case 'overview': return OVERVIEW_FIELDS[a] ? overviewPlace([set(a)], OVERVIEW_FIELDS[a]) : null;
+    // An ability's row: its score box, or the worked-out score when the Stats
+    // tab builds it.
+    case 'ability': return overviewPlace([set(`abilities.${a}.score`), attr('data-bd', a)]);
+    case 'drain': return overviewPlace([set(`abilities.${a}.drain`)], ['ability-harm']);
+    // The Mythic panel's tier and bonus hit points on Feats & Mythic.
+    case 'mythicField': return { tab: 'features', sel: [set(`mythic.${a}`)], ...folded(['mythic']) };
+    case 'classes': return overviewPlace([item('classes', a, b)]);
+    case 'armor': return { tab: 'gear', sel: [set('equipment.armor.acBonus')] };
+    case 'shield': return { tab: 'gear', sel: [set(`equipment.shields.${a}.acBonus`)] };
+    // A ticked condition: its box on the Overview, or its chip on the session
+    // dashboard.
+    case 'condition':
+      return {
+        tab: 'overview',
+        sel: [set(`conditions.${a}`), `${attr('data-action', 'dash-cond-off')}${attr('data-name', a)}`],
+      };
+    // An ability's column on the Stats tab. A column worked out from the picks
+    // has no box, so the ability's row is gone to instead.
+    case 'statsBuild': return { tab: 'stats', sel: [attr('data-build', `${a}|${b}`), attr('data-ab', a)] };
+
     default: {
       // A sub-system's source-sheet leftovers: `akashicExtra:<row>:<cell>`.
       const extra = /^(\w+)Extra$/.exec(head);
@@ -464,6 +498,15 @@ export function formulaPlace(model, place) {
     open: spot.open?.length ? spot.open : null,
     buildView: !!spot.buildView,
   };
+}
+
+/**
+ * Whether a place is one this can go to, without the text lookup
+ * `formulaPlace` makes. The breakdown panel asks it for every line it draws.
+ */
+export function knownPlace(model, place) {
+  const ref = String(place ?? '').trim();
+  return !!ref && !!placeOf(model, ref);
 }
 
 /**

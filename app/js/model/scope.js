@@ -1317,6 +1317,8 @@ export function forwardedInto(model, name, only = '') {
       const o = overlaps?.get(e);
       return {
         where: describeSource(e.path, model.data),
+        // The place it was written, as ui/formula-places.js reads it.
+        path: e.path,
         value: e.value,
         expr: e.expr,
         sign: e.sign,

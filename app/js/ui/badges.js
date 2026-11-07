@@ -11,6 +11,7 @@ import { exprField } from './rows.js';
 import { fmt, FORWARD_BY_DERIVED } from '../rules.js';
 import { forwardedLine } from '../model/scope.js';
 import { forwardedPopHtml } from './breakdown-popover.js';
+import { knownPlace } from './formula-places.js';
 
 /* ----- the import offset, as a field -----
  * AC, touch, flat-footed, CMD and the three saves all carry a reconciliation
@@ -112,7 +113,8 @@ export function forwardedPop(model, names, extra = '') {
   let opts = {};
   try { opts = extra ? JSON.parse(extra) : {}; } catch { opts = {}; }
   const list = String(names || '').split(' ').filter(Boolean);
-  return forwardedPopHtml(forwardedGroups(model, list, opts.only || ''), opts);
+  return forwardedPopHtml(forwardedGroups(model, list, opts.only || ''),
+    { ...opts, goes: (place) => knownPlace(model, place) });
 }
 
 export function sheetBonusHint(examples) {

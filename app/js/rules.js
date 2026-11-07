@@ -3425,8 +3425,11 @@ export function skillConditionDelta(cs, s) {
  * A line is { label, value, note, key }; `plain` marks the number a sum
  * starts from (Base 10, a save's base) rather than a bonus laid on it, and
  * `key` names what the line stands for -- a bonus column's own key, or
- * 'base', 'ability', 'sizeMod', 'miscAC', 'armor', 'shield' -- for a reader that
- * lays the same lines out its own way (the Stat Block's AC line).
+ * 'base', 'ability', 'sizeMod', 'miscAC', 'miscCMD', 'armor', 'shield', 'bab',
+ * 'miscAttack', 'initMisc', 'mythicTier' -- for a reader that lays the same
+ * lines out its own way (the Stat Block's AC line), and for the breakdown,
+ * which turns the key into the field the line comes from (model/breakdown.js
+ * `recipePlace`).
  * -------------------------------------------------------------- */
 
 export const recipePart = (label, value, note = '', key = undefined) => ({
@@ -3480,8 +3483,8 @@ export function initiativeParts(c) {
   const tier = Number(c.identity?.mythicTier) || 0;
   return [
     abilityPart(c, c.hp.initAbility || 'Dex', c.hp.initAbility2),
-    recipePart('misc', Number(c.hp.initMisc) || 0),
-    ...(tier >= 2 ? [recipePlain('Amazing Initiative', effectiveMythicTier(c), 'mythic tier, from the 2nd')] : []),
+    recipePart('misc', Number(c.hp.initMisc) || 0, '', 'initMisc'),
+    ...(tier >= 2 ? [recipePlain('Amazing Initiative', effectiveMythicTier(c), 'mythic tier, from the 2nd', 'mythicTier')] : []),
   ];
 }
 
@@ -3530,18 +3533,18 @@ export function cmdParts(c) {
   const d = c.defenses;
   return [
     recipePlain('Base', 10),
-    recipePart('BAB', c.attack.bab),
-    recipePart('Str', c.abilities.str.totalMod),
-    recipePart('Dex', c.abilities.dex.totalMod),
-    recipePart('special size', sizeModifiers(c.identity.size).special),
-    recipePart('misc CMD', d.miscCMD),
+    recipePart('BAB', c.attack.bab, '', 'bab'),
+    recipePart('Str', c.abilities.str.totalMod, '', 'ability'),
+    recipePart('Dex', c.abilities.dex.totalMod, '', 'ability'),
+    recipePart('special size', sizeModifiers(c.identity.size).special, '', 'sizeMod'),
+    recipePart('misc CMD', d.miscCMD, '', 'miscCMD'),
     ...bonusParts(d.acBonusesResolved, AC_BONUS_TYPES, 'cmd'),
     ...AC_BONUS_TYPES.filter(([, , flags]) => flags?.cmd === false).map(([key, label]) => recipePart(
       `${label} penalty`, Math.min(0, Number(d.acBonusesResolved?.[key]) || 0),
-      'a penalty to AC applies to CMD whatever type it is',
+      'a penalty to AC applies to CMD whatever type it is', key,
     )),
     recipePart('misc AC penalty', Math.min(0, Number(d.miscAC) || 0),
-      'a penalty to AC applies to CMD whatever column it was typed in'),
+      'a penalty to AC applies to CMD whatever column it was typed in', 'miscAC'),
   ];
 }
 
@@ -3552,10 +3555,10 @@ export function cmdParts(c) {
 export function attackParts(c, mode) {
   const m = c.attack.modes?.[mode] || {};
   return [
-    recipePart('BAB', c.attack.bab),
+    recipePart('BAB', c.attack.bab, '', 'bab'),
     abilityPart(c, m.stat1, m.stat2),
-    recipePart(/cmb/i.test(mode) ? 'special size' : 'size', sizeAttackMod(c, mode)),
-    recipePart('misc', c.attack.miscBonus),
+    recipePart(/cmb/i.test(mode) ? 'special size' : 'size', sizeAttackMod(c, mode), '', 'sizeMod'),
+    recipePart('misc', c.attack.miscBonus, '', 'miscAttack'),
   ];
 }
 

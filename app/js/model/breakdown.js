@@ -9,8 +9,9 @@
  * where the 50 is printed.
  *
  * One function, `breakdown(model, key)`, returning `{ label, total, parts }`
- * where each part is `{ label, value, note }`. The view turns it into a
- * tooltip (see ui/rows.js `workingTitle`); nothing here knows about markup.
+ * where each part is `{ label, value, note }`, and `place` where the part
+ * comes from a field the panel can go to. The view turns it into a tooltip
+ * (see ui/rows.js `workingTitle`); nothing here knows about markup.
  *
  * **The parts must add up.** Each list below is written against the same
  * expression in rules.js DERIVED that produces the number, and a breakdown
@@ -20,7 +21,8 @@
  */
 
 import {
-  ABILITIES, ABILITY_LABELS, AC_PENALTY_KEYS, ATTACK_MODE_KEY, BUILD_TEMPORARY, CONDITION_CHANNELS,
+  ABILITIES, ABILITY_LABELS, ABP_DEFENCE_GROUPS, AC_BONUS_TYPES, AC_PENALTY_KEYS, ATTACK_MODE_KEY, BUILD_TEMPORARY,
+  CONDITION_CHANNELS, SAVE_BONUS_TYPES,
   abilityOf, enhancementCapNote, acParts, acPenaltyToCmd, attackParts, cmdParts, conditionTotals, initiativeParts, recipePart,
   recipePlain, saveParts,
 } from '../rules.js';
@@ -35,6 +37,72 @@ import { campaignRules } from './campaign.js';
 const part = recipePart;
 const plain = recipePlain;
 
+/* ------------------------------------------------------------------ *
+ * Where each line comes from
+ * ------------------------------------------------------------------ */
+
+/*
+ * A line's `place` is the field it is typed in or picked from, named the way
+ * ui/formula-places.js names a place for the Formulas tab's go-to buttons, so
+ * the panel can offer the same jump. A line with no field of its own (Base
+ * 10, a figure worked out from the level) has none.
+ */
+
+/** A line with the field it comes from, where it has one. */
+const at = (p, place) => (place ? { ...p, place } : p);
+
+/** An ABP column's typed partner: the box beside it that the player fills. */
+const TYPED_PARTNER = Object.fromEntries(ABP_DEFENCE_GROUPS);
+const AC_COLUMNS = new Set(AC_BONUS_TYPES.map(([k]) => k));
+const SAVE_COLUMNS = new Set(SAVE_BONUS_TYPES.map(([k]) => k));
+
+/** The Classes table column that makes a save good. */
+const GOOD_SAVE = { fortitude: 'goodFort', reflex: 'goodRef', will: 'goodWill' };
+
+/** The row of the ability a line is named for: 'Dex', or the first of 'Str + Wis'. */
+function abilityPlace(name) {
+  const a = abilityOf(String(name ?? '').split(' + ')[0]);
+  return a ? `ability:${a}` : null;
+}
+
+/** The first row of the Classes table's column, where there is a class. */
+const classPlace = (c, field) => (c.classes?.length ? `classes:0:${field}` : null);
+
+/** A field of the Mythic panel, which is drawn only while mythic is on. */
+const mythicPlace = (c, field) => (campaignRules(c).mythic ? `mythicField:${field}` : null);
+
+/**
+ * A recipe line's place, by the key rules.js gives it. `family` is the
+ * recipe: 'ac' (any armor class), 'cmd', 'save:<key>', 'attack' or
+ * 'initiative'.
+ */
+function recipePlace(model, family, p) {
+  const c = model.data;
+  const [kind, save] = family.split(':');
+  switch (p.key) {
+    case 'ability': return abilityPlace(p.label);
+    case 'bab': return 'overview:attack.babOverride';
+    case 'sizeMod': return 'overview:identity.size';
+    case 'miscAC': return 'defenses:miscAC';
+    case 'miscCMD': return 'defenses:miscCMD';
+    case 'miscAttack': return 'overview:attack.miscBonus';
+    case 'initMisc': return 'overview:hp.initMisc';
+    case 'mythicTier': return mythicPlace(c, 'tierOverride');
+    case 'armor': return c.equipment?.armor?.active ? 'armor' : null;
+    case 'shield': {
+      const i = (c.equipment?.shields || []).findIndex((s) => s?.active);
+      return i < 0 ? null : `shield:${i}`;
+    }
+    case 'base': return kind === 'save' ? classPlace(c, GOOD_SAVE[save]) : null;
+    default: {
+      const col = TYPED_PARTNER[p.key] || p.key;
+      if (kind === 'save' && SAVE_COLUMNS.has(col)) return `statCell:saves.${save}.bonuses.${col}`;
+      if ((kind === 'ac' || kind === 'cmd') && AC_COLUMNS.has(col)) return `statCell:defenses.acBonuses.${col}`;
+      return null;
+    }
+  }
+}
+
 /**
  * The bonuses forwarded to `name`, one line each, named by where they were
  * written. `only` is 'permanent' or 'temporary'. A bonus that adds nothing --
@@ -43,15 +111,15 @@ const plain = recipePlain;
  */
 function forwardedParts(model, name, only = '') {
   const f = forwardedInto(model, name, only);
-  return (f?.from || []).filter((x) => x.counts).map((x) => part('forwarded', x.column ? x.adds : x.value,
-    `${x.temporary ? 'temporary ' : ''}${x.type ? `${x.type} ` : ''}${x.value < 0 ? 'penalty' : 'bonus'} from ${x.where}`));
+  return (f?.from || []).filter((x) => x.counts).map((x) => at(part('forwarded', x.column ? x.adds : x.value,
+    `${x.temporary ? 'temporary ' : ''}${x.type ? `${x.type} ` : ''}${x.value < 0 ? 'penalty' : 'bonus'} from ${x.where}`), x.path));
 }
 
 /** The reconciliation offset and the forwarded bonuses, where either is doing anything. */
 function extras(model, derivedKey, forwardKey) {
   const out = [];
   const offset = derivedKey ? model.offsetOf(derivedKey) : 0;
-  if (offset) out.push(part('Other', offset, 'the Other column'));
+  if (offset) out.push(at(part('Other', offset, 'the Other column'), `offset:${derivedKey}`));
   if (forwardKey) out.push(...forwardedParts(model, forwardKey));
   return out;
 }
@@ -62,10 +130,12 @@ function extras(model, derivedKey, forwardKey) {
 
 /**
  * A number with a recipe: its lines, then the offset and the forwarded
- * bonus the recompute adds on top of the recipe's sum.
+ * bonus the recompute adds on top of the recipe's sum. `family` names the
+ * recipe for `recipePlace`.
  */
-const withExtras = (lines, derivedKey, forwardKey) => (model) => [
-  ...lines(model.data), ...extras(model, derivedKey, forwardKey),
+const withExtras = (lines, derivedKey, forwardKey, family) => (model) => [
+  ...lines(model.data).map((p) => at(p, recipePlace(model, family, p))),
+  ...extras(model, derivedKey, forwardKey),
 ];
 
 function hpBreakdown(model) {
@@ -76,13 +146,15 @@ function hpBreakdown(model) {
   const tough = Number(c.hp.toughnessResolved ?? c.hp.toughness) || 0;
   const misc = Number(c.hp.miscResolved ?? c.hp.misc) || 0;
   const parts = [
-    plain('hit dice', c.gestalt?.hdTotal ?? 0, `${campaignRules(c).gestalt ? 'the best die' : 'the class\'s die'} on each of ${level} level${
+    at(plain('hit dice', c.gestalt?.hdTotal ?? 0, `${campaignRules(c).gestalt ? 'the best die' : 'the class\'s die'} on each of ${level} level${
       level === 1 ? '' : 's'}${{ max: '', average: ', averaged after 1st', rolled: ', rolled after 1st' }[campaignRules(c).hitPoints]}`),
-    part(`${c.hp.ability || 'ability'}${c.hp.ability2 ? ` + ${c.hp.ability2}` : ''} × ${level}`, abilityMod * level),
-    part('favored class', fcb),
-    part(`Toughness × ${level}`, tough * level),
-    part('mythic', mythicHp(model)),
-    part('misc', misc),
+    classPlace(c, 'hd')),
+    at(part(`${c.hp.ability || 'ability'}${c.hp.ability2 ? ` + ${c.hp.ability2}` : ''} × ${level}`, abilityMod * level),
+      abilityPlace(c.hp.ability)),
+    at(part('favored class', fcb), 'hp:fcb'),
+    at(part(`Toughness × ${level}`, tough * level), 'hp:toughness'),
+    at(part('mythic', mythicHp(model)), mythicPlace(c, 'bonusHpPerTier')),
+    at(part('misc', misc), 'hp:misc'),
   ];
   parts.push(...extras(model, 'hp.total', 'hp.total'));
   return parts;
@@ -91,7 +163,9 @@ function hpBreakdown(model) {
 function abilityBreakdown(model, key, which) {
   const build = model.data.statsBuild?.[key];
   const a = model.data.abilities[key] || {};
-  const drain = part('drain', -abilityHarm(a).drain, 'ability drain, set on the Overview');
+  const drain = at(part('drain', -abilityHarm(a).drain, 'ability drain, set on the Overview'), `drain:${key}`);
+  // A column of the ability's row on the Stats tab.
+  const column = (p, col) => at(p, `statsBuild:${key}:${col}`);
   if (!build) {
     // No build tab: the score is a plain typed number, and a forwarded bonus
     // moves only the working score.
@@ -107,7 +181,7 @@ function abilityBreakdown(model, key, which) {
     // the temporary bonuses forwarded here; the permanent ones are in the score.
     return [
       plain('Score', a.score, 'permanent score'),
-      ...BUILD_TEMPORARY.map(([k, , full]) => part(full, build[k], 'Stats tab, temporary bonuses')),
+      ...BUILD_TEMPORARY.map(([k, , full]) => column(part(full, build[k], 'Stats tab, temporary bonuses'), k)),
       ...forwardedParts(model, `${key}.score`, 'temporary'), ...forwardedParts(model, `${key}.temp`),
       drain,
     ];
@@ -122,12 +196,12 @@ function abilityBreakdown(model, key, which) {
   const sources = [Number(build.abp) ? `ABP ${build.abp}` : '',
     gear ? `gear ${gear}${best && best.value >= typed ? ` (${best.where})` : ''}` : ''].filter(Boolean).join(' + ');
   return [
-    part('point buy', build.pointBuy),
-    part('race', build.race),
-    part('enhancement', r.enhancement, [sources, enhancementCapNote(r)].filter(Boolean).join('. ')),
+    column(part('point buy', build.pointBuy), 'pointBuy'),
+    column(part('race', build.race), 'race'),
+    column(part('enhancement', r.enhancement, [sources, enhancementCapNote(r)].filter(Boolean).join('. ')), 'gear'),
     ...[['attunement', 'attuned'], ['inherent', 'inherent'], ['array', 'array'],
       ['level4', 'level/4'], ['mythic', 'mythic'], ['age', 'age category'], ['size', 'size'], ['untyped', 'untyped']]
-      .map(([k, label]) => part(label, build[k])),
+      .map(([k, label]) => column(part(label, build[k]), k)),
     ...forwardedParts(model, `${key}.score`, 'permanent'),
   ];
 }
@@ -144,22 +218,22 @@ function abilityBreakdown(model, key, which) {
  * `breakdown(model, 'ac')` are the same number twice.
  */
 export const BREAKDOWNS = new Map([
-  ['ac', { label: 'Armor Class', build: withExtras((c) => acParts(c, 'ac'), 'defenses.ac', 'ac.total'), total: (m) => m.data.defenses.ac }],
-  ['touch', { label: 'Touch AC', build: withExtras((c) => acParts(c, 'touch'), 'defenses.touch', 'ac.touch'), total: (m) => m.data.defenses.touch }],
-  ['flatFooted', { label: 'Flat-footed AC', build: withExtras((c) => acParts(c, 'flatFooted'), 'defenses.flatFooted', 'ac.flatFooted'), total: (m) => m.data.defenses.flatFooted }],
-  ['cmd', { label: 'CMD', build: withExtras(cmdParts, 'defenses.cmd', 'ac.cmd'), total: (m) => m.data.defenses.cmd }],
+  ['ac', { label: 'Armor Class', build: withExtras((c) => acParts(c, 'ac'), 'defenses.ac', 'ac.total', 'ac'), total: (m) => m.data.defenses.ac }],
+  ['touch', { label: 'Touch AC', build: withExtras((c) => acParts(c, 'touch'), 'defenses.touch', 'ac.touch', 'ac'), total: (m) => m.data.defenses.touch }],
+  ['flatFooted', { label: 'Flat-footed AC', build: withExtras((c) => acParts(c, 'flatFooted'), 'defenses.flatFooted', 'ac.flatFooted', 'ac'), total: (m) => m.data.defenses.flatFooted }],
+  ['cmd', { label: 'CMD', build: withExtras(cmdParts, 'defenses.cmd', 'ac.cmd', 'cmd'), total: (m) => m.data.defenses.cmd }],
   ...['fortitude', 'reflex', 'will'].map((k) => [k, {
     label: k[0].toUpperCase() + k.slice(1),
-    build: withExtras((c) => saveParts(c, k), `saves.${k}.total`, `saves.${k}`),
+    build: withExtras((c) => saveParts(c, k), `saves.${k}.total`, `saves.${k}`, `save:${k}`),
     total: (m) => m.data.saves[k].total,
   }]),
   ...[['melee', 'Melee attack', 'totalMelee'], ['ranged', 'Ranged attack', 'totalRanged'], ['cmb', 'CMB', 'totalCmb']]
     .map(([mode, label, field]) => [mode, {
       label,
-      build: withExtras((c) => attackParts(c, mode), ATTACK_MODE_KEY[mode], `attack.${mode}`),
+      build: withExtras((c) => attackParts(c, mode), ATTACK_MODE_KEY[mode], `attack.${mode}`, 'attack'),
       total: (m) => m.data.attack[field],
     }]),
-  ['initiative', { label: 'Initiative', build: withExtras(initiativeParts, 'initiative', 'initiative'), total: (m) => m.data.hp.initiative }],
+  ['initiative', { label: 'Initiative', build: withExtras(initiativeParts, 'initiative', 'initiative', 'initiative'), total: (m) => m.data.hp.initiative }],
   ['hp', { label: 'Hit points', build: hpBreakdown, total: (m) => m.hpMax }],
   ...ABILITIES.flatMap((k) => [
     [k, {
@@ -255,6 +329,9 @@ function adjustmentParts(model, key, cs) {
     const n = Math.max(1, count);
     const source = String(info?.key || '');
     const kind = source === 'buff:size' ? 'size' : source.startsWith('buff:') ? 'buff' : 'condition';
+    // A buff's row on the Buffs panel, or the condition's box.
+    const place = Number.isInteger(info?.buffIndex) ? `buff:${info.buffIndex}`
+      : kind === 'condition' && entry.name in (c.conditions || {}) ? `condition:${entry.name}` : null;
     const label = `${info?.label || 'condition'}${n > 1 ? ` ×${n}` : ''}`;
     let value = 0;
     const via = [];
@@ -273,11 +350,11 @@ function adjustmentParts(model, key, cs) {
     const share = through.get(entry);
     const indirect = share?.value || 0;
     if (value) {
-      const p = part(label, value, [kind, ...via].join(', '));
+      const p = at(part(label, value, [kind, ...via].join(', ')), place);
       if (indirect) p.lines = [part(share.label, indirect)];
       parts.push(p);
     } else if (indirect) {
-      parts.push(part(label, indirect, `${kind}, ${share.label}`));
+      parts.push(at(part(label, indirect, `${kind}, ${share.label}`), place));
     }
   }
   const shown = parts.reduce((t, p) => t + p.value + (p.lines || []).reduce((s, l) => s + l.value, 0), 0);
