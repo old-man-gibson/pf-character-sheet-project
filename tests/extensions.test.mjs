@@ -832,6 +832,44 @@ console.log('spheres -- a whole sphere as a shared table, tags and all');
     sphereTalent('', 'Elongated Step').sphere, 'Boxing');
 
   /*
+   * A talent cell suggests the catalogue as it is typed into, the way a feat
+   * cell does: the row's sphere narrows the list once it is picked.
+   */
+  {
+    const { datalistOptions } = await import('../app/js/ui/datalist.js');
+    const { talentCell } = await import('../app/js/ui/talents.js');
+    setSphereCatalogue({ spheres: [...merged.spheres.spheres,
+      { name: 'Brute', kind: 'combat', talents: [{ name: 'Shove', tags: [] }, { name: 'Clinch', tags: [] }] }] });
+    check('a row with its sphere picked is offered that sphere, base pick first',
+      datalistOptions('talents', { sphere: 'boxing' }),
+      [{ value: 'Boxing Sphere', label: 'base sphere' }, { value: 'Clinch', label: 'counter' },
+        { value: 'Elongated Step', label: 'stance' }]);
+    check('one without a sphere is offered every sphere, each talent labeled with its own',
+      datalistOptions('talents', { query: 'clin' }),
+      [{ value: 'Clinch', label: 'Boxing · counter' }, { value: 'Clinch', label: 'Brute' }]);
+    check('what is typed matches anywhere in a name',
+      datalistOptions('talents', { sphere: 'Boxing', query: 'step' }).map((o) => o.value), ['Elongated Step']);
+    check('a sphere no pack carries offers nothing', datalistOptions('talents', { sphere: 'Alteration' }), []);
+
+    const model = new Character(blankDocument('zz_talents'));
+    const cell = talentCell(model, 'data-item="bonus|0|talent" placeholder="Talent…"', 'Clinch', 'Boxing',
+      { sphere: 'sphere', notes: 'notes' });
+    check('the cell is a box pointing at its own list, narrowed to the row\'s sphere',
+      [/<input type="text" data-item="bonus\|0\|talent"/.test(cell), cell.includes('list="talents:bonus|0|talent"'),
+        cell.includes('<datalist id="talents:bonus|0|talent" data-fill="talents" data-sphere="Boxing">'),
+        cell.includes('data-talent-fill=')],
+      [true, true, true, true]);
+    check('a slot that grants nothing has no list',
+      talentCell(model, 'data-item="bonus|0|talent" disabled', '', null).includes('<datalist'), false);
+    check('a talent holding a formula stays a prose field',
+      talentCell(model, 'data-item="bonus|0|talent"', 'Clinch {= 1 + 1}', 'Boxing').includes('<textarea'), true);
+    setSphereCatalogue({ spheres: [] });
+    check('with no sphere catalog the box has no list',
+      talentCell(model, 'data-item="bonus|0|talent"', 'Clinch', 'Boxing').includes('list='), false);
+    setSphereCatalogue(merged.spheres);
+  }
+
+  /*
    * The sphere pickers offer what the packs carry as well as what rules.js
    * knows, so a homebrew sphere turns up where a player looks for it.
    */

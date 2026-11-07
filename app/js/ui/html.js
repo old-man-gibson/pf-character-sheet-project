@@ -144,11 +144,12 @@ export function catalogueFace(details, { compact = true, ctx = null, key = '' } 
  * Emitted only when there is a catalogue behind it, so a sheet with no packs
  * has the free-text box it always had.
  */
-export function nameDatalist(id, fill, { classes = [], has = true } = {}) {
+export function nameDatalist(id, fill, { classes = [], sphere = '', has = true } = {}) {
   if (!has) return '';
   const narrow = classes.filter(Boolean).join(',');
+  const one = String(sphere ?? '').trim();
   return `<datalist id="${esc(id)}" data-fill="${esc(fill)}"${
-    narrow ? ` data-classes="${esc(narrow)}"` : ''}></datalist>`;
+    narrow ? ` data-classes="${esc(narrow)}"` : ''}${one ? ` data-sphere="${esc(one)}"` : ''}></datalist>`;
 }
 
 /**

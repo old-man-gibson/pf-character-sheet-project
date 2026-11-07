@@ -8,8 +8,8 @@
  * skill spheres want exactly the same cell, so it moved here rather than
  * being copied or reached for across panels.
  */
-import { esc } from './html.js';
-import { prose } from './prose.js';
+import { esc, nameDatalist } from './html.js';
+import { hasView, prose } from './prose.js';
 import { foldButton } from './folds.js';
 import { linkedText } from './links.js';
 import { hasTokens, plainTokens } from '../inline.js';
@@ -137,11 +137,9 @@ export function foldingNote(model, binding, value, path, { name = '', below = ''
  * A talent cell: the box it is typed in, and -- when a pack's sphere
  * catalogue knows what was typed -- a mark carrying what it does.
  *
- * The box stays a prose field. A talent is still whatever a player writes,
- * `{…}` formulas and all, and the catalogue is a second opinion rather than a
- * gate: a talent nobody has a pack for is simply unmarked, which is the state
- * every talent on every sheet was in before this. `extra` goes on the wrapper
- * so a caller can keep the cell's own classes.
+ * A talent is still whatever a player writes, and the catalogue is a second
+ * opinion rather than a gate: a talent nobody has a pack for is simply
+ * unmarked, which is the state every talent on every sheet was in before this.
  */
 export function talentCell(model, binding, value, sphere, fill = null) {
   // `fill` names the row's own sphere and notes columns, which differ per
@@ -149,10 +147,31 @@ export function talentCell(model, binding, value, sphere, fill = null) {
   // element reads it to fill in what the catalogue can answer for free; left
   // off, the cell is an ordinary one that only ever writes the talent.
   const bind = fill ? `${binding} data-talent-fill="${esc(JSON.stringify(fill))}"` : binding;
-  const field = prose(model, bind, value, 1, 'grow');
+  const field = talentBox(model, bind, value, sphere);
   const info = talentInfo(model, sphere, value);
   if (!info) return field;
   return `<span class="tcell">${field}${talentMark(sphere, value, info)}</span>`;
+}
+
+/**
+ * The box a talent is typed in: a one-line box that suggests the catalogue's
+ * talents as it is typed into, narrowed to the row's sphere once one is
+ * picked -- the feat cell's `<datalist>`, filled by the element
+ * (`#fillDatalist`). A `<datalist>` needs an `<input>`, so a talent holding a
+ * `{…}` formula or a web address is a prose field instead, the rule
+ * `rows.gridCell` follows; the cell is drawn again as the other one once its
+ * text changes. The list sits beside its box, keyed on the row's path, so a
+ * folded panel never leaves a box pointing at a list that is not drawn.
+ */
+function talentBox(model, bind, value, sphere) {
+  const text = String(value ?? '');
+  if (hasView(text)) return prose(model, bind, text, 1, 'grow');
+  const path = bind.match(/data-item="([^"]*)"/)?.[1] ?? '';
+  const id = `talents:${path}`;
+  const list = path && !/\sdisabled\b/.test(bind) && sphereCatalogue().spheres.length > 0;
+  return `<input type="text" ${bind} data-kind="text" value="${esc(text)}"${
+    list ? ` list="${esc(id)}"` : ''}${text.trim() ? ` title="${esc(text)}"` : ''}>${
+    list ? nameDatalist(id, 'talents', { sphere }) : ''}`;
 }
 
 /**

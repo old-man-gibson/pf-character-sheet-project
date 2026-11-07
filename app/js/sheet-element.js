@@ -3834,7 +3834,7 @@ export class CharacterSheetElement extends HTMLElement {
   /**
    * Put matches for what is being typed into the list a cell points at.
    *
-   * One handler for all three catalogues, because the datalist says which one
+   * One handler for every catalogue, because the datalist says which one
    * it wants and how to narrow it. What is typed matches anywhere in a name
    * rather than only at the front -- "blades" should find *Sigil of Blades* --
    * and the answer is capped, which is what keeps this cheap at 8,912 feats.
@@ -3850,6 +3850,7 @@ export class CharacterSheetElement extends HTMLElement {
     // names on focus.
     const hits = list && datalistOptions(list.dataset.fill, {
       classes: (list.dataset.classes || '').split(',').filter(Boolean),
+      sphere: list.dataset.sphere || '',
       query: input.value,
       max: DATALIST_MAX,
     });
