@@ -708,8 +708,24 @@ most headings are in is the *entries'*; larger headings are *sections*; smaller 
 inside their entry as bold lines. Columns are read left then right, the right one starting
 at the leftmost margin past the middle that several lines share, and the gutter's position
 is learned from the whole book so that a page with little evidence is told by the rest.
-Text at the same place on most pages is furniture and is dropped — running heads, footers,
-page numbers.
+Text at the same height on 40% of pages or more is furniture and is dropped: running heads,
+footers, page numbers. A running head that changes by chapter is also dropped when it is the
+top or bottom line of its page, set apart from the text, and the same line is at the same
+height on at least three pages.
+
+Each page is cleaned up before it is read:
+
+- Text drawn twice over itself, for a bold or shadow effect, is kept once.
+- Small capitals set as a capital and smaller letters are joined into one item and
+  title-cased.
+- A class table ("Level" over 1st, 2nd, 3rd… with a base attack column) is rebuilt from
+  word positions into a tab-separated header and one line per level, which the class
+  reader takes.
+
+A gap of 0.06 em or more between two pieces of a line is a word space, except next to a
+hyphen, a bracket or punctuation. Some layouts put headings that contain "fi", "fl" or "ff"
+in a second font object; a heading style whose headings all contain one of these is read as
+the commonest heading style of its size.
 
 It stops there, on purpose. "Iron Grip (stance)" and "Craft Wondrous Trinket (item
 creation)" are set identically; only their section says one is a talent and the other a
@@ -722,7 +738,7 @@ Feats, spells, powers and reference entries found this way are filed in the pack
 (shown in the review as **Picked by name**), which the paste box could read but never
 store before.
 
-It produces a draft to check, not a finished pack. Tables come through roughly, a page
+It produces a draft to check, not a finished pack. Tables other than class tables come through roughly, a page
 set round artwork may still come out of order, and a scanned document is pictures and has no
 text to read. `tests/pdf-import.test.mjs` covers everything but pdf.js itself, on pages
 written out by hand.

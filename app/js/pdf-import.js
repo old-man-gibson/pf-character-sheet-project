@@ -62,10 +62,187 @@ export async function readPdf(data, { onProgress = null } = {}) {
   return pages;
 }
 
-/* ---------------- lines ---------------- */
+/* ---------------- items ---------------- */
 
 const round = (n, to = 1) => Math.round(n / to) * to;
 const styleOf = (it) => `${it.font}@${round(it.size, 0.5)}`;
+const center = (it) => it.x + it.w / 2;
+const sameRow = (a, b) => Math.abs(a.y - b.y) <= Math.max(2, Math.max(a.size, b.size) * 0.35);
+
+/**
+ * Text drawn more than once for a bold or shadow effect: the same words over
+ * each other on one row. Only the largest copy is kept, or "36" drawn three
+ * times reads as the page number 363636.
+ */
+function dropDoubles(items) {
+  const byText = new Map();
+  const kept = [];
+  for (const it of [...items].sort((a, b) => b.size - a.size)) {
+    const t = it.str.trim();
+    const same = byText.get(t) || [];
+    const twin = same.some((k) => sameRow(k, it)
+      && Math.min(k.x + k.w, it.x + it.w) - Math.max(k.x, it.x) >= Math.min(k.w, it.w) * 0.3);
+    if (twin) continue;
+    same.push(it);
+    byText.set(t, same);
+    kept.push(it);
+  }
+  return kept;
+}
+
+const MINOR_WORD = /(?<!^)\b(?:Of|The|And|A|An|To|In|On|With|From|For|Or|At|By)\b/g;
+const titleCase = (s) => s.toLowerCase().replace(/(^|[\s(/-])([a-z])/g, (m, a, c) => a + c.toUpperCase())
+  .replace(MINOR_WORD, (w) => w.toLowerCase());
+
+/**
+ * Small capitals set by hand: a capital, then smaller letters, one piece each
+ * ("H" at 11 pt, "EADBAND" at 7.7 pt). The size change cuts the line apart,
+ * so each run becomes one item at the capitals' size. The case of the small
+ * letters is not reliable, so the run is title-cased.
+ */
+function mergeSmallCaps(items) {
+  const sorted = [...items].sort((a, b) => (a.font < b.font ? -1 : a.font > b.font ? 1 : 0) || a.y - b.y || a.x - b.x);
+  const out = [];
+  let run = [];
+  const flush = () => {
+    const big = Math.max(...run.map((it) => it.size));
+    const small = Math.min(...run.map((it) => it.size));
+    // A capital is one or two letters; a longer piece at the large size is ordinary text.
+    const capitals = run.filter((it) => it.size === big).every((it) => it.str.trim().length <= 3);
+    if (run.length > 1 && capitals && small / big >= 0.55 && small / big <= 0.9) {
+      let str = run[0].str;
+      for (let i = 1; i < run.length; i++) {
+        const gap = run[i].x - (run[i - 1].x + run[i - 1].w);
+        str += (gap > big * 0.08 && !/\s$/.test(str) && !/^\s/.test(run[i].str) ? ' ' : '') + run[i].str;
+      }
+      const last = run[run.length - 1];
+      out.push({ ...run.find((it) => it.size === big), str: titleCase(str.replace(/\s+/g, ' ').trim()), x: run[0].x, w: last.x + last.w - run[0].x, size: big });
+    } else out.push(...run);
+    run = [];
+  };
+  for (const it of sorted) {
+    const prev = run[run.length - 1];
+    const gap = prev ? it.x - (prev.x + prev.w) : 0;
+    const joins = prev && it.font === prev.font && Math.abs(it.y - prev.y) < 1 && gap > -1
+      && gap < Math.max(it.size, prev.size) * 0.4
+      // A longer piece at a larger size is the ordinary text after the run.
+      && !(it.size > prev.size && it.str.trim().length > 3);
+    if (!joins && run.length) flush();
+    run.push(it);
+  }
+  if (run.length) flush();
+  return out;
+}
+
+const LEVEL_CELL = /^(\d{1,2})(?:st|nd|rd|th)?$/;
+
+/**
+ * A class table: "Level" over 1st, 2nd, 3rd... with a base attack column.
+ * pdf.js gives the cells one at a time in drawing order, so the table is
+ * rebuilt from positions. Header words in the header's font that overlap
+ * across lines are one column heading ("Base" / "Attack" / "Bonus"). Rows are
+ * keyed on the level column, and each word goes to the column whose center is
+ * nearest. The result is a tab-separated header and one line per level, which
+ * is what the class reader takes. Returns null when "Level" is not the head
+ * of such a table.
+ */
+function classTable(items, level, pageWidth) {
+  const levelX = center(level);
+  const rows = [];
+  for (const it of items.filter((x) => x.y > level.y && Math.abs(center(x) - levelX) < level.size * 1.6 && LEVEL_CELL.test(x.str.trim())).sort((a, b) => a.y - b.y)) {
+    if (Number(it.str.trim().match(LEVEL_CELL)[1]) === rows.length + 1) rows.push(it);
+  }
+  if (rows.length < 5) return null;
+  const firstY = rows[0].y;
+  const head = items.filter((it) => it.font === level.font && it.y >= level.y - level.size * 3 && it.y < firstY - level.size * 0.4);
+  const cols = [];
+  for (const it of [...head].sort((a, b) => a.x - b.x)) {
+    const col = cols.find((c) => it.x <= c.x1 + 2 && it.x + it.w >= c.x0 - 2);
+    if (col) { col.words.push(it); col.x0 = Math.min(col.x0, it.x); col.x1 = Math.max(col.x1, it.x + it.w); } else cols.push({ x0: it.x, x1: it.x + it.w, words: [it] });
+  }
+  // A header word set in another font by mistake still sits in its column, inside the header's lines.
+  const headSpan = [Math.min(...head.map((h) => h.y)) - 2, Math.max(...head.map((h) => h.y)) + 2];
+  for (const it of items) {
+    if (head.includes(it) || it.y < headSpan[0] || it.y > headSpan[1]) continue;
+    const col = cols.find((c) => it.x < c.x1 && it.x + it.w > c.x0);
+    if (col) { col.words.push(it); head.push(it); }
+  }
+  cols.sort((a, b) => a.x0 - b.x0);
+  const header = cols.map((c) => c.words.sort((a, b) => a.y - b.y || a.x - b.x).map((w) => w.str.trim()).join(' ').replace(/\s+/g, ' '));
+  if (!/base attack|\bbab\b/i.test(header.join(' '))) return null;
+  const spacing = (rows[rows.length - 1].y - firstY) / Math.max(1, rows.length - 1);
+  const headTop = Math.min(...head.map((h) => h.y));
+  const headBottom = Math.max(...head.map((h) => h.y));
+  let x0 = Math.min(...cols.map((c) => c.x0)) - 4;
+  let x1 = Math.max(...cols.map((c) => c.x1)) + 30;
+  // A table in one column of two stops at the middle of the page.
+  if (x1 - 30 < pageWidth / 2) x1 = Math.min(x1, pageWidth / 2);
+  if (x0 + 4 > pageWidth / 2) x0 = Math.max(x0, pageWidth / 2);
+  const colOf = (it) => {
+    let best = 0;
+    cols.forEach((c, ci) => { if (Math.abs(center(it) - (c.x0 + c.x1) / 2) < Math.abs(center(it) - (cols[best].x0 + cols[best].x1) / 2)) best = ci; });
+    return best;
+  };
+  const cells = rows.map((r, i) => {
+    const top = i === 0 ? headBottom + 2 : (rows[i - 1].y + r.y) / 2;
+    const bottom = i === rows.length - 1 ? r.y + Math.min(level.size * 1.3, spacing * 0.8) : (r.y + rows[i + 1].y) / 2;
+    const inRow = items.filter((it) => it.y > top && it.y <= bottom && it.x >= x0 && it.x <= x1 && !head.includes(it));
+    const out = cols.map(() => []);
+    for (const it of inRow) {
+      // A line-end hyphen is a piece of its own; it belongs to the word left of it.
+      if (it.str.trim() === '-') {
+        const left = inRow.filter((o) => o !== it && Math.abs(o.y - it.y) < 2 && o.x < it.x).sort((a, b) => (b.x + b.w) - (a.x + a.w))[0];
+        if (left) { out[colOf(left)].push(it); continue; }
+      }
+      out[colOf(it)].push(it);
+    }
+    return out.map((c) => c.sort((a, b) => a.y - b.y || a.x - b.x).map((w) => w.str.trim()).join(' ').replace(/\s+/g, ' ').replace(/(\w) ?- (\w)/g, '$1$2'));
+  });
+  // "Table: Warlord" just above the header is its caption.
+  const caption = items.filter((it) => !head.includes(it) && it.y < headTop && it.y >= headTop - level.size * 2.5
+    && it.x + it.w > x0 && it.x < x1 && /^Table\b/i.test(it.str.trim())).sort((a, b) => b.y - a.y)[0];
+  const y0 = (caption ? caption.y : headTop) - 2;
+  const y1 = rows[rows.length - 1].y + Math.min(level.size * 1.3, spacing * 0.8);
+  return {
+    y: y0 + 2,
+    x0,
+    x1,
+    text: [caption?.str.trim(), header.join('\t'), ...cells.map((r) => r.join('\t'))].filter(Boolean).join('\n'),
+    inside: (it) => it.y >= y0 && it.y <= y1 && it.x >= x0 && it.x <= x1,
+  };
+}
+
+/** A page with doubled text, small capitals and class tables dealt with; the tables come back as whole lines. */
+function tidyPage(page) {
+  let items = mergeSmallCaps(dropDoubles(page.items));
+  const tables = [];
+  for (const level of items.filter((it) => it.str.trim() === 'Level').sort((a, b) => a.y - b.y)) {
+    if (!items.includes(level)) continue;
+    const t = classTable(items, level, page.width);
+    if (!t) continue;
+    items = items.filter((it) => !t.inside(it));
+    tables.push({ y: t.y, x0: t.x0, x1: t.x1, text: t.text });
+  }
+  return { ...page, items, tables };
+}
+
+/* ---------------- lines ---------------- */
+
+/**
+ * The style a line is *in* (the one most of its characters are set in),
+ * whether it is in that style throughout, and the style it opens in, for a
+ * run-in label: "Prerequisites: Boxing sphere." `alias` renames styles.
+ */
+function styleLine(l, alias = null) {
+  const name = (p) => { const s = styleOf(p); return alias?.get(s) ?? s; };
+  const tally = new Map();
+  for (const p of l.parts) tally.set(name(p), (tally.get(name(p)) || 0) + p.str.trim().length);
+  const ranked = [...tally].sort((a, b) => b[1] - a[1]);
+  l.style = ranked[0][0];
+  l.size = Number(l.style.split('@')[1]);
+  l.pure = ranked.length === 1 || ranked[0][1] >= l.text.replace(/\s/g, '').length * 0.9;
+  l.lead = name(l.parts[0]);
+}
 
 /**
  * A page's items as lines, each cut where a gutter's worth of space opens.
@@ -127,7 +304,11 @@ function linesOf(page, book = new Map()) {
       // at 1.8 a 19-point gutter beside 11-point text read as a word space,
       // and two columns came out as one sentence.
       if (cur && gap <= it.size && !otherColumn && !(atGutter(it) && gap > it.size * 0.3)) {
-        cur.text += (gap > it.size * 0.18 && !cur.text.endsWith(' ') && !it.str.startsWith(' ') ? ' ' : '') + it.str;
+        // Some books set word spaces as narrow as a tenth of the type size.
+        // A gap that narrow beside a hyphen, a bracket or punctuation is kerning.
+        const space = gap > it.size * 0.18 || (gap >= it.size * 0.06
+          && !/[-–—(\[‘“/]$/.test(cur.text) && !/^[-–—,.;:!?)\]’”/]/.test(it.str));
+        cur.text += (space && !cur.text.endsWith(' ') && !it.str.startsWith(' ') ? ' ' : '') + it.str;
         cur.x1 = it.x + it.w;
         cur.parts.push(it);
       } else {
@@ -138,17 +319,11 @@ function linesOf(page, book = new Map()) {
   }
   for (const l of lines) {
     l.text = l.text.replace(/\s+/g, ' ').trim();
-    // The style a line is *in*: the one most of its characters are set in.
-    const tally = new Map();
-    for (const p of l.parts) tally.set(styleOf(p), (tally.get(styleOf(p)) || 0) + p.str.trim().length);
-    const ranked = [...tally].sort((a, b) => b[1] - a[1]);
-    l.style = ranked[0][0];
-    l.size = Number(l.style.split('@')[1]);
-    l.pure = ranked.length === 1 || ranked[0][1] >= l.text.replace(/\s/g, '').length * 0.9;
-    // The style it *opens* in, for a run-in label: "Prerequisites: Boxing sphere."
-    l.lead = styleOf(l.parts[0]);
+    styleLine(l);
   }
-  return lines.filter((l) => l.text);
+  // A rebuilt table is one line of its own, kept as it was written.
+  const tables = (page.tables || []).map((t) => ({ ...t, parts: [], table: true, style: 'table@0', size: 0, pure: false, lead: 'table@0' }));
+  return [...lines.filter((l) => l.text), ...tables];
 }
 
 /** Left column down, then right; a line across both ends the columns above it. */
@@ -190,26 +365,54 @@ function inReadingOrder(lines, width) {
  * -- for a sphere, that is the sphere's own description and base abilities.
  */
 export function outlineOf(pages, { title = '', debug = false } = {}) {
+  const tidy = pages.map(tidyPage);
   // Twice: once to learn where the book's right column starts, once knowing it.
   const book = new Map();
-  pages.forEach((p) => linesOf(p, book));
+  tidy.forEach((p) => linesOf(p, book));
   const learned = new Map(book);
-  const perPage = pages.map((p) => linesOf(p, new Map(learned)));
+  const perPage = tidy.map((p) => linesOf(p, new Map(learned)));
 
-  // Furniture: the same words at the same place on most pages -- a running
-  // header, a page number, a footer. None of it is an entry's text.
+  /*
+   * Furniture: the same words at the same height on many pages -- a running
+   * head, a page number, a footer. None of it is an entry's text. Height and
+   * not place: a running head stands at one x on left pages and another on
+   * right ones, and a right-aligned page number moves with its digits.
+   */
+  const band = (l) => Math.round(l.y / 3);
+  const numberless = (t) => t.replace(/\d+/g, '#');
   const seen = new Map();
   perPage.forEach((lines) => {
-    const once = new Set(lines.map((l) => `${round(l.x0, 6)}|${round(l.y, 6)}|${l.text.replace(/\d+/g, '#')}`));
+    const once = new Set(lines.filter((l) => !l.table).flatMap((l) => [`${band(l)}|${numberless(l.text)}`, `${band(l)}=${l.text}`]));
     for (const k of once) seen.set(k, (seen.get(k) || 0) + 1);
   });
-  const furniture = (l) => (seen.get(`${round(l.x0, 6)}|${round(l.y, 6)}|${l.text.replace(/\d+/g, '#')}`) || 0) >= Math.max(3, pages.length * 0.4);
+  const near = (l, key) => (l.table ? 0 : [-1, 0, 1].reduce((n, d) => n + (seen.get(`${band(l) + d}${key}`) || 0), 0));
+  const common = (l) => near(l, `|${numberless(l.text)}`) >= Math.max(3, pages.length * 0.4);
+  // A running head that changes with the chapter is on too few pages for
+  // that. It is still the top or bottom line of its page, apart from the
+  // text, in the same words at the same height on other pages. The same
+  // words exactly: a table row at the foot of a page can share its shape
+  // with others ("1d6 1d8 x2").
+  const furnitureOn = perPage.map((lines) => {
+    const rest = lines.filter((l) => !common(l) && !l.table).sort((a, b) => a.y - b.y);
+    const repeated = (l) => l.text.length <= 100 && near(l, `=${l.text}`) >= 3;
+    const outer = new Set();
+    if (rest.length > 1) {
+      const top = rest[0].y;
+      const bottom = rest[rest.length - 1].y;
+      const below = rest.find((l) => l.y - top >= 2);
+      const above = [...rest].reverse().find((l) => bottom - l.y >= 2);
+      for (const l of rest.filter((x) => x.y - top < 2)) if (below && below.y - l.y >= l.size * 1.5 && repeated(l)) outer.add(l);
+      for (const l of rest.filter((x) => bottom - x.y < 2)) if (above && l.y - above.y >= l.size * 1.5 && repeated(l)) outer.add(l);
+    }
+    return new Set(lines.filter((l) => common(l) || outer.has(l)));
+  });
 
   const flow = [];
   perPage.forEach((lines, pi) => {
-    const kept = lines.filter((l) => !furniture(l));
+    const furniture = furnitureOn[pi];
+    const kept = lines.filter((l) => !furniture.has(l));
     // A printed page number, when the page has one, is the one to cite.
-    const printed = lines.find((l) => furniture(l) && /^\d{1,3}$/.test(l.text));
+    const printed = lines.find((l) => furniture.has(l) && /^\d{1,4}$/.test(l.text));
     const page = printed ? Number(printed.text) : pi + 1;
     for (const l of inReadingOrder(kept, pages[pi].width)) flow.push({ ...l, page, colWidth: pages[pi].width / 2 });
   });
@@ -223,7 +426,7 @@ export function outlineOf(pages, { title = '', debug = false } = {}) {
    */
   const weight = new Map();
   let total = 0;
-  for (const l of flow) { weight.set(l.style, (weight.get(l.style) || 0) + l.text.length); total += l.text.length; }
+  for (const l of flow) if (!l.table) { weight.set(l.style, (weight.get(l.style) || 0) + l.text.length); total += l.text.length; }
   const ranked = [...weight].sort((a, b) => b[1] - a[1]);
   const bodyStyles = new Set(ranked.filter(([, n], i) => i === 0 || n >= total * 0.12).map(([s]) => s));
   const body = ranked[0]?.[0] ?? '';
@@ -238,7 +441,31 @@ export function outlineOf(pages, { title = '', debug = false } = {}) {
     // next line does end in a comma: "Internal Tool (accessory, augment,".
     && (!/[.;:,]$/.test(l.text) || (/,$/.test(l.text) && open(l.text)));
   const headingStyles = new Map();
-  for (const l of flow) if (isHeading(l)) headingStyles.set(l.style, (headingStyles.get(l.style) || 0) + 1);
+  const countHeadings = () => {
+    headingStyles.clear();
+    for (const l of flow) if (isHeading(l)) headingStyles.set(l.style, (headingStyles.get(l.style) || 0) + 1);
+  };
+  countHeadings();
+  /*
+   * A heading with "fi", "fl" or "ff" in it is sometimes set in a second
+   * font object of the same face, which holds the ligature. That style's
+   * headings all have a ligature in them. It is read as the commonest
+   * heading style of its size, or every such talent reads as a sub-heading
+   * of the one above it.
+   */
+  const ligatures = new Map();
+  for (const l of flow) if (isHeading(l) && /f[fil]/.test(l.text)) ligatures.set(l.style, (ligatures.get(l.style) || 0) + 1);
+  const ligatureOnly = (s) => headingStyles.get(s) >= 3 && (ligatures.get(s) || 0) >= headingStyles.get(s) * 0.9;
+  const alias = new Map();
+  for (const s of headingStyles.keys()) {
+    if (!ligatureOnly(s)) continue;
+    const twin = [...headingStyles].filter(([t]) => !ligatureOnly(t) && t.split('@')[1] === s.split('@')[1]).sort((a, b) => b[1] - a[1])[0];
+    if (twin) alias.set(s, twin[0]);
+  }
+  if (alias.size) {
+    for (const l of flow) if (!l.table) styleLine(l, alias);
+    countHeadings();
+  }
   // The style most headings are in is the entries'. Larger ones are sections;
   // the rest are sub-headings inside an entry (one mode of a talent that has several).
   const entryStyle = [...headingStyles].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
@@ -254,6 +481,8 @@ export function outlineOf(pages, { title = '', debug = false } = {}) {
   let last = null;
 
   for (const l of flow) {
+    // A rebuilt table is a paragraph of its own.
+    if (l.table) { endPara(); target().push(l.text); last = l; continue; }
     /*
      * The tail of a heading whose tags ran on: "…(augment, drone," then
      * "gadget)". It is in the heading's style, it closes a bracket, and it
