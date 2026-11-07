@@ -41,7 +41,7 @@
  */
 import { esc } from './html.js';
 import { trackerReading } from './panels/trackers.js';
-import { COMPANION_KINDS, COMPANION_LABELS, companionInUse } from '../companions.js';
+import { COMPANION_KINDS, COMPANION_LABELS, companionBoxValue, companionInUse } from '../companions.js';
 import { fmt, ABILITIES, ABILITY_LABELS, critMultOf, threatText } from '../rules.js';
 import { rollSpec } from '../roll20.js';
 import { campaignRules, levelProgress, mythicTierGrantOf, specialtyInPlay, trialProgress } from '../model/campaign.js';
@@ -963,11 +963,12 @@ function companions(model, add) {
         }
       }
       (co.skills || []).forEach((s, i) => {
-        if (!Number(s.ranks)) return;
+        const ranks = companionBoxValue(co, `skills.${i}.ranks`);
+        if (!ranks) return;
         const title = skillTitle(s);
         if (!title) return;
         add({
-          kind: 'skill', title, tab: kind, value: `${s.ranks} rank${s.ranks === 1 ? '' : 's'}`,
+          kind: 'skill', title, tab: kind, value: `${ranks} rank${ranks === 1 ? '' : 's'}`,
           sub: bits(`${label} skill`, text(s.ability)),
           roll: { kind: rollKind, ref: `skill:${i}`, what: `a ${label} ${title} check` }, keys: 'companion skill',
         });

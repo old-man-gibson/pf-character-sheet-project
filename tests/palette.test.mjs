@@ -134,6 +134,11 @@ console.log('a tracker and a companion read as they stand, not as they were save
   const bite = find(index(m), 'Bite');
   check('its attack shows its bonus to hit', bite?.value?.split(' · ')[0],
     (() => { const n = m.data.animalCompanion[0].attacks[0].toHit; return n >= 0 ? `+${n}` : String(n); })());
+  const i = m.data.animalCompanion[0].skills.findIndex((s) => s.name === 'Swim');
+  m.setItem('animalCompanion.0.skills', i, 'ranks', 'animalCompanion.hd');
+  const swim = index(m).find((r) => r.title === 'Swim' && r.tab === 'animalCompanion');
+  check('a skill whose ranks are a formula shows what it came to',
+    swim?.value, `${m.data.animalCompanion[0].calc.hd} ranks`);
 }
 
 console.log('the vitals lead, and are what an empty box opens on');

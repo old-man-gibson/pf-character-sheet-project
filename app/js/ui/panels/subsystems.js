@@ -74,7 +74,7 @@ import {
   CONJURED_BASE_FORMS, CONJURED_LEVEL_SOURCES, NATURAL_ATTACKS,
   abilityTextKey, companionAbilityText,
   companionAttackKey, companionScopeName, companionSkillKey, emptyCompanionFeat, hasArmorSlot, isOtherConjurationTalent,
-  skillMiscPath, wearsBarding,
+  wearsBarding,
 } from '../../companions.js';
 import { hasTokens } from '../../inline.js';
 import { getPath } from '../../model/util.js';
@@ -1729,7 +1729,7 @@ function companionHpPanel(cc) {
       ${line('Damage taken', hp.damage || 0)}
       <div class="fieldgrid two" style="margin-top:6px">
         ${field('Temporary', num(`${p}.hp.temp`, hp.temp, 'min="0"'))}
-        ${field('Bonus max HP', num(`${p}.hp.bonus`, hp.bonus))}
+        ${field('Bonus max HP', formulaBox(cc, 'hp.bonus'))}
         ${kind === 'familiar' ? '' : field('HP ability', abilitySelect(`${p}.hpAbility`, b.hpAbility))}
       </div>
       <div class="hpactions">
@@ -1777,9 +1777,9 @@ function companionScoresPanel(model, cc) {
     return `<tr>
           <th scope="row"><span class="abmark" data-ab="${a}">${ABILITY_LABELS[a]}</span></th>
           <td>${base}</td>
-          ${evo ? `<td>${num(`${p}.scores.${a}.evo`, b.scores?.[a]?.evo)}</td>` : ''}
+          ${evo ? `<td>${formulaBox(cc, `scores.${a}.evo`, { width: '3rem' })}</td>` : ''}
           <td class="num derived">${fmt(s.lvlUp || 0)}</td>
-          <td>${num(`${p}.scores.${a}.misc`, b.scores?.[a]?.misc)}${
+          <td>${formulaBox(cc, `scores.${a}.misc`, { width: '3rem' })}${
       forwardedBadge(model, `${sn}.${a}.score`)}</td>
           <td class="num total">${working(model, `${sn}.${a}`, String(s.total ?? 10))}</td>
           <td class="num"><span class="rollpair">${fmt(s.mod ?? 0)}${
@@ -1890,19 +1890,19 @@ function companionSavesPanel(model, cc) {
 
 
 /**
- * One of a companion's typed bonus boxes (COMPANION_FORMULA_FIELDS, a skill's
- * Misc), which takes a formula as readily as a number: it shows what the
- * formula came to and opens on the formula when clicked into, as the
- * character's own do. A box in a list row passes its `data-item` binding.
+ * One of a companion's typed boxes (companionFormulaBoxes in companions.js),
+ * which takes a formula as readily as a number: it shows what the formula
+ * came to and opens on the formula when clicked into, as the character's own
+ * do. A box in a list row passes its `data-item` binding.
  */
-function formulaBox(cc, path, { binding = null, width = '100%' } = {}) {
+function formulaBox(cc, path, { binding = null, width = '100%', example = '' } = {}) {
     const { p, b, k, sn } = cc;
     const r = k.typed?.[path];
     return exprField(binding || `data-set="${p}.${path}"`, getPath(b, path) ?? 0, {
       width,
       value: r && !r.error ? String(r.value) : null,
       error: r?.error || null,
-      title: `A number or a formula, e.g. floor(${sn}.hd / 2)`,
+      title: `A number or a formula, e.g. ${example || `floor(${sn}.hd / 2)`}`,
     });
   }
 
@@ -1923,7 +1923,7 @@ function companionAttacksPanel(model, cc) {
       <h3>Attacks <span class="badge">${fmt(k.totalAttack ?? 0)} to hit</span>${cap}
         <span class="pair" style="margin-left:auto">
           <label class="fld"><span>Ability</span>${select(`${p}.attackAbility`, b.attackAbility, ABILITY_LABELS_LIST, kind === 'familiar' ? 'auto (better of Str / Dex)' : '—')}</label>
-          <label class="fld"><span>Misc</span>${num(`${p}.attackBonus`, b.attackBonus, 'style="width:3.6rem"')}</label>
+          <label class="fld"><span>Misc</span>${formulaBox(cc, 'attackBonus', { width: '3.6rem' })}</label>
         </span>
       </h3>
       ${rows.length ? `<div class="tablewrap"><table class="compattacks"><thead><tr>
@@ -1934,12 +1934,12 @@ function companionAttacksPanel(model, cc) {
         ${rows.map((a, i) => `<tr>
           <td>${itemSelect(list, i, 'type', a.type, types)}</td>
           <td>${itemText(list, i, 'damage', a.damage, '1d6')}</td>
-          <td class="num">${itemNum(list, i, 'dmgBonus', a.dmgBonus)}${
+          <td class="num">${formulaBox(cc, `attacks.${i}.dmgBonus`, { binding: `data-item="${list}|${i}|dmgBonus"`, width: '3.4rem' })}${
             forwardedBadge(model, damageInto(a), { note: 'The roll adds it to the flat part of the damage.' })}</td>
           <td>${itemText(list, i, 'crit', a.crit, '20/×2')}</td>
           <td>${itemSelect(list, i, 'primary', a.primary === true ? 'primary' : a.primary === false ? 'secondary' : String(a.primary || ''),
     [['primary', 'Primary'], ['secondary', 'Secondary']], `auto (${a.primaryResolved ? 'primary' : 'secondary'})`)}</td>
-          <td>${itemNum(list, i, 'bonus', a.bonus)}${
+          <td>${formulaBox(cc, `attacks.${i}.bonus`, { binding: `data-item="${list}|${i}|bonus"`, width: '3.4rem' })}${
             forwardedBadge(model, `${sn}.attack.${companionAttackKey(a)}`)}</td>
           <td class="num total"><span class="rollpair">${fmt(a.toHit ?? 0)}${
             rollButton(model, roll, `attack:${i}`, `${a.type || 'this attack'}: attack and damage`)}</span></td>
@@ -1967,7 +1967,7 @@ function eidolonEvolutionsPanel(model, cc) {
         <span class="badge${over ? ' err' : ''}">${k.evoSpent ?? 0} of ${k.evoPool ?? 0} points</span>${
   b.id ? forwardedBadge(model, `${b.id}.evoPool`) : ''}
         <span class="pair" style="margin-left:auto">
-          <label class="fld"><span>Bonus points</span>${num(`${p}.bonusEvoPoints`, b.bonusEvoPoints, 'style="width:3.6rem"')}</label>
+          <label class="fld"><span>Bonus points</span>${formulaBox(cc, 'bonusEvoPoints', { width: '3.6rem' })}</label>
         </span>
       </h3>
       ${/* The same split the items table had: with only the name and the notes
@@ -2262,9 +2262,9 @@ function companionSkillsPanel(model, cc) {
             String(s.spec || '').trim() ? `<div class="hint">(${esc(s.spec)})</div>` : ''}</td>
           <td>${itemSelect(list, i, 'ability', s.ability, ABILITY_LABELS_LIST, null)}</td>
           <td class="mid">${itemCheck(list, i, 'classSkill', s.classSkill)}</td>
-          <td>${itemNum(list, i, 'ranks', s.ranks)}</td>
+          <td>${formulaBox(cc, `skills.${i}.ranks`, { binding: `data-item="${list}|${i}|ranks"`, width: '3.2rem', example: `${sn}.hd` })}</td>
           ${fam ? `<td class="num derived">${s.masterRanks || 0}</td>` : ''}
-          <td>${formulaBox(cc, skillMiscPath(i), { binding: `data-item="${list}|${i}|misc"`, width: '3.2rem' })}${
+          <td>${formulaBox(cc, `skills.${i}.misc`, { binding: `data-item="${list}|${i}|misc"`, width: '3.2rem' })}${
             forwardedBadge(model, `${sn}.skill.${companionSkillKey(s)}`)}</td>
           <td class="num total"><span class="rollpair">${s.armorCheck
     ? `<span tabindex="0" data-tip="${esc(`Includes the armor check penalty, ${s.armorCheck}.`)}">${fmt(s.total ?? 0)}</span>`

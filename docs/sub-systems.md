@@ -1013,6 +1013,12 @@ that spends temporary points first. Prose fields take inline formulas, and each 
 reads from a formula as `familiar.hp`, `familiar.attack`, `eidolon.hd`,
 `eidolon.evoLeft`, `animalCompanion.str.mod`, and so on.
 
+These boxes take a number or a formula: bonus max HP, ability Evo and Misc, the AC
+bonuses, CMD and CMB other, initiative bonus, attack Misc, each natural attack's Bonus
+and Dmg +, save Misc, skill Ranks and Misc, bonus feats, bonus evolution points and each
+speed's bonus. The level override, master-level penalty, base scores, temporary hit
+points, armor columns and costs take numbers only.
+
 **Combat maneuvers.** CMB is BAB + Str + the special size modifier — the AC one the other
 way round, exactly as CMD already carried it. The worksheet never worked it out at all, so
 a companion that trips or grapples had nothing to read; it now has a line, a **CMB other**

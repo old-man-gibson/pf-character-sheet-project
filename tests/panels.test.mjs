@@ -1452,6 +1452,27 @@ console.log('\na companion skill’s Misc is a number-or-formula box showing wha
   ok('and no skill Misc is a plain number box', !/type="number"[^>]*data-item="animalCompanion\.0\.skills\|\d+\|misc"/.test(html));
 }
 
+console.log('\na companion’s bonus boxes are number-or-formula boxes; its level, base scores and temporary HP stay numbers');
+{
+  const c = new Character(blankDocument({ name: 'Companion Boxes', level: 6 }));
+  c.listAdd('animalCompanion.0.attacks', { type: 'Bite', damage: '1d6', bonus: 0, dmgBonus: 0 });
+  c.listAdd('eidolon.0.attacks', { type: 'Claw', damage: '1d4', bonus: 0, dmgBonus: 0 });
+  c.set('animalCompanion.0.attackBonus', '1 + 1');
+  const boxes = (html) => {
+    const all = [...html.matchAll(/<input type="(number|text)"[^>]*?data-(?:set|item)="(?:animalCompanion|eidolon)\.0\.([^"]+)"\s+data-kind="(\w+)"/g)];
+    return Object.fromEntries(all.map(([, type, path, kind]) => [path.replace(/\|\d+\|/, '|#|').replace(/scores\.\w+\./, 'scores.*.'), `${type}/${kind}`]));
+  };
+  const ac = boxes(subsystems.companionPanel(c, 'animalCompanion'));
+  const eid = boxes(subsystems.companionPanel(c, 'eidolon'));
+  check('these take a formula', ['hp.bonus', 'scores.*.misc', 'attackBonus', 'attacks|#|bonus', 'attacks|#|dmgBonus',
+    'skills|#|ranks', 'skills|#|misc'].map((k) => ac[k]).concat(['scores.*.evo', 'bonusEvoPoints'].map((k) => eid[k])),
+  Array(9).fill('text/expr'));
+  check('these stay numbers', ['masterLevelPenalty', 'hp.temp', 'scores.*.base'].map((k) => ac[k]),
+    Array(3).fill('number/number'));
+  ok('a formula shows what it came to', /value="1 \+ 1"[^>]*data-set="animalCompanion\.0\.attackBonus" data-kind="expr"[^]*?<span class="xf-view"[^>]*>2<\/span>/
+    .test(subsystems.companionPanel(c, 'animalCompanion')));
+}
+
 console.log('\nevery tracker row has a grip, on the Trackers tab and the session Resources card');
 {
   const c = new Character(blankDocument({ name: 'Grips', level: 6 }));

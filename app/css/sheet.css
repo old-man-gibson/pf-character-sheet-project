@@ -4300,10 +4300,15 @@ button.foldchip .badge { margin-left: 4px; }
 /* Each table scrolls in its own box when one is wider than the panel (a phone),
    at its own width rather than the `table.build` floor. */
 .compskills .tablewrap > table.build { min-width: 0; }
-/* A companion's attacks: the pick lists and number boxes keep a floor, or the
-   table gave them the width of their headings ("Type", "Role"): 26px. */
+/* A companion's attacks: the pick lists keep a floor, or the table gave them
+   the width of their headings ("Type", "Role"): 26px. The Bonus and Dmg +
+   formula boxes carry their own (--xf-w). */
 table.compattacks td > select { min-width: 6.5rem; }
-table.compattacks td > input[type="number"] { min-width: 3.4rem; }
+/* A formula box in a field beside a panel heading (a companion's attack Misc,
+   an eidolon's bonus evolution points) keeps its own width. The field is only
+   as wide as what it holds, so the 100% every other field's box takes came
+   to 28px. */
+h3 > .pair > label.fld > .xf { width: var(--xf-w); }
 .compskills th:not(.cname), .compskills td:not(.cname) { width: 1%; white-space: nowrap; }
 .compskills select { width: auto; min-width: 3.6rem; }
 .compskills td.mid { text-align: center; }
