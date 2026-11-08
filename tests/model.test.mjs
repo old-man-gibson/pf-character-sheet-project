@@ -67,8 +67,9 @@ import {
   CONJURED_TABLE, COMPANION_KINDS, companionBreakdown, companionScopeName, defaultCompanion, normalizeCompanion,
   splitAbilities, setCompanionAbilityText, companionAbilityText, abilityTextKey, companionById, companionEntries,
   companionNameTest, levelSourceOf, levelSourceLabel, COMPANION_LEVEL_SOURCES, CONJURED_LEVEL_SOURCES, naturalAttack,
+  setCompanionArchetypes, companionArchetype, companionArchetypeNames,
 } from '../app/js/companions.js';
-import { namedTextFrom } from '../app/js/extensions.js';
+import { namedTextFrom, companionArchetypesFrom } from '../app/js/extensions.js';
 import { parseDiceExpr as readDice, stepDamageDice, stepDiceMap } from '../app/js/rules.js';
 import { enhancementCapNote, resolveAbility } from '../app/js/rules.js';
 import {
@@ -13304,6 +13305,167 @@ console.log('companions -- a note the player writes about an ability is theirs a
   c.set('familiar.0.abilityNotes.evasion', 'what it means at my table');
   check('it is set and read back like any other field',
     c.data.familiar[0].abilityNotes.evasion, 'what it means at my table');
+}
+
+console.log('companions -- an archetype replaces the table abilities its text names');
+{
+  // A catalogue pack keeps a familiar archetype as one page of text, the way
+  // the books list it; a hand-made pack can write it as a block instead.
+  const valetPage = [
+    'A valet is a consummate personal servant.',
+    'Valet Skills: A valet treats Craft, Perform, and Profession as class skills.',
+    'Able Assistant (Ex): The master treats the valet as having Cooperative Crafting.',
+    'This replaces alertness.',
+    'Teammate (Ex): A valet has all the teamwork feats its master has.',
+    'This replaces improved evasion.',
+    'Deliver Touch Spells (Su): At 3rd level, a valet can move before and after delivering a harmless touch spell.',
+    'This alters deliver touch spells.',
+    'Deliver Aid (Ex): At 7th level, a valet can move before and after using aid another.',
+    'This replaces speak with animals of its kind.',
+  ].join('\n\n');
+  const tables = { catalogues: { catalogues: [{ kind: 'archetype', entries: [
+    { name: 'Valet (Familiar)', fields: [], text: valetPage, source: 'Test p. 1' },
+    { name: 'Samurai Thing', fields: [['Class', 'Samurai']], text: 'Thing (Ex): This replaces challenge.' },
+  ] }] } };
+  const blocks = [{
+    kind: 'archetype', name: 'Bodyguard', class: 'Animal Companion', extName: 'Test Pack',
+    features: [
+      { name: 'Tenacious Guardian', level: 3, text: 'It stays up. This replaces evasion.' },
+      { name: 'Late Watch', level: 9, text: 'This replaces the 9th-level ability score increase.' },
+    ],
+  }, { kind: 'archetype', name: 'Ronin', class: 'Samurai', features: [{ name: 'Lone', text: 'This replaces order.' }] }];
+  const found = companionArchetypesFrom(tables, blocks);
+  check('a familiar page and a companion block are read; class archetypes are not',
+    found.map((a) => [a.kind, a.name]), [['familiar', 'Valet'], ['animalCompanion', 'Bodyguard']]);
+  const valet = found[0];
+  check('each labelled paragraph is a feature, at the level its text names',
+    valet.features.map((f) => [f.name, f.level]),
+    [['Valet Skills', 1], ['Able Assistant', 1], ['Teammate', 1], ['Deliver Touch Spells', 3], ['Deliver Aid', 7]]);
+  check('with what it replaces', valet.features[1].replaces, ['alertnes']);
+
+  setCompanionArchetypes(found);
+  check('found by name, however it is typed', companionArchetype('familiar', 'valet (familiar)')?.name, 'Valet');
+  check('and only for its own kind', companionArchetype('animalCompanion', 'Valet'), null);
+  check('the field suggests the pack’s names', companionArchetypeNames('familiar'), ['Valet']);
+
+  const c = new Character(load('angou'));
+  const plain = c.data.familiar[0].calc.gains.map((g) => g.abilities);
+  c.set('familiar.0.archetypes', 'Valet');
+  const k = c.data.familiar[0].calc;
+  const at = (lv) => k.gains.find((g) => g.level === lv)?.abilities;
+  check('a feature takes the place of the ability it replaces',
+    at(1), ['Able Assistant', 'Teammate', 'share spells', 'empathic link', 'Valet Skills']);
+  check('one with the same name is the archetype’s version', at(3), ['Deliver Touch Spells']);
+  check('and one at a later level replaces that level’s ability', at(7), ['Deliver Aid']);
+  check('the rest of the table stands', at(13), ['Scry on familiar']);
+  check('the archetype is named on the companion', [k.archetypes, k.archetypesMissing], [['Valet'], []]);
+  check('each new ability says where it came from',
+    [k.abilityInfo['able assistant'].archetype, k.abilityInfo['able assistant'].replaces, k.abilityInfo['deliver touch spells'].changes],
+    ['Valet', ['Alertness'], ['Deliver touch spells']]);
+  check('and carries its text', k.abilityInfo['deliver aid'].text.startsWith('At 7th level'), true);
+
+  c.set('familiar.0.masterLevelPenalty', 15);
+  check('a feature waits for its level; what it replaces never comes',
+    c.data.familiar[0].calc.gains.flatMap((g) => g.abilities).filter((n) => /deliver aid|speak with animals/i.test(n)), []);
+  c.set('familiar.0.masterLevelPenalty', 0);
+
+  c.set('familiar.0.archetypes', 'Valet, Homebrew Thing');
+  check('a name no pack describes is reported, the rest still apply',
+    [c.data.familiar[0].calc.archetypes, c.data.familiar[0].calc.archetypesMissing], [['Valet'], ['Homebrew Thing']]);
+  check('two that touch different abilities do not clash', c.data.familiar[0].calc.archetypeClashes, []);
+
+  setCompanionArchetypes([...found, { kind: 'familiar', name: 'Rival', features: [
+    { name: 'Rival Sense', level: 1, text: '', replaces: ['alertnes'], alters: [] }] }]);
+  c.set('familiar.0.archetypes', 'Valet, Rival');
+  check('two that replace the same ability are said to clash',
+    c.data.familiar[0].calc.archetypeClashes, [{ archetypes: ['Valet', 'Rival'], abilities: ['Alertness'] }]);
+  setCompanionArchetypes(found);
+
+  // By hand: a table ability renamed for an archetype no pack describes.
+  c.set('familiar.0.archetypes', 'Homebrew Thing');
+  c.set('familiar.0.replacedAbilities.empathic link', 'Kindred Sense');
+  const h = c.data.familiar[0].calc;
+  check('a table ability can be replaced by hand', h.gains[0].abilities, ['Alertness', 'improved evasion', 'share spells', 'Kindred Sense']);
+  check('and remembers what it replaced', h.abilityInfo['kindred sense'], { was: 'empathic link', wasKey: 'empathic link' });
+  c.set('familiar.0.replacedAbilities.empathic link', '');
+  c.set('familiar.0.archetypes', '');
+  check('clearing both puts the table back', c.data.familiar[0].calc.gains.map((g) => g.abilities), plain);
+
+  // Removed and added by hand.
+  c.set('familiar.0.removedAbilities.improved evasion', true);
+  const r = c.data.familiar[0].calc;
+  check('a table ability can be removed by hand', r.gains[0].abilities, ['Alertness', 'share spells', 'empathic link']);
+  check('and is listed so it can be put back', r.abilitiesRemoved, [{ level: 1, name: 'improved evasion' }]);
+  c.set('familiar.0.removedAbilities.improved evasion', false);
+  check('unticking puts it back in its place', c.data.familiar[0].calc.gains[0].abilities, plain[0]);
+  c.set('familiar.0.addedAbilities', [{ level: 3, name: 'Extra Sense' }, { level: 99, name: 'Far Off' }, { level: 1, name: ' ' }]);
+  const ad = c.data.familiar[0].calc;
+  check('an added ability goes at the end of its level',
+    ad.gains.find((g) => g.level === 3).abilities, [...plain[1], 'Extra Sense']);
+  check('one not reached yet, or with no name, is not there',
+    ad.gains.flatMap((g) => g.abilities).some((n) => /far off/i.test(n) || !n.trim()), false);
+  check('and it says it was added', ad.abilityInfo['extra sense'], { added: true });
+  c.set('familiar.0.addedAbilities', []);
+
+  // A pack archetype's abilities can be replaced or removed by hand as well.
+  c.set('familiar.0.archetypes', 'Valet');
+  c.set('familiar.0.replacedAbilities.teammate', 'Second Pair of Hands');
+  c.set('familiar.0.removedAbilities.valet skills', true);
+  check('an archetype’s ability can be replaced or removed by hand',
+    c.data.familiar[0].calc.gains[0].abilities, ['Able Assistant', 'Second Pair of Hands', 'share spells', 'empathic link']);
+  c.set('familiar.0.replacedAbilities.teammate', '');
+  c.set('familiar.0.removedAbilities.valet skills', false);
+  c.set('familiar.0.archetypes', '');
+
+  // Removing a replaced one shows it by the table's name; putting it back brings the replacement back.
+  c.set('familiar.0.replacedAbilities.alertness', 'Sharp Eyes');
+  c.set('familiar.0.removedAbilities.alertness', true);
+  check('a replaced ability that is removed is listed by its table name',
+    [c.data.familiar[0].calc.abilitiesRemoved, c.data.familiar[0].calc.gains[0].abilities.includes('Sharp Eyes')],
+    [[{ level: 1, name: 'Alertness' }], false]);
+  c.set('familiar.0.removedAbilities.alertness', false);
+  check('putting it back brings back its replacement', c.data.familiar[0].calc.gains[0].abilities[0], 'Sharp Eyes');
+  c.set('familiar.0.replacedAbilities.alertness', '');
+  check('and clearing it puts the table back', c.data.familiar[0].calc.gains.map((g) => g.abilities), plain);
+  check('the changes are kept on the companion only once used',
+    ['replacedAbilities', 'removedAbilities', 'addedAbilities'].map((f) => f in normalizeCompanion('familiar', {})), [false, false, false]);
+  const n = normalizeCompanion('familiar', { addedAbilities: [null, 1, [], { name: 'Kept', level: 2 }], removedAbilities: ['alertness'] });
+  check('a saved list keeps only its rows; a broken map is dropped',
+    [n.addedAbilities, 'removedAbilities' in n], [[{ name: 'Kept', level: 2 }], false]);
+
+  // Protector named in the field is the tick.
+  c.set('familiar.0.archetypes', 'Protector');
+  check('a familiar named Protector has its master’s hit points from 11th', c.data.familiar[0].calc.hpMax, Math.floor(c.hpMax / 2) * 2);
+  c.set('familiar.0.archetypes', '');
+
+  // Animal companion: the archetype field is singular, and a swap can name one grant.
+  c.set('animalCompanion.0.levelOverride', 12);
+  c.set('animalCompanion.0.archetype', 'Bodyguard');
+  const ac = c.data.animalCompanion[0].calc;
+  const acAt = (lv) => ac.gains.find((g) => g.level === lv)?.abilities;
+  check('the companion’s evasion is replaced', acAt(3), ['Tenacious Guardian']);
+  check('only the 9th-level increase goes', [acAt(4), acAt(9)], [['Ability score increase'], ['Late Watch', 'Multiattack']]);
+
+  // A sheet that carries the archetype (a published one) needs no pack for it.
+  const doc = c.toJSON();
+  doc.familiar[0].archetypes = 'Valet';
+  doc.familiar[0].citedArchetypes = { valet: structuredClone(companionArchetype('familiar', 'Valet')) };
+  setCompanionArchetypes([]);
+  const reader = new Character(doc);
+  check('a sheet carrying the archetype swaps without the pack',
+    reader.data.familiar[0].calc.gains[0].abilities.slice(0, 2), ['Able Assistant', 'Teammate']);
+  check('and nothing carried over to the next sheet', new Character(load('angou')).data.familiar[0].calc.archetypes, []);
+  // A saved file that holds junk in these maps is read as nothing, never trusted.
+  const junk = new Character(load('angou'));
+  junk.data.familiar[0].replacedAbilities = 'not a map';
+  junk.data.familiar[0].removedAbilities = { alertness: 'yes', __proto__: null };
+  junk.data.familiar[0].addedAbilities = 'not a list';
+  junk.data.familiar[0].citedArchetypes = { valet: { name: 'Valet', features: [{ name: '' }, null, { name: '__proto__', level: 1 }] } };
+  junk.set('familiar.0.archetypes', 'Valet');
+  check('a cited archetype with broken features adds only what has a name',
+    junk.data.familiar[0].calc.gains[0].abilities.includes('__proto__'), true);
+  check('and its info is an own entry, not a prototype', Object.getPrototypeOf(junk.data.familiar[0].calc.abilityInfo), Object.prototype);
+  check('a removal only counts when it is ticked', junk.data.familiar[0].calc.gains[0].abilities.includes('Alertness'), true);
 }
 
 console.log('companions -- the animal companion follows its table by effective level');

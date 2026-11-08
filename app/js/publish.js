@@ -44,7 +44,9 @@ import { deckManipulation } from './model/subsystems/cardcasting.js';
 import {
   altTrainingLevels, altTrainingLink, altTrainingRepeatFrom, altTrainingTechnique,
 } from './model/subsystems/alt-training.js';
-import { COMPANION_KINDS, abilityTextKey, companionAbilityText } from './companions.js';
+import {
+  COMPANION_KINDS, abilityTextKey, archetypeKey, archetypeNamesOf, companionAbilityText, companionArchetype,
+} from './companions.js';
 import { Character } from './model.js';
 
 /**
@@ -211,6 +213,14 @@ function publishCompanionAbilities(doc, report) {
   try { model = new Character(clone(doc)); } catch { return; }
   for (const kind of COMPANION_KINDS) {
     (doc[kind] || []).forEach((b, i) => {
+      // The archetypes it names, whole: which abilities they swap is worked
+      // out from them on every load, and a reader may have no pack for them.
+      for (const name of archetypeNamesOf(kind, b)) {
+        const a = companionArchetype(kind, name);
+        if (!a) continue;
+        b.citedArchetypes = { ...(b.citedArchetypes || {}), [archetypeKey(name)]: clone(a) };
+        carry(report, 'companion archetype');
+      }
       const gains = model.data[kind]?.[i]?.calc?.gains || [];
       const names = gains.flatMap((g) => g.abilities || [g.text]).filter(Boolean);
       for (const name of new Set(names)) {

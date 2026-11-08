@@ -4168,6 +4168,11 @@ button.badge:hover { background: color-mix(in srgb, currentColor 10%, transparen
 .gainbody .packfrom {
   display: block; margin-top: 3px; font-size: 0.7rem; font-style: italic; opacity: 0.75;
 }
+/* Replaced by and the Removed tick on one line, wrapping on a phone. */
+.gainbody .byhand { display: flex; flex-wrap: wrap; align-items: end; gap: 6px 12px; }
+.gainbody .byhand > label.fld { flex: 1 1 14rem; max-width: 21rem; }
+/* Removed by hand: kept in its level, struck, so it can be put back. */
+.gainrow.removed > .statline > .value { text-decoration: line-through; color: var(--cs-muted); }
 /* Archetype pills on a class row: the name, and a cross that removes it and restores the class's own features. */
 .pills { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-right: 6px; vertical-align: middle; }
 .pill { display: inline-flex; align-items: center; gap: 2px; font-size: 0.74rem; padding: 1px 4px 1px 8px; border-radius: 12px;

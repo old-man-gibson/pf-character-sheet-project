@@ -306,6 +306,23 @@ console.log('publish: the numbers and texts a reader with no packs could not get
   registerTables(mergeTables(bundledPacks()), model);
 }
 
+console.log('publish: a companion archetype travels with the sheet');
+{
+  const { setCompanionArchetypes } = await import('../app/js/companions.js');
+  setCompanionArchetypes([{ kind: 'familiar', name: 'Valet', source: 'Test p. 1', features: [
+    { name: 'Able Assistant', level: 1, text: 'Helps craft.', replaces: ['alertnes'], alters: [] },
+  ] }]);
+  const c = new Character(blankDocument({ name: 'Valeted', level: 5 }));
+  c.addCompanion('familiar');
+  c.set('familiar.0.archetypes', 'Valet');
+  const { doc, report } = publishDocument(c.toJSON());
+  setCompanionArchetypes([]);
+  const reader = new Character(doc);
+  check('the archetype is carried', [doc.familiar[0].citedArchetypes?.valet?.name, report.carriedBy['companion archetype']], ['Valet', 1]);
+  check('and a reader with no pack sees its ability in place of the table’s',
+    reader.data.familiar[0].calc.gains[0].abilities[0], 'Able Assistant');
+}
+
 /*  A maneuver note saved as a bare string -- the description alone, the shape
  *  the notes map has always used for it -- leaves as one entry, not one key
  *  per character; and a note kept under another spelling of the name is the
