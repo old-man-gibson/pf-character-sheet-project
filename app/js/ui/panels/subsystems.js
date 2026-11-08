@@ -2453,12 +2453,13 @@ function companionItemsPanel(model, cc) {
  * can write down. What is conditional is the pack's paragraph above it, which
  * drops away the moment there is something of their own to show instead.
  */
-function companionAbilityRow(model, cc, name) {
+function companionAbilityRow(model, cc, name, removed = false) {
     const { kind, p, b, k } = cc;
     const key = abilityTextKey(name);
     // Where it came from when it is not the table's own: an archetype's
-    // feature, or one the player put in a table ability's place.
-    const from = k.abilityInfo && Object.hasOwn(k.abilityInfo, key) ? k.abilityInfo[key] : null;
+    // feature, or one the player replaced or added. One they removed is shown
+    // struck, with only its Removed tick, so it can be put back.
+    const from = !removed && k.abilityInfo && Object.hasOwn(k.abilityInfo, key) ? k.abilityInfo[key] : null;
     const mine = String(b.abilityNotes?.[key] ?? '');
     const shared = (from?.archetype && from.text.trim() ? from : null)
       || companionAbilityText(name) || b.citedAbilities?.[key] || null;
@@ -2472,45 +2473,81 @@ function companionAbilityRow(model, cc, name) {
     // companion has, and a list you have to scroll past is not a list.
     const shut = isCollapsed(model, foldKey, true);
     const lower = (list) => andList(list.map((n) => n.toLowerCase()));
-    const why = from?.archetype
-      ? [`${from.archetype}.`, from.replaces.length ? `Replaces ${lower(from.replaces)}.` : '',
-        from.changes.length ? `Changes ${lower(from.changes)}.` : ''].filter(Boolean).join(' ')
-      : from?.was ? `Replaces ${from.was.toLowerCase()}.` : '';
-    // A table ability can be replaced by hand, for an archetype no pack describes.
-    const byHand = !from?.archetype && takesArchetypes(kind);
-    return `<div class="gainrow">
+    const why = removed ? 'Removed.'
+      : from?.archetype
+        ? [`${from.archetype}.`, from.replaces.length ? `Replaces ${lower(from.replaces)}.` : '',
+          from.changes.length ? `Changes ${lower(from.changes)}.` : ''].filter(Boolean).join(' ')
+        : from?.was ? `Replaces ${from.was.toLowerCase()}.`
+          : from?.added ? 'Added by hand.' : '';
+    // The table's abilities and an archetype's can be replaced or removed by
+    // hand. One added by hand is changed in the list under the levels.
+    const byHand = takesArchetypes(kind) && !from?.added;
+    const ownAt = (m) => (m && typeof m === 'object' && Object.hasOwn(m, tableKey) ? m[tableKey] : '');
+    return `<div class="gainrow${removed ? ' removed' : ''}">
       <div class="item statline">
         <span class="value">${esc(name)}</span>
         ${why ? `<span class="hint">${esc(why)}</span>` : ''}
         ${foldButton(model, foldKey, { open: !shut })}
       </div>
       ${shut ? '' : `<div class="gainbody">
-        ${shared && !mine.trim() ? `<div class="hint packsays">
+        ${shared && !mine.trim() && !removed ? `<div class="hint packsays">
           ${esc(shared.text)}
           ${shared.source || shared.pack ? `<span class="packfrom">${esc(shared.source || shared.pack)}</span>` : ''}
         </div>` : ''}
-        ${byHand ? field('Replaced by', text(`${p}.replacedAbilities.${esc(tableKey)}`,
-    b.replacedAbilities && Object.hasOwn(b.replacedAbilities, tableKey) ? b.replacedAbilities[tableKey] : '',
-    'The ability that takes its place')) : ''}
-        ${prose(model, `data-set="${p}.abilityNotes.${esc(key)}"`, mine, 2)}
+        ${byHand ? `<div class="byhand">
+          ${removed ? '' : field('Replaced by', text(`${p}.replacedAbilities.${esc(tableKey)}`, ownAt(b.replacedAbilities),
+    'The ability that takes its place'))}
+          ${check(`${p}.removedAbilities.${esc(tableKey)}`, ownAt(b.removedAbilities) === true, 'Removed')}
+        </div>` : ''}
+        ${removed ? '' : prose(model, `data-set="${p}.abilityNotes.${esc(key)}"`, mine, 2)}
       </div>`}
     </div>`;
+  }
+
+
+/**
+ * The abilities added by hand: a name and the level it arrives at, each shown
+ * at the end of its level once the companion reaches it.
+ */
+function companionAddedAbilities(cc) {
+    const { p, b } = cc;
+    const list = `${p}.addedAbilities`;
+    const rows = Array.isArray(b.addedAbilities) ? b.addedAbilities : [];
+    return `${rows.length ? `<div class="tablewrap" style="margin-top:8px"><table class="fitcols addedabilities"><thead><tr>
+        <th>Added ability</th><th style="width:4.5rem">Level</th><th></th>
+      </tr></thead><tbody>
+        ${rows.map((a, i) => `<tr>
+          <td>${itemText(list, i, 'name', a.name, 'Ability')}</td>
+          <td>${itemNum(list, i, 'level', a.level)}</td>
+          ${rowRemove(list, i)}
+        </tr>`).join('')}
+      </tbody></table></div>` : ''}
+      <div style="margin-top:6px">${addButton(list, 'Add an ability', { name: '', level: 1 })}</div>`;
   }
 
 
 function companionGainsPanel(model, cc) {
     const { kind, p, b, k, label } = cc;
     const gains = k.gains || [];
+    // A level whose abilities were all removed by hand still shows, so they
+    // can be put back.
+    const removed = Array.isArray(k.abilitiesRemoved) ? k.abilitiesRemoved : [];
+    const levels = [...new Set([...gains.map((g) => g.level), ...removed.map((r) => r.level)])].sort((x, y) => x - y);
+    const rowsAt = (lv) => [
+      ...gains.filter((g) => g.level === lv).flatMap((g) => (g.abilities || [g.text]).map((n) => companionAbilityRow(model, cc, n))),
+      ...removed.filter((r) => r.level === lv).map((r) => companionAbilityRow(model, cc, r.name, true)),
+    ].join('');
     return `<section class="panel">
       <h3>${esc(label)} abilities <span class="badge">${gains.length} from the table</span></h3>
-      ${gains.length ? `<div class="rowlist">${gains.map((g) => `<div class="item gainlevel">
-        <span class="label">Level ${g.level}</span>
-        <div class="gains">${(g.abilities || [g.text]).map((n) => companionAbilityRow(model, cc, n)).join('')}</div>
+      ${levels.length ? `<div class="rowlist">${levels.map((lv) => `<div class="item gainlevel">
+        <span class="label">Level ${lv}</span>
+        <div class="gains">${rowsAt(lv)}</div>
       </div>`).join('')}</div>` : '<p class="empty">Nothing yet at this level.</p>'}
       ${(k.archetypeClashes || []).map((c) => `<p class="hint warn">${esc(c.archetypes.join(' and '))} both change
         ${esc(andList(c.abilities.map((n) => n.toLowerCase())))}, so they cannot be taken together.</p>`).join('')}
       ${k.archetypesMissing?.length ? `<p class="hint">${esc(andList(k.archetypesMissing))}
-        ${k.archetypesMissing.length > 1 ? 'were' : 'was'} not found in any pack. Open an ability above to replace it by hand.</p>` : ''}
+        ${k.archetypesMissing.length > 1 ? 'were' : 'was'} not found in any pack. Open an ability above to replace or remove it, or add one below.</p>` : ''}
+      ${takesArchetypes(kind) ? companionAddedAbilities(cc) : ''}
       <div class="fieldgrid" style="margin-top:8px">
         ${kind === 'familiar' ? `<label class="fld" style="grid-column:1/-1"><span>Familiar abilities</span>
           ${prose(model, `data-set="${p}.abilities"`, b.abilities, 3)}</label>` : ''}

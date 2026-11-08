@@ -13192,6 +13192,48 @@ console.log('companions -- an archetype replaces the table abilities its text na
   c.set('familiar.0.archetypes', '');
   check('clearing both puts the table back', c.data.familiar[0].calc.gains.map((g) => g.abilities), plain);
 
+  // Removed and added by hand.
+  c.set('familiar.0.removedAbilities.improved evasion', true);
+  const r = c.data.familiar[0].calc;
+  check('a table ability can be removed by hand', r.gains[0].abilities, ['Alertness', 'share spells', 'empathic link']);
+  check('and is listed so it can be put back', r.abilitiesRemoved, [{ level: 1, name: 'improved evasion' }]);
+  c.set('familiar.0.removedAbilities.improved evasion', false);
+  check('unticking puts it back in its place', c.data.familiar[0].calc.gains[0].abilities, plain[0]);
+  c.set('familiar.0.addedAbilities', [{ level: 3, name: 'Extra Sense' }, { level: 99, name: 'Far Off' }, { level: 1, name: ' ' }]);
+  const ad = c.data.familiar[0].calc;
+  check('an added ability goes at the end of its level',
+    ad.gains.find((g) => g.level === 3).abilities, [...plain[1], 'Extra Sense']);
+  check('one not reached yet, or with no name, is not there',
+    ad.gains.flatMap((g) => g.abilities).some((n) => /far off/i.test(n) || !n.trim()), false);
+  check('and it says it was added', ad.abilityInfo['extra sense'], { added: true });
+  c.set('familiar.0.addedAbilities', []);
+
+  // A pack archetype's abilities can be replaced or removed by hand as well.
+  c.set('familiar.0.archetypes', 'Valet');
+  c.set('familiar.0.replacedAbilities.teammate', 'Second Pair of Hands');
+  c.set('familiar.0.removedAbilities.valet skills', true);
+  check('an archetype’s ability can be replaced or removed by hand',
+    c.data.familiar[0].calc.gains[0].abilities, ['Able Assistant', 'Second Pair of Hands', 'share spells', 'empathic link']);
+  c.set('familiar.0.replacedAbilities.teammate', '');
+  c.set('familiar.0.removedAbilities.valet skills', false);
+  c.set('familiar.0.archetypes', '');
+
+  // Removing a replaced one shows it by the table's name; putting it back brings the replacement back.
+  c.set('familiar.0.replacedAbilities.alertness', 'Sharp Eyes');
+  c.set('familiar.0.removedAbilities.alertness', true);
+  check('a replaced ability that is removed is listed by its table name',
+    [c.data.familiar[0].calc.abilitiesRemoved, c.data.familiar[0].calc.gains[0].abilities.includes('Sharp Eyes')],
+    [[{ level: 1, name: 'Alertness' }], false]);
+  c.set('familiar.0.removedAbilities.alertness', false);
+  check('putting it back brings back its replacement', c.data.familiar[0].calc.gains[0].abilities[0], 'Sharp Eyes');
+  c.set('familiar.0.replacedAbilities.alertness', '');
+  check('and clearing it puts the table back', c.data.familiar[0].calc.gains.map((g) => g.abilities), plain);
+  check('the changes are kept on the companion only once used',
+    ['replacedAbilities', 'removedAbilities', 'addedAbilities'].map((f) => f in normalizeCompanion('familiar', {})), [false, false, false]);
+  const n = normalizeCompanion('familiar', { addedAbilities: [null, 1, [], { name: 'Kept', level: 2 }], removedAbilities: ['alertness'] });
+  check('a saved list keeps only its rows; a broken map is dropped',
+    [n.addedAbilities, 'removedAbilities' in n], [[{ name: 'Kept', level: 2 }], false]);
+
   // Protector named in the field is the tick.
   c.set('familiar.0.archetypes', 'Protector');
   check('a familiar named Protector has its master’s hit points from 11th', c.data.familiar[0].calc.hpMax, Math.floor(c.hpMax / 2) * 2);
@@ -13217,11 +13259,14 @@ console.log('companions -- an archetype replaces the table abilities its text na
   // A saved file that holds junk in these maps is read as nothing, never trusted.
   const junk = new Character(load('angou'));
   junk.data.familiar[0].replacedAbilities = 'not a map';
+  junk.data.familiar[0].removedAbilities = { alertness: 'yes', __proto__: null };
+  junk.data.familiar[0].addedAbilities = 'not a list';
   junk.data.familiar[0].citedArchetypes = { valet: { name: 'Valet', features: [{ name: '' }, null, { name: '__proto__', level: 1 }] } };
   junk.set('familiar.0.archetypes', 'Valet');
   check('a cited archetype with broken features adds only what has a name',
     junk.data.familiar[0].calc.gains[0].abilities.includes('__proto__'), true);
   check('and its info is an own entry, not a prototype', Object.getPrototypeOf(junk.data.familiar[0].calc.abilityInfo), Object.prototype);
+  check('a removal only counts when it is ticked', junk.data.familiar[0].calc.gains[0].abilities.includes('Alertness'), true);
 }
 
 console.log('companions -- the animal companion follows its table by effective level');

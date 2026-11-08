@@ -614,32 +614,45 @@ export function companionArchetypeNames(kind) {
 
 /**
  * The table's abilities with the companion's archetypes and the player's own
- * replacements made.
+ * changes made.
  *
  * An archetype the field names is found in the packs, or in the copy a
  * published sheet carries (`citedArchetypes`). Each of its features takes out
  * the abilities it replaces, at every level, or at the one level it names
  * ("the 7th-level evasion"). A feature with the same name as an ability takes
  * that one's place too: the valet's Deliver Touch Spells is the valet's
- * version. The feature then arrives at its own level. What is left of the
- * table can be renamed by hand (`replacedAbilities`, keyed by the table name),
- * for an archetype no pack describes.
+ * version. The feature then arrives at its own level.
+ *
+ * Then the player's own changes, for an archetype no pack describes or a
+ * ruling at the table. Each is keyed by the name the ability had before them
+ * (`abilityTextKey`), whether the table's or an archetype's:
+ * `removedAbilities` takes it out, `replacedAbilities` renames it in place,
+ * and `addedAbilities` (a list of `{ level, name }`) puts new ones at the end
+ * of their level.
  *
  * `table` is every level's Special entry, not only those reached, so a feature
  * can say it replaces one that has not arrived yet.
  *
- * Returns `{ gains, info, applied, missing, clashes }`: the gains in the
- * shape `computeCompanion` makes them, `info[abilityTextKey(shown name)]`
+ * Returns `{ gains, info, applied, missing, clashes, removed }`: the gains in
+ * the shape `computeCompanion` makes them, `info[abilityTextKey(shown name)]`
  * saying where a changed one came from, the archetypes found, those not
- * found, and each pair of them that changes the same ability.
+ * found, each pair of them that changes the same ability, and the abilities
+ * removed by hand (`{ level, name }`) so they can be put back.
  */
 export function swapCompanionAbilities(kind, b, gains, level, table) {
   const names = archetypeNamesOf(kind, b);
   // Read as own entries only: these maps come from a saved file.
-  const byHand = new Map(b?.replacedAbilities && typeof b.replacedAbilities === 'object'
-    ? Object.entries(b.replacedAbilities).map(([k, v]) => [k, String(v ?? '').trim()]).filter(([, v]) => v) : []);
-  const cited = b?.citedArchetypes && typeof b.citedArchetypes === 'object' ? new Map(Object.entries(b.citedArchetypes)) : new Map();
-  if (!names.length && !byHand.size) return { gains, info: {}, applied: [], missing: [], clashes: [] };
+  const own = (m) => (m && typeof m === 'object' && !Array.isArray(m) ? Object.entries(m) : []);
+  const byHand = new Map(own(b?.replacedAbilities).map(([k, v]) => [k, String(v ?? '').trim()]).filter(([, v]) => v));
+  const takenOut = new Set(own(b?.removedAbilities).filter(([, v]) => v === true).map(([k]) => k));
+  const added = (Array.isArray(b?.addedAbilities) ? b.addedAbilities : [])
+    .filter((a) => a && typeof a === 'object')
+    .map((a) => ({ level: Math.max(1, Math.floor(Number(a.level)) || 1), name: String(a.name ?? '').trim() }))
+    .filter((a) => a.name && a.level <= level);
+  const cited = new Map(own(b?.citedArchetypes));
+  if (!ARCHETYPE_FIELD[kind] || (!names.length && !byHand.size && !takenOut.size && !added.length)) {
+    return { gains, info: {}, applied: [], missing: [], clashes: [], removed: [] };
+  }
 
   const word = ARCHETYPE_CLASS_WORD[kind] || '';
   const keyOf = (n) => swapKey(n, word);
@@ -650,7 +663,7 @@ export function swapCompanionAbilities(kind, b, gains, level, table) {
   }
   const labelOf = (k) => tableNames.get(swapBase(k)) || swapLabel(k);
 
-  let rows = gains.flatMap((g) => (g.abilities || [g.text]).map((name) => ({ level: g.level, name, table: true })));
+  let rows = gains.flatMap((g) => (g.abilities || [g.text]).map((name) => ({ level: g.level, name })));
   const info = new Map();
   const applied = [];
   const missing = [];
@@ -698,13 +711,26 @@ export function swapCompanionAbilities(kind, b, gains, level, table) {
       });
     }
   }
+  // The player's own: taken out, then renamed, then added. Removal reads the
+  // name from before any renaming, so putting one back brings back its
+  // replacement too.
+  const removed = [];
+  rows = rows.filter((r) => {
+    if (!takenOut.has(abilityTextKey(r.name))) return true;
+    removed.push({ level: r.level, name: r.name });
+    return false;
+  });
   for (const r of rows) {
-    if (!r.table) continue;
     const was = abilityTextKey(r.name);
     const to = byHand.get(was);
     if (!to) continue;
     info.set(abilityTextKey(to), { was: r.name, wasKey: was });
     r.name = to;
+  }
+  // Each goes to the end of its level when the rows are grouped below.
+  for (const a of added) {
+    rows.push({ level: a.level, name: a.name });
+    if (!info.has(abilityTextKey(a.name))) info.set(abilityTextKey(a.name), { added: true });
   }
 
   // Back into gains, a level at a time, in the order the rows now stand; a
@@ -718,7 +744,7 @@ export function swapCompanionAbilities(kind, b, gains, level, table) {
   const out = [...byLevel].sort((x, y) => x[0] - y[0]).map(([lv, list]) => ({
     level: lv, text: list.join(', '), abilities: list, ...(notes.has(lv) ? { note: notes.get(lv) } : {}),
   }));
-  return { gains: out, info: Object.fromEntries(info), applied, missing, clashes };
+  return { gains: out, info: Object.fromEntries(info), applied, missing, clashes, removed };
 }
 
 /**
@@ -986,10 +1012,14 @@ export function normalizeCompanion(kind, block) {
     };
   }
   if (!out.abilityNotes || typeof out.abilityNotes !== 'object') out.abilityNotes = {};
-  // Table abilities replaced by hand, by the table's name for them. Made the
-  // first time one is replaced, so a companion that never was saves nothing.
-  if ('replacedAbilities' in out && (!out.replacedAbilities || typeof out.replacedAbilities !== 'object' || Array.isArray(out.replacedAbilities))) {
-    delete out.replacedAbilities;
+  // Abilities replaced, removed or added by hand. Each is made the first time
+  // it is used, so a companion that never was saves nothing.
+  for (const key of ['replacedAbilities', 'removedAbilities']) {
+    if (key in out && (!out[key] || typeof out[key] !== 'object' || Array.isArray(out[key]))) delete out[key];
+  }
+  if ('addedAbilities' in out) {
+    if (!Array.isArray(out.addedAbilities)) delete out.addedAbilities;
+    else out.addedAbilities = out.addedAbilities.filter((a) => a && typeof a === 'object' && !Array.isArray(a));
   }
   // A document saved before equipment could do anything holds a name and a
   // cost; the two new fields default the way a player would expect -- a thing
@@ -1506,6 +1536,7 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     calc.archetypes = swapped.applied;
     calc.archetypesMissing = swapped.missing;
     calc.archetypeClashes = swapped.clashes;
+    calc.abilitiesRemoved = swapped.removed;
   }
   if (kind === 'familiar') {
     calc.tableInt = row.int;

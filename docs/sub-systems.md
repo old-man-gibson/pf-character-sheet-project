@@ -1021,9 +1021,13 @@ in the loaded packs. When a pack has the archetype (a catalogue entry named
 names ("This replaces alertness.") and are added at their own level. A feature with the
 same name as a table ability replaces it. Each row shows the archetype and what it
 replaces, and the archetype's text when opened. Two archetypes that change the same
-ability get a warning. For an archetype that is not in any pack, open a table ability and
-type its replacement in **Replaced by**. A published sheet includes the archetypes it
-names, so a reader without the pack sees the same list.
+ability get a warning. A published sheet includes the archetypes it names, so a reader
+without the pack sees the same list.
+
+Any ability, from the table or an archetype, can also be changed by hand. Open it and type
+a new name in **Replaced by**, or tick **Removed**. A removed ability stays in its level,
+struck through, so it can be put back. **Add an ability** adds one with a name and a
+level; it shows at the end of that level once the companion reaches it.
 
 These boxes take a number or a formula: bonus max HP, ability Evo and Misc, the AC
 bonuses, CMD and CMB other, initiative bonus, attack Misc, each natural attack's Bonus
