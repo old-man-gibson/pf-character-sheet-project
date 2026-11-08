@@ -24,7 +24,7 @@ import {
   BUILD_DERIVED_KEYS, BUILD_OPTIONAL_KEYS, BUILD_PERMANENT_GROUPS, BUILD_TEMPORARY,
   CORE_PROWESS_LEVELS, LEGENDARY_GIFTS, MENTAL_PROWESS_LEVELS, abpAttunement,
   PHYSICAL_PROWESS_LEVELS, PROWESS_TRACKS, SAVE_BONUS_TYPES, abpGroupTotal, abpSourceLevel, bonusColumnName,
-  enhancementCapNote,
+  enhancementCapNote, tempEnhancementNote,
 } from '../../rules.js';
 
 
@@ -86,6 +86,7 @@ export function renderStatsPanel(model, ctx) {
   };
 
   const over = ABILITIES.filter((a) => build[a].resolved?.enhancementWasted > 0);
+  const tempOver = ABILITIES.filter((a) => build[a].resolved?.tempEnhancementWasted > 0);
 
   return `<div class="grid">
       <div class="band">
@@ -190,7 +191,9 @@ export function renderStatsPanel(model, ctx) {
                   ${BUILD_TEMPORARY.map(([k]) => cell(ab, k)).join('')}
                   <td class="num">${`${forwardedBadge(model, `${ab}.score`, { only: 'temporary' })}${
                     forwardedBadge(model, `${ab}.temp`)}` || '—'}</td>
-                  <td class="num">${r.temporary || a.forwarded?.temporary || a.forwardedTemp?.total
+                  <td class="num${r.tempEnhancementWasted ? ' over' : ''}"${
+                  r.tempEnhancementWasted ? ` title="${esc(tempEnhancementNote(build[ab]))}"` : ''}>${
+                  r.temporary || a.forwarded?.temporary || a.forwardedTemp?.total
                   ? fmt((r.temporary || 0) + (a.forwarded?.temporary || 0) + (a.forwardedTemp?.total || 0)) : '—'}</td>
                   <td class="num">${harm.drain ? minus(-harm.drain) : '—'}</td>
                   <td class="num">${harm.damage ? `${harm.damage} (${minus(-Math.floor(harm.damage / 2))})` : '—'}</td>
@@ -208,6 +211,9 @@ export function renderStatsPanel(model, ctx) {
           <code>{str.temp += 2 as size}</code> or <code>{str.score += 2 as temp.size}</code> for a
           temporary one. The badge links to the text that added it.
         </p>
+        ${tempOver.length ? `<p class="hint warn">
+          ${tempOver.map((a) => `<strong>${ABILITY_LABELS[a]}</strong>: ${esc(tempEnhancementNote(build[a]))}`).join(' ')}
+        </p>` : ''}
       </section>
       </div>
 

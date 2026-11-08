@@ -241,13 +241,19 @@ export function resolveAbility(entry = {}, gearItems = 0) {
   // ABP and gear are one enhancement bonus, capped together as the defence
   // pairs are (abpPairTotal).
   const enhancement = abpPairTotal(abp, gear, ENHANCEMENT_CAP);
+  // A temporary enhancement bonus is the same bonus again: it adds what it
+  // brings past ABP and gear, up to the cap, or counts on its own above it.
+  // A penalty typed there still counts in full.
+  const tempTyped = n(entry.tempEnhancement);
+  const tempEnhancement = tempTyped < 0 ? tempTyped
+    : abpPairTotal(abp, Math.max(gear, tempTyped), ENHANCEMENT_CAP) - enhancement;
 
   const total = n(entry.pointBuy) + n(entry.race) + enhancement + n(entry.attunement)
     + n(entry.inherent) + n(entry.array) + n(entry.level4) + n(entry.mythic)
     + n(entry.age) + n(entry.size) + n(entry.untyped);
 
   const temporary = n(entry.alchemical) + n(entry.circumstance) + n(entry.morale)
-    + n(entry.tempEnhancement) + n(entry.tempSize);
+    + tempEnhancement + n(entry.tempSize);
 
   return {
     enhancement,
@@ -255,10 +261,28 @@ export function resolveAbility(entry = {}, gearItems = 0) {
     enhancementWasted: Math.max(0, rawEnhancement - enhancement),
     // Only when there is some, so a sheet without item bonuses saves as before.
     ...(items ? { gearItems: items } : {}),
+    ...(tempTyped !== tempEnhancement ? { tempEnhancement, tempEnhancementWasted: tempTyped - tempEnhancement } : {}),
     total,
     temporary,
     tempTotal: total + temporary,
   };
+}
+
+/**
+ * What ABP and gear did to an ability's temporary enhancement, as one
+ * sentence, or '' where it counted in full. `entry` is the build row, its
+ * `resolved` filled in.
+ */
+export function tempEnhancementNote(entry) {
+  const r = entry?.resolved;
+  if (!r?.tempEnhancementWasted) return '';
+  const typed = n(entry.tempEnhancement);
+  const gear = Math.max(n(entry.gear), n(r.gearItems));
+  if (typed > ENHANCEMENT_CAP) return `Temporary enhancement above +${ENHANCEMENT_CAP} counts on its own. ABP and gear add nothing to it.`;
+  if (n(entry.abp) + typed > ENHANCEMENT_CAP) {
+    return `Temporary enhancement stacks with ABP up to +${ENHANCEMENT_CAP}. ${r.tempEnhancementWasted} is wasted.`;
+  }
+  return `Temporary enhancement does not stack with gear's +${gear}. ${r.tempEnhancementWasted} is wasted.`;
 }
 
 /**
@@ -1422,6 +1446,49 @@ export function abpPairTotal(abp, typed, cap) {
 /** One ABP-plus-typed defence pair, capped as above. */
 export function abpGroupTotal(abp, typed) {
   return abpPairTotal(abp, typed, ABP_DEFENCE_CAP);
+}
+
+/**
+ * An ABP pair as a destination holds it, for a bonus of its type to settle
+ * against (typedColumns): ABP's half, the typed half and their shared cap.
+ */
+export function abpPair(abp, typed, cap) {
+  return { abp: Number(abp) || 0, typed: Number(typed) || 0, cap };
+}
+
+export const isAbpPair = (have) => !!have && typeof have === 'object';
+
+/** How much of a type a destination already counts: a number, or an ABP pair's total. */
+export function typedThere(have) {
+  return isAbpPair(have) ? abpPairTotal(have.abp, Math.max(0, have.typed), have.cap) : Math.max(0, Number(have) || 0);
+}
+
+/**
+ * What a bonus adds where `have` of its type is already counted: the part
+ * past it. Where `have` is an ABP pair, the bonus joins the typed half, so a
+ * cloak of resistance or a Resistance spell stacks with ABP up to the cap
+ * instead of competing with it. The one rule for forwarded bonuses
+ * (stackAt in inline.js) and typed buffs (buff-stacking.js).
+ */
+export function typedGain(value, have) {
+  const v = Number(value) || 0;
+  if (v <= 0) return 0;
+  if (!isAbpPair(have)) return Math.max(0, v - typedThere(have));
+  const typed = Math.max(0, have.typed);
+  return abpPairTotal(have.abp, Math.max(typed, v), have.cap) - abpPairTotal(have.abp, typed, have.cap);
+}
+
+/**
+ * Why an ABP pair took less of a bonus than it gives, as a clause, or ''
+ * when the typed half alone already covers it (or `have` is not a pair).
+ */
+export function abpPairReason(value, have, name) {
+  if (!isAbpPair(have)) return '';
+  const v = Number(value) || 0;
+  if (have.typed >= v) return '';
+  if (v > have.cap) return `${name} above +${have.cap} counts on its own, without ABP`;
+  if (have.abp + v > have.cap) return `ABP and ${name} stack up to +${have.cap}`;
+  return '';
 }
 
 /**

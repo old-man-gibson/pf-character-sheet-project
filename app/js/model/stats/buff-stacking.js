@@ -10,8 +10,10 @@
  *    that type there -- the save's or AC's typed column, a belt's enhancement
  *    on the Stats tab, a forwarded `{… as resistance}` -- so a buff adds only
  *    what it brings past it. That is the same settling `typedColumns` gives a
- *    forwarded bonus. The other numbers keep no typed columns, so a buff
- *    there settles against the other buffs only.
+ *    forwarded bonus. ABP's half of a pair is not in the way: the buff joins
+ *    the typed half and stacks with ABP up to the cap (typedGain). The other
+ *    numbers keep no typed columns, so a buff there settles against the other
+ *    buffs only.
  *
  * Penalties always stack. A dial that reaches several numbers (Attack: melee,
  * ranged and CMB; Saves: all three) is split first, so each number settles on
@@ -22,7 +24,9 @@
  * why a ticked buff is not moving a number.
  */
 
-import { ABILITIES, BONUS_TYPES, baseType, bonusTypeKey, stacksWithItself } from '../../rules.js';
+import {
+  ABILITIES, BONUS_TYPES, abpPairReason, baseType, bonusTypeKey, isAbpPair, stacksWithItself, typedGain,
+} from '../../rules.js';
 import { typedColumns } from '../scope.js';
 
 /** The dials that reach more than one number, and the numbers they reach. */
@@ -42,19 +46,30 @@ const LABEL = {
   str: 'Str', dex: 'Dex', con: 'Con', int: 'Int', wis: 'Wis', cha: 'Cha',
 };
 
-/** What the character already has of `type` at one number: its typed column, or a forwarded bonus. */
+/**
+ * What the character already has of `type` at one number: its typed column,
+ * or a forwarded bonus. Where the column is an ABP pair, the best of those is
+ * its typed half and the pair comes back, for typedGain to settle against.
+ */
 function alreadyThere(model, type, key) {
   const dest = DESTINATION[key];
   if (!dest) return 0;
   const cols = typedColumns(model, dest) || {};
-  let have = Number(cols[type]) || 0;
+  const pair = isAbpPair(cols[type]) ? cols[type] : null;
+  const typedOf = (v) => (isAbpPair(v) ? v.typed : Number(v) || 0);
+  let have = typedOf(cols[type]);
   // An ability score keeps its permanent and temporary enhancement apart;
-  // a buff is either, and only the better of the two is there to beat.
-  if (ABILITIES.includes(key)) have = Math.max(have, Number(cols[`temp.${type}`]) || 0);
-  for (const e of model.contributions?.by?.[dest] || []) {
+  // a buff is either, and only the better of the two is there to beat. So
+  // is a bonus forwarded to the working score.
+  const at = [dest];
+  if (ABILITIES.includes(key)) {
+    have = Math.max(have, typedOf(cols[`temp.${type}`]));
+    at.push(`${key}.temp`);
+  }
+  for (const e of at.flatMap((d) => model.contributions?.by?.[d] || [])) {
     if (!e.error && e.value > 0 && baseType(e.type) === type) have = Math.max(have, e.value);
   }
-  return have;
+  return pair ? { ...pair, typed: have } : have;
 }
 
 /**
@@ -96,10 +111,12 @@ export function settleTypedBuffs(model, rows) {
       for (const r of group) {
         const v = Number(r[block][key]) || 0;
         if (v <= 0) continue;
-        const kept = r === winner ? Math.max(0, best - have) : 0;
+        const kept = r === winner ? typedGain(best, have) : 0;
         if (kept === v) continue;
         r[block][key] = kept;
-        r.lost.push({ key, value: v, kept, by: r === winner ? null : winner.label });
+        r.lost.push({
+          key, value: v, kept, by: r === winner ? null : winner.label, ...(isAbpPair(have) ? { pair: have } : {}),
+        });
       }
     }
   }
@@ -116,9 +133,11 @@ export function stackingSummary(row, type) {
   const name = BONUS_TYPES[bonusTypeKey(type)]?.name?.toLowerCase() || String(type || '').toLowerCase();
   const reasons = new Map();
   for (const l of row.lost) {
+    const cap = l.by ? '' : abpPairReason(l.value, l.pair, name);
     const why = l.by ? `${l.by}’s ${name} bonus counts instead`
-      : l.kept ? `adds only ${l.kept}, past the ${name} bonus already there`
-        : `the ${name} bonus already there is as large`;
+      : cap ? (l.kept ? `adds only ${l.kept}, since ${cap}` : cap)
+        : l.kept ? `adds only ${l.kept}, past the ${name} bonus already there`
+          : `the ${name} bonus already there is as large`;
     if (!reasons.has(why)) reasons.set(why, []);
     reasons.get(why).push(l.key);
   }

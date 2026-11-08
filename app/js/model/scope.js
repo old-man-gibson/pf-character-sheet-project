@@ -11,7 +11,7 @@
 import {
   ABILITIES, AC_BONUS_TYPES, DEFENCE_PART_FAMILIES, FORWARD_FAMILIES, FORWARD_LATE,
   FORWARD_STATS, MANEUVER_FIELDS, SAVE_BONUS_TYPES, SHEET_ALIASES, armorParts, gearBonusToken, skillLabel,
-  abpGroupTotal, columnTypes, resolveAbility, statMod,
+  ABP_DEFENCE_CAP, ENHANCEMENT_CAP, abpPair, abpPairReason, columnTypes, statMod,
 } from '../rules.js';
 import { deathThreshold, effectiveMythicTier, fmt, mythicPowerUses, surgeDie } from '../rules.js';
 import {
@@ -1215,6 +1215,10 @@ const ABILITY_COLUMN_TYPES = {
  * armour classes and CMD the AC row -- each only the columns it takes -- and
  * an ability score its build. Untyped, dodge and circumstance columns are not
  * here, because those stack.
+ *
+ * A type ABP shares (resistance, deflection, an ability's enhancement) is an
+ * `abpPair` rather than a number, so a bonus of it joins the typed half and
+ * stacks with ABP up to the cap (typedGain).
  */
 export function typedColumns(model, key) {
   const c = model.data;
@@ -1223,7 +1227,7 @@ export function typedColumns(model, key) {
     for (const [type, cols] of Object.entries(map)) {
       const flags = types.find(([k]) => k === cols[cols.length - 1])?.[2];
       if (filter && flags && flags[filter] === false) continue;
-      out[type] = cols.length === 2 ? abpGroupTotal(resolved?.[cols[0]], resolved?.[cols[1]])
+      out[type] = cols.length === 2 ? abpPair(resolved?.[cols[0]], resolved?.[cols[1]], ABP_DEFENCE_CAP)
         : Number(resolved?.[cols[0]]) || 0;
     }
     return out;
@@ -1253,14 +1257,21 @@ export function typedColumns(model, key) {
     const worn = companionArmor(comp.kind, comp.b)?.ac || 0;
     return worn ? { armor: worn } : null;
   }
-  const ability = /^(str|dex|con|int|wis|cha)\.score$/.exec(key);
+  const ability = /^(str|dex|con|int|wis|cha)\.(score|temp)$/.exec(key);
   if (ability) {
     const b = c.statsBuild?.[ability[1]] || {};
+    // The enhancement is ABP's prowess with the gear, and a temporary one
+    // joins the same pair (resolveAbility).
+    const gear = Math.max(Number(b.gear) || 0, Number(b.resolved?.gearItems) || 0);
+    const tempPair = abpPair(b.abp, Math.max(gear, Number(b.tempEnhancement) || 0), ENHANCEMENT_CAP);
     const out = {};
     for (const [type, col] of Object.entries(ABILITY_COLUMN_TYPES)) {
-      out[type] = col ? Number(b[col]) || 0 : (b.resolved || resolveAbility(b)).enhancement;
+      out[type] = type === 'temp.enhancement' ? tempPair
+        : col ? Number(b[col]) || 0 : abpPair(b.abp, gear, ENHANCEMENT_CAP);
     }
-    return out;
+    // The working score: an enhancement bonus there is temporary, and joins
+    // the same pair. Its other types still stack as they always did.
+    return ability[2] === 'score' ? out : { enhancement: tempPair };
   }
   return null;
 }
@@ -1326,7 +1337,7 @@ export function forwardedInto(model, name, only = '') {
         type: e.type,
         temporary: !!e.temporary,
         counts: !counted || counted.has(e),
-        ...(o ? { column: o.column, adds: e.value - o.overlap } : {}),
+        ...(o ? { column: o.column, adds: e.value - o.overlap, ...(o.pair ? { pair: o.pair } : {}) } : {}),
       };
     });
   return from.length ? { total, from } : null;
@@ -1339,9 +1350,12 @@ export function forwardedInto(model, name, only = '') {
  */
 export function stackingNote(x) {
   if (x.column) {
-    return x.adds > 0
-      ? `  (adds ${x.adds}: the ${x.type} column already gives ${x.column})`
-      : `  (adds nothing: the ${x.type} column already gives ${x.column})`;
+    const adds = x.adds > 0 ? `adds ${x.adds}` : 'adds nothing';
+    // An ABP pair names ABP's cap where that is what stopped it, and its typed
+    // half where that is.
+    const why = abpPairReason(x.value, x.pair, x.type)
+      || `the ${x.type} column already gives ${x.pair ? x.pair.typed : x.column}`;
+    return `  (${adds}: ${why})`;
   }
   return x.counts ? '' : `  (does not stack with the other ${x.type})`;
 }

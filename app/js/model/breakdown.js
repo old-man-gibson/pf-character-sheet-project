@@ -23,7 +23,7 @@
 import {
   ABILITIES, ABILITY_LABELS, ABP_DEFENCE_GROUPS, AC_BONUS_TYPES, AC_PENALTY_KEYS, ATTACK_MODE_KEY, BUILD_TEMPORARY,
   CONDITION_CHANNELS, SAVE_BONUS_TYPES,
-  abilityOf, enhancementCapNote, acParts, acPenaltyToCmd, attackParts, cmdParts, conditionTotals, initiativeParts, recipePart,
+  abilityOf, enhancementCapNote, tempEnhancementNote, acParts, acPenaltyToCmd, attackParts, cmdParts, conditionTotals, initiativeParts, recipePart,
   recipePlain, saveParts,
 } from '../rules.js';
 import { forwardedInto, gearItemBonuses } from './scope.js';
@@ -179,9 +179,13 @@ function abilityBreakdown(model, key, which) {
   if (which === 'temp') {
     // The working score is the permanent one plus the temporary columns and
     // the temporary bonuses forwarded here; the permanent ones are in the score.
+    // A temporary enhancement counts for what it adds past ABP and gear.
+    const used = (k) => (k === 'tempEnhancement' && 'tempEnhancement' in r ? r.tempEnhancement : build[k]);
+    const why = (k) => ['Stats tab, temporary bonuses', k === 'tempEnhancement' ? tempEnhancementNote(build) : '']
+      .filter(Boolean).join('. ');
     return [
       plain('Score', a.score, 'permanent score'),
-      ...BUILD_TEMPORARY.map(([k, , full]) => column(part(full, build[k], 'Stats tab, temporary bonuses'), k)),
+      ...BUILD_TEMPORARY.map(([k, , full]) => column(part(full, used(k), why(k)), k)),
       ...forwardedParts(model, `${key}.score`, 'temporary'), ...forwardedParts(model, `${key}.temp`),
       drain,
     ];
