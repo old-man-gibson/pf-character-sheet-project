@@ -416,11 +416,6 @@ export function recomputeAkashic(model) {
   const radiantDawn = radiantDawnEssence(model);
   const typed = essenceCells(model, a.essence, radiantDawn.essence);
 
-  // A bonus sent to `essence.pool` ({essence.pool += 1} on a feat) adds to the
-  // typed daily pool. The sources are still checked against the typed figure.
-  const typedPool = typed.pool.value;
-  const poolForwarded = forwarded(model, 'essence.pool');
-  const pool = typedPool + poolForwarded;
   // The sheet's "Essence Boon" is the casting tradition's own pool taken as
   // essence rather than as spell points -- the same number, written twice.
   // Now that the Spheres tab works it out, it is computed here instead of
@@ -431,6 +426,17 @@ export function recomputeAkashic(model) {
     (t, [key]) => t + (key === 'boon' && traditionBoon ? traditionBoon : typed[key].value),
     0,
   );
+  // A blank or 0 Pool is the sources added up, for a character who weaves
+  // veils: a named veilweaving class or the Veilweaving sphere. (A tradition's
+  // boons count essence for any sphere caster.) A typed pool is checked
+  // against the sources. A bonus sent to `essence.pool` ({essence.pool += 1}
+  // on a feat) adds to either.
+  const weaves = !!a.veilweaving?.sphere || (a.classes || []).some((c) => String(c?.name ?? '').trim());
+  const poolAuto = essenceCellBlank(a.essence?.pool);
+  if (poolAuto) typed.pool = { value: weaves ? sources : 0, error: null };
+  const typedPool = typed.pool.value;
+  const poolForwarded = forwarded(model, 'essence.pool');
+  const pool = typedPool + poolForwarded;
   const used = essenceInvested([...(a.slots || []), ...(a.kheshig || [])])
     // A receptacle ticked off holds nothing for now.
     + (a.otherReceptacles || []).reduce((t, r) => t + (r.active === false ? 0 : Number(r.essence) || 0), 0);
@@ -455,6 +461,8 @@ export function recomputeAkashic(model) {
     sphereCap,
     capForwarded,
     pool,
+    poolAuto,
+    weaves,
     poolForwarded,
     sources,
     traditionBoon,
@@ -462,9 +470,8 @@ export function recomputeAkashic(model) {
     // Dawn maneuvers grant; a blank Radiant Dawn cell takes that figure.
     typed,
     radiantDawn,
-    // The pool is what the veilweaving classes and their sources come to, and
-    // the sheet writes that total itself; where the two disagree the panel
-    // says so rather than quietly picking one.
+    // A typed pool can disagree with its sources; the panel says so rather
+    // than quietly picking one.
     sourcesShort: sources - typedPool,
     temp,
     spSpent,
@@ -486,10 +493,10 @@ export const ESSENCE_CELLS = ['pool', ...ESSENCE_SOURCES.map(([key]) => key)];
 export const ESSENCE_DISCIPLINE = 'Radiant Dawn';
 
 /**
- * A Radiant Dawn cell that is blank, or the 0 a workbook import leaves in an
- * empty cell, takes its figure from the maneuvers known.
+ * A Pool or Radiant Dawn cell that is blank, or holds the 0 a workbook import
+ * leaves in an empty cell, works out its own figure.
  */
-export const radiantDawnBlank = (raw) => raw === null || raw === undefined || raw === 0
+export const essenceCellBlank = (raw) => raw === null || raw === undefined || raw === 0
   || (typeof raw === 'string' && raw.trim() === '');
 
 /**
@@ -510,16 +517,17 @@ export function radiantDawnEssence(model) {
 
 /**
  * Each pool cell as `{ value, error }`: a number as typed, a formula worked
- * out, a blank Radiant Dawn cell counted from the maneuvers. A formula here
- * reads `essence.pool`, `essence.total` and `essence.free` as 0, because they
- * are these cells added up; read as last time's figure they would climb on
+ * out, a blank Radiant Dawn cell counted from the maneuvers. (A blank Pool is
+ * filled in afterwards from the sources.) A formula here reads
+ * `essence.pool`, `essence.total` and `essence.free` as 0, because they are
+ * these cells added up; read as last time's figure they would climb on
  * every recompute.
  */
 function essenceCells(model, essence = {}, radiantDawn = 0) {
   const scope = scopeIfFormulas(model, ESSENCE_CELLS.map((key) => essence?.[key]));
   const own = scope && { ...scope, essence: { ...scope.essence, pool: 0, total: 0, free: 0 } };
   return Object.fromEntries(ESSENCE_CELLS.map((key) => [key,
-    key === 'radiantDawn' && radiantDawnBlank(essence?.[key])
+    key === 'radiantDawn' && essenceCellBlank(essence?.[key])
       ? { value: radiantDawn, error: null }
       : evaluateAmount(essence?.[key], own)]));
 }

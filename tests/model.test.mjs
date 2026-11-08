@@ -4261,7 +4261,7 @@ console.log('the essence pool cells take formulas');
   check('a reopened sheet works them out the same', [reopened().data.akashic.calc.pool, reopened().data.akashic.calc.sources], [10, 3]);
   const html = subsystemPanels.akashicPanel(c, {});
   check('the pool cell is a formula box showing what it came to',
-    [html.includes('data-set="akashic.essence.pool" data-kind="expr"'), html.includes('title="level + 1 = 10. Click to edit."')], [true, true]);
+    [html.includes('data-set="akashic.essence.pool" data-kind="expr-or-null"'), html.includes('title="level + 1 = 10. Click to edit."')], [true, true]);
   const audited = c.audit().find((r) => r.id === 'essence-featTraits');
   check('and the Formulas tab lists it', [audited?.status, audited?.value, audited?.place], ['ok', 2, 'essence:featTraits']);
 
@@ -4275,6 +4275,42 @@ console.log('the essence pool cells take formulas');
   c.recompute();
   c.recompute();
   check('a pool cell that reads the pool does not climb', [k().pool, reopened().data.akashic.calc.pool], [4, 4]);
+}
+
+console.log('a blank Pool adds up the essence sources');
+{
+  const c = new Character(blankDocument({ name: 'Veilweaver', level: 9 }));
+  const k = () => c.data.akashic.calc;
+  const reopened = () => new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  const panel = () => subsystemPanels.akashicPanel(c, {});
+  c.set('akashic.essence.featTraits', 2);
+  check('without a veilweaving class or the sphere, a blank Pool stays 0',
+    [k().pool, k().weaves, k().sourcesShort, panel().includes('placeholder="auto: 0"')], [0, false, 2, true]);
+  c.set('akashic.essence.featTraits', 0);
+  c.set('akashic.classes.0.name', 'Vizier');
+  const note = (body) => {
+    const at = c.data.notes.length;
+    c.listAdd('notes', { title: 'Bonus', body });
+    return () => c.listRemove('notes', at);
+  };
+  check('no sources, no essence', [c.data.akashic.essence.pool, k().pool, k().poolAuto], [0, 0, true]);
+  c.set('akashic.essence.featTraits', 2);
+  c.set('akashic.essence.fcb', 'floor(level / 9)');
+  check('a 0 Pool takes the sources total',
+    [k().pool, k().typed.pool.value, k().sourcesShort, c.scope().essence.pool, k().total, k().free], [3, 3, 0, 3, 3, 3]);
+  check('the per-day line and the Pool placeholder show it',
+    [panel().includes('3 essence per day'), panel().includes('placeholder="auto: 3"'), panel().includes('≠ pool')], [true, true, false]);
+  c.set('akashic.essence.pool', 5);
+  check('a typed pool replaces it and is checked against the sources', [k().pool, k().poolAuto, k().sourcesShort], [5, false, -2]);
+  check('and the panel flags the difference', panel().includes('≠ pool'), true);
+  c.set('akashic.essence.pool', 'level - 4');
+  check('so does a formula', k().pool, 5);
+  c.set('akashic.essence.pool', null);
+  check('a cleared Pool takes the sources again', [k().pool, k().poolAuto], [3, true]);
+  check('and saves as cleared', [c.toJSON().akashic.essence.pool, reopened().data.akashic.calc.pool], [null, 3]);
+  const drop = note('Extra Essence {essence.pool += 2}');
+  check('a bonus to essence.pool adds to the sources total', [k().pool, k().poolForwarded, k().sourcesShort], [5, 2, 0]);
+  drop();
 }
 
 console.log('a blank Radiant Dawn cell counts the Radiant Dawn maneuvers known');
