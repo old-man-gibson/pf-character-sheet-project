@@ -32,8 +32,14 @@ export const swapsMeet = (a, b) => {
   if (swapBase(a) !== swapBase(b)) return false;
   return swapLevel(a) === null || swapLevel(b) === null;
 };
+/** 1st, 2nd, 3rd, 4th, 11th, 21st. */
+export const ordinal = (n) => {
+  const tens = n % 100;
+  const suffix = tens >= 11 && tens <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
+  return `${n}${suffix}`;
+};
 /** "warriors grace@10" as a person reads it. */
-export const swapLabel = (k) => (swapLevel(k) ? `${swapBase(k)} (${swapLevel(k)}th)` : swapBase(k));
+export const swapLabel = (k) => (swapLevel(k) ? `${swapBase(k)} (${ordinal(swapLevel(k))})` : swapBase(k));
 
 /**
  * The key a class feature is matched by, across the ways a page names it:

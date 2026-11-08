@@ -51,7 +51,7 @@ const TYPE_ABBREV = {
 };
 import {
   CARD_COLORS, CARD_MODIFICATIONS, CARD_KEYWORDS, DECK_SORTS, LIFEBOUND_PILES, TABLE_DESTINATIONS, cardKeywordPattern, deckOrder, harrowFor,
-  hasManipulation, manipulationCount, redrawSize, castingTableNames, manipulationEntry, manipulationFoldKey, deckManipulationCatalogue, MANIPULATION_NEEDS,
+  hasManipulation, manipulationCount, redrawSize, castingTableNames, blankCastingClass, manipulationEntry, manipulationFoldKey, deckManipulationCatalogue, MANIPULATION_NEEDS,
   maneuverCatalogue, maneuverDetails, maneuverIsWritten, maneuverOwn, altTrainingLink,
   altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques, psionicCurveTotals, psionicTables,
   spellCatalogue, spellDetails, powerCatalogue, powerDetails, veilsAvailable, veilDetails, veilOwn,
@@ -66,7 +66,7 @@ import { andList, round } from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, CASTING_SOURCES, ESSENCE_SOURCES, MANEUVER_FIELDS,
   PREP_STYLES, SIZE_MODIFIERS,
-  SPELL_LEVELS, SP_PER_TEMP_ESSENCE, VEIL_SLOTS, WIKI_BASE, castingNoun, fmt, prepStyle,
+  SP_PER_TEMP_ESSENCE, VEIL_SLOTS, WIKI_BASE, castingNoun, fmt, prepStyle,
   skillLabel, wikiUrl,
 } from '../../rules.js';
 import {
@@ -949,11 +949,7 @@ export function vancianPanel(model, ctx = {}) {
     (v.classes || []).map((c, i) => castingClassPanel(model, c, i)).join('')}</div>` : ''}
 
       <section class="panel span2">
-        ${addButton('vancian.classes', 'Add casting class', {
-    name: '', slotType: '', stat: '', stat2: '', prep: '', source: '',
-    casterLevelOverride: null, concentration: null,
-    spells: SPELL_LEVELS.map((level) => ({ level, perDay: null, known: null })),
-  })}
+        ${addButton('vancian.classes', 'Add casting class', blankCastingClass())}
       </section>
       ${vancianPreparedPanel(model, v, ctx)}
       ${systemExtrasPanel(model, v, 'vancian', 'Vancian Magic')}

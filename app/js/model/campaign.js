@@ -136,6 +136,12 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
   agingEffects: false,
   /** Variant multiclassing: a secondary class picked on Progression (`d.vmc`). */
   vmc: false,
+  /**
+   * Archetype packages: a class may give up one of its packages for another
+   * on Progression (packages.js). Off, the swaps already made stay on their
+   * classes, and the pill on the class row still removes them.
+   */
+  archetypePackages: false,
 });
 
 /** The levels a variant multiclass grants a secondary class feature at, in place of a feat. */
@@ -237,6 +243,7 @@ export function campaignRules(d) {
     backgroundUse: BACKGROUND_USES.includes(c.backgroundUse) ? c.backgroundUse : CAMPAIGN_DEFAULTS.backgroundUse,
     agingEffects: bool('agingEffects'),
     vmc: bool('vmc'),
+    archetypePackages: bool('archetypePackages'),
   };
 }
 

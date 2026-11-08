@@ -46,13 +46,17 @@ export const hasView = (text) => hasTokens(text) || hasLink(text);
  * A click on a link opens it in a new tab and leaves the textarea shut; a
  * click anywhere else on the overlay opens the textarea, as before (see the
  * element's `.prose` binding).
+ *
+ * `view` is a read view the caller has built itself, as markup: a ladder cell
+ * marking what an archetype changed in it. It replaces the rendered one, and
+ * the field has a view whatever its text holds.
  */
 export function prose(model, bindingAttr, value, rows = 3, extraClass = '', local = null,
-  { inactive = false, inactiveTitle = '' } = {}) {
+  { inactive = false, inactiveTitle = '', view = null } = {}) {
   const text = value ?? '';
   const formulas = hasTokens(text);
-  const rendered = formulas ? renderedProse(model, text, local, { inactive, inactiveTitle, links: true })
-    : hasLink(text) ? linkedText(text) : null;
+  const rendered = view ?? (formulas ? renderedProse(model, text, local, { inactive, inactiveTitle, links: true })
+    : hasLink(text) ? linkedText(text) : null);
   // The gold edge these fields carry says "formulas work here"; the tooltip
   // is what says how. Set on the wrapper so it covers both layers, and the
   // rendered view's own title still wins while it is showing.

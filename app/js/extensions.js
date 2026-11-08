@@ -46,9 +46,11 @@ import { storageMedium } from './pack-storage.js';
 // from this file, so there is no cycle to think about.
 import { veilEntry } from './model/subsystems/akashic.js';
 import { talentKey } from './model/spheres.js';
-import { markUndo } from './model/undo.js';
+import { asOneUndo } from './model/undo.js';
 import { blankClassRow } from './model/document.js';
-import { swapAt, swapBase, swapLevel, swapsMeet, swapLabel, swapKey } from './swaps.js';
+import { PACKAGE_POWERS, readPackageSentence } from './package-text.js';
+import { levelRuleGrants, levelRuleLevels } from './rules.js';
+import { ordinal, swapAt, swapBase, swapLevel, swapsMeet, swapLabel, swapKey } from './swaps.js';
 
 export const EXTENSION_FORMAT = 'character-sheet-extension';
 export const EXTENSION_VERSION = 1;
@@ -93,6 +95,7 @@ export const BLOCK_KINDS = {
   veil: { label: 'Veil', lands: 'Its chakra slot on the Akashic tab (shaped, essence 0)' },
   archetype: { label: 'Archetype', lands: 'Its class. Replaced features are removed from the Progression tab and Template group, and the new ones are added. The pill on the class row removes the archetype' },
   options: { label: 'Option menu', lands: 'The class feature it names on the Progression tab, as a menu of choices, and its own Template group' },
+  package: { label: 'Archetype package', lands: 'Swapped for one of a class\'s own packages on the Progression tab, when the campaign allows archetype packages' },
   note: { label: 'Note', lands: 'Extras & Notes' },
 };
 
@@ -224,11 +227,35 @@ export function normalizeBlock(block) {
       };
     case 'veil':
       return { ...base, slot: str(b.slot ?? b.chakra).trim(), descriptor: str(b.descriptor).trim() };
+    case 'package': {
+      // A named set of a class's features (`includes`, a single grant as
+      // "name@level"), or, with no class, a set of features of its own; and
+      // the powers it grants. Both read off its sentence unless given.
+      const className = str(b.class ?? b.className).trim();
+      const read = readPackageSentence(base.text, className);
+      const includes = arr(b.includes).map((s) => str(s).trim()).filter(Boolean);
+      const grants = arr(b.grants).map(lower).filter((g) => PACKAGE_POWERS.includes(g));
+      return {
+        ...base,
+        class: className,
+        includes: includes.length ? includes : read.includes,
+        grants: grants.length ? grants : read.grants,
+        features: arr(b.features).map((f) => ({
+          name: str(f?.name).trim(),
+          type: featureType(f?.type),
+          level: Math.max(1, Math.min(20, num(f?.level, 1))),
+          text: str(f?.text),
+        })).filter((f) => f.name),
+      };
+    }
     case 'archetype': {
       const className = str(b.class ?? b.className).trim();
+      // A package swap (packages.js) states its swaps outright: the features
+      // it brings are another class's, whose text says nothing about this one.
+      const swap = b.package && typeof b.package === 'object' ? structuredClone(b.package) : null;
       const features = arr(b.features).map((f) => {
         const text = str(f?.text);
-        const swaps = parseSwaps(text, className);
+        const swaps = swap ? { replaces: [], alters: [] } : parseSwaps(text, className);
         // a swap a pack states outright, with the level it names kept on it
         const given = (k) => arr(f?.[k])
           .map((s) => swapAt(swapKey(swapBase(s), className), swapLevel(s)))
@@ -257,7 +284,8 @@ export function normalizeBlock(block) {
         // the whole of what it does to them.
         tracks: trackSpec(b.tracks),
         features,
-        stacksWith: stacks.length ? stacks : parseStacksWith(features.map((f) => f.text).join('\n')),
+        stacksWith: stacks.length || swap ? stacks : parseStacksWith(features.map((f) => f.text).join('\n')),
+        ...(swap ? { package: swap } : {}),
       };
     }
     case 'options':
@@ -437,7 +465,7 @@ export function parseReplaces(text) {
 // The keys a swap is matched by live in swaps.js, where the companion sums can
 // reach them too; they are still exported from here for every reader that
 // already finds them here.
-export { swapAt, swapBase, swapLevel, swapsMeet, swapLabel, swapKey };
+export { ordinal, swapAt, swapBase, swapLevel, swapsMeet, swapLabel, swapKey };
 
 /**
  * What an archetype feature does to the class, read off its own text:
@@ -1452,6 +1480,10 @@ export function applyBlock(model, rawBlock) {
     }
     case 'archetype':
       return applyArchetype(model, block);
+    case 'package':
+      // A package is never added alone: it takes the place of one of a
+      // class's own (packages.js, from the Progression tab).
+      return `${block.name || 'An archetype package'} is swapped in on the Progression tab. Turn on Archetype packages under Campaign rules to use it.`;
     case 'options':
       return applyOptions(model, block);
     case 'note':
@@ -1521,16 +1553,27 @@ export function applyOptions(model, block) {
 function dropRuleLevel(model, className, columnIndex, level, entry) {
   const col = model.data.progression?.classFeatures?.[className]?.columns?.[columnIndex];
   if (!col) return false;
-  // Which group grants there is the grid's own answer, asked the grid's way.
-  const row = model.classFeatureRows(className).find((r) => r.classLevel === level);
-  const gi = row?.cells?.[col]?.fields.find((f) => f.on && f.group)?.group?.index;
-  if (gi === undefined || gi === null) return false;
+  const gi = grantingGroupAt(model, className, col, level);
+  if (gi === null) return false;
   const was = model.classFeatureRuleGroups(className, col)[gi]?.rule || '';
   model.setClassFeatureRuleGroup(className, columnIndex, gi, { rule: `${was}${was ? ', ' : ''}-${level}` });
   // The level, not the rule as it stood: taking that one term back out again
   // is the same edit whatever order the archetypes come off in.
   entry.ruleEdits.push({ column: col, group: gi, level });
   return true;
+}
+
+/**
+ * The rule group of a feature column that grants at a class level, by index,
+ * or null. The grid's own answer where the Planner has that level; for one it
+ * does not have yet, the group whose rule names the level, so a swap made at
+ * 6th still takes the 12th-level grant.
+ */
+function grantingGroupAt(model, className, col, level) {
+  const row = model.classFeatureRows(className).find((r) => r.classLevel === level);
+  if (row) return row.cells?.[col]?.fields.find((f) => f.on && f.group)?.group?.index ?? null;
+  const gi = model.classFeatureRuleGroups(className, col).findIndex((g) => levelRuleGrants(g.rule || '', level, level));
+  return gi === -1 ? null : gi;
 }
 
 /** Put a level back on a schedule by dropping the "-N" that took it off. */
@@ -1999,6 +2042,142 @@ function cellNames(cell) {
   return cell.split(/,\s*(?![^()]*\))/).map((s) => s.trim()).filter(Boolean);
 }
 
+/** A feature cell's text whatever shape it is stored in. */
+const cellString = (v) => (v && typeof v === 'object'
+  ? Object.values(v).map((x) => str(x).trim()).filter(Boolean).join(', ')
+  : str(v).trim());
+
+/**
+ * Where one swap key sits on a class's ladder, found without changing it:
+ * the Special cells that name it (`{level, name}`, level being the row's
+ * key), the index of the feature column it has (-1 for none) and the indexes
+ * of its notes. A key naming one grant ("bonus feat@6") looks only at that
+ * class level's row, and has no notes: the feature stands, one grant fewer.
+ * A class level the Planner does not reach yet is looked for under its own
+ * number, which is where a class's pack writes it.
+ */
+function ladderHits(model, className, key) {
+  const group = model.data.progression?.classFeatures?.[className] || null;
+  const base = swapBase(key);
+  const at = swapLevel(key);
+  const rows = model.classFeatureRows(className);
+  const charAt = at === null ? null : (rows.find((r) => r.classLevel === at)?.key ?? at);
+  const cells = [];
+  for (const [level, row] of Object.entries(group?.byLevel || {})) {
+    if (charAt !== null && Number(level) !== charAt) continue;
+    for (const n of cellNames(row?.Special) || []) if (swapKey(n, className) === base) cells.push({ level: Number(level), name: n });
+  }
+  const column = (group?.columns || []).findIndex((c) => c !== 'Special' && swapKey(c, className) === base);
+  const notes = at !== null ? [] : model.classFeatureNotes(className)
+    .map((n, i) => (swapKey(n.name, className) === base ? i : -1)).filter((i) => i !== -1);
+  return { base, at, charAt, rows, cells, column, notes };
+}
+
+/**
+ * Where each of a list of swap keys is on a class's ladder, before anything is
+ * swapped: `{key, name, levels, found}`. `name` is the ladder's own spelling
+ * where it has one; `levels` are the Planner levels it sits at. A feature that
+ * only has a note is found at no level.
+ */
+export function swapReach(model, className, keys) {
+  const group = model.data.progression?.classFeatures?.[className] || null;
+  return (keys || []).map((key) => {
+    const h = ladderHits(model, className, key);
+    const levelOf = (k) => Math.floor(h.rows.find((r) => r.key === k)?.level ?? k);
+    const levels = new Set(h.cells.map((c) => levelOf(c.level)));
+    let name = h.cells[0]?.name || '';
+    let found = h.cells.length > 0 || h.notes.length > 0;
+    if (h.column !== -1) {
+      const col = group.columns[h.column];
+      name ||= col;
+      if (h.at !== null) {
+        if (grantingGroupAt(model, className, col, h.at) !== null) {
+          found = true;
+          levels.add(levelOf(h.charAt));
+        }
+      } else {
+        // Where the column grants: its schedule's levels, or the rows it has
+        // text on. Levels past the Planner's count too, as the swap takes them.
+        found = true;
+        const groups = model.classFeatureRuleGroups(className, col);
+        const levelAt = (classLevel) => Math.floor(h.rows.find((r) => r.classLevel === classLevel)?.level ?? classLevel);
+        for (const grp of groups) for (const l of levelRuleLevels(grp.rule || '')) levels.add(levelAt(l));
+        if (!groups.length) {
+          for (const [k, cells] of Object.entries(group.byLevel || {})) if (cellString(cells?.[col])) levels.add(levelOf(Number(k)));
+        }
+      }
+    }
+    if (!name && h.notes.length) name = model.classFeatureNotes(className)[h.notes[0]].name;
+    return { key, name: name || swapBase(key), levels: [...levels].sort((a, b) => a - b), found };
+  });
+}
+
+/**
+ * What one archetype on a class changed on its ladder, read from its own
+ * record: `lost` and `gained` as `{key, level, name, column, feature}` (`key`
+ * the row it sits on, `level` the Planner level shown for it, `column` the
+ * feature column that lost one grant, null for a name in Special or a whole
+ * column gone, and `feature` the feature it is a grant of), the notes it took
+ * out and put in, and what it could not find. A package swap is an
+ * archetype, so this covers both.
+ */
+export function archetypeChanges(model, className, e) {
+  const rows = model.classFeatureRows(className);
+  const keyOf = (classLevel) => rows.find((r) => r.classLevel === classLevel)?.key ?? classLevel;
+  // The Planner level a row key is shown at, as the ladder's Lvl column says it.
+  const item = (key, name, column, feature = name) => ({
+    key, level: Math.floor(rows.find((r) => r.key === key)?.level ?? key), name, column, feature,
+  });
+  const lost = [];
+  for (const c of e?.removedCells || []) if (!c.column) lost.push(item(c.level, c.name, null));
+  for (const r of e?.ruleEdits || []) lost.push(item(keyOf(r.level), r.column, r.column));
+  for (const col of e?.removedColumns || []) {
+    // Where it granted: its schedule's levels, or the rows it had text on.
+    const keys = new Set();
+    for (const grp of col.rules || []) for (const l of levelRuleLevels(grp.rule || '')) keys.add(keyOf(l));
+    if (!(col.rules || []).length) for (const k of Object.keys(col.cells || {})) keys.add(Number(k));
+    for (const k of keys) {
+      const had = cellString(col.cells?.[k]);
+      const name = had && swapKey(had, className) !== swapKey(col.name, className) ? `${col.name} (${had})` : col.name;
+      lost.push(item(k, name, null, col.name));
+    }
+  }
+  return {
+    lost,
+    gained: (e?.addedCells || []).map((c) => item(c.level, c.name, null)),
+    lostNotes: e?.removedNotes || [],
+    gainedNotes: e?.addedNotes || [],
+    notFound: e?.notFound || [],
+  };
+}
+
+/**
+ * Everything the archetypes on a class changed, for the ladder to mark:
+ * `cells` maps a row key to `{lost, gained}`, each item carrying `by`
+ * (`{name, package}`, the archetype or swap that did it); `lostNotes` are the
+ * notes they took out, and `gainedNotes` maps a note's name, in lower case, to
+ * the `by` that put it in.
+ */
+export function archetypeMarks(model, className) {
+  const row = (model.data.classes || []).find((c) => lower(c?.name) === lower(className));
+  const cells = new Map();
+  const at = (k) => {
+    if (!cells.has(k)) cells.set(k, { lost: [], gained: [] });
+    return cells.get(k);
+  };
+  const lostNotes = [];
+  const gainedNotes = new Map();
+  for (const e of arr(row?.archetypeStack)) {
+    const by = { name: e.name, package: e.package || null };
+    const ch = archetypeChanges(model, className, e);
+    for (const l of ch.lost) at(l.key).lost.push({ ...l, by });
+    for (const g of ch.gained) at(g.key).gained.push({ ...g, by });
+    for (const n of ch.lostNotes) lostNotes.push({ ...n, by });
+    for (const n of ch.gainedNotes) gainedNotes.set(lower(n), by);
+  }
+  return { cells, lostNotes, gainedNotes };
+}
+
 /**
  * Apply an archetype to its class on a character.
  *
@@ -2018,6 +2197,12 @@ export function applyArchetype(model, block) {
     if (status.reason === 'no-class') return `${b.name} needs ${status.className} on the Classes table first.`;
     return `${b.name} cannot be added: it and ${status.with} both change ${status.shared.join(', ')}.`;
   }
+  // Each note it takes out marks its own undo; the whole archetype is one step.
+  return asOneUndo(model, `Added ${b.name} to ${status.className}`, () => addArchetype(model, b));
+}
+
+/** applyArchetype once it is known to fit. */
+function addArchetype(model, b) {
   const [ci, row] = classRowFor(model, b.class);
   const className = row.name;
   const d = model.data;
@@ -2032,30 +2217,19 @@ export function applyArchetype(model, block) {
     removedNotes: [],      // {name, type, text} taken out of the class's own text
     addedNotes: [],        // names written into it
     notFound: [],
+    // a package swap's own record: what was given up and taken (packages.js)
+    ...(b.package ? { package: structuredClone(b.package) } : {}),
   };
-  // The row a class level's cells are kept under: its character level, which a
-  // gestalt gap makes differ (or that plus a tenth on a row giving two levels).
-  const charLevelOf = (classLevel) => model.classFeatureRows(className)
-    .find((r) => r.classLevel === classLevel)?.key ?? null;
-
   const removeKey = (key) => {
-    const base = swapBase(key);
-    const at = swapLevel(key);              // one named grant, or the whole feature
-    const charAt = at === null ? null : charLevelOf(at);
+    const { base, at, charAt, cells: found, column: ci2, notes: noteHits } = ladderHits(model, className, key);
     let hit = false;
     if (group) {
-      for (const [level, cells] of Object.entries(group.byLevel || {})) {
-        if (charAt !== null && Number(level) !== charAt) continue;
-        const names = cellNames(cells?.Special);
-        if (!names) continue;
-        const keep = names.filter((n) => swapKey(n, className) !== base);
-        if (keep.length !== names.length) {
-          hit = true;
-          for (const n of names) if (swapKey(n, className) === base) entry.removedCells.push({ level: Number(level), name: n });
-          model.setClassFeature(className, Number(level), 'Special', keep.join(', '));
-        }
+      for (const level of new Set(found.map((c) => c.level))) {
+        const names = cellNames(group.byLevel?.[level]?.Special) || [];
+        hit = true;
+        for (const c of found) if (c.level === level) entry.removedCells.push(c);
+        model.setClassFeature(className, level, 'Special', names.filter((n) => swapKey(n, className) !== base).join(', '));
       }
-      const ci2 = (group.columns || []).findIndex((c) => c !== 'Special' && swapKey(c, className) === base);
       if (ci2 !== -1 && at !== null) {
         // One grant of a repeat feature: the column stays and its schedule
         // loses that level, which is what the rule language's "-10" is for.
@@ -2088,15 +2262,11 @@ export function applyArchetype(model, block) {
     }
     // A named grant leaves the feature's text where it is: the feature stands,
     // it simply arrives one time fewer.
-    if (at === null) {
-      const notes = model.classFeatureNotes(className);
-      for (let i = notes.length - 1; i >= 0; i--) {
-        if (swapKey(notes[i].name, className) === base) {
-          hit = true;
-          entry.removedNotes.push({ name: notes[i].name, type: notes[i].type ?? null, text: notes[i].text || '' });
-          model.removeClassFeatureNote(className, i);
-        }
-      }
+    const notes = model.classFeatureNotes(className);
+    for (const i of [...noteHits].reverse()) {
+      hit = true;
+      entry.removedNotes.push({ name: notes[i].name, type: notes[i].type ?? null, text: notes[i].text || '' });
+      model.removeClassFeatureNote(className, i);
     }
     return hit;
   };
@@ -2154,10 +2324,11 @@ export function applyArchetype(model, block) {
   const parts = [`Added ${b.name} to ${className}`];
   // A feature replaced outright is named; grants replaced one at a time are
   // named with the levels, since which of them went is the whole point.
-  const took = [...new Set(entry.removedCells.filter((c) => !c.column).map((c) => c.name))];
+  const took = [...new Set([...entry.removedCells.filter((c) => !c.column).map((c) => c.name),
+    ...entry.removedColumns.map((c) => c.name)])];
   const byColumn = new Map();
   for (const r of entry.ruleEdits) byColumn.set(r.column, [...(byColumn.get(r.column) || []), r.level]);
-  for (const [col, levels] of byColumn) took.push(`${col} at ${levels.sort((a, z) => a - z).map((l) => `${l}th`).join(' and ')}`);
+  for (const [col, levels] of byColumn) took.push(`${col} at ${levels.sort((a, z) => a - z).map(ordinal).join(' and ')}`);
   if (took.length) parts.push(`replacing ${took.join(', ')}`);
   const altered = [...new Set(b.features.flatMap((f) => f.alters))];
   if (altered.length) parts.push(`altering ${altered.join(', ')}`);
@@ -2174,9 +2345,13 @@ export function removeArchetype(model, className, name) {
   const stack = Array.isArray(row.archetypeStack) ? row.archetypeStack : [];
   const at = stack.findIndex((e) => lower(e.name) === lower(name));
   if (at === -1) return `${name} is not on ${row.name}.`;
+  return asOneUndo(model, `Removed ${stack[at].name || 'the archetype'} from ${row.name}`, () => takeOffArchetype(model, ci, row, stack, at));
+}
+
+/** removeArchetype once the entry is found. */
+function takeOffArchetype(model, ci, row, stack, at) {
   const e = stack[at];
   const cls = row.name;
-  markUndo(model, `Removed ${e.name || 'the archetype'} from ${cls}`);
   const d = model.data;
   // its own additions go
   for (const { level, name: n } of e.addedCells) {
@@ -2213,9 +2388,18 @@ export function removeArchetype(model, className, name) {
   for (const f of e.removedNotes || []) model.addClassFeatureNote(cls, f);
   // and a talent track it widened goes back to what the class states
   if (e.trackSpec) model.setCustomizationSpec(cls, e.trackSpec);
+  // a package swap's casting class goes with it
+  if (e.package?.casting) {
+    const vi = (d.vancian?.classes || []).findIndex((c) => lower(c?.name) === lower(e.package.casting));
+    if (vi !== -1) model.listRemove('vancian.classes', vi);
+    // the Vancian mark and tab it turned on, unless something else uses them now
+    if (e.package.taggedVancian && (row.systems || []).includes('vancian')
+      && !(d.vancian?.classes || []).some((c) => lower(c?.levelClass) === lower(cls))) model.toggleClassSystem(ci, 'vancian');
+    if (e.package.shownTab && !(d.vancian?.classes || []).length) model.hideTab('vancian');
+  }
   row.archetypeStack = stack.filter((_, i) => i !== at);
   if (!row.archetypeStack.length) delete row.archetypeStack;
-  const tags = str(row.archetypes).split(/,\s*/).map((t) => t.trim()).filter((t) => t && lower(t) !== lower(name));
+  const tags = str(row.archetypes).split(/,\s*/).map((t) => t.trim()).filter((t) => t && lower(t) !== lower(e.name));
   model.setItem('classes', ci, 'archetypes', tags.join(', '));
   model.recompute();
   const back = [...new Set([...e.removedCells.map((c) => c.name), ...(e.ruleEdits || []).map((r) => r.column),

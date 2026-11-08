@@ -59,6 +59,7 @@ import {
   poolAt, poolBar, poolPip, poolStep, poolTyped, remoteAllowed, remotePlayArg,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
+import { packageBlocks, packageId, swapPackage } from './packages.js';
 import { COMPANION_KINDS, COMPANION_LABELS } from './companions.js';
 import { applyBlock, looksLikeExtension, looksLikeLibrary, removeArchetype } from './extensions.js';
 import { describePublish, publishDocument } from './publish.js';
@@ -6828,9 +6829,9 @@ export class CharacterSheetElement extends HTMLElement {
         if (key === 'formula' || key === 'minFormula') {
           this.#refreshPreview(root, 'add', this.#view.draft.formula, this.#view.draft.minFormula);
         }
-        // The full-attack d20 is built for the picked weapon, so the pick
-        // has to rebuild it.
-        if (key === 'fullAttackWeapon') this.#render();
+        // The full-attack d20 is built for the picked weapon, and a package
+        // swap's check for the packages picked, so the pick has to rebuild it.
+        if (key === 'fullAttackWeapon' || key.startsWith('pkgGive:') || key.startsWith('pkgTake:')) this.#render();
       });
       // Enter adds an XP award, as its Add button does.
       if (key === 'xpAward') {
@@ -8514,6 +8515,26 @@ export class CharacterSheetElement extends HTMLElement {
       case 'arch-remove': {
         // Take an archetype off its class; its record restores what it replaced.
         this.#historyNote = removeArchetype(this.#model, button?.dataset.class, button?.dataset.name);
+        this.#render();
+        break;
+      }
+      case 'package-swap': {
+        // Give up one of a class's archetype packages for another (packages.js).
+        const row = button?.closest('tr');
+        const blocks = extensionRuntime.blocks();
+        const all = packageBlocks(blocks);
+        const pick = (which) => all.find((p) => packageId(p) === row?.querySelector(`select[data-pkg="${which}"]`)?.value) || null;
+        const gives = pick('give');
+        const takes = pick('take');
+        if (!gives || !takes) {
+          this.#historyNote = 'Pick a package to give up and a package to take.';
+        } else {
+          try {
+            this.#historyNote = swapPackage(this.#model, { className: button.dataset.class, gives, takes, blocks });
+          } catch (err) {
+            this.#historyNote = `Could not swap ${takes.name}: ${err.message}`;
+          }
+        }
         this.#render();
         break;
       }

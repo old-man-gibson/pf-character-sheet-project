@@ -27,6 +27,12 @@ import { hasTokens } from '../../inline.js';
 import { rgba } from '../../tracker-style.js';
 import { logDay, logLinesHtml } from '../play-log.js';
 import { VMC_LEVELS, campaignRules } from '../../model/campaign.js';
+import { runtime as extensionRuntime } from '../../extension-runtime.js';
+import {
+  groupLevels, ownPackages, packageBlocks, packageCheck, packageId, packageProblems, sameClass, swapsOn,
+} from '../../packages.js';
+import { archetypeChanges, archetypeMarks } from '../../extensions.js';
+import { hasLink, linkedText } from '../links.js';
 import { foldingNote } from '../talents.js';
 import { field, text } from '../fields.js';
 
@@ -60,6 +66,95 @@ function vmcPanel(model) {
   }).join('')}</tbody>
       </table></div>
       <p class="hint">These replace the feats at 3rd, 7th, 11th, 15th and 19th.</p>
+    </section>`);
+}
+
+/**
+ * Archetype packages (a campaign rule): per class, the swaps made -- the
+ * package given up, the one taken, × to undo -- and a row to make another.
+ * The packages are the enabled packs' `package` blocks; the swap is an
+ * archetype (packages.js), so its pill is on the Overview's class row too.
+ */
+function packagePanel(model, ctx) {
+  const c = model.data;
+  if (!campaignRules(c).archetypePackages) return '';
+  const blocks = extensionRuntime.blocks();
+  const all = packageBlocks(blocks);
+  const rows = (c.classes || []).map((row, i) => ({ row, i })).filter(({ row }) => String(row?.name ?? '').trim());
+  const draft = ctx?.draft || {};
+  const option = (p, chosen) => `<option value="${esc(packageId(p))}"${chosen === packageId(p) ? ' selected' : ''}>${esc(p.name)}</option>`;
+  // Features with the levels they come at: struck through for what leaves the
+  // class, highlighted for what joins it, as the class's ladder marks them.
+  const featureList = (items, cls) => (items.length ? `<ul class="pkgfeats">${items.map((x) => `<li><span class="${cls}">${esc(x.name)}</span>${
+    x.levels.length ? ` <span class="pkglv">${esc(x.levels.join(', '))}</span>` : ''}</li>`).join('')}</ul>` : '');
+  const note = (text, warn = false) => `<p class="hint${warn ? ' warn' : ''}">${esc(text)}</p>`;
+  const body = rows.map(({ row, i }) => {
+    const swaps = swapsOn(row);
+    const given = new Set(swaps.map((e) => String(e.package.gives).toLowerCase()));
+    const own = ownPackages(all, row.name);
+    const left = own.filter((p) => !given.has(p.name.toLowerCase()));
+    const done = swaps.map((e) => {
+      const ch = archetypeChanges(model, row.name, e);
+      const took = groupLevels(ch.lost.map((l) => ({ name: l.feature, levels: [l.level] })));
+      const brought = groupLevels(ch.gained.filter((x) => x.name.toLowerCase() !== `${e.name} package`.toLowerCase())
+        .map((x) => ({ name: x.name, levels: [x.level] })));
+      return `<tr>
+          <td data-stack="name">${esc(row.name)}</td>
+          <td data-label="Gives up">${esc(e.package.gives)}${featureList(took, 'archlost')}
+            ${e.package.absent?.length ? note(`Not on the ladder: ${e.package.absent.join(', ')}.`) : ''}</td>
+          <td data-label="Takes">${esc(e.package.takes)}${e.package.takesClass ? ` <span class="badge">${esc(e.package.takesClass)}</span>` : ''}${featureList(brought, 'archgain')}</td>
+          <td class="mid">${removeAction('arch-remove', { class: row.name, name: e.name }, { what: `the ${e.package.takes} package` })}</td>
+        </tr>`;
+    }).join('');
+    if (!own.length) {
+      return `${done}<tr><td data-stack="name">${esc(row.name)}</td><td colspan="3" class="empty" data-label="Packages">No packages for ${esc(row.name)} in the enabled packs.</td></tr>`;
+    }
+    if (!left.length) return done;
+    // What may be taken: every other class's packages, and those of no class.
+    const others = all.filter((p) => !sameClass(p.class, row.name));
+    const byClass = new Map();
+    for (const p of others) {
+      const k = String(p.class || '').trim() || 'Any class';
+      if (!byClass.has(k)) byClass.set(k, []);
+      byClass.get(k).push(p);
+    }
+    const groups = [...byClass.entries()].sort(([a], [b]) => (a === 'Any class' ? -1 : b === 'Any class' ? 1 : a.localeCompare(b)));
+    // A choice since given up, or none yet, is the first one left: what the select shows.
+    const give = left.some((p) => packageId(p) === draft[`pkgGive:${i}`]) ? draft[`pkgGive:${i}`] : packageId(left[0]);
+    const take = draft[`pkgTake:${i}`] || '';
+    // What this swap would do, checked against the class's ladder as it is now.
+    const check = packageCheck(model, {
+      className: row.name, gives: left.find((p) => packageId(p) === give), takes: others.find((p) => packageId(p) === take), blocks,
+    });
+    const powers = check.grants.filter((p) => p !== 'combat training');
+    const takesClass = others.find((p) => packageId(p) === take)?.class || '';
+    return `${done}<tr>
+          <td data-stack="name">${esc(row.name)}</td>
+          <td data-label="Gives up"><select data-draft="pkgGive:${i}" data-pkg="give" aria-label="Package ${esc(row.name)} gives up">${left.map((p) => option(p, give)).join('')}</select>
+            ${featureList(check.removes, 'archlost')}
+            ${check.absent.length ? note(`Not on the ladder: ${check.absent.join(', ')}.`) : ''}</td>
+          <td data-label="Takes"><select data-draft="pkgTake:${i}" data-pkg="take" aria-label="Package ${esc(row.name)} takes">
+            <option value="">Choose a package</option>
+            ${groups.map(([k, list]) => `<optgroup label="${esc(k)}">${list.sort((a, b) => a.name.localeCompare(b.name)).map((p) => option(p, take)).join('')}</optgroup>`).join('')}
+          </select>
+            ${featureList(check.adds, 'archgain')}
+            ${check.noClass ? note(`No ${takesClass || 'matching'} class is in the enabled packs, so its features cannot be added.`, true)
+    : check.missing.length ? note(`Not found on the ${takesClass} class: ${check.missing.join(', ')}.`, true) : ''}
+            ${powers.length ? note(`Also grants ${powers.join(' and ')}.`) : ''}</td>
+          <td class="mid"><button data-action="package-swap" data-class="${esc(row.name)}">Swap</button></td>
+        </tr>`;
+  }).join('');
+  const problems = packageProblems(model, blocks);
+  return collapsible(model, 'packages', `<section class="panel span2 pkgpanel">
+      <h3>Archetype packages</h3>
+      ${problems.map((p) => `<p class="hint warn">${esc(p.text)}</p>`).join('')}
+      ${!all.length ? '<p class="empty">No archetype packages in the enabled packs.</p>'
+    : !rows.length ? '<p class="empty">No classes yet.</p>'
+      : `<div class="tablewrap"><table class="pkgswap stacked">
+        <thead><tr><th>Class</th><th>Gives up</th><th>Takes</th><th></th></tr></thead>
+        <tbody>${body}</tbody>
+      </table></div>
+      <p class="hint">A swap removes the struck-through features and adds the highlighted ones, at the levels shown. The class's feature ladder marks them the same way.</p>`}
     </section>`);
 }
 
@@ -256,6 +351,7 @@ export function renderProgressionPanel(model, ctx) {
       </section>`)}
       ${alignedPanel(model)}
       ${vmcPanel(model)}
+      ${packagePanel(model, ctx)}
     </div>
     <div class="featgroups">
       ${classFeatureGroups(model, ctx)}
@@ -304,6 +400,10 @@ function classFeatureGroups(model, ctx) {
 
       // Cells waiting on a class level the character has not got back yet.
       const parked = Object.keys(model.classFeatureParked(name)).map(Number).sort((a, b) => a - b);
+      // What the class's archetypes and package swaps took and brought, to mark.
+      // A whole feature gone is named in Special, or the first column if none.
+      const marks = archetypeMarks(model, name);
+      marks.col = g.columns.includes('Special') ? 'Special' : g.columns[0];
       return collapsible(model, `progfeat-${name}`, `<section class="panel featpanel">
         <h3>${movable ? grip(`data-cfggrip="${gi}"`) : ''}${esc(name)} features
           <span class="badge">${orphaned ? 'not in progression' : `levels ${rows.length ? `${rows[0].level}–${rows[rows.length - 1].level}` : '—'}`}</span>
@@ -324,13 +424,13 @@ function classFeatureGroups(model, ctx) {
             <td class="num"${name === 'General' ? ''
     : ` title="Character level ${row.level}: ${esc(name)} level ${row.classLevel}${row.aligned ? `, from ${esc(row.aligned)}` : ''}"`}>${row.level}</td>
             ${g.columns.map((col) => featureCell(ctx, model, name, col, row,
-    groupNamesShown(model, name, col, (g.rules?.[col] || []).length))).join('')}
+    groupNamesShown(model, name, col, (g.rules?.[col] || []).length), marks)).join('')}
           </tr>`).join('')}</tbody>
         </table></div>
         <div style="margin-top:6px">
           <button class="primary" data-action="add-cf-column" data-class="${esc(name)}">+ Add column</button>
         </div>
-        ${classFeatureNotes(model, name)}
+        ${classFeatureNotes(model, name, marks)}
       </section>`);
     }).join('') + menuListMarkup(ctx);
   }
@@ -394,8 +494,9 @@ function packOffers(className, offers) {
  * drags it into whatever order reads best -- a pack lands them in table
  * order, which is not always the order a player thinks in.
  */
-function classFeatureNotes(model, className) {
+function classFeatureNotes(model, className, marks = archetypeMarks(model, className)) {
     const notes = model.classFeatureNotes(className);
+    const lost = marks.lostNotes;
     const offers = model.classFeatureNoteSuggestions(className);
     const open = isOpen(model, `cfnotes-${className}`);
     const charLevel = Number(model.data.identity.level) || 0;
@@ -421,10 +522,12 @@ function classFeatureNotes(model, className) {
     text: `
         ${open ? '▾' : '▸'} What they do <span class="badge">${notes.length}</span>
         ${offers.length ? `<span class="badge offer" title="Named on the ladder, not written here, and included in an active pack.">${offers.length} in your packs</span>` : ''}
+        ${lost.length ? `<span class="badge" title="Taken out by an archetype or package swap.">${lost.length} given up</span>` : ''}
       `,
   })}
       ${open ? `${notes.length ? `<div class="cfnotelist" data-cfnotes="${esc(className)}">${notes.map((f, i) => {
         const when = arrival(f);
+        const from = marks.gainedNotes.get(String(f.name).toLowerCase());
         const foldKey = `cfnote-${className}-${f.name}`;
         const shut = isCollapsed(model, foldKey);
         return `<div class="cfnote${shut ? ' collapsed' : ''}" data-cfndrop="${esc(JSON.stringify({ c: className, i }))}">
@@ -437,6 +540,7 @@ function classFeatureNotes(model, className) {
             ${['', 'Ex', 'Su', 'Sp'].map((t) => `<option value="${t}"${(f.type || '') === t ? ' selected' : ''}>${t || '—'}</option>`).join('')}
           </select>
           ${when.badge}
+          ${from ? `<span class="badge archfrom" title="${esc(gainedBy(from))}">${esc(from.name)}</span>` : ''}
           ${removeAction('remove-cfnote', { class: className, index: i }, { what: f.name })}
         </span>
         ${shut ? '' : prose(model, `data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'text' }))}"`, f.text, 3, 'grow', null, {
@@ -445,10 +549,37 @@ function classFeatureNotes(model, className) {
   })}
       </div>`;
       }).join('')}</div>` : '<p class="empty">Nothing yet. A class added from a pack adds its features\' text here.</p>'}
+      ${lostNotes(model, className, lost)}
       ${packOffers(className, offers)}
       <div style="margin-top:6px">
         <button data-action="add-cfnote" data-class="${esc(className)}">+ Add feature text</button>
       </div>` : ''}
+    </div>`;
+  }
+
+/**
+ * The features' text an archetype or package swap took out, folded under the
+ * notes: struck through and read-only, since the class no longer has them.
+ * Taking the archetype off puts each one back on the list above.
+ */
+function lostNotes(model, className, lost) {
+    if (!lost.length) return '';
+    const key = `cflost-${className}`;
+    const open = isOpen(model, key, false);
+    return `<div class="cflost">
+      ${foldButton(model, key, {
+    open,
+    cls: 'notehead',
+    title: '',
+    text: `${open ? '▾' : '▸'} Given up <span class="badge">${lost.length}</span>`,
+  })}
+      ${open ? lost.map((n) => `<div class="cfnote lost">
+        <span class="pair">
+          <span class="archlost">${esc(n.name)}</span>${n.type ? ` <span class="otype">(${esc(n.type)})</span>` : ''}
+          <span class="hint">${esc(lostBy(n.by))}</span>
+        </span>
+        ${String(n.text || '').trim() ? `<div class="peektext">${esc(n.text)}</div>` : ''}
+      </div>`).join('') : ''}
     </div>`;
   }
 
@@ -596,28 +727,59 @@ function featureColumnHead(model, className, col, index, tableKey, count) {
    * Text already sitting on a level a later rule excludes is kept and flagged
    * rather than hidden, so tightening a rule never quietly eats an entry.
    */
-function featureCell(ctx, model, className, col, row, multi) {
+function featureCell(ctx, model, className, col, row, multi, marks = null) {
     const cell = row.cells[col];
     // Two rule groups granting at the same level are two things to write down,
     // so each gets its own field, stacked, in its own colour.
     return `<td class="featcell${cell.fields.length > 1 ? ' stacked' : ''}">
-      ${cell.fields.map((f) => featureField(ctx, model, className, col, row, f, multi)).join('')}
+      ${cell.fields.map((f, i) => featureField(ctx, model, className, col, row, f, multi, i === 0 ? marks : null)).join('')}
     </td>`;
   }
 
+/** Who took a feature off the ladder, and who put one on, as a hover says it. */
+const lostBy = (by) => (by.package ? `Given up for the ${by.name} package.` : `Replaced by the ${by.name} archetype.`);
+const gainedBy = (by) => (by.package ? `From the ${by.name} package, in place of ${by.package.gives}.` : `From the ${by.name} archetype.`);
+
+/**
+ * A ladder field's read view where an archetype changed it, or null where
+ * none did: the names it brought highlighted, the ones it took struck through
+ * after them. Only what the class's archetypes recorded is marked, so a name
+ * a player typed in later is plain.
+ */
+function markedView(model, col, row, field, marks) {
+    const here = marks?.cells.get(row.key);
+    if (!here) return null;
+    const lost = here.lost.filter((l) => (l.column ? l.column === col : col === marks.col));
+    const gained = col === 'Special' ? here.gained : [];
+    if (!lost.length && !gained.length) return null;
+    const text = field.text || '';
+    const by = new Map(gained.map((x) => [x.name.toLowerCase(), x.by]));
+    const names = text.split(/,\s*(?![^()]*\))/).map((s) => s.trim()).filter(Boolean);
+    const shown = hasTokens(text) ? renderedProse(model, text, null, { links: true })
+      : hasLink(text) ? linkedText(text)
+        : names.map((n) => (by.has(n.toLowerCase())
+          ? `<span class="archgain" title="${esc(gainedBy(by.get(n.toLowerCase())))}">${esc(n)}</span>` : esc(n))).join(', ');
+    const struck = lost.map((l) => `<span class="archlost" title="${esc(lostBy(l.by))}">${esc(l.name)}</span>`).join(', ');
+    return [shown, struck].filter(Boolean).join(', ');
+  }
+
   /** One writable field inside a feature cell: its tag, its box, its state. */
-function featureField(ctx, model, className, col, row, field, multi) {
+function featureField(ctx, model, className, col, row, field, multi, marks = null) {
     const cell = row.cells[col];
     const colour = field.group?.color || null;
     const label = field.group?.name || col;
+    const view = markedView(model, col, row, field, marks);
+    // One grant of a repeat feature an archetype took: the level is locked, and says why.
+    const tookGrant = marks?.cells.get(row.key)?.lost.find((l) => l.column === col);
 
     const state = !cell.ruled ? ''
-      : !field.on ? `slot-off${field.stranded ? ' kept' : ''}`
+      : !field.on ? `slot-off${field.stranded ? ' kept' : ''}${tookGrant ? ' archoff' : ''}`
         : `slot-on${field.due ? ' due' : ''}${field.planned ? ' planned' : ''}`;
     const title = !cell.ruled ? ''
       : field.group?.orphan ? `“${field.group.name}” is no longer a rule group on this column. The text is kept but cannot be edited here.`
         : !field.on ? (field.stranded ? 'Outside every rule on this column. The text is kept but cannot be edited here.'
-          : `No ${col} at this level.`)
+          : tookGrant ? `No ${col} at this level. ${lostBy(tookGrant.by)}`
+            : `No ${col} at this level.`)
           : `${label}${field.due ? ': nothing chosen yet' : field.planned ? ': not reached yet' : ''}`;
 
     // Whether the column names its groups is groupNamesShown's call. Text left
@@ -636,9 +798,9 @@ function featureField(ctx, model, className, col, row, field, multi) {
     // written in it does. Still a box to type in: a GM's ruling, an option no
     // pack carries, or a note beside the name all go in as they always did.
     const menu = field.menu?.options?.length ? field.menu : null;
-    const body = menu
+    const body = menu && !(view && !field.on)
       ? menuField(ctx, ref, field, menu, placeholder, row.classLevel)
-      : prose(model, `class="cfeat" data-cfeat="${ref}"${field.on ? '' : ' disabled'}${placeholder}`, field.text, 1, 'grow');
+      : prose(model, `class="cfeat" data-cfeat="${ref}"${field.on ? '' : ' disabled'}${placeholder}`, field.text, 1, 'grow', null, { view });
 
     // A cell naming a feature that has text under "What they do" offers it
     // here, one click away, without leaving the ladder. The button carries
