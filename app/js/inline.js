@@ -40,7 +40,7 @@ import {
   parse, evaluateFormula, collectReferences, resolvePath, FormulaError,
 } from './formula.js';
 import { formatNumber } from './formula-format.js';
-import { STACKING_TYPES, baseType, stacksWithItself } from './rules.js';
+import { STACKING_TYPES, baseType, isAbpPair, stacksWithItself, typedGain, typedThere } from './rules.js';
 
 const TOKEN_RE = /\{([^{}]*)\}/g;
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_.]*$/;
@@ -786,7 +786,8 @@ export function resolveContributions(contributions, names, baseScope, targets, k
   // count. Any other type counts once, at its best -- two size bonuses are one
   // size bonus -- and that includes a column of the same type at the
   // destination: a forwarded +2 resistance bonus to a save whose Resistance
-  // column already holds 3 adds nothing, and a +5 adds 2.
+  // column already holds 3 adds nothing, and a +5 adds 2. ABP's resistance is
+  // not such a column: a cloak stacks with it up to the cap (typedGain).
   //
   // The ones that lose are not dropped from the list. "Where did this number
   // come from" is answered badly by a source that has quietly vanished, so
@@ -826,11 +827,16 @@ function stackAt(list, columns) {
     if (!held || e.value > held.value) best.set(e.type, e);
   }
   for (const e of best.values()) {
-    const column = Math.max(0, Number(columns?.[e.type] ?? columns?.[baseType(e.type)]) || 0);
-    const overlap = Math.min(column, e.value);
-    if (overlap) overlaps.set(e, { overlap, column });
-    if (overlap >= e.value) continue;
-    total += e.value - overlap;
+    // A column that is an ABP pair takes the bonus into its typed half, up to
+    // the pair's cap (typedGain); `pair` goes with the overlap for the words.
+    const have = columns?.[e.type] ?? columns?.[baseType(e.type)];
+    const adds = typedGain(e.value, have);
+    const overlap = e.value - adds;
+    if (overlap) {
+      overlaps.set(e, { overlap, column: typedThere(have), ...(isAbpPair(have) ? { pair: have } : {}) });
+    }
+    if (adds <= 0) continue;
+    total += adds;
     counts.add(e);
   }
   return { total, counts, overlaps };

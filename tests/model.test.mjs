@@ -17,7 +17,7 @@ import {
 } from './fixtures.mjs';
 import {
   Character, MYTHIC_POWER_FORMULA, SCHEMA_VERSION, DEFAULT_TAB_ORDER, inspectDocument, abilityCollapse, LOG_MAX,
-  setManeuverCatalogue, disciplineEntries, describeSource, maneuverDetails, maneuverIsWritten,
+  setManeuverCatalogue, disciplineEntries, describeSource, maneuverDetails, maneuverIsWritten, stackingNote,
   maneuverOwn, blankWeapon, blankClassRow,
   setVancianTables, castingTableNames, castingTable, closestName,
   setPsionicTables, psionicTables, psionicCurve, psionicPoints, psionicClassTotal,
@@ -50,6 +50,7 @@ import {
 import { zoneAt, barLayout, normalizeStyle, squareLayout } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
+import { tempEnhancementNote } from '../app/js/rules.js';
 import { importConjuredCompanion } from '../app/js/model/subsystems/companions.js';
 import { companionTabNumber } from '../app/js/companions.js';
 import { featNames } from '../app/js/model/feats.js';
@@ -3571,19 +3572,26 @@ console.log('typed buffs -- the largest of a type counts, penalties stack, round
   c.recompute();
   check('a typed penalty still counts against the best bonus', c.conditionState.delta.melee, 2 + 1 + 1 - 2);
 
-  // Settled against the save's own column of that type, save by save.
-  // ABP's resistance is the same bonus as a cloak's: +1 on every save at
-  // 6th, and the cloak's +2 on Fortitude on top of it is +3 there.
+  // Settled against the save's own column of that type, save by save. ABP's
+  // +1 resistance at 6th is not in the way: a resistance bonus stacks with it
+  // up to +5. The cloak's +2 on Fortitude is, so the buff's +3 adds 1 there.
   c.data.buffs = [buff({ name: 'Resistance', type: 'resistance', saves: 3 })];
   c.data.saves.fortitude.bonuses.resistance = 2;
   c.recompute();
   cs = c.conditionState;
-  check('nothing past ABP and a +2 cloak on Fortitude, +2 past ABP alone',
-    [cs.delta.fortitude, cs.delta.reflex, cs.delta.will], [0, 2, 2]);
-  check('and it says so', cs.buffStacking[0], [
-    'Fortitude: the resistance bonus already there is as large',
-    'Reflex, Will: adds only 2, past the resistance bonus already there',
+  check('1 past a +2 cloak on Fortitude, all of it on top of ABP alone',
+    [cs.delta.fortitude, cs.delta.reflex, cs.delta.will], [1, 3, 3]);
+  check('and it says so', cs.buffStacking[0], ['Fortitude: adds only 1, past the resistance bonus already there']);
+  c.data.identity.level = 13;
+  c.recompute();
+  cs = c.conditionState;
+  check('at 13th ABP gives +4, and the pair stops at +5',
+    [c.data.saves.reflex.bonuses.abpResistance, cs.delta.fortitude, cs.delta.reflex, cs.delta.will], [4, 0, 1, 1]);
+  check('and it says that too', cs.buffStacking[0], [
+    'Fortitude: ABP and resistance stack up to +5',
+    'Reflex, Will: adds only 1, since ABP and resistance stack up to +5',
   ]);
+  c.data.identity.level = 6;
   c.data.buffs[0].type = '';
   c.recompute();
   check('untyped, it adds everywhere', c.conditionState.delta.fortitude, 3);
@@ -3602,6 +3610,87 @@ console.log('typed buffs -- the largest of a type counts, penalties stack, round
   check('undo puts it back on', [c.data.buffs[0].rounds, c.data.buffs[0].on, c.conditionState.delta.melee], [1, true, 2]);
   advanceTurn(c, true);
   check('the session board’s Next turn is a round too', [c.data.buffs[0].on, c.playActions[0].label], [false, 'Next turn, Haste ended']);
+}
+
+console.log('ABP stacks with gear and buffs of its type, up to the cap');
+{
+  // 10th level: ABP gives +3 resistance and +2 deflection.
+  const c = new Character(blankDocument({ name: 'Cloaked', level: 10 }));
+  c.recompute();
+  const saves = () => ['fortitude', 'reflex', 'will'].map((k) => c.data.saves[k].total);
+  const s0 = saves();
+  const ac0 = c.data.defenses.ac;
+  c.setItem('equipment.gear', 0, 'name', 'Cloak of Resistance');
+  c.setItem('equipment.gear', 0, 'bonuses.0.value', 1);
+  c.setItem('equipment.gear', 0, 'bonuses.0.type', 'Resistance');
+  c.setItem('equipment.gear', 0, 'bonuses.0.target', 'saves');
+  check('a +1 cloak in slotted gear adds 1 on top of ABP’s +3', saves().map((v, i) => v - s0[i]), [1, 1, 1]);
+  c.setItem('equipment.gear', 0, 'bonuses.0.value', 4);
+  check('a +4 cloak adds 2, to +5', saves().map((v, i) => v - s0[i]), [2, 2, 2]);
+  check('and its badge says why', stackingNote(c.forwardedInto('saves.will').from[0]), '  (adds 2: ABP and resistance stack up to +5)');
+  c.setItem('equipment.gear', 0, 'bonuses.0.value', 1);
+
+  c.setItem('equipment.gear', 1, 'bonuses.0.value', 1);
+  c.setItem('equipment.gear', 1, 'bonuses.0.type', 'Deflection');
+  c.setItem('equipment.gear', 1, 'bonuses.0.target', 'ac');
+  check('a +1 ring of protection adds 1 on top of ABP’s +2', c.data.defenses.ac - ac0, 1);
+  c.setItem('equipment.gear', 1, 'bonuses.0.value', 0);
+
+  // A buff joins the same pair: with the cloak's +1 there, a +2 Resistance
+  // buff adds 1 more; Shield of Faith's +4 adds 3, to +5.
+  const buff = (o) => ({ name: '', on: true, type: '', rounds: '', attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [], ...o });
+  c.data.buffs = [buff({ name: 'Resistance', type: 'resistance', saves: 2 }), buff({ name: 'Shield of Faith', type: 'deflection', ac: 4 })];
+  c.recompute();
+  const cs = c.conditionState;
+  check('buffs stack with ABP too', [cs.adjusted.fortitude - s0[0], cs.adjusted.ac - ac0], [2, 3]);
+  check('and say why they add less', [cs.buffStacking[0], cs.buffStacking[1]], [
+    ['saves: adds only 1, past the resistance bonus already there'],
+    ['AC: adds only 3, since ABP and deflection stack up to +5'],
+  ]);
+
+  // An ability's enhancement: ABP's +2 Strength and Bull's Strength's +4 are +6.
+  c.data.progressionPicks.abp = [{ level: 7, physical: 'Strength', mental: null }];
+  c.data.buffs = [buff({ name: 'Bull’s Strength', type: 'enhancement', bonuses: [{ target: 'str', value: 4, valueNum: 4 }] })];
+  c.recompute();
+  check('Bull’s Strength adds all 4 on top of ABP’s +2 Strength',
+    [c.data.abilities.str.score, c.conditionState.scores.str, c.conditionState.buffStacking[0]], [12, 16, undefined]);
+
+  // A source above the cap is not cut to it: it counts on its own, and ABP
+  // adds nothing to it. Physical enhancement at CL 21+ is +8; Idealize at
+  // 20th makes it +12. Every way onto the sheet gives the same score.
+  const strWith = (v, how) => {
+    c.data.buffs = [];
+    c.setItem('equipment.other', 0, 'note', '');
+    c.data.statsBuild.str.tempEnhancement = 0;
+    if (how === 'buff') c.data.buffs = [buff({ name: 'Physical Enhancement', type: 'enhancement', bonuses: [{ target: 'str', value: v, valueNum: v }] })];
+    if (how === 'column') c.data.statsBuild.str.tempEnhancement = v;
+    if (how === 'temp.') c.setItem('equipment.other', 0, 'note', `{str.score += ${v} as temp.enhancement}`);
+    if (how === '.temp') c.setItem('equipment.other', 0, 'note', `{str.temp += ${v} as enhancement}`);
+    c.recompute();
+    return c.conditionState.scores.str;
+  };
+  for (const v of [8, 12]) {
+    check(`a +${v} enhancement over ABP’s +2 gives Str ${10 + v} every way`,
+      ['buff', 'column', 'temp.', '.temp'].map((how) => strWith(v, how)), [10 + v, 10 + v, 10 + v, 10 + v]);
+  }
+  check('the buff says ABP drops out', (strWith(8, 'buff'), c.conditionState.buffStacking[0]),
+    ['Str: adds only 6, since enhancement above +6 counts on its own, without ABP']);
+  strWith(8, 'column');
+  check('the temporary column shows what it adds, and why', [c.data.statsBuild.str.resolved.temporary, tempEnhancementNote(c.data.statsBuild.str)],
+    [6, 'Temporary enhancement above +6 counts on its own. ABP and gear add nothing to it.']);
+  check('a +4 there adds all of it, to +6', strWith(4, 'column'), 16);
+  check('a +6 there adds 4, to +6', [strWith(6, 'column'), tempEnhancementNote(c.data.statsBuild.str)],
+    [16, 'Temporary enhancement stacks with ABP up to +6. 2 is wasted.']);
+  c.data.statsBuild.str.gear = 4;
+  check('and a +4 adds nothing past a +4 belt', [strWith(4, 'column'), tempEnhancementNote(c.data.statsBuild.str)],
+    [16, 'Temporary enhancement does not stack with gear\'s +4. 4 is wasted.']);
+  c.data.progressionPicks.abp = [];
+  check('with no ABP, a +2 there does not stack with the belt’s +4', [strWith(2, 'column'), tempEnhancementNote(c.data.statsBuild.str)],
+    [14, 'Temporary enhancement does not stack with gear\'s +4. 2 is wasted.']);
+  check('and a penalty typed there still counts', strWith(-2, 'column'), 12);
+  c.data.statsBuild.str.gear = 0;
+  strWith(0, 'none');
+  check('nothing typed, nothing noted', [c.data.statsBuild.str.resolved.tempEnhancementWasted, tempEnhancementNote(c.data.statsBuild.str)], [undefined, '']);
 }
 
 console.log('ability damage and drain -- the modifier, the score, a night’s rest');
@@ -8208,9 +8297,9 @@ console.log('gear bonuses -- amount, type and destination, read as a forwarded b
   c.setItem('equipment.other', 0, 'bonuses.0.value', 5);
   check('and moves the number', c.data.saves.will.total, will + 2);
 
-  // A bonus of a type the destination already holds counts only for what it
-  // adds past it, as the rulebook has it: Nico's saves carry ABP's +5
-  // resistance and his AC ABP's +2 deflection. These used to add on top.
+  // A bonus of a type ABP shares stacks with ABP up to +5, and one past +5
+  // counts on its own: Nico's saves carry ABP's +5 resistance and his AC
+  // ABP's +2 deflection.
   c.setItem('equipment.other', 0, 'bonuses.0.value', 0);
   const bare = c.data.saves.will.total;
   c.setItem('equipment.other', 0, 'bonuses.0.type', 'Resistance');
@@ -8218,12 +8307,16 @@ console.log('gear bonuses -- amount, type and destination, read as a forwarded b
   check('a +5 resistance bonus under ABP’s +5 resistance adds nothing', c.data.saves.will.total, bare);
   c.setItem('equipment.other', 0, 'bonuses.0.value', 7);
   check('a +7 adds the 2 past it', c.data.saves.will.total, bare + 2);
-  check('and its badge says so', c.forwardedInto('saves.will').from.map((x) => [x.value, x.column, x.adds]), [[7, 5, 2]]);
+  check('and its badge says so', c.forwardedInto('saves.will').from.map((x) => [x.value, x.column, x.adds, stackingNote(x)]),
+    [[7, 5, 2, '  (adds 2: resistance above +5 counts on its own, without ABP)']]);
   const acBare = ac();
   c.setItem('equipment.gear', 1, 'bonuses.0.target', 'ac.total');
   c.setItem('equipment.gear', 1, 'bonuses.0.value', 3);
   c.setItem('equipment.gear', 1, 'bonuses.0.type', 'Deflection');
-  check('a ring of +3 over ABP’s +2 deflection adds 1', ac(), acBare + 1);
+  check('a ring of +3 over ABP’s +2 deflection adds all 3', ac(), acBare + 3);
+  c.setItem('equipment.gear', 1, 'bonuses.0.value', 4);
+  check('a ring of +4 adds 3, to +5', [ac(), stackingNote(c.forwardedInto('ac.total').from.find((x) => x.type === 'deflection'))],
+    [acBare + 3, '  (adds 3: ABP and deflection stack up to +5)']);
   c.setItem('equipment.gear', 1, 'bonuses.0.target', '');
   c.setItem('equipment.other', 0, 'bonuses.0.type', 'Luck');
   c.setItem('equipment.other', 0, 'bonuses.0.value', 5);

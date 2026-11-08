@@ -31,7 +31,7 @@
  * table's way of filling the sheet.
  */
 
-import { critMultOf, threatText, fmt } from './rules.js';
+import { abpGroupTotal, critMultOf, threatText, fmt } from './rules.js';
 import { hasTokens, formatValue } from './inline.js';
 import { eachShown } from './ui/prose.js';
 
@@ -237,7 +237,7 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
   const armor = armorRow?.active ? num(armorRow.acBonus) + num(armorRow.enhancement) : 0;
   const shield = shieldRow ? num(shieldRow.acBonus) + num(shieldRow.enhancement) : 0;
   const acb = d.acBonusesResolved || {};
-  const deflect = num(acb.deflection) + num(acb.abpDeflection);
+  const deflect = abpGroupTotal(acb.abpDeflection, acb.deflection);
   const size = num(acb.size);
   const dodge = num(acb.dodge);
   const ac = num(d.ac);
@@ -260,7 +260,7 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
     if (!s) continue;
     const base = num(s.base);
     const ability = abMod(s.stat1) + abMod(s.stat2);
-    const magic = num(s.bonusesResolved?.abpResistance) + num(s.bonusesResolved?.resistance);
+    const magic = abpGroupTotal(s.bonusesResolved?.abpResistance, s.bonusesResolved?.resistance);
     set(mw, s.total); set(`${mw}Base`, base); set(`${mw}Ability`, ability); set(`${mw}Magic`, magic);
     set(`${mw}Misc`, num(s.total) - base - ability - magic);
   }
