@@ -117,6 +117,14 @@ export function indexedDbMedium({ factory = globalThis.indexedDB, name = PACK_DB
 
   return {
     name: 'IndexedDB',
+    /**
+     * Throws where the database cannot be used. Opens it and starts a read
+     * without reading anything, so asking costs nothing however much is stored.
+     */
+    async ready() {
+      const db = await openDb();
+      db.transaction(store, 'readonly');
+    },
     async all() {
       const db = await openDb();
       const tx = db.transaction(store, 'readonly');
@@ -171,7 +179,7 @@ export async function packMedium({
 
   const db = indexedDbMedium({ factory });
   try {
-    await db.all();
+    await db.ready();
   } catch {
     // No database to be had. Carry on where the packs already are.
     return { medium: fallback(), moved: [] };

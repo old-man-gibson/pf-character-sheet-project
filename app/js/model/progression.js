@@ -43,6 +43,12 @@ export const featureGroupKey = (group, index) => (group?.name || `#${index}`);
  * ------------------------------------------------------------------ */
 
 let OPTION_CATALOGUES = new Map();
+// The menus a column can pick from (every one but the hidden), in the order
+// they were registered, and the same split by feature and by class. A ladder
+// asks for its column's menu on every render.
+let VISIBLE_MENUS = [];
+let MENUS_BY_FEATURE = new Map();
+let MENUS_BY_CLASS = new Map();
 
 /**
  * A class or feature name as it is matched on, across the ways two pages
@@ -83,6 +89,16 @@ export function setOptionCatalogues(list) {
       })).filter((o) => o.name),
     });
   }
+  // From the map, not the list: a later menu of the same name takes the earlier one's place.
+  VISIBLE_MENUS = [...OPTION_CATALOGUES.values()].filter((c) => !c.hidden);
+  MENUS_BY_FEATURE = new Map();
+  MENUS_BY_CLASS = new Map();
+  for (const c of VISIBLE_MENUS) {
+    for (const [index, key] of [[MENUS_BY_FEATURE, c.featureKey], [MENUS_BY_CLASS, c.classKey]]) {
+      if (!index.has(key)) index.set(key, []);
+      index.get(key).push(c);
+    }
+  }
 }
 
 /** One menu by name, or null where no pack provides it. */
@@ -93,7 +109,7 @@ export function optionCatalogue(name) {
 
 /** Every menu registered, for a picker of catalogues. */
 export function optionCatalogues() {
-  return [...OPTION_CATALOGUES.values()].filter((c) => !c.hidden);
+  return [...VISIBLE_MENUS];
 }
 
 /**
@@ -108,14 +124,14 @@ export function optionCatalogueFor(className, column) {
   const cls = menuKey(className);
   const col = menuKey(column);
   if (!col) return null;
-  const hits = optionCatalogues().filter((c) => c.featureKey === col && (!c.classKey || c.classKey === cls));
+  const hits = (MENUS_BY_FEATURE.get(col) || []).filter((c) => !c.classKey || c.classKey === cls);
   // A menu that names the class is meant more particularly than one that does not.
   const exact = hits.find((c) => c.classKey) || hits[0];
   if (exact) return exact;
   // A catalogue calls the legendary monk's list its "Art" where the class
   // table heads the column "Monk Art". Only where the class is named and is
   // this one: the last word of a column is far too little to go on otherwise.
-  return optionCatalogues().find((c) => c.classKey === cls && c.featureKey
+  return (MENUS_BY_CLASS.get(cls) || []).find((c) => c.featureKey
     && col.endsWith(` ${c.featureKey}`)) || null;
 }
 

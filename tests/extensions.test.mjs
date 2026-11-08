@@ -16,7 +16,7 @@ import {
   copyCost, packSize, packGroups, packFindText, PACK_GROUP_MIN,
 } from '../app/js/extension-manager.js';
 import {
-  Character, setManeuverCatalogue, disciplineEntries, setOptionCatalogues, optionCatalogues, resolveOptionMenu, optionCatalogueFor,
+  Character, setManeuverCatalogue, disciplineEntries, setOptionCatalogues, optionCatalogue, optionCatalogues, resolveOptionMenu, optionCatalogueFor,
   setSphereCatalogue, sphereCatalogue, sphereBasePick, isBasePickOf, talentNoteText, setAltTrainingTables, sphereEntry, sphereNames, sphereTalent, talentsTagged,
   setVeilCatalogue, veilCatalogue, veilEntry, veilClasses, veilSlots, veilsAvailable,
   veilDetails, veilOwn, veilIsWritten,
@@ -1850,7 +1850,9 @@ console.log('a catalogue pack\'s tables are menus too: class options, and powers
   const offered = () => c.classFeatureNoteSuggestions('Stancer').map((s) => [s.name, s.level]);
   check('a cell naming a pack entry is offered its text, at the level it sits; one already written up, or nobody carries, is not',
     offered(), [['Crane Step', 2]]);
-  tables.powers.powers[3].text = 'Warms them.';
+  // A new row, as a pack saved again would give: an entry is read once per
+  // object, so one changed in place would keep its old reading.
+  tables.powers.powers[3] = { ...tables.powers.powers[3], text: 'Warms them.' };
   setOptionCatalogues(optionCataloguesFromTables(tables));
   check('an entry with no text is nothing to offer, and one with text is', offered(), [['Warm Hands', 1], ['Crane Step', 2]]);
   c.addClassFeatureNoteFromPack('Stancer', 'Crane Step');
@@ -2199,6 +2201,109 @@ console.log('library -- every local pack and the switches as one file, imported 
   check('a changed pack is an update', p3.update.map((d) => d.id), ['pack-a']);
   check('a bundled id and junk are skipped', p3.skipped.map((s) => s.id), ['bundled-x', '?']);
   check('not a library, no plan', planLibrary({ format: 'x' }).add, []);
+}
+
+console.log('store -- a pack is parsed once, and again after it is saved or removed');
+{
+  const storage = fakeStorage();
+  const store = extensionStore(storage);
+  await store.open();
+  const pack = (revision, name) => ({ format: EXTENSION_FORMAT, id: 'menus', name: 'Menus', revision,
+    blocks: [{ kind: 'options', name: 'Arts', class: 'Monk', feature: 'Art', options: [{ name, text: 'x' }] }] });
+  await store.save(pack(1, 'Old Art'));
+  const first = store.read('menus');
+  check('a second read is the same document', store.read('menus') === first, true);
+  const before = store.revision;
+  await store.save(pack(2, 'New Art'));
+  const second = store.read('menus');
+  check('a saved pack is read again', [second === first, second.revision, second.blocks[0].options.map((o) => o.name)], [false, 2, ['New Art']]);
+  check('and the store says it changed', store.revision > before, true);
+  await store.setEnabled('menus', false);
+  check('switching it off leaves the document as it was read', store.read('menus') === second, true);
+  await store.remove('menus');
+  check('a removed pack reads null', store.read('menus'), null);
+}
+
+console.log('store -- start-up reads the database once');
+{
+  // Every getAll the fake answers. Asking whether the database works must
+  // not read every pack in it: with 1,400 book packs that was 122 MB, twice.
+  const base = fakeIndexedDb();
+  let reads = 0;
+  const counting = {
+    open(...a) {
+      const req = base.open(...a);
+      const db = req.result;
+      if (!db.counted) {
+        const transaction = db.transaction.bind(db);
+        db.transaction = (...t) => {
+          const tx = transaction(...t);
+          const objectStore = tx.objectStore;
+          tx.objectStore = (...o) => { const os = objectStore(...o); const getAll = os.getAll; os.getAll = () => { reads++; return getAll(); }; return os; };
+          return tx;
+        };
+        db.counted = true;
+      }
+      return req;
+    },
+  };
+  const storage = fakeStorage();
+  const store = extensionStore(() => packMedium({ storage, factory: counting, holds: isPackKey, keep: packsWorthMoving }));
+  await store.open();
+  check('the stored packs are read once', [store.medium, reads], ['IndexedDB', 1]);
+  await store.save({ format: EXTENSION_FORMAT, id: 'one', name: 'One', blocks: [{ kind: 'note', name: 'n' }] });
+  check('and what is saved after is read back from memory', [store.read('one')?.name, reads], ['One', 1]);
+}
+
+console.log('merge -- packs adding to one catalogue kind build one list and leave their own alone');
+{
+  const opt = (name, cls, text) => ({ name, text, fields: [['Class', cls]] });
+  const pack = (id, entries) => normalizeExtension({ id, name: id, provides: { catalogues: { catalogues: [{ kind: 'class option', entries }] } } });
+  const a = pack('a', [opt('Ash', 'Rogue', 'a1'), opt('Bog', 'Rogue', 'a2')]);
+  const b = pack('b', [opt('Ash', 'Rogue', 'b1'), opt('Ash', 'Monk', 'b2')]);
+  const c = pack('c', [opt('Cog', 'Rogue', 'c1'), opt('Bog', 'Rogue', 'c2')]);
+  const own = () => [a, b, c].map((p) => p.provides.catalogues.catalogues[0].entries.map((e) => e.text).join(','));
+  const before = own();
+  const merged = mergeTables([a, b, c]).catalogues.catalogues;
+  check('one kind, later packs winning entry by entry in first-seen order',
+    merged.map((k) => k.entries.map((e) => `${e.name}/${e.text}`)), [['Ash/b1', 'Bog/c2', 'Ash/b2', 'Cog/c1']]);
+  check('each pack keeps its own list', own(), before);
+  check('a second merge comes out the same', JSON.stringify(mergeTables([a, b, c])), JSON.stringify(mergeTables([a, b, c])));
+  check('and one pack alone is just that pack', mergeTables([a]).catalogues.catalogues[0].entries.map((e) => e.text), ['a1', 'a2']);
+}
+
+console.log('runtime -- the active packs, their blocks and their menus are worked out again only when the store changes');
+{
+  const had = globalThis.localStorage;
+  globalThis.localStorage = fakeStorage();
+  const { runtime, registerPacks } = await import('../app/js/extension-runtime.js');
+  runtime.bundled = [normalizeExtension({ id: 'b1', name: 'B1', blocks: [{ kind: 'note', name: 'from b1' }] })];
+  await runtime.store.open();
+  const opt = (name, text) => ({ name, text, fields: [['Class', 'Stancer'], ['Option', 'Stance']] });
+  const pack = (revision, note, text) => ({ format: EXTENSION_FORMAT, id: 'local', name: 'Local', revision,
+    blocks: [{ kind: 'note', name: note }],
+    provides: { catalogues: { catalogues: [{ kind: 'class option', entries: [opt('Ash Step', text), opt('Bog Step', 'Sinks.')] }] } } });
+  await runtime.store.save(pack(1, 'first', 'Must be at least 4th level. This replaces Bog Step.'));
+  const active = runtime.active();
+  const blocks = runtime.blocks();
+  check('asked twice, the same answers', [runtime.active() === active, runtime.blocks() === blocks], [true, true]);
+  const ash = () => optionCataloguesFromTables(mergeTables(runtime.active()))
+    .find((m) => m.name === 'Stancer Stance').options.find((o) => o.name === 'Ash Step');
+  const read = ash();
+  check('an entry is read once', [ash() === read, read.minLevel, read.replaces], [true, 4, ['Bog Step']]);
+
+  await runtime.store.save(pack(2, 'second', 'Must be at least 8th level.'));
+  check('a saved pack is read again', [runtime.active() === active, runtime.blocks().map((b) => b.name)], [false, ['from b1', 'second']]);
+  check('and so are its entries', [ash().minLevel, ash().replaces], [8, []]);
+  registerPacks(runtime.active());
+  check('which is what the model is handed', optionCatalogue('Stancer Stance').options.find((o) => o.name === 'Ash Step').minLevel, 8);
+
+  await runtime.store.setEnabled('local', false);
+  check('a pack switched off drops out', runtime.active().map((p) => p.id), ['b1']);
+  runtime.bundled = [];
+  check('and a new bundled list is seen', runtime.active().length, 0);
+  setOptionCatalogues([]);
+  globalThis.localStorage = had;
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

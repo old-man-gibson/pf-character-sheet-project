@@ -90,6 +90,8 @@ const DATALIST_MAX = 40;
  */
 const SELECT_FILLERS = {
   targets: targetChoices,
+  menus: lore.columnMenuChoices,
+  groupmenus: lore.groupMenuChoices,
 };
 /** How wide a printed page's text is, in CSS pixels: A4 less 10 mm margins (190 mm). */
 const PRINT_WIDTH = 715;

@@ -21,7 +21,7 @@ import {
 } from '../rows.js';
 import { linkField } from '../fields.js';
 import { same } from '../format.js';
-import { alignedGainRows, alignedRule, columnLetter, optionCatalogues, systemTabWidth } from '../../model.js';
+import { alignedGainRows, alignedRule, columnLetter, optionCatalogue, optionCatalogues, systemTabWidth } from '../../model.js';
 import { parseLevelRule, levelRuleLevels, summariseLevels } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
 import { rgba } from '../../tracker-style.js';
@@ -659,18 +659,16 @@ function featureColumnHead(model, className, col, index, tableKey, count) {
     // Two schedules in one column are as often two lists -- infusions on the
     // odd levels, utility talents on the even -- so each may pick from a menu
     // of its own. One group has the column's, and needs no second dropdown.
-    const menuNames = groups.length > 1 ? optionCatalogues().map((c) => c.name) : [];
+    const anyMenus = groups.length > 1 && optionCatalogues().length > 0;
     const groupMenu = (grp, gi) => {
       const chosen = grp.optionsFrom || '';
-      if (!menuNames.length && !chosen) return '';
-      const names = chosen && !menuNames.some((n) => same(n, chosen)) ? [...menuNames, chosen] : menuNames;
-      const missing = chosen && !menuNames.some((n) => same(n, chosen));
+      if (!anyMenus && !chosen) return '';
+      const missing = chosen && (!anyMenus || !providedMenu(chosen));
       return `<select class="colmenu gmenu${missing ? ' bad' : ''}" style="--gc:${esc(grp.color)}"
-        data-cfgmenu="${esc(className)}|${index}|${gi}"
+        data-cfgmenu="${esc(className)}|${index}|${gi}"${anyMenus ? ' data-fill="groupmenus"' : ''}
         title="${esc(missing ? `“${chosen}” is not available. Its pack is off or not installed.`
     : `The menu ${grp.name || 'this group'}'s cells pick from. Blank uses the column's menu.`)}">
-        <option value=""${chosen ? '' : ' selected'}>— column's menu —</option>
-        ${names.map((n) => `<option value="${esc(n)}"${same(n, chosen) ? ' selected' : ''}>${esc(n)}</option>`).join('')}
+        ${groupMenuChoices(model, chosen, { all: false })}
       </select>`;
     };
     const groupRow = (grp, gi) => {
@@ -845,12 +843,40 @@ export function featurePeekHtml(model, className, text) {
     }).join('');
   }
 
+  /** A menu a pack provides by this name, spelled the way the pack spells it; null when none does. */
+const providedMenu = (name) => {
+    const menu = String(name ?? '').trim() ? optionCatalogue(name) : null;
+    return menu && !menu.hidden ? menu : null;
+  };
+
+  /**
+   * The choices inside a menu picker holding `value`: every menu the packs
+   * provide, or with `all: false` only the one it holds. `blank` names the
+   * empty choice.
+   *
+   * The panel draws the short form and the sheet puts the whole list in when
+   * somebody reaches for the picker (`data-fill`, see `#fillSelect`). With
+   * many packs on, every column carried hundreds of menus. A menu no pack
+   * provides any more stays listed, so switching its pack off does not
+   * quietly forget the choice.
+   */
+function menuChoices(value, blank, all) {
+    const v = String(value ?? '').trim();
+    const held = providedMenu(v)?.name ?? v;
+    const names = all ? optionCatalogues().map((c) => c.name) : [];
+    if (held && !names.some((n) => same(n, held))) names.push(held);
+    return `<option value=""${held ? '' : ' selected'}>${esc(blank)}</option>${
+      names.map((n) => `<option value="${esc(n)}"${same(n, held) ? ' selected' : ''}>${esc(n)}</option>`).join('')}`;
+  }
+
+export function columnMenuChoices(model, value, { all = true } = {}) { return menuChoices(value, '— no menu —', all); }
+export function groupMenuChoices(model, value, { all = true } = {}) { return menuChoices(value, '— column\'s menu —', all); }
+
   /**
    * Which menu a column's cells pick from.
    *
    * Only shown once a pack provides one, since with none there is nothing to
-   * choose between. A menu named on the column but no longer provided stays
-   * listed, so switching its pack off does not quietly forget the choice.
+   * choose between.
    */
 function featureColumnMenu(model, className, col, index) {
     // A column may name several menus, layered -- an archetype's over the
@@ -858,19 +884,15 @@ function featureColumnMenu(model, className, col, index) {
     // since an archetype's pill is where those come and go.
     const stack = model.classFeatureColumnOptions(className, col);
     const [chosen = '', ...layered] = stack;
-    const all = optionCatalogues();
-    if (!all.length && !chosen) return '';
-    const names = all.map((c) => c.name);
-    if (chosen && !names.some((n) => same(n, chosen))) names.push(chosen);
-    const missing = chosen && !all.some((c) => same(c.name, chosen));
+    if (!chosen && !optionCatalogues().length) return '';
+    const missing = chosen && !providedMenu(chosen);
     const claimed = chosen && !model.classFeatureColumnOptionsChosen(className, col);
-    return `<select class="colmenu${missing ? ' bad' : ''}" data-cfmenu="${esc(className)}|${index}"
+    return `<select class="colmenu${missing ? ' bad' : ''}" data-cfmenu="${esc(className)}|${index}" data-fill="menus"
       title="${esc(missing ? `“${chosen}” is not available. Its pack is off or not installed.`
     : claimed ? `“${chosen}” names this class and this feature, so this column picks from it. Choose another, or none.`
       : chosen ? `Cells in this column pick from “${chosen}”.`
         : 'Pick entries from a pack menu instead of typing them.')}">
-      <option value=""${chosen ? '' : ' selected'}>— no menu —</option>
-      ${names.map((n) => `<option value="${esc(n)}"${same(n, chosen) ? ' selected' : ''}>${esc(n)}</option>`).join('')}
+      ${columnMenuChoices(model, chosen, { all: false })}
     </select>${layered.map((n) => `<span class="colmenu layered" title="${
       esc(`“${n}” adds to the menu above. Its entries take priority, and the entries it replaces are removed.`)}">+ ${esc(n)}</span>`).join('')}`;
   }

@@ -28,7 +28,7 @@
  *
  *  Run: node tests/panels.test.mjs */
 import { blankDocument } from '../app/js/convert.js';
-import { Character } from '../app/js/model.js';
+import { Character, setOptionCatalogues } from '../app/js/model.js';
 import { hasFixtures, fixtureIds, loadCharacter } from './fixtures.mjs';
 import * as overview from '../app/js/ui/panels/overview.js';
 import * as combat from '../app/js/ui/panels/combat.js';
@@ -680,6 +680,50 @@ console.log('\nthe gear table: three cells a bonus, and the card grows with its 
   ok('and its description is a growing prose field', /<span class="prose  grow"[^>]*>\s*<textarea data-item="equipment\.gear\|0\|note"/.test(open));
   const span = Number(open.match(/gearcardrow"><td colspan="(\d+)"/)?.[1]);
   ok('the card spans exactly the row’s cells', span === 5 + 3 * 3 + 4);
+}
+
+console.log('\nthe Progression tab: a menu picker is drawn with its choice and filled when pressed');
+{
+  const menu = (name, cls, feature, extra = {}) => ({ name, class: cls, feature, options: [{ name: `${name} one`, text: 'x' }], ...extra });
+  setOptionCatalogues([
+    menu('Kiai Arts', 'Samurai', 'Kiai art'), menu('Rogue Talents', 'Rogue', 'Rogue talent'),
+    menu('Samurai — features', 'Samurai', '', { hidden: true }),
+  ]);
+  const c = new Character(blankDocument({ name: 'Menus', level: 3 }));
+  for (let l = 1; l <= 3; l++) c.setProgressionClass(l, 0, 'Samurai');
+  for (const col of ['Kiai art', 'Special', 'Gone']) c.addClassFeatureColumn('Samurai', col);
+  const cols = c.data.progression.classFeatures.Samurai.columns;
+  c.setClassFeatureColumnOptions('Samurai', cols.indexOf('Gone'), 'Old Menu');
+  c.addClassFeatureRuleGroup('Samurai', cols.indexOf('Special'), { rule: 'odd' });
+  c.addClassFeatureRuleGroup('Samurai', cols.indexOf('Special'), { rule: 'even' });
+  c.setClassFeatureRuleGroup('Samurai', cols.indexOf('Special'), 1, { optionsFrom: 'rogue talents' });
+  const html = lore.renderProgressionPanel(c, CTX);
+  const pickers = [...html.matchAll(/<select class="colmenu[^>]*>[\s\S]*?<\/select>/g)].map((m) => m[0]);
+  const fill = (s) => s.match(/data-fill="(\w+)"/)?.[1];
+  const picked = (s) => s.match(/<option [^>]*selected>[^<]*<\/option>/)?.[0];
+  const options = (s) => (s.match(/<option\b/g) || []).length;
+  const full = (s, value) => (fill(s) === 'menus' ? lore.columnMenuChoices : lore.groupMenuChoices)(c, value);
+  const valueOf = (s) => s.match(/<option value="([^"]*)"[^>]*selected>/)?.[1];
+  ok('every picker is drawn with its blank and its choice only, and asks for the rest',
+    pickers.length === 5 && pickers.every((s) => fill(s) && options(s) <= 2));
+  ok('filled, each lists every menu but the hidden, and reads the same as before',
+    pickers.every((s) => {
+      const all = full(s, valueOf(s));
+      return picked(all) === picked(s) && /Kiai Arts/.test(all) && /Rogue Talents/.test(all) && !/features/.test(all);
+    }));
+  const kiai = pickers.find((s) => /Kiai Arts/.test(s));
+  ok('a column a menu names is drawn with it', /<option value="Kiai Arts" selected>Kiai Arts<\/option>/.test(kiai));
+  ok('a group menu written in other letters reads as the pack spells it, both ways',
+    pickers.some((s) => fill(s) === 'groupmenus' && /<option value="Rogue Talents" selected>/.test(s))
+      && /<option value="Rogue Talents" selected>/.test(lore.groupMenuChoices(c, 'rogue talents')));
+  const gone = pickers.find((s) => /Old Menu/.test(s));
+  ok('a menu no pack provides is marked, and kept when the list is filled',
+    /class="colmenu bad"/.test(gone) && /<option value="Old Menu" selected>Old Menu<\/option>/.test(gone)
+      && /<option value="Old Menu" selected>Old Menu<\/option>$/.test(lore.columnMenuChoices(c, 'Old Menu')));
+  ok('an empty picker reads the blank either way',
+    lore.columnMenuChoices(c, '', { all: false }) === '<option value="" selected>— no menu —</option>'
+      && lore.columnMenuChoices(c, '').startsWith('<option value="" selected>— no menu —</option><option value="Kiai Arts">'));
+  setOptionCatalogues([]);
 }
 
 if (hasFixtures()) {
@@ -1508,5 +1552,25 @@ console.log('\na familiar’s abilities can be replaced, removed and added by ha
     && /data-item="familiar\.0\.addedAbilities\|0\|level"/.test(html) && /data-add="familiar\.0\.addedAbilities"/.test(html));
   ok('a companion with no archetype field has none of these', !/addedAbilities|removedAbilities/.test(subsystems.companionPanel(c, 'eidolon')));
 }
+console.log('\nthe Extensions tab: a shelf of many blocks arrives with every pack folded');
+{
+  const { runtime } = await import('../app/js/extension-runtime.js');
+  const { normalizeExtension } = await import('../app/js/extensions.js');
+  const had = runtime.bundled;
+  const pack = (id, n) => normalizeExtension({ id, name: id, blocks: Array.from({ length: n }, (_, i) => ({ kind: 'note', name: `${id} note ${i}` })) });
+  const c = new Character(blankDocument({ name: 'Shelf', level: 1 }));
+  const draw = (extSearch = '') => manager.renderSystemManagerPanel(c, { ...shutCtx(), extSearch });
+  const packs = (html) => [...html.matchAll(/<div class="foldsub extpack( collapsed)?">/g)].map((m) => !!m[1]);
+  runtime.bundled = [pack('small-a', 30), pack('small-b', 30)];
+  ok('a short shelf draws its small packs open', packs(draw()).join() === 'false,false');
+  runtime.bundled = [pack('small-a', 30), pack('small-b', 30), ...Array.from({ length: 6 }, (_, i) => pack(`more-${i}`, 30))];
+  const many = draw();
+  ok('a long one folds every pack', packs(many).length === 8 && packs(many).every(Boolean) && !/data-action="ext-add-block"/.test(many));
+  c.data.uiPrefs.collapsed = { 'extpack:small-a': false };
+  ok('and a pack opened by hand stays open', packs(draw()).filter((x) => !x).length === 1);
+  ok('a search still shows what it finds', /data-action="ext-add-block"/.test(draw('more-3 note 7')));
+  runtime.bundled = had;
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
