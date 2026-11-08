@@ -3243,6 +3243,49 @@ console.log('a bonus raises the essence capacity');
   check('and it goes with the bonuses', [k().totalCap, k().capForwarded, k().overCap], [3, 0, ['Gloves']]);
 }
 
+console.log('the Veilweaving sphere gives essence capacity by character level');
+{
+  const c = new Character(blankDocument({ name: 'Weaver', level: 3 }));
+  c.data.classes = [
+    { name: 'Wizard', hd: 6, bab: 0.5, goodFort: false, goodRef: false, goodWill: true, skillRanks: 2, levelsOverride: null },
+  ];
+  c.data.akashic.classes = [{ name: 'Wizard', mod: 'Int', essenceCap: 0, bonusCap: 0 }, { name: '', essenceCap: 0, bonusCap: 0 }];
+  c.recompute();
+  const k = () => c.data.akashic.calc;
+  const row = () => c.data.akashic.classes[0];
+  check('without the sphere there is no capacity', [k().sphereCap, k().totalCap], [0, 0]);
+
+  c.listAdd('training.magic.classes', {
+    name: 'Wizard', type: 'High', talentsPerLevel: null, mod1: 'Int', mod2: null, classLevelsOverride: 3,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: i === 0 ? 'Veilweaving Sphere' : null, sphere: i === 0 ? 'Veilweaving' : null, notes: null })),
+  });
+  check('with it, 1 at 3rd level, on the class row too',
+    [k().sphereCap, k().totalCap, row().totalCap, c.scope().essence.cap], [1, 1, 1, 1]);
+  check('a row with no class takes nothing from it', c.data.akashic.classes[1].totalCap, 0);
+  check('the class row says where its cap comes from',
+    subsystemPanels.akashicPanel(c, {}).includes('data-tip="The Veilweaving sphere gives a capacity of 1, plus 1 per 6 character levels."'), true);
+  check('1 more at 6th, 12th and 18th level, and no more past 20th',
+    [1, 5, 6, 11, 12, 17, 18, 20, 25].map((level) => { c.set('identity.level', level); return k().sphereCap; }),
+    [1, 1, 2, 2, 3, 3, 4, 4, 4]);
+
+  c.set('identity.level', 12);
+  c.setItem('akashic.classes', 0, 'essenceCap', 4);
+  check('a class with a higher cap keeps its own', [row().totalCap, k().totalCap], [4, 4]);
+  c.setItem('akashic.classes', 0, 'essenceCap', 0);
+  c.setItem('akashic.classes', 0, 'bonusCap', 1);
+  check('the Bonus column adds to the sphere\'s', [row().totalCap, k().totalCap], [4, 4]);
+  c.setItem('akashic.classes', 0, 'bonusCap', 0);
+  c.setItem('training.magic.classes.0.levels', 2, 'talent', 'Capacity Increase');
+  c.setItem('training.magic.classes.0.levels', 2, 'sphere', 'Veilweaving');
+  c.setItem('training.magic.classes.0.levels', 2, 'notes', '{essence.cap += 1}');
+  check('a talent raises it', [k().sphereCap, k().capForwarded, k().totalCap], [3, 1, 4]);
+  check('reopening keeps it, and saves no cap of its own',
+    (() => {
+      const saved = JSON.parse(JSON.stringify(c.toJSON()));
+      return [new Character(saved).data.akashic.calc.totalCap, saved.akashic.classes[0].essenceCap, saved.akashic.classes[0].totalCap];
+    })(), [4, 0, undefined]);
+}
+
 console.log('essence.cap is a destination before the tab is in use');
 {
   const c = new Character(blankDocument({ name: 'Unwoven', level: 5 }));
@@ -4199,6 +4242,115 @@ console.log('readied stances stay stances without the discipline pack');
   const bare = new Character(saved);
   check('with no pack: one maneuver and one stance, as with it',
     [bare.data.maneuvers.calc.maneuvers, bare.data.maneuvers.calc.stances], [1, 1]);
+  setManeuverCatalogue(before);
+}
+
+console.log('the essence pool cells take formulas');
+{
+  const c = new Character(blankDocument({ name: 'Veilweaver', level: 9 }));
+  const k = () => c.data.akashic.calc;
+  const reopened = () => new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  c.set('akashic.essence.pool', 'level + 1');
+  c.set('akashic.essence.featTraits', 'floor(level / 4)');
+  c.set('akashic.essence.fcb', 1);
+  check('a formula in a pool cell is worked out',
+    [k().typed.pool, k().typed.featTraits, k().pool, k().sources], [{ value: 10, error: null }, { value: 2, error: null }, 10, 3]);
+  check('essence.pool reads the worked-out pool', c.scope().essence.pool, 10);
+  check('the cells save what was typed',
+    [c.toJSON().akashic.essence.pool, c.toJSON().akashic.essence.featTraits, c.toJSON().akashic.calc], ['level + 1', 'floor(level / 4)', undefined]);
+  check('a reopened sheet works them out the same', [reopened().data.akashic.calc.pool, reopened().data.akashic.calc.sources], [10, 3]);
+  const html = subsystemPanels.akashicPanel(c, {});
+  check('the pool cell is a formula box showing what it came to',
+    [html.includes('data-set="akashic.essence.pool" data-kind="expr-or-null"'), html.includes('title="level + 1 = 10. Click to edit."')], [true, true]);
+  const audited = c.audit().find((r) => r.id === 'essence-featTraits');
+  check('and the Formulas tab lists it', [audited?.status, audited?.value, audited?.place], ['ok', 2, 'essence:featTraits']);
+
+  c.set('akashic.essence.fcb', 'floor(level +');
+  check('a broken formula adds nothing and says why', [k().typed.fcb.value, !!k().typed.fcb.error, k().sources], [0, true, 2]);
+  check('and is listed as broken', c.audit().find((r) => r.id === 'essence-fcb')?.status, 'error');
+
+  // The pool's own totals read 0 inside the pool cells, so a cell that reads
+  // them cannot climb from one recompute to the next.
+  c.set('akashic.essence.pool', 'essence.pool + essence.total + essence.free + 4');
+  c.recompute();
+  c.recompute();
+  check('a pool cell that reads the pool does not climb', [k().pool, reopened().data.akashic.calc.pool], [4, 4]);
+}
+
+console.log('a blank Pool adds up the essence sources');
+{
+  const c = new Character(blankDocument({ name: 'Veilweaver', level: 9 }));
+  const k = () => c.data.akashic.calc;
+  const reopened = () => new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  const panel = () => subsystemPanels.akashicPanel(c, {});
+  c.set('akashic.essence.featTraits', 2);
+  check('without a veilweaving class or the sphere, a blank Pool stays 0',
+    [k().pool, k().weaves, k().sourcesShort, panel().includes('placeholder="auto: 0"')], [0, false, 2, true]);
+  c.set('akashic.essence.featTraits', 0);
+  c.set('akashic.classes.0.name', 'Vizier');
+  const note = (body) => {
+    const at = c.data.notes.length;
+    c.listAdd('notes', { title: 'Bonus', body });
+    return () => c.listRemove('notes', at);
+  };
+  check('no sources, no essence', [c.data.akashic.essence.pool, k().pool, k().poolAuto], [0, 0, true]);
+  c.set('akashic.essence.featTraits', 2);
+  c.set('akashic.essence.fcb', 'floor(level / 9)');
+  check('a 0 Pool takes the sources total',
+    [k().pool, k().typed.pool.value, k().sourcesShort, c.scope().essence.pool, k().total, k().free], [3, 3, 0, 3, 3, 3]);
+  check('the per-day line and the Pool placeholder show it',
+    [panel().includes('3 essence per day'), panel().includes('placeholder="auto: 3"'), panel().includes('≠ pool')], [true, true, false]);
+  c.set('akashic.essence.pool', 5);
+  check('a typed pool replaces it and is checked against the sources', [k().pool, k().poolAuto, k().sourcesShort], [5, false, -2]);
+  check('and the panel flags the difference', panel().includes('≠ pool'), true);
+  c.set('akashic.essence.pool', 'level - 4');
+  check('so does a formula', k().pool, 5);
+  c.set('akashic.essence.pool', null);
+  check('a cleared Pool takes the sources again', [k().pool, k().poolAuto], [3, true]);
+  check('and saves as cleared', [c.toJSON().akashic.essence.pool, reopened().data.akashic.calc.pool], [null, 3]);
+  const drop = note('Extra Essence {essence.pool += 2}');
+  check('a bonus to essence.pool adds to the sources total', [k().pool, k().poolForwarded, k().sourcesShort], [5, 2, 0]);
+  drop();
+}
+
+console.log('a blank Radiant Dawn cell counts the Radiant Dawn maneuvers known');
+{
+  const before = maneuverCatalogue();
+  setManeuverCatalogue({ disciplines: [{ name: 'Radiant Dawn', entries: [
+    { level: 1, kind: 'maneuver', name: 'Dawn Strike', type: 'Strike' },
+    { level: 1, kind: 'stance', name: 'Morning Stance', type: 'Stance' },
+    { level: 2, kind: 'maneuver', name: 'Noon Strike', type: 'Strike' },
+    { level: 4, kind: 'maneuver', name: 'Zenith', type: 'Boost' },
+  ] }, { name: 'Golden Lion', entries: [{ level: 1, kind: 'maneuver', name: 'Roar', type: 'Boost' }] }] });
+  const c = new Character(blankDocument({ name: 'Rajah', level: 9 }));
+  const rd = () => c.data.akashic.calc.typed.radiantDawn.value;
+  c.set('maneuvers.disciplines', [
+    { name: 'radiant dawn', known: [], custom: [], notes: {} },
+    { name: 'Golden Lion', known: ['Roar'], custom: [], notes: {} },
+  ]);
+  check('none known, no essence', [rd(), c.data.akashic.calc.radiantDawn], [0, { known: 0, highest: 0, essence: 0 }]);
+  const path = 'maneuvers.disciplines.0';
+  c.toggleManeuver(path, 'Dawn Strike', true);
+  c.toggleManeuver(path, 'Morning Stance', true);
+  check('two known, highest level 1: capped at 1', rd(), 1);
+  c.toggleManeuver(path, 'Noon Strike', true);
+  check('three known, highest level 2: capped at 2', rd(), 2);
+  c.toggleManeuver(path, 'Zenith', true);
+  check('four known, highest level 4: one each, stances too', [rd(), c.data.akashic.calc.sources], [4, 4]);
+  check('other disciplines do not count', c.data.akashic.calc.radiantDawn.known, 4);
+  check('the cell shows the count as its placeholder',
+    subsystemPanels.akashicPanel(c, {}).includes('placeholder="auto: 4"'), true);
+
+  c.set('akashic.essence.radiantDawn', 6);
+  check('a number typed in the cell replaces the count', rd(), 6);
+  c.set('akashic.essence.radiantDawn', 'floor(level / 3)');
+  check('so does a formula', rd(), 3);
+  c.set('akashic.essence.radiantDawn', 0);
+  check('0, as a workbook leaves an empty cell, is counted', rd(), 4);
+  c.set('akashic.essence.radiantDawn', null);
+  check('and so is a cleared cell', rd(), 4);
+  check('a reopened sheet counts them the same',
+    new Character(JSON.parse(JSON.stringify(c.toJSON()))).data.akashic.calc.typed.radiantDawn.value, 4);
   setManeuverCatalogue(before);
 }
 

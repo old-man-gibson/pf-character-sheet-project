@@ -282,8 +282,9 @@ function everywhere() {
       children: [{ name: 'Smite, greater', text: 'twice {smite.twice = 2}', tables: [] }],
     }],
   }];
-  // A veil in a chakra slot.
+  // A veil in a chakra slot, and essence pool cells written as rules.
   d.akashic.slots = [{ slot: 'Hands', twinveil: false, veils: [{ name: 'Test Veil', essence: 2, desc: 'grips {veil.grip = 3}' }] }];
+  d.akashic.essence = { ...(d.akashic.essence || {}), pool: 'level + 2', featTraits: 'floor(level / 4)', radiantDawn: 'floor(level / 8)' };
   // A prepared spell's note, a deck manipulation's note, leftovers from a sheet.
   d.vancian.prepared = [{ name: 'Fireball', note: 'burns {fireball.x = 1}' }];
   d.psionics = { ...(d.psionics || {}), classes: [{ name: 'Psion', stat: 'Int', powers: [{ name: 'Mind Thrust', level: '1', note: 'hits {thrust.x = 1}' }] }] };
@@ -353,6 +354,10 @@ console.log('every formula on the Formulas tab has somewhere to go, and it is th
     ['companion-eidolon-0-cmdOther', 'companion-eidolon-1-ac.all', 'companion-eidolon-1-saves.will.misc',
       'companion-eidolon-1-speeds.0.bonus'].map((id) => rows.find((r) => r.id === id)).map((r) => [r?.status, r?.value]),
     [['ok', 2], ['ok', 2], ['ok', 1], ['ok', 40]]);
+  check('the essence pool cells are audited, worked out',
+    ['essence-pool', 'essence-featTraits', 'essence-radiantDawn'].map((id) => rows.find((r) => r.id === id))
+      .map((r) => [r?.status, r?.value, r?.place]),
+    [['ok', 10, 'essence:pool'], ['ok', 2, 'essence:featTraits'], ['ok', 1, 'essence:radiantDawn']]);
   for (const r of rows) checkPlace(c, r.place, `formula ${r.name}`);
   check('every formula row carries its place', rows.filter((r) => !r.place).map((r) => r.id), []);
   const forwarded = admin.forwardedRows(c);

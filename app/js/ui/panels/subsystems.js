@@ -55,7 +55,7 @@ import {
   maneuverCatalogue, maneuverDetails, maneuverIsWritten, maneuverOwn, altTrainingLink,
   altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques, psionicCurveTotals, psionicTables,
   spellCatalogue, spellDetails, powerCatalogue, powerDetails, veilsAvailable, veilDetails, veilOwn,
-  slug, manifesterForwardKey, vancianForwardKey, poolTracker,
+  slug, manifesterForwardKey, vancianForwardKey, poolTracker, essenceCellBlank,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST, nameDatalist, noteCell, packText, portraitHtml } from '../html.js';
 import {
@@ -321,7 +321,6 @@ function essFig(v, k, sub = '', badge = '') {
    */
 function akashicClassesPanel(a) {
     const list = 'akashic.classes';
-    const e = a.essence || {};
     // Only the filled class blocks are worth a row; the template's six leave
     // five empty ones behind on most sheets. A row added here is shown from
     // the start (`added`), so it can be filled in or removed.
@@ -349,7 +348,9 @@ function akashicClassesPanel(a) {
   })}</td>
               <td class="num">${itemNum(list, i, 'essenceCap', c.essenceCap)}</td>
               <td class="num">${itemNum(list, i, 'bonusCap', c.bonusCap)}</td>
-              <td class="num total">${c.totalCap ?? 0}</td>
+              <td class="num total">${(a.calc?.sphereCap || 0) > (Number(c.essenceCap) || 0)
+    ? `<span tabindex="0" data-tip="The Veilweaving sphere gives a capacity of 1, plus 1 per 6 character levels.">${c.totalCap ?? 0}</span>`
+    : c.totalCap ?? 0}</td>
               ${rowRemove(list, i)}
             </tr>`).join('') || `<tr><td colspan="7" class="empty">No veilweaving class.</td></tr>`}
           </tbody></table>
@@ -377,16 +378,16 @@ function akashicClassesPanel(a) {
           <div class="subhead">Essence pool</div>
           <table class="build"><tbody>
             <tr><th scope="row">Pool</th>
-              <td class="num">${num('akashic.essence.pool', e.pool)}</td></tr>
+              <td class="num">${essenceCell(a, 'pool')}</td></tr>
             ${ESSENCE_SOURCES.map(([key, label]) => (key === 'boon' && a.calc?.traditionBoon ? `<tr>
               <th scope="row" title="The casting tradition's pool, taken as essence instead of spell points. Set it on the Magic Spheres tab.">
                 ${esc(label)}</th>
               <td class="num total">${a.calc.traditionBoon}</td>
             </tr>` : `<tr>
               <th scope="row">${esc(label)}</th>
-              <td class="num">${num(`akashic.essence.${key}`, e[key])}</td>
+              <td class="num">${essenceCell(a, key)}</td>
             </tr>`)).join('')}
-            <tr${a.calc?.sourcesShort ? ` title="These sources add up to ${a.calc.sources}, but the daily pool above is ${a.calc.pool}. Change the pool if it is wrong."` : ''}>
+            <tr${a.calc?.sourcesShort ? ` title="These sources add up to ${a.calc.sources}, but the daily pool above is ${a.calc.pool}. Clear the pool to use the sources."` : ''}>
               <th scope="row">Sources${a.calc?.sourcesShort ? ' <span class="badge err">≠ pool</span>' : ''}</th>
               <td class="num total">${a.calc?.sources ?? 0}</td></tr>
           </tbody></table>
@@ -394,6 +395,32 @@ function akashicClassesPanel(a) {
       </div>
     </section>`;
   }
+
+/**
+ * One essence pool cell, a number or a formula. A blank Pool adds up the
+ * sources, and a blank Radiant Dawn cell counts the Radiant Dawn maneuvers and
+ * stances known.
+ */
+function essenceCell(a, key) {
+  const raw = a.essence?.[key];
+  const r = a.calc?.typed?.[key];
+  const shown = {
+    width: '4.6rem',
+    value: typeof raw === 'string' && raw.trim() && r && !r.error ? r.value : null,
+    error: r?.error || null,
+  };
+  const auto = (value, title) => exprField(`data-set="akashic.essence.${key}"`, essenceCellBlank(raw) ? '' : raw, {
+    ...shown, kind: 'expr-or-null', placeholder: `auto: ${value}`, title,
+  });
+  if (key === 'pool') {
+    return auto(a.calc?.poolAuto ? a.calc.typed.pool.value : a.calc?.sources ?? 0, a.calc?.weaves
+      ? 'Blank uses the total of the sources below. Or enter a number or a formula.'
+      : 'Blank uses the total of the sources below once the character has a veilweaving class or the Veilweaving sphere. Or enter a number or a formula.');
+  }
+  if (key !== 'radiantDawn') return exprField(`data-set="akashic.essence.${key}"`, raw ?? 0, shown);
+  const rd = a.calc?.radiantDawn || {};
+  return auto(rd.essence ?? 0, `Blank gives 1 per Radiant Dawn maneuver or stance known, up to the highest level known (${rd.known ?? 0} known, highest level ${rd.highest ?? 0}). Or enter a number or a formula.`);
+}
 
   /**
    * The slot board.

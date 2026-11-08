@@ -10,7 +10,7 @@
  */
 
 import {
-  AC_BONUS_TYPES, BUFF_MOD_KEYS, DERIVED, FORWARD_BY_DERIVED, SAVE_BONUS_TYPES, bonusColumnName, diceString,
+  AC_BONUS_TYPES, BUFF_MOD_KEYS, DERIVED, ESSENCE_SOURCES, FORWARD_BY_DERIVED, SAVE_BONUS_TYPES, bonusColumnName, diceString,
   flatFootedLoss, skillLabel,
 } from '../rules.js';
 import {
@@ -558,6 +558,20 @@ export const FORMULA_FIELDS = [
       return fields.filter(({ obj, field }) => stringFormula(obj[field])).map(({ id, name, obj, field, place }) => ({
         id, place, name, formula: obj[field], value: obj[`${field}Num`], error: obj[`${field}Error`],
       }));
+    },
+  },
+  {
+    // The essence pool and its sources. The Essence Boon cell is not drawn
+    // while the casting tradition supplies the boon.
+    key: 'essence', source: 'player', where: 'the Akashic tab',
+    collect: (model) => {
+      const a = model.data.akashic;
+      return [['pool', 'Essence pool'], ...ESSENCE_SOURCES]
+        .filter(([key]) => stringFormula(a?.essence?.[key]) && !(key === 'boon' && a.calc?.traditionBoon))
+        .map(([key, label]) => ({
+          id: `essence-${key}`, place: `essence:${key}`, name: /^essence/i.test(label) ? label : `${label} essence`,
+          formula: a.essence[key], value: a.calc?.typed?.[key]?.value, error: a.calc?.typed?.[key]?.error,
+        }));
     },
   },
   {
