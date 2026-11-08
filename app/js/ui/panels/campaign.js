@@ -202,6 +202,8 @@ export function campaignPanel(model, ctx = {}) {
       : '')}
         ${row('vmc', 'Variant multiclassing', check('vmc', 'Variant multiclassing'),
     'Characters may pick a secondary class on <strong>Progression</strong>. Its features replace the feats at 3rd, 7th, 11th, 15th and 19th.')}
+        ${row('archetypePackages', 'Archetype packages', check('archetypePackages', 'Archetype packages'),
+    'A class may give up one of its archetype packages for another on <strong>Progression</strong>.')}
         ${row('heroPoints', 'Hero points', check('heroPoints', 'Hero points'),
     'Hero points are tracked on <strong>Details</strong> and as a <strong>Trackers</strong> pool.')}
         ${row('antiheroes', 'Antiheroes', check('antiheroes', 'Antiheroes', !rules.heroPoints),

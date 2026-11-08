@@ -26,6 +26,7 @@
 import { babFromText, minLevelIn, normalizeBlock, featureKey } from './extensions.js';
 import { isGuileSphere, sphereSide } from './rules.js';
 import { TEXT_STEPS, cleanText } from './text.js';
+import { looksLikePackageList, readPackageList } from './package-text.js';
 
 // One definition, shared: the block reader needs it to tell which of a class's
 // features repeat, and the paste reader to pair a table's names with its prose.
@@ -211,6 +212,16 @@ export function parsePaste(text) {
   // strips the markdown that the page readers cannot use and this one is
   // made of.
   if (looksStructured(text)) return readStructured(text);
+  // A list of archetype packages under class headings is read whole, as
+  // package blocks: its lines are sentences no page reader would take.
+  if (looksLikePackageList(text) && /\bpackages?\b/i.test(text)) {
+    const blocks = readPackageList(text).map(normalizeBlock).filter(Boolean);
+    const classes = new Set(blocks.map((b) => b.class.toLowerCase()));
+    return {
+      blocks, maneuvers: [], spheres: [], feats: [], spells: [], powers: [], catalogue: [], leftovers: [],
+      report: [`${blocks.length} archetype packages for ${classes.size} classes.`],
+    };
+  }
   const lines = clean(text).split(/\r?\n/);
   const used = new Array(lines.length).fill(false);
   // A wiki's chrome is marked first and stays transparent from here on: the

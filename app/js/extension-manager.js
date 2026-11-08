@@ -574,6 +574,8 @@ Hit Die: d12.
         case 'template': return `${b.features.length} feature(s): ${b.features.map((f) => f.name).join(', ')}`;
         case 'options': return [b.class && `for ${b.class}'s ${b.feature || '?'}`, `${b.options.length} entr${b.options.length === 1 ? 'y' : 'ies'}`,
           [...new Set(b.options.map((o) => o.category).filter(Boolean))].join(', ')].filter(Boolean).join(' · ');
+        case 'package': return [b.class ? `for ${b.class}` : 'any class', b.includes.length ? `includes ${b.includes.join(', ')}` : '',
+          b.grants.length ? `grants ${b.grants.join(', ')}` : '', b.features.length ? `${b.features.length} feature(s)` : ''].filter(Boolean).join(' · ');
         default: return '';
       }
     };
@@ -1298,6 +1300,17 @@ Hit Die: d12.
           ${F(i, 'name', 'Title', b.name)}
           ${A(i, 'text', 'Body', b.text, 6)}
         </div>`;
+      case 'package':
+        return `<div class="fields">
+          ${F(i, 'name', 'Package name', b.name)}
+          ${F(i, 'class', 'Class it belongs to', b.class, { ph: 'blank: any class may take it' })}
+          ${A(i, 'text', 'Text', b.text, 3, 'What it includes and grants is read from this when the boxes below are blank.')}
+          ${F(i, 'includes', 'Includes', b.includes.join(', '), { wide: true, ph: 'bravery, weapon training, bonus feats@6 (@ marks one level\'s grant)' })}
+          ${F(i, 'grants', 'Grants', b.grants.join(', '), { wide: true, ph: 'spellcasting, manifesting, spherecasting, initiating, combat training' })}
+          ${A(i, 'features', 'Own features (a package of no class)', b.features.map((f) => `${f.level}: ${f.name}${f.text ? ` — ${f.text}` : ''}`).join('\n'), 4,
+    'one per line, "5: Practice — text"', false)}
+          ${F(i, 'source', 'Source', b.source, { wide: true })}
+        </div>`;
       default:
         return '';
     }
@@ -1665,8 +1678,10 @@ Hit Die: d12.
       case 'goodFort': case 'goodRef': case 'goodWill': b[key] = !!value; return;
       case 'type': b.type = value || null; return;
       case 'minFormula': b.minFormula = value === '' ? null : value; return;
-      case 'classSkills': case 'languages': case 'replaces': case 'stacksWith': b[key] = String(value).split(',').map((s) => s.trim()).filter(Boolean); return;
+      case 'classSkills': case 'languages': case 'replaces': case 'stacksWith': case 'includes': b[key] = String(value).split(',').map((s) => s.trim()).filter(Boolean); return;
+      case 'grants': b.grants = normalizeBlock({ ...b, grants: String(value).split(',') }).grants; return;
       case 'features':
+        if (b.kind === 'package') { b.features = parseClassFeatures(value); return; }
         if (b.kind === 'archetype') {
           // re-normalise so each feature's replaces/alters/level are read off its new text
           const fresh = normalizeBlock({ ...b, features: parseGroupFeatures(value) });

@@ -123,7 +123,8 @@ function restore(model, state) {
 export function markUndo(model, label) {
   // Inside a play action the action's own entry already covers this, and a
   // snapshot as well would put the whole document back behind its back.
-  if (model.playing) return model;
+  // Inside asOneUndo the outer mark covers it the same way.
+  if (model.playing || model.undoGroup) return model;
   // The same defaults a play action reads first (see there), so that play
   // written into this snapshot later lands on a figure and not on nothing.
   readDefaults(model);
@@ -134,6 +135,18 @@ export function markUndo(model, label) {
   // itself back without each of its thirty call sites having to remember to.
   emit(model, { type: 'undo-mark', label: named });
   return model;
+}
+
+/**
+ * One undo step for a change made of several edits, each of which may mark
+ * its own: mark once under `label`, then run `fn` with the marks inside it
+ * skipped, so Undo takes back the whole change and not only its last part.
+ */
+export function asOneUndo(model, label, fn) {
+  if (model.playing || model.undoGroup) return fn();
+  markUndo(model, label);
+  model.undoGroup = true;
+  try { return fn(); } finally { model.undoGroup = false; }
 }
 
 const top = (list) => list?.[list.length - 1] ?? null;

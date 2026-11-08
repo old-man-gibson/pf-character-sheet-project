@@ -1539,6 +1539,23 @@ select.jumpto[hidden] { display: none; }
    taking the rest. */
 table.vmc col.lvl { width: 4.5rem; }
 table.vmc col.vname { width: 16rem; }
+table.pkgswap select { max-width: 100%; }
+table.pkgswap td { vertical-align: top; }
+table.pkgswap .hint { margin: 4px 0 0; }
+/* What a swap takes and brings, each feature with the levels it comes at. */
+ul.pkgfeats {
+  list-style: none; margin: 5px 0 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: 0.8rem;
+}
+ul.pkgfeats .pkglv { color: var(--cs-muted); font-size: 0.72rem; }
+/* What an archetype or package swap changed on a class, wherever it is shown:
+   what it brought is highlighted, what it took is struck through and muted. */
+.archgain {
+  background: color-mix(in srgb, var(--cs-good) 20%, transparent);
+  box-shadow: inset 0 -2px 0 var(--cs-good); border-radius: 3px; padding: 0 2px;
+}
+.archlost { text-decoration: line-through; color: var(--cs-muted); }
+.badge.archfrom { border-color: var(--cs-good); }
 table.vmc td { vertical-align: top; }
 /* Aligned classes on Progression: one block per prestige class, and the rows
    of a ladder that came from one, their level in the accent colour. */
@@ -3732,6 +3749,12 @@ table.featgrid th .colmenu.bad { color: var(--cs-bad); border-color: var(--cs-ba
   background: transparent; border: 0;
 }
 .cfnotes .notehead:hover { color: var(--cs-text); }
+/* The features' text an archetype took out: read-only, under the notes. */
+.cflost { margin-top: 8px; }
+.cfnote.lost { padding: 3px 6px; }
+.cfnote.lost .pair { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.cfnote.lost .hint { margin: 0; }
+.cfnote.lost .peektext { white-space: pre-wrap; font-size: 0.8rem; line-height: 1.45; color: var(--cs-muted); padding: 2px 0 6px 14px; }
 /* What a pack can explain, under the notes: shut rows, each opening to the
    text it would add. */
 .badge.offer { background: transparent; border-style: dashed; }
@@ -3833,6 +3856,9 @@ table.featgrid .ffield.slot-off input.cfeat,
 table.featgrid .ffield.slot-off .prose-view {
   opacity: 0.3; background: transparent; border-style: dashed;
 }
+/* A grant an archetype took off the schedule: locked like any other, but
+   legible enough to read what went. */
+table.featgrid .ffield.slot-off.archoff .prose-view { opacity: 0.85; }
 /* Text stranded outside every rule stays legible and flagged, never hidden. */
 table.featgrid .ffield.slot-off.kept textarea.cfeat,
 table.featgrid .ffield.slot-off.kept input.cfeat,

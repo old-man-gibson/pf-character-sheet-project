@@ -44,6 +44,8 @@ A pack carries two kinds of thing:
     { "kind": "archetype", "name": "Antiquarian", "class": "Armiger",
       "tracks": { "spheres": "both" },
       "features": [{ "level": 1, "name": "Relic lore", "text": "This replaces quick change." }] },
+    { "kind": "package", "name": "Blade Drill", "class": "Fighter",
+      "includes": ["bonus feats@1", "bonus feats@6", "bravery", "weapon training"], "grants": [] },
     { "kind": "tracker", "name": "Rage rounds", "maxFormula": "4 + con.mod + (level - 1) * 2", "refresh": "per day" },
     { "kind": "race", "name": "Dwarf", "size": "Medium", "speed": 20,
       "abilityMods": { "con": 2, "wis": 2, "cha": -2 },
@@ -393,6 +395,23 @@ several archetypes come off in does not matter. The feature's own text stays on 
 tab throughout: it arrives one time fewer, it does not go. A level the class never granted
 at is **not** a swap that happened: nothing is changed and the report says so, which is what
 catches a page whose table and prose disagree.
+
+**Archetype packages** (a campaign rule, off by default). A `package` block names a class, the
+features it holds (`includes`, one grant as `"bonus feats@6"`) and the powers it grants
+(`grants`: `spellcasting`, `manifesting`, `spherecasting`, `initiating`, `combat training`).
+Both are read from its text when the pack does not list them: "The Blade Drill archetype
+grants a fighter the bonus feats gained at 1st and 6th levels, bravery, and weapon training."
+A package with no class lists its own `features` with levels. With the rule on, the
+Progression tab has a row per class: pick one of the class's packages to give up and any
+other package to take. The swap is applied as an archetype. The given-up features leave the
+class, and the taken package's features join it at the levels its own class gains them, with
+their text from that class's block in an enabled pack. The class row gets a pill, and its ×
+undoes the swap. A taken package that grants spellcasting adds a casting class named
+"Fighter (Package)" on Vancian Magic, with the package class's slot table and this class's
+levels. Other powers are set up by hand. The panel flags two packages on one class that grant
+the same power, a spellcasting package on a class that already casts spells, and a package
+held twice on one character. A list of packages under class headings pasted into the paste
+importer is read as package blocks.
 
 Switching a
 pack on or off in the dialog redraws every sheet on the page at once. `app/js/extensions.js`

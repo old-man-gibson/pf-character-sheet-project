@@ -31,6 +31,16 @@ export function setVancianTables(doc) {
   };
 }
 
+/**
+ * A new casting class: Add casting class on the Vancian Magic tab starts from
+ * it, and so does a package swap that grants spellcasting (packages.js).
+ */
+export const blankCastingClass = (name = '', slotType = '') => ({
+  name, slotType, stat: '', stat2: '', prep: '', source: '',
+  casterLevelOverride: null, concentration: null,
+  spells: SPELL_LEVELS.map((level) => ({ level, perDay: null, known: null })),
+});
+
 /** Every class name the shared table can supply, for pickers and matching. */
 /** The casting-table row a published class brought with it, or null. */
 function citedTable(c) {
