@@ -348,7 +348,9 @@ function akashicClassesPanel(a) {
   })}</td>
               <td class="num">${itemNum(list, i, 'essenceCap', c.essenceCap)}</td>
               <td class="num">${itemNum(list, i, 'bonusCap', c.bonusCap)}</td>
-              <td class="num total">${c.totalCap ?? 0}</td>
+              <td class="num total">${(a.calc?.sphereCap || 0) > (Number(c.essenceCap) || 0)
+    ? `<span tabindex="0" data-tip="The Veilweaving sphere gives a capacity of 1, plus 1 per 6 character levels.">${c.totalCap ?? 0}</span>`
+    : c.totalCap ?? 0}</td>
               ${rowRemove(list, i)}
             </tr>`).join('') || `<tr><td colspan="7" class="empty">No veilweaving class.</td></tr>`}
           </tbody></table>

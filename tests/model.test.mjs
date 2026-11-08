@@ -3243,6 +3243,49 @@ console.log('a bonus raises the essence capacity');
   check('and it goes with the bonuses', [k().totalCap, k().capForwarded, k().overCap], [3, 0, ['Gloves']]);
 }
 
+console.log('the Veilweaving sphere gives essence capacity by character level');
+{
+  const c = new Character(blankDocument({ name: 'Weaver', level: 3 }));
+  c.data.classes = [
+    { name: 'Wizard', hd: 6, bab: 0.5, goodFort: false, goodRef: false, goodWill: true, skillRanks: 2, levelsOverride: null },
+  ];
+  c.data.akashic.classes = [{ name: 'Wizard', mod: 'Int', essenceCap: 0, bonusCap: 0 }, { name: '', essenceCap: 0, bonusCap: 0 }];
+  c.recompute();
+  const k = () => c.data.akashic.calc;
+  const row = () => c.data.akashic.classes[0];
+  check('without the sphere there is no capacity', [k().sphereCap, k().totalCap], [0, 0]);
+
+  c.listAdd('training.magic.classes', {
+    name: 'Wizard', type: 'High', talentsPerLevel: null, mod1: 'Int', mod2: null, classLevelsOverride: 3,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: i === 0 ? 'Veilweaving Sphere' : null, sphere: i === 0 ? 'Veilweaving' : null, notes: null })),
+  });
+  check('with it, 1 at 3rd level, on the class row too',
+    [k().sphereCap, k().totalCap, row().totalCap, c.scope().essence.cap], [1, 1, 1, 1]);
+  check('a row with no class takes nothing from it', c.data.akashic.classes[1].totalCap, 0);
+  check('the class row says where its cap comes from',
+    subsystemPanels.akashicPanel(c, {}).includes('data-tip="The Veilweaving sphere gives a capacity of 1, plus 1 per 6 character levels."'), true);
+  check('1 more at 6th, 12th and 18th level, and no more past 20th',
+    [1, 5, 6, 11, 12, 17, 18, 20, 25].map((level) => { c.set('identity.level', level); return k().sphereCap; }),
+    [1, 1, 2, 2, 3, 3, 4, 4, 4]);
+
+  c.set('identity.level', 12);
+  c.setItem('akashic.classes', 0, 'essenceCap', 4);
+  check('a class with a higher cap keeps its own', [row().totalCap, k().totalCap], [4, 4]);
+  c.setItem('akashic.classes', 0, 'essenceCap', 0);
+  c.setItem('akashic.classes', 0, 'bonusCap', 1);
+  check('the Bonus column adds to the sphere\'s', [row().totalCap, k().totalCap], [4, 4]);
+  c.setItem('akashic.classes', 0, 'bonusCap', 0);
+  c.setItem('training.magic.classes.0.levels', 2, 'talent', 'Capacity Increase');
+  c.setItem('training.magic.classes.0.levels', 2, 'sphere', 'Veilweaving');
+  c.setItem('training.magic.classes.0.levels', 2, 'notes', '{essence.cap += 1}');
+  check('a talent raises it', [k().sphereCap, k().capForwarded, k().totalCap], [3, 1, 4]);
+  check('reopening keeps it, and saves no cap of its own',
+    (() => {
+      const saved = JSON.parse(JSON.stringify(c.toJSON()));
+      return [new Character(saved).data.akashic.calc.totalCap, saved.akashic.classes[0].essenceCap, saved.akashic.classes[0].totalCap];
+    })(), [4, 0, undefined]);
+}
+
 console.log('essence.cap is a destination before the tab is in use');
 {
   const c = new Character(blankDocument({ name: 'Unwoven', level: 5 }));

@@ -6,7 +6,8 @@
  */
 
 import {
-  ESSENCE_SOURCES, KHESHIG_VEILS, essenceInvested, statMod, tempEssence, tempEssenceCost, veilDC,
+  ESSENCE_SOURCES, KHESHIG_VEILS, essenceInvested, sphereEssenceCapacity, statMod, tempEssence, tempEssenceCost,
+  veilDC,
 } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { classPresence, tableSpelling } from '../progression.js';
@@ -389,16 +390,17 @@ export function recomputeAkashic(model) {
 
   applyVeilweaving(model, a);
   const base = Number(a.baseDC) || 0;
-  // A bonus sent to `essence.cap` ({essence.cap += 1} in a Capacity Increase
-  // talent) adds to the best class block's cap, and the veils are checked
-  // against the raised figure.
+  // The Veilweaving sphere gives a capacity by character level, and a class
+  // row reads it when its own Ess. is lower. A bonus sent to `essence.cap`
+  // ({essence.cap += 1} in a Capacity Increase talent) adds to the best of
+  // them, and the veils are checked against the raised figure.
+  const sphereCap = a.veilweaving?.sphere ? sphereEssenceCapacity(model.data.identity?.level) : 0;
   const capForwarded = forwarded(model, 'essence.cap');
-  const cap = (a.classes || []).reduce(
-    (m, c) => Math.max(m, (Number(c.essenceCap) || 0) + (Number(c.bonusCap) || 0)), 0,
-  ) + capForwarded;
   for (const c of a.classes || []) {
-    c.totalCap = (Number(c.essenceCap) || 0) + (Number(c.bonusCap) || 0);
+    const own = Number(c.essenceCap) || 0;
+    c.totalCap = (String(c?.name ?? '').trim() ? Math.max(own, sphereCap) : own) + (Number(c.bonusCap) || 0);
   }
+  const cap = (a.classes || []).reduce((m, c) => Math.max(m, c.totalCap), sphereCap) + capForwarded;
 
   const over = [];
   for (const holder of [...(a.slots || []), ...(a.kheshig || [])]) {
@@ -450,6 +452,7 @@ export function recomputeAkashic(model) {
     base,
     traditions,
     totalCap: cap,
+    sphereCap,
     capForwarded,
     pool,
     poolForwarded,
