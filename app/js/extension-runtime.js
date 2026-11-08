@@ -19,11 +19,12 @@ import * as model from './model.js';
 import { setOptionCatalogues } from './model.js';
 import {
   TABLES, extensionStore, loadBundledExtensions, activeExtensions, activeBlocks, mergeTables, registerTables,
-  optionCataloguesFrom, optionCataloguesFromTables, classFeatureTextFromTables, namedTextFrom, isPackKey, packsWorthMoving,
+  optionCataloguesFrom, optionCataloguesFromTables, classFeatureTextFromTables, namedTextFrom, companionArchetypesFrom,
+  isPackKey, packsWorthMoving,
 } from './extensions.js';
 // Straight from the module rather than through model.js, which does not
 // re-export this one -- companions.js is beside the model, not inside it.
-import { setCompanionAbilityText } from './companions.js';
+import { setCompanionAbilityText, setCompanionArchetypes } from './companions.js';
 import { packMedium } from './pack-storage.js';
 
 // The model's setter for every table kind, by the name TABLES gives it.
@@ -58,6 +59,13 @@ export function registerPacks(packs) {
   } catch (err) {
     failed.push({ name: 'setCompanionAbilityText', error: err?.message || String(err) });
     setCompanionAbilityText([]);
+  }
+  // And the familiar and animal companion archetypes, which swap those abilities.
+  try {
+    setCompanionArchetypes(companionArchetypesFrom(tables, blocks));
+  } catch (err) {
+    failed.push({ name: 'setCompanionArchetypes', error: err?.message || String(err) });
+    setCompanionArchetypes([]);
   }
   return failed;
 }

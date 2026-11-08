@@ -29,6 +29,7 @@ import {
   recipePart, recipePlain, reducedSpeed, saveBase, sizeModifiers, skillLabel, skillTotal, sumParts,
 } from './rules.js';
 import { parse } from './formula.js';
+import { swapBase, swapKey, swapLabel, swapLevel, swapsMeet } from './swaps.js';
 import {
   evaluateAmount, getPath, isLandSpeed, isPinned, normalizeName, slug, speedRow, speedRows,
 } from './model/util.js';
@@ -548,6 +549,204 @@ export function companionAbilityText(name) {
   return ABILITY_TEXT.get(abilityTextKey(name)) || null;
 }
 
+/* ------------------------------------------------------------------ *
+ * Archetypes: what replaces the table's abilities.
+ * ------------------------------------------------------------------ */
+
+/**
+ * The field a kind names its archetypes in. The familiar's has always been a
+ * list ("Archetypes"), the animal companion's a single one; both are read as
+ * a list. The conjured companion's are ticks and are not read here.
+ */
+const ARCHETYPE_FIELD = { familiar: 'archetypes', animalCompanion: 'archetype' };
+
+/** The word an archetype's text calls the companion by, which swapKey strips. */
+const ARCHETYPE_CLASS_WORD = { familiar: 'familiar', animalCompanion: 'animal companion' };
+
+/** Whether a kind's table abilities can be swapped by an archetype or by hand. */
+export const takesArchetypes = (kind) => !!ARCHETYPE_FIELD[kind];
+
+/** The archetype names a companion's field holds, as typed. */
+export function archetypeNamesOf(kind, b) {
+  const v = b?.[ARCHETYPE_FIELD[kind]];
+  if (!ARCHETYPE_FIELD[kind] || typeof v !== 'string') return [];
+  return v.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+}
+
+/** "Valet", "valet (Familiar)" and "Valet archetype" are one archetype. */
+export const archetypeKey = (name) => normalizeName(String(name ?? '')
+  .replace(/\s*\((?:familiar|animal companion|companion)\)\s*$/i, '')
+  .replace(/\s+archetype$/i, ''));
+
+/**
+ * Whether a familiar is a Protector: the tick, or the archetype named in its
+ * field. Either way its hit points are its master's from 11th level.
+ */
+export const namesProtector = (b) => archetypeNamesOf('familiar', b).some((n) => archetypeKey(n) === 'protector');
+export const isProtector = (b) => !!b?.protector || namesProtector(b);
+
+/**
+ * The familiar and animal companion archetypes the active packs describe,
+ * filled by `extension-runtime` the way the ability text is. Empty when no
+ * pack carries any, which leaves every companion on its table.
+ */
+let ARCHETYPES = new Map();
+
+export function setCompanionArchetypes(list) {
+  ARCHETYPES = new Map();
+  for (const a of Array.isArray(list) ? list : []) {
+    const key = archetypeKey(a?.name);
+    // The last pack in wins, as with ability text.
+    if (key && ARCHETYPE_FIELD[a.kind]) ARCHETYPES.set(`${a.kind}|${key}`, a);
+  }
+}
+
+/** One archetype as a pack describes it, or null. */
+export function companionArchetype(kind, name) {
+  return ARCHETYPES.get(`${kind}|${archetypeKey(name)}`) || null;
+}
+
+/** Every archetype the packs carry for a kind, by name, for the field's suggestions. */
+export function companionArchetypeNames(kind) {
+  const names = [...ARCHETYPES.values()].filter((a) => a.kind === kind).map((a) => a.name);
+  return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * The table's abilities with the companion's archetypes and the player's own
+ * changes made.
+ *
+ * An archetype the field names is found in the packs, or in the copy a
+ * published sheet carries (`citedArchetypes`). Each of its features takes out
+ * the abilities it replaces, at every level, or at the one level it names
+ * ("the 7th-level evasion"). A feature with the same name as an ability takes
+ * that one's place too: the valet's Deliver Touch Spells is the valet's
+ * version. The feature then arrives at its own level.
+ *
+ * Then the player's own changes, for an archetype no pack describes or a
+ * ruling at the table. Each is keyed by the name the ability had before them
+ * (`abilityTextKey`), whether the table's or an archetype's:
+ * `removedAbilities` takes it out, `replacedAbilities` renames it in place,
+ * and `addedAbilities` (a list of `{ level, name }`) puts new ones at the end
+ * of their level.
+ *
+ * `table` is every level's Special entry, not only those reached, so a feature
+ * can say it replaces one that has not arrived yet.
+ *
+ * Returns `{ gains, info, applied, missing, clashes, removed }`: the gains in
+ * the shape `computeCompanion` makes them, `info[abilityTextKey(shown name)]`
+ * saying where a changed one came from, the archetypes found, those not
+ * found, each pair of them that changes the same ability, and the abilities
+ * removed by hand (`{ level, name }`) so they can be put back.
+ */
+export function swapCompanionAbilities(kind, b, gains, level, table) {
+  const names = archetypeNamesOf(kind, b);
+  // Read as own entries only: these maps come from a saved file.
+  const own = (m) => (m && typeof m === 'object' && !Array.isArray(m) ? Object.entries(m) : []);
+  const byHand = new Map(own(b?.replacedAbilities).map(([k, v]) => [k, String(v ?? '').trim()]).filter(([, v]) => v));
+  const takenOut = new Set(own(b?.removedAbilities).filter(([, v]) => v === true).map(([k]) => k));
+  const added = (Array.isArray(b?.addedAbilities) ? b.addedAbilities : [])
+    .filter((a) => a && typeof a === 'object')
+    .map((a) => ({ level: Math.max(1, Math.floor(Number(a.level)) || 1), name: String(a.name ?? '').trim() }))
+    .filter((a) => a.name && a.level <= level);
+  const cited = new Map(own(b?.citedArchetypes));
+  if (!ARCHETYPE_FIELD[kind] || (!names.length && !byHand.size && !takenOut.size && !added.length)) {
+    return { gains, info: {}, applied: [], missing: [], clashes: [], removed: [] };
+  }
+
+  const word = ARCHETYPE_CLASS_WORD[kind] || '';
+  const keyOf = (n) => swapKey(n, word);
+  // A swap key back to the table's own name for it, for saying what went.
+  const tableNames = new Map();
+  for (const row of table || []) {
+    for (const n of splitAbilities(row.special)) if (!tableNames.has(keyOf(n))) tableNames.set(keyOf(n), n);
+  }
+  const labelOf = (k) => tableNames.get(swapBase(k)) || swapLabel(k);
+
+  let rows = gains.flatMap((g) => (g.abilities || [g.text]).map((name) => ({ level: g.level, name })));
+  const info = new Map();
+  const applied = [];
+  const missing = [];
+  // Two archetypes that change the same ability cannot be taken together, as
+  // with a class's. Both still apply; the clash is said, not settled.
+  const touchedBy = [];             // [swap key, archetype name]
+  const clashes = [];
+  for (const typed of names) {
+    const a = companionArchetype(kind, typed) || cited.get(archetypeKey(typed)) || null;
+    if (!a || !Array.isArray(a.features)) { missing.push(typed); continue; }
+    const aname = String(a.name ?? typed);
+    applied.push(aname);
+    const mine = a.features.flatMap((f) => [
+      ...(Array.isArray(f?.replaces) ? f.replaces : []), ...(Array.isArray(f?.alters) ? f.alters : [])]);
+    for (const other of [...new Set(touchedBy.map(([, n]) => n))]) {
+      const shared = touchedBy.filter(([k, n]) => n === other && mine.some((m) => swapsMeet(k, m))).map(([k]) => labelOf(k));
+      if (shared.length) clashes.push({ archetypes: [other, aname], abilities: [...new Set(shared)] });
+    }
+    for (const k of mine) touchedBy.push([k, aname]);
+    for (const f of a.features) {
+      const fname = String(f?.name ?? '').trim();
+      if (!fname) continue;
+      const own = keyOf(fname);
+      const replaces = Array.isArray(f.replaces) ? f.replaces : [];
+      const alters = Array.isArray(f.alters) ? f.alters : [];
+      const level1 = Math.max(1, Number(f.level) || 1);
+      // It takes the place of the first one it replaces at its own level, so
+      // the list still reads in the table's order.
+      let at = -1;
+      const kept = [];
+      for (const r of rows) {
+        const k = keyOf(r.name);
+        const goes = k === own || replaces.some((s) => swapBase(s) === k && (swapLevel(s) === null || swapLevel(s) === r.level));
+        if (!goes) kept.push(r);
+        else if (at === -1 && r.level === level1) at = kept.length;
+      }
+      rows = kept;
+      if (level1 <= level) rows.splice(at === -1 ? rows.length : at, 0, { level: level1, name: fname });
+      info.set(abilityTextKey(fname), {
+        archetype: aname,
+        text: String(f.text ?? ''),
+        source: String(a.source || a.pack || ''),
+        replaces: [...new Set(replaces.map(labelOf))],
+        changes: [...new Set(alters.map(labelOf))],
+      });
+    }
+  }
+  // The player's own: taken out, then renamed, then added. Removal reads the
+  // name from before any renaming, so putting one back brings back its
+  // replacement too.
+  const removed = [];
+  rows = rows.filter((r) => {
+    if (!takenOut.has(abilityTextKey(r.name))) return true;
+    removed.push({ level: r.level, name: r.name });
+    return false;
+  });
+  for (const r of rows) {
+    const was = abilityTextKey(r.name);
+    const to = byHand.get(was);
+    if (!to) continue;
+    info.set(abilityTextKey(to), { was: r.name, wasKey: was });
+    r.name = to;
+  }
+  // Each goes to the end of its level when the rows are grouped below.
+  for (const a of added) {
+    rows.push({ level: a.level, name: a.name });
+    if (!info.has(abilityTextKey(a.name))) info.set(abilityTextKey(a.name), { added: true });
+  }
+
+  // Back into gains, a level at a time, in the order the rows now stand; a
+  // level that kept a note keeps it.
+  const notes = new Map(gains.filter((g) => g.note).map((g) => [g.level, g.note]));
+  const byLevel = new Map();
+  for (const r of rows) {
+    if (!byLevel.has(r.level)) byLevel.set(r.level, []);
+    if (!byLevel.get(r.level).includes(r.name)) byLevel.get(r.level).push(r.name);
+  }
+  const out = [...byLevel].sort((x, y) => x[0] - y[0]).map(([lv, list]) => ({
+    level: lv, text: list.join(', '), abilities: list, ...(notes.has(lv) ? { note: notes.get(lv) } : {}),
+  }));
+  return { gains: out, info: Object.fromEntries(info), applied, missing, clashes, removed };
+}
+
 /**
  * The abilities one row of the table's Special column names.
  *
@@ -813,6 +1012,15 @@ export function normalizeCompanion(kind, block) {
     };
   }
   if (!out.abilityNotes || typeof out.abilityNotes !== 'object') out.abilityNotes = {};
+  // Abilities replaced, removed or added by hand. Each is made the first time
+  // it is used, so a companion that never was saves nothing.
+  for (const key of ['replacedAbilities', 'removedAbilities']) {
+    if (key in out && (!out[key] || typeof out[key] !== 'object' || Array.isArray(out[key]))) delete out[key];
+  }
+  if ('addedAbilities' in out) {
+    if (!Array.isArray(out.addedAbilities)) delete out.addedAbilities;
+    else out.addedAbilities = out.addedAbilities.filter((a) => a && typeof a === 'object' && !Array.isArray(a));
+  }
   // A document saved before equipment could do anything holds a name and a
   // cost; the two new fields default the way a player would expect -- a thing
   // written down is a thing being worn, and it does nothing until it is told
@@ -1028,6 +1236,7 @@ export function computeCompanion(kind, block, master, bonuses = null) {
   const b = block;
   const fwd = bonusesFor(bonuses);
   const arch = (id) => kind === 'conjured' && !!b.archetypes?.[id];
+  const protector = kind === 'familiar' && isProtector(b);
   const penalty = Math.abs(Math.floor(Number(b.masterLevelPenalty) || 0));
   const raw = rawLevel(kind, b, master);
   const level = clampLevel(raw - penalty, levelCap(kind));
@@ -1118,7 +1327,7 @@ export function computeCompanion(kind, block, master, bonuses = null) {
   const perDie = kind === 'conjured' ? (arch('mage') ? 6 : 10) : 8;
   const ownDice = hd * perDie + mod(conKey) * hd;
   const hpMax = (kind === 'familiar'
-    ? Math.floor(master.hp / 2) * (b.protector && master.level >= 11 ? 2 : 1) + (Number(b.hp?.bonus) || 0)
+    ? Math.floor(master.hp / 2) * (protector && master.level >= 11 ? 2 : 1) + (Number(b.hp?.bonus) || 0)
     : (halfHp ? Math.max(1, Math.floor(ownDice / 2)) : ownDice) + (Number(b.hp?.bonus) || 0)) + fwd.hp;
   const damage = Math.max(0, Number(b.hp?.damage) || 0);
   const temp = Math.max(0, Number(b.hp?.temp) || 0);
@@ -1246,7 +1455,7 @@ export function computeCompanion(kind, block, master, bonuses = null) {
   // level 12 had three increases and a list naming two.
   const byDice = kind === 'conjured' && bonusHD > 0 && !arch('familiar');
   const INCREASE = 'Ability score increase';
-  const gains = [];
+  let gains = [];
   for (let i = 0; i < Math.min(kind === 'conjured' ? effLevel : level, table.length); i++) {
     // `abilities` is the cell split into the rules it names, so the panel can
     // open each one on its own text rather than on the whole line.
@@ -1270,6 +1479,10 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     }
   }
 
+  // The archetypes named on it, and anything the player replaced by hand.
+  const swapped = swapCompanionAbilities(kind, b, gains, level, table);
+  gains = swapped.gains;
+
   const calc = {
     scores,
     rawLevel: raw,
@@ -1291,7 +1504,7 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     hpPerDie: kind === 'familiar' ? 0 : perDie,
     hpHalved: halfHp,
     hpFromMaster: kind === 'familiar'
-      ? Math.floor(master.hp / 2) * (b.protector && master.level >= 11 ? 2 : 1) : 0,
+      ? Math.floor(master.hp / 2) * (protector && master.level >= 11 ? 2 : 1) : 0,
     hpAbility: conKey,
     levelFrom: levelSourceLabel(kind, b),
     levelCap: levelCap(kind),
@@ -1318,9 +1531,16 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     gains,
     saves,
   };
+  if (ARCHETYPE_FIELD[kind]) {
+    calc.abilityInfo = swapped.info;
+    calc.archetypes = swapped.applied;
+    calc.archetypesMissing = swapped.missing;
+    calc.archetypeClashes = swapped.clashes;
+    calc.abilitiesRemoved = swapped.removed;
+  }
   if (kind === 'familiar') {
     calc.tableInt = row.int;
-    calc.protectorDoubles = !!b.protector && master.level >= 11;
+    calc.protectorDoubles = protector && master.level >= 11;
   }
   if (kind === 'animalCompanion') {
     calc.bonusTricks = level >= 1 ? row.tricks : 0;

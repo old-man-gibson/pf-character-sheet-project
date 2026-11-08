@@ -17,7 +17,7 @@ import { prose, renderedProse } from '../prose.js';
 import { systemExtrasPanel } from './subsystems.js';
 import { itemArea } from '../prose.js';
 import {
-  addButton, foldButton, gridCell, isCollapsed, isOpen, itemText, removeAction, removeButton, rowTools,
+  addButton, foldButton, grip, gridCell, isCollapsed, isOpen, itemText, removeAction, removeButton, rowTools,
 } from '../rows.js';
 import { linkField } from '../fields.js';
 import { same } from '../format.js';
@@ -354,9 +354,21 @@ export function renderProgressionPanel(model, ctx) {
       ${packagePanel(model, ctx)}
     </div>
     <div class="featgroups">
-      ${classFeatureGroups(model, ctx, model, ctx)}
+      ${classFeatureGroups(model, ctx)}
     </div>`;
   }
+
+/**
+ * The ◂ ▸ pair that moves a feature group or a feature column one place.
+ * `data` goes on both buttons as data-* attributes; the button that would
+ * move past an end is disabled.
+ */
+function sideMove(action, data, i, count, what) {
+  const attrs = Object.entries(data).map(([k, v]) => `data-${k}="${esc(v)}"`).join(' ');
+  const button = (delta, arrow, way) => `<button type="button" data-action="${action}" ${attrs} data-delta="${delta}"
+      title="Move ${way}" aria-label="Move ${esc(what)} ${way}"${i + delta < 0 || i + delta >= count ? ' disabled' : ''}>${arrow}</button>`;
+  return `<span class="sidemove">${button(-1, '◂', 'left')}${button(1, '▸', 'right')}</span>`;
+}
 
   /**
    * One collapsible group per class named in the progression, holding that
@@ -367,27 +379,11 @@ function classFeatureGroups(model, ctx) {
     // The menus this grid's cells pick from, gathered as the cells render so
     // one list is written per menu however many cells offer it.
     ctx.menuLists = new Map();
-    const names = model.progressionClasses();
-    // Feature groups whose class is no longer in any track keep their data
-    // and stay visible so nothing silently disappears.
-    for (const key of Object.keys(p.classFeatures || {})) {
-      const g = p.classFeatures[key];
-      if (!names.includes(key) && key !== 'General'
-        && (g.columns.length || Object.keys(g.byLevel).length)) names.push(key);
-    }
-    if (p.classFeatures?.General?.columns?.length) names.push('General');
+    // Groups whose class is no longer in any track are included, so nothing
+    // silently disappears. The order is the player's once they move one.
+    const names = model.classFeatureGroupOrder();
 
-    // Narrow groups first: flex wrapping packs in order, so putting the small
-    // tables ahead lets two or three of them share a row before a wide one
-    // claims its own.
-    const widthOf = (name) => {
-      const g = p.classFeatures?.[name] || { columns: [] };
-      const saved = model.data.uiPrefs?.colWidths?.[`progfeat-${name}`] || {};
-      return 46 + g.columns.reduce((t, col) => t + Math.max(90, Number(saved[col]) || 260), 0);
-    };
-    names.sort((a, b) => widthOf(a) - widthOf(b));
-
-    return names.map((name) => {
+    return names.map((name, gi) => {
       const g = p.classFeatures?.[name] || { columns: [], byLevel: {}, rules: {} };
       const orphaned = name !== 'General' && !model.classLevelsIn(name).length;
       // Rows carry both levels: the character level they sit at and the
@@ -396,11 +392,11 @@ function classFeatureGroups(model, ctx) {
 
       // Column widths are draggable; saved per character in uiPrefs.
       const tableKey = `progfeat-${name}`;
-      const saved = model.data.uiPrefs?.colWidths?.[tableKey] || {};
-      const colW = (col) => Math.max(90, Number(saved[col]) || 260);
+      const colW = (col) => model.classFeatureColumnWidth(name, col);
       const total = 46 + g.columns.reduce((t, col) => t + colW(col), 0);
       const charLevel = Number(model.data.identity.level) || 0;
       const due = Object.values(model.classFeatureDue(name)).reduce((t, n) => t + n, 0);
+      const movable = names.length > 1;
 
       // Cells waiting on a class level the character has not got back yet.
       const parked = Object.keys(model.classFeatureParked(name)).map(Number).sort((a, b) => a - b);
@@ -409,10 +405,11 @@ function classFeatureGroups(model, ctx) {
       const marks = archetypeMarks(model, name);
       marks.col = g.columns.includes('Special') ? 'Special' : g.columns[0];
       return collapsible(model, `progfeat-${name}`, `<section class="panel featpanel">
-        <h3>${esc(name)} features
+        <h3>${movable ? grip(`data-cfggrip="${gi}"`) : ''}${esc(name)} features
           <span class="badge">${orphaned ? 'not in progression' : `levels ${rows.length ? `${rows[0].level}–${rows[rows.length - 1].level}` : '—'}`}</span>
           ${due ? `<span class="badge due" title="Reached levels with nothing filled in.">${due} to pick</span>` : ''}
           ${parked.length ? `<span class="badge" title="Written for ${esc(name)} level${parked.length === 1 ? '' : 's'} ${parked.join(', ')}, which this character no longer has. It is kept and returns when the class reaches those levels again.">${parked.length} parked</span>` : ''}
+          ${movable ? sideMove('move-cf-group', { index: gi }, gi, names.length, `${name} features`) : ''}
           ${orphaned ? groupDelete(name, g, ctx.armedRemove ?? null) : ''}
         </h3>
         <div class="tablewrap"><table class="gridtab featgrid" style="width:${total}px" data-colresize="off">
@@ -421,7 +418,7 @@ function classFeatureGroups(model, ctx) {
             ${g.columns.map((col) => `<col style="width:${colW(col)}px">`).join('')}
           </colgroup>
           <thead><tr><th class="num">Lvl</th>
-            ${g.columns.map((col, i) => featureColumnHead(model, name, col, i, tableKey)).join('')}
+            ${g.columns.map((col, i) => featureColumnHead(model, name, col, i, tableKey, g.columns.length)).join('')}
           </tr></thead>
           <tbody>${rows.map((row) => `<tr class="${row.future ? 'future' : ''}${row.aligned ? ' aligned' : ''}">
             <td class="num"${name === 'General' ? ''
@@ -630,13 +627,14 @@ function groupNamesShown(model, className, col, groupCount) {
   }
 
   /**
-   * A feature column's header: its name, its level rule, and the drag handle.
+   * A feature column's header: its name, its level rule, the handle that
+   * resizes it, and the grip and ◂ ▸ pair that move it.
    *
    * The rule box is deliberately plain text rather than a builder -- what a
    * player types ("2, +4") is what gets stored, so the schedule stays legible
    * and extensible after the fact.
    */
-function featureColumnHead(model, className, col, index, tableKey) {
+function featureColumnHead(model, className, col, index, tableKey, count) {
     const groups = model.classFeatureRuleGroups(className, col);
     const due = model.classFeatureDue(className)[col] || 0;
     const named = groupNamesShown(model, className, col, groups.length);
@@ -693,11 +691,15 @@ function featureColumnHead(model, className, col, index, tableKey) {
       </span>`;
     };
 
-    return `<th class="resizable">
+    // JSON for the same reason as a cell's: a class name is free text.
+    const movable = count > 1;
+    return `<th class="resizable"${movable ? ` data-cfcoldrop="${esc(JSON.stringify({ c: className, i: index }))}"` : ''}>
       <span class="pair">
+        ${movable ? grip('data-cfcolgrip') : ''}
         <input type="text" class="colname" value="${esc(col)}" data-cfcol="${esc(className)}|${index}">
         ${due ? `<span class="badge due" title="${due} level${due === 1 ? '' : 's'} reached with nothing filled in">${due}</span>` : ''}
         ${groups.length ? foldButton(model, foldKey, { open: !folded }) : ''}
+        ${movable ? sideMove('move-cf-column', { class: className, col: index }, index, count, `the ${col} column`) : ''}
         ${removeAction('remove-cf-column', { class: className, col: index }, { what: 'column' })}
       </span>
       ${folded ? `<span class="rulechips">${groups.map(groupChip).join('')}</span>` : `${groups.map(groupRow).join('')}

@@ -2328,6 +2328,14 @@ export function tempEssenceCost(akashic) {
   return tempEssence(akashic) * SP_PER_TEMP_ESSENCE;
 }
 
+/**
+ * The Veilweaving sphere's essence capacity by character level: 1, and 1 more
+ * at 6th, 12th and 18th level. The table ends at 20th.
+ */
+export function sphereEssenceCapacity(level) {
+  return 1 + Math.floor(Math.min(20, Math.max(0, Math.trunc(Number(level) || 0))) / 6);
+}
+
 /** A veil's save DC is the veilweaver's base plus the essence invested in it. */
 export function veilDC(baseDC, essence) {
   return (Number(baseDC) || 0) + (Number(essence) || 0);

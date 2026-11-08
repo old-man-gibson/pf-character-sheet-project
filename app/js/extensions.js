@@ -50,6 +50,7 @@ import { asOneUndo } from './model/undo.js';
 import { blankClassRow } from './model/document.js';
 import { PACKAGE_POWERS, readPackageSentence } from './package-text.js';
 import { levelRuleGrants, levelRuleLevels } from './rules.js';
+import { ordinal, swapAt, swapBase, swapLevel, swapsMeet, swapLabel, swapKey } from './swaps.js';
 
 export const EXTENSION_FORMAT = 'character-sheet-extension';
 export const EXTENSION_VERSION = 1;
@@ -461,60 +462,10 @@ export function parseReplaces(text) {
 
 /* ---------------- archetypes: what a feature swaps ---------------- */
 
-/**
- * The key a class feature is matched by, across the ways a page names it:
- * "Trap sense +1" / "Trap Sense (Ex)" / "kiai art" / "Kiai Arts" are one key;
- * "the legendary samurai's weapon proficiencies", "armor proficiencies" and
- * "proficiencies" are all the one proficiency feature; "iaijutsu master" and
- * "iaijutsu mastery" meet on their stem.
- */
-/**
- * A swap key may name one grant of a feature rather than the feature: an
- * archetype replacing "the 10th and 14th level warrior's grace" takes those
- * two and leaves the others. The level rides on the key as "@10", which keeps
- * a swap list the flat list of strings it has always been, and lets two
- * archetypes taking different grants of the same feature stack.
- */
-export const swapAt = (key, level) => (key && level ? `${key}@${level}` : key);
-export const swapBase = (k) => str(k).split('@')[0];
-export const swapLevel = (k) => {
-  const n = Number(str(k).split('@')[1]);
-  return Number.isFinite(n) && n >= 1 ? n : null;
-};
-/** Do two swap keys land on each other? A whole feature covers each of its grants. */
-export const swapsMeet = (a, b) => {
-  if (a === b) return true;
-  if (swapBase(a) !== swapBase(b)) return false;
-  return swapLevel(a) === null || swapLevel(b) === null;
-};
-/** 1st, 2nd, 3rd, 4th, 11th, 21st. */
-export const ordinal = (n) => {
-  const tens = n % 100;
-  const suffix = tens >= 11 && tens <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
-  return `${n}${suffix}`;
-};
-/** "warriors grace@10" as a person reads it. */
-export const swapLabel = (k) => (swapLevel(k) ? `${swapBase(k)} (${ordinal(swapLevel(k))})` : swapBase(k));
-
-export function swapKey(s, className = '') {
-  let k = lower(s).replace(/\((?:ex|su|sp)(?: or (?:ex|su|sp))?\)/g, '').replace(/sheathe/g, 'sheath').trim();
-  if (/proficienc/.test(k)) return 'weapon and armor proficiency';
-  const cls = lower(className);
-  if (cls) k = k.replace(new RegExp(`^(?:the\\s+|a\\s+|an\\s+)?${cls.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['’]s\\s+(?:normal\\s+)?`), '');
-  k = k
-    .replace(/^(?:the|a|an)\s+/, '')
-    .replace(/^normal\s+/, '')
-    .replace(/\s+class features?$/, '')
-    .replace(/\s+abilit(?:y|ies)$/, '')
-    .replace(/\s*[+\-–]\s*\d+(?:\/[+\-–—]|\/-)?\s*$/, '')
-    .replace(/\s*\([^)]*\)\s*$/, '')
-    .replace(/[^a-z0-9 ]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  k = k.replace(/(\w{3,})s$/, '$1');                          // plural-insensitive on the last word
-  k = k.replace(/(\w{5,})y$/, '$1');                          // "iaijutsu mastery" / "iaijutsu master"
-  return k;
-}
+// The keys a swap is matched by live in swaps.js, where the companion sums can
+// reach them too; they are still exported from here for every reader that
+// already finds them here.
+export { ordinal, swapAt, swapBase, swapLevel, swapsMeet, swapLabel, swapKey };
 
 /**
  * What an archetype feature does to the class, read off its own text:
@@ -1913,6 +1864,59 @@ export function namedTextFrom(blocks) {
     const text = str(b.text);
     if (!name || !text.trim()) continue;
     out.push({ name, text, source: str(b.source).trim(), pack: str(b.extName).trim() });
+  }
+  return out;
+}
+
+/**
+ * The companion kind an archetype is for, by what its pack calls it: the
+ * books' lists name them "Valet (Familiar)" and "Bodyguard (Companion)", and a
+ * hand-made archetype block names its class "Familiar" or "Animal Companion".
+ */
+const COMPANION_ARCHETYPE_KINDS = [
+  { kind: 'familiar', suffix: /\s*\(familiar\)\s*$/i, cls: /^familiar$/i, className: 'familiar' },
+  { kind: 'animalCompanion', suffix: /\s*\((?:animal )?companion\)\s*$/i, cls: /^(?:animal )?companion$/i, className: 'animal companion' },
+];
+
+/**
+ * Familiar and animal companion archetypes the active packs carry, for the
+ * companion sums: each one's features with the level they arrive at and the
+ * table abilities they replace or change.
+ *
+ * A catalogue pack keeps one as a page of text, read the way a class
+ * archetype's page is (`pageFeatures`): every "Name (Ex): …" paragraph is a
+ * feature, and its own "This replaces alertness." says what it takes. An
+ * archetype block says the same with fields. Looked up by name and never
+ * copied onto a character, like the ability text above.
+ */
+export function companionArchetypesFrom(tables, blocks) {
+  const out = [];
+  const add = (kind, block, pack) => {
+    const b = normalizeBlock(block);
+    if (!b?.name || !b.features.length) return;
+    out.push({
+      kind, name: b.name, source: str(b.source).trim(), pack: str(pack).trim(),
+      features: b.features.map((f) => ({
+        name: f.name, type: f.type, level: f.level, text: f.text, replaces: f.replaces, alters: f.alters,
+      })),
+    });
+  };
+  for (const cat of arr(tables?.catalogues?.catalogues)) {
+    if (lower(cat?.kind) !== 'archetype') continue;
+    for (const e of arr(cat.entries)) {
+      const name = str(e?.name).trim();
+      const of = COMPANION_ARCHETYPE_KINDS.find((k) => k.suffix.test(name));
+      if (!of) continue;
+      add(of.kind, {
+        kind: 'archetype', name: name.replace(of.suffix, '').trim(), class: of.className, source: e.source,
+        features: pageFeatures(e.text).map((f) => ({ name: f.name, type: f.type, text: f.text })),
+      }, '');
+    }
+  }
+  for (const b of arr(blocks)) {
+    if (lower(b?.kind) !== 'archetype') continue;
+    const of = COMPANION_ARCHETYPE_KINDS.find((k) => k.cls.test(str(b.class ?? b.className).trim()));
+    if (of) add(of.kind, { ...b, class: of.className }, b.extName);
   }
   return out;
 }

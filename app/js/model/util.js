@@ -463,6 +463,20 @@ export function resolveBonusBlock(scope, block, types, errors) {
   return out;
 }
 
+/**
+ * Move one item of an array to another place, in place. `to` counts the
+ * array as it is now, so a drop after the third item is 3 whichever side the
+ * item came from. False when nothing moved.
+ */
+export function moveItem(arr, from, to) {
+  if (!Array.isArray(arr) || from < 0 || from >= arr.length) return false;
+  const target = Math.max(0, Math.min(arr.length - 1, to > from ? to - 1 : to));
+  if (target === from) return false;
+  const [item] = arr.splice(from, 1);
+  arr.splice(target, 0, item);
+  return true;
+}
+
 export const pad = (arr, n, fill) => Array.from({ length: n }, (_, i) => arr?.[i] ?? (typeof fill === 'function' ? fill() : fill));
 
 export const cleanText = (v) => (v === null || v === undefined ? '' : String(v).trim());

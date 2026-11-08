@@ -67,8 +67,9 @@ import {
   CONJURED_TABLE, COMPANION_KINDS, companionBreakdown, companionScopeName, defaultCompanion, normalizeCompanion,
   splitAbilities, setCompanionAbilityText, companionAbilityText, abilityTextKey, companionById, companionEntries,
   companionNameTest, levelSourceOf, levelSourceLabel, COMPANION_LEVEL_SOURCES, CONJURED_LEVEL_SOURCES, naturalAttack,
+  setCompanionArchetypes, companionArchetype, companionArchetypeNames,
 } from '../app/js/companions.js';
-import { namedTextFrom } from '../app/js/extensions.js';
+import { namedTextFrom, companionArchetypesFrom } from '../app/js/extensions.js';
 import { parseDiceExpr as readDice, stepDamageDice, stepDiceMap } from '../app/js/rules.js';
 import { enhancementCapNote, resolveAbility } from '../app/js/rules.js';
 import {
@@ -3243,6 +3244,49 @@ console.log('a bonus raises the essence capacity');
   check('and it goes with the bonuses', [k().totalCap, k().capForwarded, k().overCap], [3, 0, ['Gloves']]);
 }
 
+console.log('the Veilweaving sphere gives essence capacity by character level');
+{
+  const c = new Character(blankDocument({ name: 'Weaver', level: 3 }));
+  c.data.classes = [
+    { name: 'Wizard', hd: 6, bab: 0.5, goodFort: false, goodRef: false, goodWill: true, skillRanks: 2, levelsOverride: null },
+  ];
+  c.data.akashic.classes = [{ name: 'Wizard', mod: 'Int', essenceCap: 0, bonusCap: 0 }, { name: '', essenceCap: 0, bonusCap: 0 }];
+  c.recompute();
+  const k = () => c.data.akashic.calc;
+  const row = () => c.data.akashic.classes[0];
+  check('without the sphere there is no capacity', [k().sphereCap, k().totalCap], [0, 0]);
+
+  c.listAdd('training.magic.classes', {
+    name: 'Wizard', type: 'High', talentsPerLevel: null, mod1: 'Int', mod2: null, classLevelsOverride: 3,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: i === 0 ? 'Veilweaving Sphere' : null, sphere: i === 0 ? 'Veilweaving' : null, notes: null })),
+  });
+  check('with it, 1 at 3rd level, on the class row too',
+    [k().sphereCap, k().totalCap, row().totalCap, c.scope().essence.cap], [1, 1, 1, 1]);
+  check('a row with no class takes nothing from it', c.data.akashic.classes[1].totalCap, 0);
+  check('the class row says where its cap comes from',
+    subsystemPanels.akashicPanel(c, {}).includes('data-tip="The Veilweaving sphere gives a capacity of 1, plus 1 per 6 character levels."'), true);
+  check('1 more at 6th, 12th and 18th level, and no more past 20th',
+    [1, 5, 6, 11, 12, 17, 18, 20, 25].map((level) => { c.set('identity.level', level); return k().sphereCap; }),
+    [1, 1, 2, 2, 3, 3, 4, 4, 4]);
+
+  c.set('identity.level', 12);
+  c.setItem('akashic.classes', 0, 'essenceCap', 4);
+  check('a class with a higher cap keeps its own', [row().totalCap, k().totalCap], [4, 4]);
+  c.setItem('akashic.classes', 0, 'essenceCap', 0);
+  c.setItem('akashic.classes', 0, 'bonusCap', 1);
+  check('the Bonus column adds to the sphere\'s', [row().totalCap, k().totalCap], [4, 4]);
+  c.setItem('akashic.classes', 0, 'bonusCap', 0);
+  c.setItem('training.magic.classes.0.levels', 2, 'talent', 'Capacity Increase');
+  c.setItem('training.magic.classes.0.levels', 2, 'sphere', 'Veilweaving');
+  c.setItem('training.magic.classes.0.levels', 2, 'notes', '{essence.cap += 1}');
+  check('a talent raises it', [k().sphereCap, k().capForwarded, k().totalCap], [3, 1, 4]);
+  check('reopening keeps it, and saves no cap of its own',
+    (() => {
+      const saved = JSON.parse(JSON.stringify(c.toJSON()));
+      return [new Character(saved).data.akashic.calc.totalCap, saved.akashic.classes[0].essenceCap, saved.akashic.classes[0].totalCap];
+    })(), [4, 0, undefined]);
+}
+
 console.log('essence.cap is a destination before the tab is in use');
 {
   const c = new Character(blankDocument({ name: 'Unwoven', level: 5 }));
@@ -4202,6 +4246,115 @@ console.log('readied stances stay stances without the discipline pack');
   setManeuverCatalogue(before);
 }
 
+console.log('the essence pool cells take formulas');
+{
+  const c = new Character(blankDocument({ name: 'Veilweaver', level: 9 }));
+  const k = () => c.data.akashic.calc;
+  const reopened = () => new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  c.set('akashic.essence.pool', 'level + 1');
+  c.set('akashic.essence.featTraits', 'floor(level / 4)');
+  c.set('akashic.essence.fcb', 1);
+  check('a formula in a pool cell is worked out',
+    [k().typed.pool, k().typed.featTraits, k().pool, k().sources], [{ value: 10, error: null }, { value: 2, error: null }, 10, 3]);
+  check('essence.pool reads the worked-out pool', c.scope().essence.pool, 10);
+  check('the cells save what was typed',
+    [c.toJSON().akashic.essence.pool, c.toJSON().akashic.essence.featTraits, c.toJSON().akashic.calc], ['level + 1', 'floor(level / 4)', undefined]);
+  check('a reopened sheet works them out the same', [reopened().data.akashic.calc.pool, reopened().data.akashic.calc.sources], [10, 3]);
+  const html = subsystemPanels.akashicPanel(c, {});
+  check('the pool cell is a formula box showing what it came to',
+    [html.includes('data-set="akashic.essence.pool" data-kind="expr-or-null"'), html.includes('title="level + 1 = 10. Click to edit."')], [true, true]);
+  const audited = c.audit().find((r) => r.id === 'essence-featTraits');
+  check('and the Formulas tab lists it', [audited?.status, audited?.value, audited?.place], ['ok', 2, 'essence:featTraits']);
+
+  c.set('akashic.essence.fcb', 'floor(level +');
+  check('a broken formula adds nothing and says why', [k().typed.fcb.value, !!k().typed.fcb.error, k().sources], [0, true, 2]);
+  check('and is listed as broken', c.audit().find((r) => r.id === 'essence-fcb')?.status, 'error');
+
+  // The pool's own totals read 0 inside the pool cells, so a cell that reads
+  // them cannot climb from one recompute to the next.
+  c.set('akashic.essence.pool', 'essence.pool + essence.total + essence.free + 4');
+  c.recompute();
+  c.recompute();
+  check('a pool cell that reads the pool does not climb', [k().pool, reopened().data.akashic.calc.pool], [4, 4]);
+}
+
+console.log('a blank Pool adds up the essence sources');
+{
+  const c = new Character(blankDocument({ name: 'Veilweaver', level: 9 }));
+  const k = () => c.data.akashic.calc;
+  const reopened = () => new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  const panel = () => subsystemPanels.akashicPanel(c, {});
+  c.set('akashic.essence.featTraits', 2);
+  check('without a veilweaving class or the sphere, a blank Pool stays 0',
+    [k().pool, k().weaves, k().sourcesShort, panel().includes('placeholder="auto: 0"')], [0, false, 2, true]);
+  c.set('akashic.essence.featTraits', 0);
+  c.set('akashic.classes.0.name', 'Vizier');
+  const note = (body) => {
+    const at = c.data.notes.length;
+    c.listAdd('notes', { title: 'Bonus', body });
+    return () => c.listRemove('notes', at);
+  };
+  check('no sources, no essence', [c.data.akashic.essence.pool, k().pool, k().poolAuto], [0, 0, true]);
+  c.set('akashic.essence.featTraits', 2);
+  c.set('akashic.essence.fcb', 'floor(level / 9)');
+  check('a 0 Pool takes the sources total',
+    [k().pool, k().typed.pool.value, k().sourcesShort, c.scope().essence.pool, k().total, k().free], [3, 3, 0, 3, 3, 3]);
+  check('the per-day line and the Pool placeholder show it',
+    [panel().includes('3 essence per day'), panel().includes('placeholder="auto: 3"'), panel().includes('≠ pool')], [true, true, false]);
+  c.set('akashic.essence.pool', 5);
+  check('a typed pool replaces it and is checked against the sources', [k().pool, k().poolAuto, k().sourcesShort], [5, false, -2]);
+  check('and the panel flags the difference', panel().includes('≠ pool'), true);
+  c.set('akashic.essence.pool', 'level - 4');
+  check('so does a formula', k().pool, 5);
+  c.set('akashic.essence.pool', null);
+  check('a cleared Pool takes the sources again', [k().pool, k().poolAuto], [3, true]);
+  check('and saves as cleared', [c.toJSON().akashic.essence.pool, reopened().data.akashic.calc.pool], [null, 3]);
+  const drop = note('Extra Essence {essence.pool += 2}');
+  check('a bonus to essence.pool adds to the sources total', [k().pool, k().poolForwarded, k().sourcesShort], [5, 2, 0]);
+  drop();
+}
+
+console.log('a blank Radiant Dawn cell counts the Radiant Dawn maneuvers known');
+{
+  const before = maneuverCatalogue();
+  setManeuverCatalogue({ disciplines: [{ name: 'Radiant Dawn', entries: [
+    { level: 1, kind: 'maneuver', name: 'Dawn Strike', type: 'Strike' },
+    { level: 1, kind: 'stance', name: 'Morning Stance', type: 'Stance' },
+    { level: 2, kind: 'maneuver', name: 'Noon Strike', type: 'Strike' },
+    { level: 4, kind: 'maneuver', name: 'Zenith', type: 'Boost' },
+  ] }, { name: 'Golden Lion', entries: [{ level: 1, kind: 'maneuver', name: 'Roar', type: 'Boost' }] }] });
+  const c = new Character(blankDocument({ name: 'Rajah', level: 9 }));
+  const rd = () => c.data.akashic.calc.typed.radiantDawn.value;
+  c.set('maneuvers.disciplines', [
+    { name: 'radiant dawn', known: [], custom: [], notes: {} },
+    { name: 'Golden Lion', known: ['Roar'], custom: [], notes: {} },
+  ]);
+  check('none known, no essence', [rd(), c.data.akashic.calc.radiantDawn], [0, { known: 0, highest: 0, essence: 0 }]);
+  const path = 'maneuvers.disciplines.0';
+  c.toggleManeuver(path, 'Dawn Strike', true);
+  c.toggleManeuver(path, 'Morning Stance', true);
+  check('two known, highest level 1: capped at 1', rd(), 1);
+  c.toggleManeuver(path, 'Noon Strike', true);
+  check('three known, highest level 2: capped at 2', rd(), 2);
+  c.toggleManeuver(path, 'Zenith', true);
+  check('four known, highest level 4: one each, stances too', [rd(), c.data.akashic.calc.sources], [4, 4]);
+  check('other disciplines do not count', c.data.akashic.calc.radiantDawn.known, 4);
+  check('the cell shows the count as its placeholder',
+    subsystemPanels.akashicPanel(c, {}).includes('placeholder="auto: 4"'), true);
+
+  c.set('akashic.essence.radiantDawn', 6);
+  check('a number typed in the cell replaces the count', rd(), 6);
+  c.set('akashic.essence.radiantDawn', 'floor(level / 3)');
+  check('so does a formula', rd(), 3);
+  c.set('akashic.essence.radiantDawn', 0);
+  check('0, as a workbook leaves an empty cell, is counted', rd(), 4);
+  c.set('akashic.essence.radiantDawn', null);
+  check('and so is a cleared cell', rd(), 4);
+  check('a reopened sheet counts them the same',
+    new Character(JSON.parse(JSON.stringify(c.toJSON()))).data.akashic.calc.typed.radiantDawn.value, 4);
+  setManeuverCatalogue(before);
+}
+
 console.log('maneuver names match however a pack spelled them');
 {
   const before = maneuverCatalogue();
@@ -4770,6 +4923,53 @@ console.log('a class-feature column or group takes its saved width with it');
   c.listRemove('classes', 0);
   c.removeClassFeatureGroup('Fighter');
   check('a removed group drops them all', widths(), undefined);
+}
+
+console.log('class feature groups and their columns move left and right');
+{
+  const c = new Character(blankDocument({ name: 'Order', level: 4 }));
+  const cls = (name, hd) => ({ name, hd, bab: 1, goodFort: true, goodRef: false, goodWill: false,
+    skillRanks: 2, archetypes: '', levelsOverride: null, systems: [] });
+  c.listAdd('classes', cls('Fighter', 10));
+  c.listAdd('classes', cls('Rogue', 8));
+  [1, 2].forEach((l) => c.setProgressionClass(l, 0, 'Fighter'));
+  [3, 4].forEach((l) => c.setProgressionClass(l, 0, 'Rogue'));
+  c.addClassFeatureColumn('Fighter', 'Bonus feat');
+  c.addClassFeatureColumn('Rogue', 'Talent');
+  c.addClassFeatureColumn('Rogue', 'Sneak attack');
+  c.setColumnWidth('progfeat-Fighter', 'Bonus feat', 700);
+  check('unmoved, the narrowest group comes first', c.classFeatureGroupOrder(), ['Rogue', 'Fighter']);
+  c.moveClassFeatureGroup(1, 0);
+  check('a moved group stays where it was put', c.classFeatureGroupOrder(), ['Fighter', 'Rogue']);
+  check('the whole order is saved', c.data.uiPrefs.featureGroupOrder, ['Fighter', 'Rogue']);
+  c.setColumnWidth('progfeat-Fighter', 'Bonus feat', 90);
+  c.setColumnWidth('progfeat-Fighter', 'Bonus feat', 900);
+  check('a width change does not reorder a saved order', c.classFeatureGroupOrder(), ['Fighter', 'Rogue']);
+  c.moveClassFeatureGroup(0, 0);
+  c.moveClassFeatureGroup(5, 0);
+  check('a move to its own place or from nowhere does nothing', c.classFeatureGroupOrder(), ['Fighter', 'Rogue']);
+  c.listAdd('classes', cls('Wizard', 6));
+  c.setProgressionClass(4, 1, 'Wizard');
+  c.addClassFeatureColumn('Wizard', 'Bonus feat');
+  check('a group added later goes after the saved ones', c.classFeatureGroupOrder(), ['Fighter', 'Rogue', 'Wizard']);
+  c.moveClassFeatureGroup(0, 3);
+  check('a move to the end counts the list before the move', c.classFeatureGroupOrder(), ['Rogue', 'Wizard', 'Fighter']);
+  c.setProgressionClass(4, 1, null);
+  c.listRemove('classes', 2);
+  c.removeClassFeatureGroup('Wizard');
+  check('a removed group leaves the saved order', c.data.uiPrefs.featureGroupOrder, ['Rogue', 'Fighter']);
+
+  c.setClassFeature('Rogue', 4, 'Sneak attack', '2d6');
+  c.setColumnWidth('progfeat-Rogue', 'Sneak attack', 150);
+  c.moveClassFeatureColumn('Rogue', 1, 0);
+  const rogue = () => c.data.progression.classFeatures.Rogue;
+  check('a moved column changes places', rogue().columns, ['Sneak attack', 'Talent']);
+  check('its cells and width go with it', [rogue().byLevel[4]['Sneak attack'], c.classFeatureColumnWidth('Rogue', 'Sneak attack')], ['2d6', 150]);
+  c.moveClassFeatureColumn('Rogue', 0, 2);
+  check('one place right is two along', rogue().columns, ['Talent', 'Sneak attack']);
+  c.moveClassFeatureColumn('Rogue', 1, 9);
+  c.moveClassFeatureColumn('Nobody', 0, 1);
+  check('past the end or for a class with no group, nothing moves', [rogue().columns, c.data.progression.classFeatures.Nobody], [['Talent', 'Sneak attack'], undefined]);
 }
 
 console.log('a formula in a leftover cell is read on every tab, Crafting included');
@@ -13105,6 +13305,167 @@ console.log('companions -- a note the player writes about an ability is theirs a
   c.set('familiar.0.abilityNotes.evasion', 'what it means at my table');
   check('it is set and read back like any other field',
     c.data.familiar[0].abilityNotes.evasion, 'what it means at my table');
+}
+
+console.log('companions -- an archetype replaces the table abilities its text names');
+{
+  // A catalogue pack keeps a familiar archetype as one page of text, the way
+  // the books list it; a hand-made pack can write it as a block instead.
+  const valetPage = [
+    'A valet is a consummate personal servant.',
+    'Valet Skills: A valet treats Craft, Perform, and Profession as class skills.',
+    'Able Assistant (Ex): The master treats the valet as having Cooperative Crafting.',
+    'This replaces alertness.',
+    'Teammate (Ex): A valet has all the teamwork feats its master has.',
+    'This replaces improved evasion.',
+    'Deliver Touch Spells (Su): At 3rd level, a valet can move before and after delivering a harmless touch spell.',
+    'This alters deliver touch spells.',
+    'Deliver Aid (Ex): At 7th level, a valet can move before and after using aid another.',
+    'This replaces speak with animals of its kind.',
+  ].join('\n\n');
+  const tables = { catalogues: { catalogues: [{ kind: 'archetype', entries: [
+    { name: 'Valet (Familiar)', fields: [], text: valetPage, source: 'Test p. 1' },
+    { name: 'Samurai Thing', fields: [['Class', 'Samurai']], text: 'Thing (Ex): This replaces challenge.' },
+  ] }] } };
+  const blocks = [{
+    kind: 'archetype', name: 'Bodyguard', class: 'Animal Companion', extName: 'Test Pack',
+    features: [
+      { name: 'Tenacious Guardian', level: 3, text: 'It stays up. This replaces evasion.' },
+      { name: 'Late Watch', level: 9, text: 'This replaces the 9th-level ability score increase.' },
+    ],
+  }, { kind: 'archetype', name: 'Ronin', class: 'Samurai', features: [{ name: 'Lone', text: 'This replaces order.' }] }];
+  const found = companionArchetypesFrom(tables, blocks);
+  check('a familiar page and a companion block are read; class archetypes are not',
+    found.map((a) => [a.kind, a.name]), [['familiar', 'Valet'], ['animalCompanion', 'Bodyguard']]);
+  const valet = found[0];
+  check('each labelled paragraph is a feature, at the level its text names',
+    valet.features.map((f) => [f.name, f.level]),
+    [['Valet Skills', 1], ['Able Assistant', 1], ['Teammate', 1], ['Deliver Touch Spells', 3], ['Deliver Aid', 7]]);
+  check('with what it replaces', valet.features[1].replaces, ['alertnes']);
+
+  setCompanionArchetypes(found);
+  check('found by name, however it is typed', companionArchetype('familiar', 'valet (familiar)')?.name, 'Valet');
+  check('and only for its own kind', companionArchetype('animalCompanion', 'Valet'), null);
+  check('the field suggests the pack’s names', companionArchetypeNames('familiar'), ['Valet']);
+
+  const c = new Character(load('angou'));
+  const plain = c.data.familiar[0].calc.gains.map((g) => g.abilities);
+  c.set('familiar.0.archetypes', 'Valet');
+  const k = c.data.familiar[0].calc;
+  const at = (lv) => k.gains.find((g) => g.level === lv)?.abilities;
+  check('a feature takes the place of the ability it replaces',
+    at(1), ['Able Assistant', 'Teammate', 'share spells', 'empathic link', 'Valet Skills']);
+  check('one with the same name is the archetype’s version', at(3), ['Deliver Touch Spells']);
+  check('and one at a later level replaces that level’s ability', at(7), ['Deliver Aid']);
+  check('the rest of the table stands', at(13), ['Scry on familiar']);
+  check('the archetype is named on the companion', [k.archetypes, k.archetypesMissing], [['Valet'], []]);
+  check('each new ability says where it came from',
+    [k.abilityInfo['able assistant'].archetype, k.abilityInfo['able assistant'].replaces, k.abilityInfo['deliver touch spells'].changes],
+    ['Valet', ['Alertness'], ['Deliver touch spells']]);
+  check('and carries its text', k.abilityInfo['deliver aid'].text.startsWith('At 7th level'), true);
+
+  c.set('familiar.0.masterLevelPenalty', 15);
+  check('a feature waits for its level; what it replaces never comes',
+    c.data.familiar[0].calc.gains.flatMap((g) => g.abilities).filter((n) => /deliver aid|speak with animals/i.test(n)), []);
+  c.set('familiar.0.masterLevelPenalty', 0);
+
+  c.set('familiar.0.archetypes', 'Valet, Homebrew Thing');
+  check('a name no pack describes is reported, the rest still apply',
+    [c.data.familiar[0].calc.archetypes, c.data.familiar[0].calc.archetypesMissing], [['Valet'], ['Homebrew Thing']]);
+  check('two that touch different abilities do not clash', c.data.familiar[0].calc.archetypeClashes, []);
+
+  setCompanionArchetypes([...found, { kind: 'familiar', name: 'Rival', features: [
+    { name: 'Rival Sense', level: 1, text: '', replaces: ['alertnes'], alters: [] }] }]);
+  c.set('familiar.0.archetypes', 'Valet, Rival');
+  check('two that replace the same ability are said to clash',
+    c.data.familiar[0].calc.archetypeClashes, [{ archetypes: ['Valet', 'Rival'], abilities: ['Alertness'] }]);
+  setCompanionArchetypes(found);
+
+  // By hand: a table ability renamed for an archetype no pack describes.
+  c.set('familiar.0.archetypes', 'Homebrew Thing');
+  c.set('familiar.0.replacedAbilities.empathic link', 'Kindred Sense');
+  const h = c.data.familiar[0].calc;
+  check('a table ability can be replaced by hand', h.gains[0].abilities, ['Alertness', 'improved evasion', 'share spells', 'Kindred Sense']);
+  check('and remembers what it replaced', h.abilityInfo['kindred sense'], { was: 'empathic link', wasKey: 'empathic link' });
+  c.set('familiar.0.replacedAbilities.empathic link', '');
+  c.set('familiar.0.archetypes', '');
+  check('clearing both puts the table back', c.data.familiar[0].calc.gains.map((g) => g.abilities), plain);
+
+  // Removed and added by hand.
+  c.set('familiar.0.removedAbilities.improved evasion', true);
+  const r = c.data.familiar[0].calc;
+  check('a table ability can be removed by hand', r.gains[0].abilities, ['Alertness', 'share spells', 'empathic link']);
+  check('and is listed so it can be put back', r.abilitiesRemoved, [{ level: 1, name: 'improved evasion' }]);
+  c.set('familiar.0.removedAbilities.improved evasion', false);
+  check('unticking puts it back in its place', c.data.familiar[0].calc.gains[0].abilities, plain[0]);
+  c.set('familiar.0.addedAbilities', [{ level: 3, name: 'Extra Sense' }, { level: 99, name: 'Far Off' }, { level: 1, name: ' ' }]);
+  const ad = c.data.familiar[0].calc;
+  check('an added ability goes at the end of its level',
+    ad.gains.find((g) => g.level === 3).abilities, [...plain[1], 'Extra Sense']);
+  check('one not reached yet, or with no name, is not there',
+    ad.gains.flatMap((g) => g.abilities).some((n) => /far off/i.test(n) || !n.trim()), false);
+  check('and it says it was added', ad.abilityInfo['extra sense'], { added: true });
+  c.set('familiar.0.addedAbilities', []);
+
+  // A pack archetype's abilities can be replaced or removed by hand as well.
+  c.set('familiar.0.archetypes', 'Valet');
+  c.set('familiar.0.replacedAbilities.teammate', 'Second Pair of Hands');
+  c.set('familiar.0.removedAbilities.valet skills', true);
+  check('an archetype’s ability can be replaced or removed by hand',
+    c.data.familiar[0].calc.gains[0].abilities, ['Able Assistant', 'Second Pair of Hands', 'share spells', 'empathic link']);
+  c.set('familiar.0.replacedAbilities.teammate', '');
+  c.set('familiar.0.removedAbilities.valet skills', false);
+  c.set('familiar.0.archetypes', '');
+
+  // Removing a replaced one shows it by the table's name; putting it back brings the replacement back.
+  c.set('familiar.0.replacedAbilities.alertness', 'Sharp Eyes');
+  c.set('familiar.0.removedAbilities.alertness', true);
+  check('a replaced ability that is removed is listed by its table name',
+    [c.data.familiar[0].calc.abilitiesRemoved, c.data.familiar[0].calc.gains[0].abilities.includes('Sharp Eyes')],
+    [[{ level: 1, name: 'Alertness' }], false]);
+  c.set('familiar.0.removedAbilities.alertness', false);
+  check('putting it back brings back its replacement', c.data.familiar[0].calc.gains[0].abilities[0], 'Sharp Eyes');
+  c.set('familiar.0.replacedAbilities.alertness', '');
+  check('and clearing it puts the table back', c.data.familiar[0].calc.gains.map((g) => g.abilities), plain);
+  check('the changes are kept on the companion only once used',
+    ['replacedAbilities', 'removedAbilities', 'addedAbilities'].map((f) => f in normalizeCompanion('familiar', {})), [false, false, false]);
+  const n = normalizeCompanion('familiar', { addedAbilities: [null, 1, [], { name: 'Kept', level: 2 }], removedAbilities: ['alertness'] });
+  check('a saved list keeps only its rows; a broken map is dropped',
+    [n.addedAbilities, 'removedAbilities' in n], [[{ name: 'Kept', level: 2 }], false]);
+
+  // Protector named in the field is the tick.
+  c.set('familiar.0.archetypes', 'Protector');
+  check('a familiar named Protector has its master’s hit points from 11th', c.data.familiar[0].calc.hpMax, Math.floor(c.hpMax / 2) * 2);
+  c.set('familiar.0.archetypes', '');
+
+  // Animal companion: the archetype field is singular, and a swap can name one grant.
+  c.set('animalCompanion.0.levelOverride', 12);
+  c.set('animalCompanion.0.archetype', 'Bodyguard');
+  const ac = c.data.animalCompanion[0].calc;
+  const acAt = (lv) => ac.gains.find((g) => g.level === lv)?.abilities;
+  check('the companion’s evasion is replaced', acAt(3), ['Tenacious Guardian']);
+  check('only the 9th-level increase goes', [acAt(4), acAt(9)], [['Ability score increase'], ['Late Watch', 'Multiattack']]);
+
+  // A sheet that carries the archetype (a published one) needs no pack for it.
+  const doc = c.toJSON();
+  doc.familiar[0].archetypes = 'Valet';
+  doc.familiar[0].citedArchetypes = { valet: structuredClone(companionArchetype('familiar', 'Valet')) };
+  setCompanionArchetypes([]);
+  const reader = new Character(doc);
+  check('a sheet carrying the archetype swaps without the pack',
+    reader.data.familiar[0].calc.gains[0].abilities.slice(0, 2), ['Able Assistant', 'Teammate']);
+  check('and nothing carried over to the next sheet', new Character(load('angou')).data.familiar[0].calc.archetypes, []);
+  // A saved file that holds junk in these maps is read as nothing, never trusted.
+  const junk = new Character(load('angou'));
+  junk.data.familiar[0].replacedAbilities = 'not a map';
+  junk.data.familiar[0].removedAbilities = { alertness: 'yes', __proto__: null };
+  junk.data.familiar[0].addedAbilities = 'not a list';
+  junk.data.familiar[0].citedArchetypes = { valet: { name: 'Valet', features: [{ name: '' }, null, { name: '__proto__', level: 1 }] } };
+  junk.set('familiar.0.archetypes', 'Valet');
+  check('a cited archetype with broken features adds only what has a name',
+    junk.data.familiar[0].calc.gains[0].abilities.includes('__proto__'), true);
+  check('and its info is an own entry, not a prototype', Object.getPrototypeOf(junk.data.familiar[0].calc.abilityInfo), Object.prototype);
+  check('a removal only counts when it is ticked', junk.data.familiar[0].calc.gains[0].abilities.includes('Alertness'), true);
 }
 
 console.log('companions -- the animal companion follows its table by effective level');

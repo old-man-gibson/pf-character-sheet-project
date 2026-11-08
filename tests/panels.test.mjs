@@ -1487,5 +1487,26 @@ console.log('\nevery tracker row has a grip, on the Trackers tab and the session
   check('Resources card: the same',
     [count(card, /class="dashtracker[^"]*" data-trackerdrop="/g), count(card, /<span class="grip" data-trackergrip /g)], [n, n]);
 }
+console.log('\na familiar’s abilities can be replaced, removed and added by hand');
+{
+  const c = new Character(blankDocument({ name: 'Familiar By Hand', level: 6 }));
+  c.set('familiar.0.replacedAbilities.alertness', 'Sharp Eyes');
+  c.set('familiar.0.removedAbilities.improved evasion', true);
+  c.listAdd('familiar.0.addedAbilities', { name: 'Extra Sense', level: 3 });
+  c.data.uiPrefs.collapsed = new Proxy({}, { get: (_, key) => foldValue(String(key), true) });
+  const html = subsystems.companionPanel(c, 'familiar');
+  const row = (name) => new RegExp(`<div class="gainrow[^"]*">\\s*<div class="item statline">\\s*<span class="value">${name}</span>[^]*?(?=<div class="gainrow|</section>)`).exec(html)?.[0] || '';
+  ok('a replaced ability says what it replaces, and its box keeps the table name',
+    /Replaces alertness\./.test(row('Sharp Eyes')) && /data-set="familiar\.0\.replacedAbilities\.alertness"[^>]*/.test(row('Sharp Eyes')));
+  ok('a removed one stays in its level, struck, with its tick on and no other box',
+    /class="gainrow removed"/.test(row('improved evasion')) && /Removed\./.test(row('improved evasion'))
+    && /checked\s+data-set="familiar\.0\.removedAbilities\.improved evasion"/.test(row('improved evasion'))
+    && !/replacedAbilities|abilityNotes/.test(row('improved evasion')));
+  ok('an added one says so and has no Replaced by box',
+    /Added by hand\./.test(row('Extra Sense')) && !/Replaced by/.test(row('Extra Sense')));
+  ok('the added list edits its name and level', /data-item="familiar\.0\.addedAbilities\|0\|name"/.test(html)
+    && /data-item="familiar\.0\.addedAbilities\|0\|level"/.test(html) && /data-add="familiar\.0\.addedAbilities"/.test(html));
+  ok('a companion with no archetype field has none of these', !/addedAbilities|removedAbilities/.test(subsystems.companionPanel(c, 'eidolon')));
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

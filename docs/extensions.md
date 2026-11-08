@@ -344,6 +344,14 @@ one entry per option under its category (and a *(Level N+)* mark where the text 
 may select it); the feature itself keeps its schedule on the ladder. Removing the
 archetype removes the group.
 
+**Familiar and animal companion archetypes.** An `archetype` block whose class is
+`Familiar` or `Animal Companion`, or a catalogue `archetype` entry named "Valet (Familiar)"
+or "Bodyguard (Companion)", is matched by name against the companion's Archetypes field. A
+catalogue entry is split into features the same way as a class archetype's page. Its
+features replace the table abilities they name, using the same swap keys, each time the
+companion is recalculated. Nothing is written into the character. See
+[Companions](sub-systems.md#companions--familiar-animal-companion-and-eidolon).
+
 **A class feature taken over and over gets a column, and a menu to pick from.** Adding a
 `class` block gives each feature its table names at more than one level a column of its
 own on the Progression tab, on the schedule those levels describe — *Prowess* on `2, +2`,

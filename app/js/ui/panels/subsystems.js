@@ -55,14 +55,14 @@ import {
   maneuverCatalogue, maneuverDetails, maneuverIsWritten, maneuverOwn, altTrainingLink,
   altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques, psionicCurveTotals, psionicTables,
   spellCatalogue, spellDetails, powerCatalogue, powerDetails, veilsAvailable, veilDetails, veilOwn,
-  slug, manifesterForwardKey, vancianForwardKey, poolTracker,
+  slug, manifesterForwardKey, vancianForwardKey, poolTracker, essenceCellBlank,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST, nameDatalist, noteCell, packText, portraitHtml } from '../html.js';
 import {
   CARD_CASTING_TIMES, CARD_DAMAGE_TYPES, CARD_DURATIONS, CARD_RANGES, CARD_SAVES, CARD_STAT_FIELDS, CARD_TARGETS,
   TERRAIN_CHOICES, stepCastingTime,
 } from '../../model/subsystems/cardcasting.js';
-import { round } from '../format.js';
+import { andList, round } from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, CASTING_SOURCES, ESSENCE_SOURCES, MANEUVER_FIELDS,
   PREP_STYLES, SIZE_MODIFIERS,
@@ -72,7 +72,7 @@ import {
 import {
   BODY_TYPES, COMPANION_LABELS, COMPANION_LEVEL_SOURCES, CONJURED_ARCHETYPES,
   CONJURED_BASE_FORMS, CONJURED_LEVEL_SOURCES, NATURAL_ATTACKS,
-  abilityTextKey, companionAbilityText,
+  abilityTextKey, companionAbilityText, companionArchetypeNames, namesProtector, takesArchetypes,
   companionAttackKey, companionScopeName, companionSkillKey, emptyCompanionFeat, hasArmorSlot, isOtherConjurationTalent,
   wearsBarding,
 } from '../../companions.js';
@@ -321,7 +321,6 @@ function essFig(v, k, sub = '', badge = '') {
    */
 function akashicClassesPanel(a) {
     const list = 'akashic.classes';
-    const e = a.essence || {};
     // Only the filled class blocks are worth a row; the template's six leave
     // five empty ones behind on most sheets. A row added here is shown from
     // the start (`added`), so it can be filled in or removed.
@@ -349,7 +348,9 @@ function akashicClassesPanel(a) {
   })}</td>
               <td class="num">${itemNum(list, i, 'essenceCap', c.essenceCap)}</td>
               <td class="num">${itemNum(list, i, 'bonusCap', c.bonusCap)}</td>
-              <td class="num total">${c.totalCap ?? 0}</td>
+              <td class="num total">${(a.calc?.sphereCap || 0) > (Number(c.essenceCap) || 0)
+    ? `<span tabindex="0" data-tip="The Veilweaving sphere gives a capacity of 1, plus 1 per 6 character levels.">${c.totalCap ?? 0}</span>`
+    : c.totalCap ?? 0}</td>
               ${rowRemove(list, i)}
             </tr>`).join('') || `<tr><td colspan="7" class="empty">No veilweaving class.</td></tr>`}
           </tbody></table>
@@ -377,16 +378,16 @@ function akashicClassesPanel(a) {
           <div class="subhead">Essence pool</div>
           <table class="build"><tbody>
             <tr><th scope="row">Pool</th>
-              <td class="num">${num('akashic.essence.pool', e.pool)}</td></tr>
+              <td class="num">${essenceCell(a, 'pool')}</td></tr>
             ${ESSENCE_SOURCES.map(([key, label]) => (key === 'boon' && a.calc?.traditionBoon ? `<tr>
               <th scope="row" title="The casting tradition's pool, taken as essence instead of spell points. Set it on the Magic Spheres tab.">
                 ${esc(label)}</th>
               <td class="num total">${a.calc.traditionBoon}</td>
             </tr>` : `<tr>
               <th scope="row">${esc(label)}</th>
-              <td class="num">${num(`akashic.essence.${key}`, e[key])}</td>
+              <td class="num">${essenceCell(a, key)}</td>
             </tr>`)).join('')}
-            <tr${a.calc?.sourcesShort ? ` title="These sources add up to ${a.calc.sources}, but the daily pool above is ${a.calc.pool}. Change the pool if it is wrong."` : ''}>
+            <tr${a.calc?.sourcesShort ? ` title="These sources add up to ${a.calc.sources}, but the daily pool above is ${a.calc.pool}. Clear the pool to use the sources."` : ''}>
               <th scope="row">Sources${a.calc?.sourcesShort ? ' <span class="badge err">≠ pool</span>' : ''}</th>
               <td class="num total">${a.calc?.sources ?? 0}</td></tr>
           </tbody></table>
@@ -394,6 +395,32 @@ function akashicClassesPanel(a) {
       </div>
     </section>`;
   }
+
+/**
+ * One essence pool cell, a number or a formula. A blank Pool adds up the
+ * sources, and a blank Radiant Dawn cell counts the Radiant Dawn maneuvers and
+ * stances known.
+ */
+function essenceCell(a, key) {
+  const raw = a.essence?.[key];
+  const r = a.calc?.typed?.[key];
+  const shown = {
+    width: '4.6rem',
+    value: typeof raw === 'string' && raw.trim() && r && !r.error ? r.value : null,
+    error: r?.error || null,
+  };
+  const auto = (value, title) => exprField(`data-set="akashic.essence.${key}"`, essenceCellBlank(raw) ? '' : raw, {
+    ...shown, kind: 'expr-or-null', placeholder: `auto: ${value}`, title,
+  });
+  if (key === 'pool') {
+    return auto(a.calc?.poolAuto ? a.calc.typed.pool.value : a.calc?.sources ?? 0, a.calc?.weaves
+      ? 'Blank uses the total of the sources below. Or enter a number or a formula.'
+      : 'Blank uses the total of the sources below once the character has a veilweaving class or the Veilweaving sphere. Or enter a number or a formula.');
+  }
+  if (key !== 'radiantDawn') return exprField(`data-set="akashic.essence.${key}"`, raw ?? 0, shown);
+  const rd = a.calc?.radiantDawn || {};
+  return auto(rd.essence ?? 0, `Blank gives 1 per Radiant Dawn maneuver or stance known, up to the highest level known (${rd.known ?? 0} known, highest level ${rd.highest ?? 0}). Or enter a number or a formula.`);
+}
 
   /**
    * The slot board.
@@ -1623,7 +1650,7 @@ function companionLevelControls(model, cc) {
     const { kind, p, b, k } = cc;
     if (kind === 'familiar') {
       return `${field('Master level penalty', num(`${p}.masterLevelPenalty`, b.masterLevelPenalty, 'min="0"'))}
-        ${field('Protector archetype', check(`${p}.protector`, b.protector, 'doubles hit points from 11th'))}`;
+        ${namesProtector(b) ? '' : field('Protector archetype', check(`${p}.protector`, b.protector, 'doubles hit points from 11th'))}`;
     }
     const classes = model.progressionClasses();
     const source = kind === 'animalCompanion'
@@ -1648,6 +1675,19 @@ function companionLevelControls(model, cc) {
   }
 
 
+/**
+ * A companion's archetype field, suggesting the archetypes the packs carry for
+ * its kind. Several can be named, split by commas.
+ */
+function archetypeInput(cc, key) {
+    const { kind, p, b } = cc;
+    const names = companionArchetypeNames(kind);
+    const id = `${kind}-archetype-names`;
+    return `${text(`${p}.${key}`, b[key], '', names.length ? { list: id } : {})}${
+      names.length ? `<datalist id="${id}">${names.map((n) => `<option value="${esc(n)}"></option>`).join('')}</datalist>` : ''}`;
+  }
+
+
 function companionHeadPanel(model, cc) {
     const { kind, p, sn, roll, b, k, label } = cc;
     const saves = k.saves || {};
@@ -1657,11 +1697,11 @@ function companionHeadPanel(model, cc) {
     const w = (stat, shown) => working(model, `${sn}.${stat}`, shown);
     const identity = kind === 'familiar' ? `
         ${field('Creature', text(`${p}.creature`, b.creature, 'Owl, cat, thrush…'))}
-        ${field('Archetypes', text(`${p}.archetypes`, b.archetypes))}
+        ${field('Archetypes', archetypeInput(cc, 'archetypes'))}
         ${field('Special ability', text(`${p}.specialAbility`, b.specialAbility, 'What this familiar grants its master'))}`
       : kind === 'animalCompanion' ? `
         ${field('Creature', text(`${p}.creature`, b.creature, 'Wolf, roc, big cat…'))}
-        ${field('Archetype', text(`${p}.archetype`, b.archetype))}
+        ${field('Archetype', archetypeInput(cc, 'archetype'))}
         ${field('Body type', select(`${p}.bodyType`, b.bodyType, BODY_TYPES.map((t) => t.name)))}`
       : kind === 'conjured' ? `
         ${field('Base form', select(`${p}.baseForm`, b.baseForm, CONJURED_BASE_FORMS.map((f) => f.name)))}
@@ -1704,9 +1744,9 @@ function companionHeadPanel(model, cc) {
         ${bigStat('Will', { html: w('will', sv('will')) }, kind === 'familiar' ? 'master’s base' : ((k.formSaves || b.goodSaves)?.will ? 'good' : 'poor'))}
       </div>
       <p class="hint">${kind === 'familiar'
-    ? 'A familiar’s level is its master’s level. It uses the master’s BAB and base saves. It has half the master’s hit points. Its Intelligence and natural armor come from the familiar table.'
+    ? 'A familiar’s level is its master’s level. It uses the master’s BAB and base saves. It has half the master’s hit points. Its Intelligence and natural armor come from the familiar table. An archetype from a loaded pack replaces the abilities it names.'
     : kind === 'animalCompanion'
-      ? 'The level is the master’s levels in the class named, less any penalty. A Spheres companion uses ranks in Handle Animal or Ride instead. HD, BAB, saves, skill ranks, feats, natural armor, the Str/Dex bonus and bonus tricks follow the animal companion table.'
+      ? 'The level is the master’s levels in the class named, less any penalty. A Spheres companion uses ranks in Handle Animal or Ride instead. HD, BAB, saves, skill ranks, feats, natural armor, the Str/Dex bonus and bonus tricks follow the animal companion table. An archetype from a loaded pack replaces the abilities it names.'
       : kind === 'conjured'
         ? 'The level is the Conjuration sphere’s caster level from the Magic Spheres table, with its bonuses, less any penalty. A class’s levels can be used instead. HD, BAB, saves, skill points, feats and natural armor follow the Conjuration sphere’s companion table. The base form adds its own natural armor, saves and starting scores. Archetypes that change the progression are ticked below.'
         : 'The level is the master’s levels in the class named, less any penalty. HD, BAB, saves, feats, natural armor, the Str/Dex bonus, the evolution pool and the attack cap follow the eidolon table.'}
@@ -2436,42 +2476,101 @@ function companionItemsPanel(model, cc) {
  * can write down. What is conditional is the pack's paragraph above it, which
  * drops away the moment there is something of their own to show instead.
  */
-function companionAbilityRow(model, cc, name) {
-    const { kind, p, b } = cc;
+function companionAbilityRow(model, cc, name, removed = false) {
+    const { kind, p, b, k } = cc;
     const key = abilityTextKey(name);
+    // Where it came from when it is not the table's own: an archetype's
+    // feature, or one the player replaced or added. One they removed is shown
+    // struck, with only its Removed tick, so it can be put back.
+    const from = !removed && k.abilityInfo && Object.hasOwn(k.abilityInfo, key) ? k.abilityInfo[key] : null;
     const mine = String(b.abilityNotes?.[key] ?? '');
-    const shared = companionAbilityText(name) || b.citedAbilities?.[key] || null;
+    const shared = (from?.archetype && from.text.trim() ? from : null)
+      || companionAbilityText(name) || b.citedAbilities?.[key] || null;
+    // The table ability a hand-made replacement stands in for. The row keeps
+    // its place and its fold under that name, so it stays open as it is renamed.
+    const tableKey = from?.wasKey || key;
     // Folded per companion by its stable id, so opening Evasion on one wolf
     // does not open it on the other three.
-    const foldKey = `${kind}-${b.id || cc.i}-ability-${key}`;
+    const foldKey = `${kind}-${b.id || cc.i}-ability-${tableKey}`;
     // Shut unless it has been opened: five of these are a list of what the
     // companion has, and a list you have to scroll past is not a list.
     const shut = isCollapsed(model, foldKey, true);
-    return `<div class="gainrow">
+    const lower = (list) => andList(list.map((n) => n.toLowerCase()));
+    const why = removed ? 'Removed.'
+      : from?.archetype
+        ? [`${from.archetype}.`, from.replaces.length ? `Replaces ${lower(from.replaces)}.` : '',
+          from.changes.length ? `Changes ${lower(from.changes)}.` : ''].filter(Boolean).join(' ')
+        : from?.was ? `Replaces ${from.was.toLowerCase()}.`
+          : from?.added ? 'Added by hand.' : '';
+    // The table's abilities and an archetype's can be replaced or removed by
+    // hand. One added by hand is changed in the list under the levels.
+    const byHand = takesArchetypes(kind) && !from?.added;
+    const ownAt = (m) => (m && typeof m === 'object' && Object.hasOwn(m, tableKey) ? m[tableKey] : '');
+    return `<div class="gainrow${removed ? ' removed' : ''}">
       <div class="item statline">
         <span class="value">${esc(name)}</span>
+        ${why ? `<span class="hint">${esc(why)}</span>` : ''}
         ${foldButton(model, foldKey, { open: !shut })}
       </div>
       ${shut ? '' : `<div class="gainbody">
-        ${shared && !mine.trim() ? `<div class="hint packsays">
+        ${shared && !mine.trim() && !removed ? `<div class="hint packsays">
           ${esc(shared.text)}
           ${shared.source || shared.pack ? `<span class="packfrom">${esc(shared.source || shared.pack)}</span>` : ''}
         </div>` : ''}
-        ${prose(model, `data-set="${p}.abilityNotes.${esc(key)}"`, mine, 2)}
+        ${byHand ? `<div class="byhand">
+          ${removed ? '' : field('Replaced by', text(`${p}.replacedAbilities.${esc(tableKey)}`, ownAt(b.replacedAbilities),
+    'The ability that takes its place'))}
+          ${check(`${p}.removedAbilities.${esc(tableKey)}`, ownAt(b.removedAbilities) === true, 'Removed')}
+        </div>` : ''}
+        ${removed ? '' : prose(model, `data-set="${p}.abilityNotes.${esc(key)}"`, mine, 2)}
       </div>`}
     </div>`;
+  }
+
+
+/**
+ * The abilities added by hand: a name and the level it arrives at, each shown
+ * at the end of its level once the companion reaches it.
+ */
+function companionAddedAbilities(cc) {
+    const { p, b } = cc;
+    const list = `${p}.addedAbilities`;
+    const rows = Array.isArray(b.addedAbilities) ? b.addedAbilities : [];
+    return `${rows.length ? `<div class="tablewrap" style="margin-top:8px"><table class="fitcols addedabilities"><thead><tr>
+        <th>Added ability</th><th style="width:4.5rem">Level</th><th></th>
+      </tr></thead><tbody>
+        ${rows.map((a, i) => `<tr>
+          <td>${itemText(list, i, 'name', a.name, 'Ability')}</td>
+          <td>${itemNum(list, i, 'level', a.level)}</td>
+          ${rowRemove(list, i)}
+        </tr>`).join('')}
+      </tbody></table></div>` : ''}
+      <div style="margin-top:6px">${addButton(list, 'Add an ability', { name: '', level: 1 })}</div>`;
   }
 
 
 function companionGainsPanel(model, cc) {
     const { kind, p, b, k, label } = cc;
     const gains = k.gains || [];
+    // A level whose abilities were all removed by hand still shows, so they
+    // can be put back.
+    const removed = Array.isArray(k.abilitiesRemoved) ? k.abilitiesRemoved : [];
+    const levels = [...new Set([...gains.map((g) => g.level), ...removed.map((r) => r.level)])].sort((x, y) => x - y);
+    const rowsAt = (lv) => [
+      ...gains.filter((g) => g.level === lv).flatMap((g) => (g.abilities || [g.text]).map((n) => companionAbilityRow(model, cc, n))),
+      ...removed.filter((r) => r.level === lv).map((r) => companionAbilityRow(model, cc, r.name, true)),
+    ].join('');
     return `<section class="panel">
       <h3>${esc(label)} abilities <span class="badge">${gains.length} from the table</span></h3>
-      ${gains.length ? `<div class="rowlist">${gains.map((g) => `<div class="item gainlevel">
-        <span class="label">Level ${g.level}</span>
-        <div class="gains">${(g.abilities || [g.text]).map((n) => companionAbilityRow(model, cc, n)).join('')}</div>
+      ${levels.length ? `<div class="rowlist">${levels.map((lv) => `<div class="item gainlevel">
+        <span class="label">Level ${lv}</span>
+        <div class="gains">${rowsAt(lv)}</div>
       </div>`).join('')}</div>` : '<p class="empty">Nothing yet at this level.</p>'}
+      ${(k.archetypeClashes || []).map((c) => `<p class="hint warn">${esc(c.archetypes.join(' and '))} both change
+        ${esc(andList(c.abilities.map((n) => n.toLowerCase())))}, so they cannot be taken together.</p>`).join('')}
+      ${k.archetypesMissing?.length ? `<p class="hint">${esc(andList(k.archetypesMissing))}
+        ${k.archetypesMissing.length > 1 ? 'were' : 'was'} not found in any pack. Open an ability above to replace or remove it, or add one below.</p>` : ''}
+      ${takesArchetypes(kind) ? companionAddedAbilities(cc) : ''}
       <div class="fieldgrid" style="margin-top:8px">
         ${kind === 'familiar' ? `<label class="fld" style="grid-column:1/-1"><span>Familiar abilities</span>
           ${prose(model, `data-set="${p}.abilities"`, b.abilities, 3)}</label>` : ''}

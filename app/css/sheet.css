@@ -1946,7 +1946,6 @@ button.mname {
   align-items: start;
 }
 .ak-pool table.build th[scope="row"] { font-weight: 500; color: var(--cs-muted); }
-.ak-pool input[type="number"] { width: 100%; }
 /* A class's name is a word or two; the box took the width of the panel. */
 .ak-classes td:first-child input[type="text"] { width: 12rem; min-width: 7rem; }
 .ak-classes select { width: auto; min-width: 5rem; }
@@ -3675,6 +3674,16 @@ table.prog th .colname:hover { border-color: var(--cs-line); }
 }
 .featgroups .panel.featpanel { flex: 0 1 auto; min-width: 250px; max-width: 100%; }
 .featgroups .panel.collapsed { flex: 0 1 auto; }
+/* Moving a group or a column: its grip drags it, ◂ ▸ move it one place. A
+   panel heading pushes its buttons right; the pair stays beside the badges. */
+.sidemove { display: inline-flex; gap: 2px; flex: none; }
+.panel > h3 .sidemove button { margin-left: 0; padding: 1px 6px; }
+.featpanel.dragging, table.featgrid th.dragging { opacity: 0.45; }
+.featpanel.drop-before { box-shadow: -4px 0 0 0 var(--cs-accent); }
+.featpanel.drop-after { box-shadow: 4px 0 0 0 var(--cs-accent); }
+table.featgrid th.drop-before { box-shadow: inset 3px 0 0 var(--cs-accent); }
+table.featgrid th.drop-after { box-shadow: inset -3px 0 0 var(--cs-accent); }
+table.featgrid th .sidemove button { padding: 0 3px; font-size: 0.7rem; line-height: 1.2; }
 table.featgrid { table-layout: fixed; }
 table.featgrid td.featcell { vertical-align: top; padding: 2px 3px; }
 table.featgrid th { position: relative; overflow: hidden; }
@@ -4185,6 +4194,11 @@ button.badge:hover { background: color-mix(in srgb, currentColor 10%, transparen
 .gainbody .packfrom {
   display: block; margin-top: 3px; font-size: 0.7rem; font-style: italic; opacity: 0.75;
 }
+/* Replaced by and the Removed tick on one line, wrapping on a phone. */
+.gainbody .byhand { display: flex; flex-wrap: wrap; align-items: end; gap: 6px 12px; }
+.gainbody .byhand > label.fld { flex: 1 1 14rem; max-width: 21rem; }
+/* Removed by hand: kept in its level, struck, so it can be put back. */
+.gainrow.removed > .statline > .value { text-decoration: line-through; color: var(--cs-muted); }
 /* Archetype pills on a class row: the name, and a cross that removes it and restores the class's own features. */
 .pills { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-right: 6px; vertical-align: middle; }
 .pill { display: inline-flex; align-items: center; gap: 2px; font-size: 0.74rem; padding: 1px 4px 1px 8px; border-radius: 12px;
