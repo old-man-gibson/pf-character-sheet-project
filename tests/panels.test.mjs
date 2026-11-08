@@ -1552,5 +1552,25 @@ console.log('\na familiar’s abilities can be replaced, removed and added by ha
     && /data-item="familiar\.0\.addedAbilities\|0\|level"/.test(html) && /data-add="familiar\.0\.addedAbilities"/.test(html));
   ok('a companion with no archetype field has none of these', !/addedAbilities|removedAbilities/.test(subsystems.companionPanel(c, 'eidolon')));
 }
+console.log('\nthe Extensions tab: a shelf of many blocks arrives with every pack folded');
+{
+  const { runtime } = await import('../app/js/extension-runtime.js');
+  const { normalizeExtension } = await import('../app/js/extensions.js');
+  const had = runtime.bundled;
+  const pack = (id, n) => normalizeExtension({ id, name: id, blocks: Array.from({ length: n }, (_, i) => ({ kind: 'note', name: `${id} note ${i}` })) });
+  const c = new Character(blankDocument({ name: 'Shelf', level: 1 }));
+  const draw = (extSearch = '') => manager.renderSystemManagerPanel(c, { ...shutCtx(), extSearch });
+  const packs = (html) => [...html.matchAll(/<div class="foldsub extpack( collapsed)?">/g)].map((m) => !!m[1]);
+  runtime.bundled = [pack('small-a', 30), pack('small-b', 30)];
+  ok('a short shelf draws its small packs open', packs(draw()).join() === 'false,false');
+  runtime.bundled = [pack('small-a', 30), pack('small-b', 30), ...Array.from({ length: 6 }, (_, i) => pack(`more-${i}`, 30))];
+  const many = draw();
+  ok('a long one folds every pack', packs(many).length === 8 && packs(many).every(Boolean) && !/data-action="ext-add-block"/.test(many));
+  c.data.uiPrefs.collapsed = { 'extpack:small-a': false };
+  ok('and a pack opened by hand stays open', packs(draw()).filter((x) => !x).length === 1);
+  ok('a search still shows what it finds', /data-action="ext-add-block"/.test(draw('more-3 note 7')));
+  runtime.bundled = had;
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

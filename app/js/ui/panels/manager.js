@@ -36,6 +36,12 @@ const EXT_GROUP_FOLD = 12;
 const EXT_PACK_FOLD = 60;
 
 /*
+ * More blocks than this on the shelf and every pack arrives folded. A
+ * hundred small packs drawn open was 10,000 elements on every render.
+ */
+const EXT_SHELF_FOLD = 200;
+
+/*
  * The most blocks a search draws. A search folds nothing, so one letter
  * matched nearly every block.
  */
@@ -296,7 +302,7 @@ function extensionBlocksPanel(model, ctx) {
         loose.splice(loose.indexOf(note), 1);
       }
       const packKey = `extpack:${id}`;
-      const packShut = !seeking && rows.isCollapsed(model, packKey, p.blocks.length > EXT_PACK_FOLD);
+      const packShut = !seeking && rows.isCollapsed(model, packKey, p.blocks.length > EXT_PACK_FOLD || byKind.length > EXT_SHELF_FOLD);
       const groupHtml = [...groups.entries()].map(([name, list]) => {
         const key = `extgrp:${id}:${name}`;
         // Big groups arrive folded, small ones open. A chakra of sixty veils

@@ -2224,6 +2224,54 @@ console.log('store -- a pack is parsed once, and again after it is saved or remo
   check('a removed pack reads null', store.read('menus'), null);
 }
 
+console.log('store -- start-up reads the database once');
+{
+  // Every getAll the fake answers. Asking whether the database works must
+  // not read every pack in it: with 1,400 book packs that was 122 MB, twice.
+  const base = fakeIndexedDb();
+  let reads = 0;
+  const counting = {
+    open(...a) {
+      const req = base.open(...a);
+      const db = req.result;
+      if (!db.counted) {
+        const transaction = db.transaction.bind(db);
+        db.transaction = (...t) => {
+          const tx = transaction(...t);
+          const objectStore = tx.objectStore;
+          tx.objectStore = (...o) => { const os = objectStore(...o); const getAll = os.getAll; os.getAll = () => { reads++; return getAll(); }; return os; };
+          return tx;
+        };
+        db.counted = true;
+      }
+      return req;
+    },
+  };
+  const storage = fakeStorage();
+  const store = extensionStore(() => packMedium({ storage, factory: counting, holds: isPackKey, keep: packsWorthMoving }));
+  await store.open();
+  check('the stored packs are read once', [store.medium, reads], ['IndexedDB', 1]);
+  await store.save({ format: EXTENSION_FORMAT, id: 'one', name: 'One', blocks: [{ kind: 'note', name: 'n' }] });
+  check('and what is saved after is read back from memory', [store.read('one')?.name, reads], ['One', 1]);
+}
+
+console.log('merge -- packs adding to one catalogue kind build one list and leave their own alone');
+{
+  const opt = (name, cls, text) => ({ name, text, fields: [['Class', cls]] });
+  const pack = (id, entries) => normalizeExtension({ id, name: id, provides: { catalogues: { catalogues: [{ kind: 'class option', entries }] } } });
+  const a = pack('a', [opt('Ash', 'Rogue', 'a1'), opt('Bog', 'Rogue', 'a2')]);
+  const b = pack('b', [opt('Ash', 'Rogue', 'b1'), opt('Ash', 'Monk', 'b2')]);
+  const c = pack('c', [opt('Cog', 'Rogue', 'c1'), opt('Bog', 'Rogue', 'c2')]);
+  const own = () => [a, b, c].map((p) => p.provides.catalogues.catalogues[0].entries.map((e) => e.text).join(','));
+  const before = own();
+  const merged = mergeTables([a, b, c]).catalogues.catalogues;
+  check('one kind, later packs winning entry by entry in first-seen order',
+    merged.map((k) => k.entries.map((e) => `${e.name}/${e.text}`)), [['Ash/b1', 'Bog/c2', 'Ash/b2', 'Cog/c1']]);
+  check('each pack keeps its own list', own(), before);
+  check('a second merge comes out the same', JSON.stringify(mergeTables([a, b, c])), JSON.stringify(mergeTables([a, b, c])));
+  check('and one pack alone is just that pack', mergeTables([a]).catalogues.catalogues[0].entries.map((e) => e.text), ['a1', 'a2']);
+}
+
 console.log('runtime -- the active packs, their blocks and their menus are worked out again only when the store changes');
 {
   const had = globalThis.localStorage;
