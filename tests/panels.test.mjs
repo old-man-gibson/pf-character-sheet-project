@@ -970,7 +970,7 @@ console.log('\nno character text reaches the page as markup');
   folding.listAdd('raceTraits', { name: 'Darkvision', text: long });
   folding.set('featGroups.0.entries.0.note', long);
   folding.setItem('mythic.abilities', 0, 'effect', long);
-  const over = overview.renderOverviewPanel(folding, { ...CTX, buildView: true });
+  const over = lore.renderLorePanel(folding, CTX);
   const tab = feats.renderFeaturesPanel(folding, CTX);
   check('trait, race trait, feat and mythic notes fold',
     [over.includes('data-collapse="tnote:traitSlots.trait1.text"'),
@@ -1099,7 +1099,7 @@ console.log('\nevery gold badge is the one badge, and opens the same panel');
   // Every panel, every view, with badges actually up -- `renders` fails on
   // one drawn by hand.
   sweep('a character with forwarded bonuses', c);
-  const html = overview.renderOverviewPanel(c, CTX);
+  const html = renderStatsPanel(c, CTX);
   const mate = subsystems.companionPanel(c, 'eidolon');
 
   const dr = html.match(/<span class="fwd" data-fwd="defenses\.dr dr\.magic dr\.none" data-fwdx="([^"]*)"[^>]*>([^<]*)</);
@@ -1606,6 +1606,41 @@ console.log('\nthe Extensions tab: a shelf of many blocks arrives with every pac
   ok('its count says how many match', alone('more-3').count.includes('30 of 240')
     && alone('').count === '' && /Nothing matches/.test(alone('nothing like this').list));
   runtime.bundled = had;
+}
+
+console.log('\nthe Overview edits only Details, Conditions and Buffs; the rest is read-only with an Edit button');
+{
+  const { HOMES, formulaPlace } = await import('../app/js/ui/formula-places.js');
+  const c = new Character(blankDocument({ name: 'Read Only', level: 4 }));
+  c.data.classes[0] = { ...c.data.classes[0], name: 'Fighter', hd: 10, bab: 1, goodFort: true };
+  c.listAdd('raceTraits', { name: 'Darkvision', text: 'Sees in the dark.' });
+  c.set('traitSlots.trait1.name', 'Reactionary');
+  c.set('identity.specialty', 'Chef');
+  c.listAdd('identity.languages', 'Elven');
+  c.listAdd('buffs', { name: 'Rage', on: true, note: '' });
+  c.recompute();
+  const html = overview.renderOverviewPanel(c, { ...CTX, buildView: true });
+  // Every binding that writes to the character, by its path.
+  const writes = [...html.matchAll(/data-(set|item|build|prog|pick|add|remove|offset|hp|tedit)="([^"]*)"/g)]
+    .map((m) => `${m[1]} ${m[2]}`);
+  const elsewhere = writes.filter((w) => !/^(set|item|add|remove) (identity\.|conditions\.|buffs\b)/.test(w));
+  check('no field outside Details, Conditions and Buffs', elsewhere, []);
+  ok('Details, Conditions and Buffs still edit', /data-set="identity\.name"/.test(html)
+    && /data-action="add-condition"/.test(html) && /data-item="buffs\|0\|/.test(html));
+  // Each Edit button goes to a panel its tab draws.
+  const draw = {
+    stats: (m) => renderStatsPanel(m, CTX),
+    progression: (m) => lore.renderProgressionPanel(m, CTX),
+    lore: (m) => lore.renderLorePanel(m, CTX),
+    gear: (m) => gear.renderGearPanel(m, CTX),
+  };
+  const homes = [...html.matchAll(/data-action="go-home" data-place="home:([^"]+)"/g)].map((m) => m[1]);
+  check('an Edit button for every read-only panel, and a home for every button',
+    [...homes].sort(), Object.keys(HOMES).sort());
+  for (const key of homes) {
+    const to = formulaPlace(c, `home:${key}`);
+    ok(`Edit on ${key} lands on its panel (${to?.tab})`, !!to && draw[to.tab]?.(c).includes(`data-home="${key}"`));
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

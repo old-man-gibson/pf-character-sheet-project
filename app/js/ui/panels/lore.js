@@ -1,9 +1,10 @@
 /**
- * ui/panels/lore.js -- the Progression tab, the Lore tab, and the leftovers.
+ * ui/panels/lore.js -- the Progression tab, the Background tab, and the leftovers.
  *
- * Progression is the class table: what each level of each class gave, with the
- * repeat features in a column each and the option menus a pack supplies. Lore
- * is the background sections and the notes. The leftovers are the tabs a
+ * Progression is the Classes table and the level plan: what each level of each
+ * class gave, with the repeat features in a column each and the option menus a
+ * pack supplies. Background (tab id `lore`) is the race traits, traits and
+ * drawbacks, specialty, languages and the story sections. The leftovers are the tabs a
  * particular workbook had that the app has no model for -- kept as a grid so
  * nothing is lost in the import even where nothing can be computed from it.
  *
@@ -12,21 +13,25 @@
  */
 import { esc } from '../html.js';
 import { classActionsPanel } from '../class-actions.js';
-import { collapsible } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
 import { systemExtrasPanel } from './subsystems.js';
 import { itemArea } from '../prose.js';
 import {
-  addButton, foldButton, grip, gridCell, isCollapsed, isOpen, itemText, removeAction, removeButton, rowTools,
+  addButton, collapsible, exprField, foldButton, grip, gridCell, isCollapsed, isOpen, itemCheck, itemNum, itemSelect,
+  itemText, removeAction, removeButton, rowRemove, rowTools,
 } from '../rows.js';
 import { linkField } from '../fields.js';
 import { same } from '../format.js';
-import { alignedGainRows, alignedRule, columnLetter, optionCatalogue, optionCatalogues, systemTabWidth } from '../../model.js';
-import { parseLevelRule, levelRuleLevels, summariseLevels } from '../../rules.js';
+import {
+  alignedGainRows, alignedRule, blankClassRow, columnLetter, optionCatalogue, optionCatalogues, plannedLevels, systemTabWidth,
+} from '../../model.js';
+import {
+  GAME_SYSTEMS, TRAIT_CATEGORIES, TRAIT_SLOTS, parseLevelRule, levelRuleLevels, summariseLevels,
+} from '../../rules.js';
 import { hasTokens } from '../../inline.js';
 import { rgba } from '../../tracker-style.js';
 import { logDay, logLinesHtml } from '../play-log.js';
-import { VMC_LEVELS, campaignRules } from '../../model/campaign.js';
+import { VMC_LEVELS, campaignRules, specialtyInPlay } from '../../model/campaign.js';
 import { runtime as extensionRuntime } from '../../extension-runtime.js';
 import {
   groupLevels, ownPackages, packageBlocks, packageCheck, packageId, packageProblems, sameClass, swapsOn,
@@ -34,7 +39,7 @@ import {
 import { archetypeChanges, archetypeMarks } from '../../extensions.js';
 import { hasLink, linkedText } from '../links.js';
 import { foldingNote } from '../talents.js';
-import { field, text } from '../fields.js';
+import { autoNum, field, select, text } from '../fields.js';
 
 
 /**
@@ -291,6 +296,7 @@ export function renderProgressionPanel(model, ctx) {
     };
 
     return `<div class="grid">
+      ${classesPanel(model, ctx)}
       ${classActionsPanel(model)}
       ${collapsible(model, 'prog-levels', `<section class="panel span2">
         <h3>Level progression
@@ -322,7 +328,7 @@ export function renderProgressionPanel(model, ctx) {
           </tr>`).join('')}</tbody>
         </table></div>
         <p class="hint">
-          Class tracks pick from the classes on the Overview. HP, ranks and saves per level
+          Class tracks pick from the Classes table above. HP, ranks and saves per level
           are read-only. ${gestalt ? 'They use the best of the classes chosen on each row'
     : 'With gestalt off, they come from the first track\'s class only'}
           (good saves ½, poor ⅓). Rows past level ${level} are planned. Class features are
@@ -1006,12 +1012,23 @@ export function renderExtrasPanel(model, ctx) {
   }
 
 
+/**
+ * The Background tab: the race's traits and the character's own, the
+ * specialty, the languages, and the free-text story sections -- the parts of a
+ * character chosen once at creation. The Overview shows them read-only.
+ */
 export function renderLorePanel(model, ctx) {
     const c = model.data;
 
     return `<div class="grid">
+      ${traitsPanel(model, ctx)}
+      <div class="band">
+        ${/* Background skills (a campaign rule) replace the Specialty. */''}
+        ${specialtyInPlay(c) ? specialtyPanel(model) : ''}
+        ${languagesPanel(model)}
+      </div>
       <section class="panel span2">
-        <h3>Background</h3>
+        <h3>Story</h3>
         <div class="fieldgrid two">
           ${(c.backgroundSections || []).map((sec, i) => `<label class="fld tall">
             <span>${esc(sec.label)}</span>${itemArea(model, 'backgroundSections', i, 'text', sec.text, 3)}
@@ -1055,4 +1072,406 @@ export function gridTab(model, index, tab) {
         ${addButton(list, 'Add row', { cells: Array.from({ length: width }, () => null) })}
       </div>
     </section>`;
+  }
+
+/* ---------------- classes, traits, specialty and languages ---------------- */
+
+/** The base attack progressions a class can run, as the rules name them. */
+// Characters, not entities: the dropdown escapes its labels like every other.
+export const BAB_RATES = [[1, 'full'], [0.75, '¾'], [0.5, '½'], [0, 'none']];
+
+/** The hit dice a class can have, as the workbook's own HD Size column listed them. */
+const HIT_DICE = [4, 6, 8, 10, 12];
+
+/**
+ * One of the class table's two progression dropdowns.
+ *
+ * HD and BAB are the same control asking two questions, so they are built by
+ * the same function: a fixed list of what the rules allow, plus whatever the
+ * row already holds if a pack or an import put something else there -- which
+ * is how a d20 hit die or a 2/3 progression survives being looked at.
+ */
+function progressionSelect(i, field, value, choices, label, format = String, beaten = null) {
+  const now = Number(value) || 0;
+  const known = choices.some(([v]) => v === now);
+  const opts = known ? choices : [...choices, [now, format(now)]];
+  // Marked when another class present at the same levels is doing better,
+  // because that is when changing this dropdown moves nothing on the sheet.
+  const lost = beaten?.count || 0;
+  const all = lost > 0 && lost === beaten.levels;
+  const where = beaten?.levels === 1 ? 'its only level'
+    : all ? `all ${lost} of its levels`
+      : `${lost} of its ${beaten?.levels} levels`;
+  const why = lost
+    ? `Another class has a better ${beaten.noun} at ${where}, so this one${
+      all ? ' has no effect' : ' only counts at the other levels'}.`
+    : '';
+  return itemSelect('classes', i, field, now, opts, null, null, {
+    kind: 'number', attrs: `aria-label="${esc(label)}" class="${all ? 'beaten' : ''}"${why ? ` title="${esc(why)}"` : ''}`,
+  });
+}
+
+  /**
+   * The specialty: what the character did before, the feat it grants and its
+   * perks. The feat is the same field as the Granted feats row on Feats &
+   * Mythic -- one home, seen from two places.
+   *
+   * Two perks, always. A specialty grants the pair; there is no order to them
+   * and neither is optional, so the row carries no arrows and no cross -- and
+   * nothing offers to add a third. A document that arrived with more shows
+   * them all rather than hiding what it holds.
+   */
+function specialtyPanel(model) {
+    const c = model.data;
+    const perks = c.identity.specialtyPerks || [];
+    const slots = Math.max(2, perks.length);
+    return `<section class="panel" data-home="specialty">
+      <h3>Specialty</h3>
+      <div class="fieldgrid two">
+        ${field('Specialty', text('identity.specialty', c.identity.specialty, 'Chef, Gambling Villain…'))}
+        ${field('Specialty feat', text('grantedFeats.specialty.name', c.grantedFeats?.specialty?.name, 'Which feat?'))}
+      </div>
+      <div class="perkfields">
+        ${Array.from({ length: slots }, (_, i) => `<label class="fld">
+          <span>Perk ${i + 1}</span>
+          ${prose(model, `data-item="identity.specialtyPerks|${i}|self"`, perks[i] ?? '', 1, 'grow')}
+        </label>`).join('')}
+      </div>
+      <p class="hint">The specialty feat is also listed under <strong>Granted feats</strong>
+        on Feats &amp; Mythic. The three specialty skills are chosen on the Skills tab.</p>
+    </section>`;
+  }
+
+  /**
+   * Languages, against the slots the character has for them.
+   *
+   * One slot per point of Int bonus and one per Linguistics rank are the
+   * rules; anything else that grants some is a number or a formula in Extra,
+   * so a "+1 per two levels" stays true as the character levels.
+   *
+   * The list is edited once and read constantly, so folded down the panel is
+   * the thing that gets read: every language the character speaks on one line,
+   * in a box, ready to be copied into a post. Opened it is the fields again,
+   * and the order is the player's -- a chip can be dragged past its
+   * neighbours by the grip, which is what keeps the trade tongues at the front
+   * and the dead ones at the back.
+   */
+/**
+ * Every language the character speaks, native ones first, on one line in a
+ * read-only box with a Copy button: the folded Languages panel, and the
+ * Overview's copy of it.
+ *
+ * A textarea rather than an input, because an input is one line by
+ * definition: a character with a good Int bonus and ranks in Linguistics
+ * speaks more languages than fit across a third of a row, and the rest
+ * of them scrolled out of sight with nothing to say they were there.
+ *
+ * It is still a form control rather than a div, because the Copy button
+ * beside it reads `.value`, and because a field is what you can click
+ * into and select all of. `#bindReadOnlyBoxes` sizes it to its content
+ * after every render, so the box is as tall as the list and never grows
+ * a scrollbar of its own.
+ */
+export function languageCopy(identity) {
+  const spoken = [...String(identity.nativeLanguages || '').split(/[,;]/), ...(identity.languages || [])]
+    .map((s) => String(s).trim()).filter(Boolean);
+  return `<div class="langcopy">
+      <textarea class="ro" data-post="languages" readonly rows="1" spellcheck="false"
+        placeholder="No languages yet." aria-label="Every language spoken">${esc(spoken.join(', '))}</textarea>
+      <button data-view data-copy="languages" title="Copy the list.">Copy</button>
+    </div>`;
+}
+
+function languagesPanel(model) {
+    const c = model.data;
+    const i = c.identity;
+    const slots = i.languageSlots || { int: 0, linguistics: 0, extra: 0, total: 0, known: 0 };
+    const langs = i.languages || [];
+    const spare = slots.total - slots.known;
+    const shut = !!c.uiPrefs?.collapsed?.languages;
+    const head = `<h3>Languages
+        <span class="badge${spare < 0 ? ' err' : ''}" title="Languages known / slots from Int, Linguistics and Extra.">${slots.known} / ${slots.total}</span>
+        ${foldButton(null, 'languages', {
+    open: !shut, cls: 'disclose', title: shut ? 'Open the list to edit it' : 'Fold it down to one line',
+  })}
+      </h3>`;
+    if (shut) {
+      return `<section class="panel collapsed" data-home="languages">
+        ${head}
+        ${languageCopy(i)}
+      </section>`;
+    }
+    return `<section class="panel" data-home="languages">
+      ${head}
+      <div class="fieldgrid">
+        ${field('Native', text('identity.nativeLanguages', i.nativeLanguages, 'Common'))}
+        ${field('From Int', `<span class="value" title="One per point of Intelligence bonus">${slots.int}</span>`)}
+        ${field('From Linguistics', `<span class="value" title="One per Linguistics rank">${slots.linguistics}</span>`)}
+        ${field('Extra slots', exprField('data-set="identity.languageExtra"', i.languageExtra, {
+          width: '100%',
+          value: typeof i.languageExtra === 'string' && i.languageExtra.trim() ? slots.extra : null,
+          error: slots.extraError,
+          title: 'A number or a formula, e.g. floor(level / 2)',
+        }))}
+      </div>
+      <div class="langlist">
+        ${langs.map((l, li) => `<span class="lang" data-rowdrop="identity.languages|${li}" data-rowaxis="x">
+          ${grip()}
+          ${itemText('identity.languages', li, 'self', l, 'Language')}
+          ${removeButton('identity.languages', li, { what: 'language', tiny: true })}
+        </span>`).join('')}
+      </div>
+      <div class="pair" style="margin-top:8px">
+        ${addButton('identity.languages', 'Add language', '')}
+        <span class="hint">${spare > 0 ? `${spare} slot${spare === 1 ? '' : 's'} free`
+    : spare < 0 ? `${-spare} over the limit` : 'all slots used'}</span>
+      </div>
+      <p class="hint">Native languages are free. You get one slot per point of Int bonus and one per
+        Linguistics rank. <strong>Extra</strong> takes a number or a formula for slots a race
+        or a trait adds.</p>
+    </section>`;
+  }
+
+  /* ---------------- classes (gestalt) ---------------- */
+
+  /**
+   * The class table, and the levels each class actually runs for.
+   *
+   * Levels is a read-out before it is a field: the number is how often the
+   * Planner features that class at or below the character's own level, which
+   * is what every other tab means by "class level". Left alone it stays that
+   * count and moves when the Planner does; a number typed in pins it instead,
+   * and clearing the box hands it back.
+   *
+   * The gestalt summary under the table is for a character running more than
+   * one class track. On a single track there is no best-of to take, so the
+   * same three numbers are said without the gestalt language.
+   */
+function classesPanel(model, ctx) {
+    const c = model.data;
+    const g = c.gestalt || { saves: {} };
+    const sv = (k) => g.saves?.[k] || {};
+    const level = Number(c.identity.level) || 0;
+    // Gestalt off (a campaign rule): one class a level, each its own progression.
+    const core = !campaignRules(c).gestalt;
+    const gestalt = !core && (c.progression?.tracks ?? 1) > 1;
+    // Classes the Planner gives no level to, with gestalt off.
+    const idle = core ? (c.classes || []).filter((x) => x.name && !x.gestaltLevels).map((x) => x.name) : [];
+    const aligns = model.alignedSteps().filter((s) => s.class);
+    // The sub-system picker: a row of toggles under the class it belongs to.
+    // Marking a system badges its tabs in the ⚙ manager and puts them on the
+    // session view's bar before anything is typed into them.
+    const sysButton = (x, i) => {
+      const n = (x.systems || []).length;
+      const open = ctx.openClassSystems === i;
+      return `<button data-action="class-systems" data-index="${i}" aria-expanded="${open}"
+        title="Choose the sub-systems this class uses. Their tabs are marked on the ⚙ tab and shown in session view.">
+        ${open ? '▾' : '▸'} ${n || '—'}</button>`;
+    };
+    const sysPicker = (x, i) => {
+      if (ctx.openClassSystems !== i) return '';
+      const on = new Set(x.systems || []);
+      const known = new Set(GAME_SYSTEMS.map((s) => s.id));
+      const extra = [...on].filter((id) => !known.has(id));
+      return `<tr class="syspicker"><td colspan="11">
+        <p class="hint" style="margin:2px 0 6px">
+          The sub-systems ${esc(x.name || 'this class')} uses. Their tabs are marked on the ⚙ tab
+          and shown on the session view's bar.
+        </p>
+        <div class="pair" style="flex-wrap:wrap">
+          ${GAME_SYSTEMS.map((s) => `<button data-action="class-system-toggle" data-index="${i}"
+            data-system="${s.id}" aria-pressed="${on.has(s.id)}">${esc(s.label)}</button>`).join('')}
+          ${extra.map((id) => `<button data-action="class-system-toggle" data-index="${i}"
+            data-system="${esc(id)}" aria-pressed="true"
+            title="A system from an extension pack that has no tab in this app.">${esc(id)}</button>`).join('')}
+        </div>
+      </td></tr>`;
+    };
+    return `<section class="panel span2" data-home="classes">
+      <h3>Classes</h3>
+      <div class="tablewrap squeeze"><table class="classes stacked cardrows">
+        <colgroup><col class="cls"><col class="lvl"><col class="hd"><col class="bab">
+          <col class="save"><col class="save"><col class="save">
+          <col class="ranks"><col class="arch"><col class="sys"><col class="tools"></colgroup>
+        <thead><tr>
+          <th>Class</th>
+          <th class="num" title="The number of levels in this class, from the Planner. Saves, hit points, BAB and casting use it. Type a number to override it.">Levels</th>
+          <th class="num">HD</th>
+          <th title="Base attack progression. The character's BAB uses the best one at each level.">BAB</th>
+          <th class="mid" title="Good Fortitude">Fort</th><th class="mid" title="Good Reflex">Ref</th><th class="mid" title="Good Will">Will</th>
+          <th class="num" title="Skill ranks per level">Ranks</th>
+          <th>Archetypes</th>
+          <th title="The sub-systems this class uses.">Systems</th><th></th>
+        </tr></thead>
+        <tbody>${c.classes.map((x, i) => {
+          const over = x.levelsOverride == null ? null : Number(x.levelsOverride);
+          // What the box goes back to when cleared: the Planner's rows, or
+          // every level when the Planner never names the class.
+          const planned = plannedLevels(model, x.name, level).filter(Boolean).length;
+          const auto = planned || level;
+          const from = planned
+            ? `the Planner lists it on ${planned} of ${level} level${level === 1 ? '' : 's'}`
+            : `the Planner does not list it, so it counts every level (${level})`;
+          // Levels a prestige class adds as an aligned class, which count for
+          // class features and not here.
+          const aligned = aligns.filter((s) => s.class === x.name && s.level <= level);
+          const from2 = [...new Set(aligned.map((s) => s.prestige))];
+          const extra = aligned.length
+            ? ` ${from2.join(' and ')} add${from2.length === 1 ? 's' : ''} ${aligned.length} aligned level${aligned.length === 1 ? '' : 's'} for class features.`
+            : '';
+          const why = over == null
+            ? `${from[0].toUpperCase()}${from.slice(1)}. Type a number to override it.${extra}`
+            : `Set to ${over}. If cleared, ${from}.${extra}`;
+          return `<tr>
+          <td data-stack="name">${itemText('classes', i, 'name', x.name)}</td>
+          <td class="num" data-label="Levels" data-inline="spec">${autoNum(`data-item="classes|${i}|levelsOverride"`, over, {
+    auto: true, placeholder: auto, title: why, label: `Levels of ${x.name || 'this class'}`,
+  })}</td>
+          <td class="num" data-label="Hit die" data-inline="spec">${progressionSelect(i, 'hd', x.hd,
+    HIT_DICE.map((d) => [d, `d${d}`]), `Hit die for ${x.name || 'this class'}`, (d) => `d${d}`,
+    { count: x.gestaltBeaten?.hd, levels: x.gestaltBeaten?.levels, noun: 'hit die' })}</td>
+          ${/* The progression, not a bonus: what the class adds to BAB per level.
+              Kept as the fraction the rules state it in, because that is what
+              the gestalt sum adds up and floors. */ ''}
+          <td data-label="BAB" data-inline="spec">${progressionSelect(i, 'bab', x.bab, BAB_RATES,
+    `BAB progression for ${x.name || 'this class'}`, String,
+    { count: x.gestaltBeaten?.bab, levels: x.gestaltBeaten?.levels, noun: 'progression' })}</td>
+          <td class="mid" data-label="Good Fort" data-inline="save">${itemCheck('classes', i, 'goodFort', x.goodFort)}</td>
+          <td class="mid" data-label="Good Ref" data-inline="save">${itemCheck('classes', i, 'goodRef', x.goodRef)}</td>
+          <td class="mid" data-label="Good Will" data-inline="save">${itemCheck('classes', i, 'goodWill', x.goodWill)}</td>
+          ${/* Ranks is the fourth of the four numbers a class advances at, and
+                sits after the saves only because that is the column order. The
+                card puts it back with the other three; see `data-inline` in the
+                stylesheet, which groups by `order` rather than by markup so the
+                table's columns are left alone. */''}
+          <td class="num" data-label="Ranks" data-inline="spec">${itemNum('classes', i, 'skillRanks', x.skillRanks)}</td>
+          <td data-label="Archetypes">${(Array.isArray(x.archetypeStack) && x.archetypeStack.length) ? `<span class="pills">${x.archetypeStack.map((a) => `
+            <span class="pill" title="${esc(`${a.name}: an archetype from an extension pack.${a.removedCells?.length ? ` Replaced ${[...new Set(a.removedCells.map((r) => r.name))].join(', ')}.` : ''}${a.touches?.length ? ` Changes: ${a.touches.join(', ')}.` : ''} × removes it and restores the class's features.`)}">
+              ${esc(a.name)}${removeAction('arch-remove', { class: x.name, name: a.name }, { what: a.name })}
+            </span>`).join('')}</span>` : ''}${itemText('classes', i, 'archetypes', x.archetypes)}</td>
+          <td class="mid" data-label="Systems">${sysButton(x, i)}</td>
+          ${rowTools('classes', i)}
+        </tr>${sysPicker(x, i)}`;
+        }).join('')}</tbody>
+      </table></div>
+      <div style="margin-top:8px">${addButton('classes', 'Add class', blankClassRow())}</div>
+      <div class="fieldgrid" style="margin-top:8px">
+        <div class="statline"><span class="label">Save bases${gestalt ? ' (gestalt)' : ''}</span>
+          <span class="value">Fort ${sv('fortitude').base ?? 0} &middot;
+            Ref ${sv('reflex').base ?? 0} &middot; Will ${sv('will').base ?? 0}</span></div>
+        <div class="statline"><span class="label">Base attack bonus${gestalt ? ' (gestalt)' : ''}</span>
+          <span class="value" title="${esc(`${g.babPerLevel ?? 0} per level, ${core ? 'each class rounded down separately' : 'summed and rounded down once'}${
+    c.attack?.babOverride == null ? '' : `. Set to ${c.attack.babOverride} in the Attack panel on the Stats tab`}.`)}"
+            >+${esc(g.bab ?? 0)}${c.attack?.babOverride == null ? '' : ` <span class="badge">pinned +${esc(c.attack.babOverride)}</span>`}</span></div>
+        <div class="statline"><span class="label">HP / level${gestalt ? ' (best HD)' : ''}</span>
+          <span class="value">d${g.hpPerLevel || 0}</span></div>
+        <div class="statline"><span class="label">Hit points from these classes</span>
+          <span class="value" title="${esc(`${g.hdTotal ?? 0} from hit dice over ${level} level${level === 1 ? '' : 's'}, before Con, favored class, Toughness and mythic tiers.`)}"
+            >${g.hdTotal ?? 0} &rarr; ${g.hp?.base ?? 0} total</span></div>
+        ${core ? `<div class="statline"><span class="label">Skill ranks from classes</span>
+          <span class="value" title="Each class's ranks per level, times its levels.">${g.ranksTotal || 0}</span></div>`
+    : `<div class="statline"><span class="label">Skill ranks / level${gestalt ? ' (best)' : ''}</span>
+          <span class="value">${g.ranksPerLevel || 0}</span></div>`}
+      </div>
+      <p class="hint">
+        ${gestalt ? `Gestalt: each level uses the best progression among the classes at that level,
+        from the Planner. Good saves give +2 once plus &frac12; per level. Poor saves give &#8531; per level.`
+    : core ? `One class per level, from the Planner's first track. Each class's good saves give +2 plus
+        &frac12; per level and poor saves &#8531; per level, and each class's base attack bonus is rounded
+        down separately.${idle.length ? ` <strong>${esc(idle.join(', '))}</strong>
+        ${idle.length === 1 ? 'has' : 'have'} no levels: add ${idle.length === 1 ? 'it' : 'them'} to the Planner's first track, or type a level count here.` : ''}`
+      : `Good saves give +2 once plus &frac12; per level. Poor saves give &#8531; per level.`}
+        The Saves, Attack and Hit points panels on the Stats tab use these bases.${gestalt
+    ? ` A hit die or progression that another class already beats has no effect; hover over it
+        to see why.` : ''}
+      </p>
+    </section>`;
+  }
+
+function traitsPanel(model, ctx) {
+    const c = model.data;
+    const slots = c.traitSlots || {};
+    const categories = [...TRAIT_CATEGORIES, ...(c.traitCategories || [])];
+    const filled = (key) => !!(slots[key]?.name || slots[key]?.text || slots[key]?.category);
+
+    const standard = ['trait1', 'trait2', 'trait3'];
+    const picked = standard.filter(filled).length;
+    const row = (def) => {
+      const v = slots[def.key] || {};
+      const locked = def.requires && !filled(def.requires);
+      const isDrawback = def.kind !== 'trait';
+      // The three standard picks are owed; an empty one says so.
+      const owed = standard.includes(def.key) && !filled(def.key);
+      const wants = locked ? `Take ${TRAIT_SLOTS.find((s) => s.key === def.requires)?.label} first`
+        : owed ? 'Pick a trait' : '';
+      return `<tr class="${locked ? 'lockedslot' : ''}${owed ? ' needsfill' : ''}"${owed ? ' title="Empty trait slot."' : ''}>
+        <td data-stack="head">${esc(def.label)}${def.requires ? `<div class="hint">needs ${esc(TRAIT_SLOTS.find((s) => s.key === def.requires)?.label)}</div>` : ''}</td>
+        <td data-label="Category">${isDrawback ? '<span class="hint">—</span>'
+          : select(`traitSlots.${def.key}.category`, v.category, categories)}</td>
+        <td data-stack="name">${text(`traitSlots.${def.key}.name`, v.name, wants || (isDrawback ? 'Drawback' : 'Trait'))}</td>
+        <td data-label="Trait / effect">${foldingNote(model, `data-set="traitSlots.${def.key}.text"`, v.text,
+    `traitSlots.${def.key}.text`, { name: v.name })}</td>
+      </tr>`;
+    };
+
+    const race = c.raceTraits || [];
+    // Two panels side by side in a band, each folding on its own, rather
+    // than two lists inside one panel.
+    const traitsHtml = `<section class="panel traitspanel" data-home="traits">
+      <h3>Traits &amp; drawbacks
+        <span class="badge${picked < standard.length ? ' err' : ' ok'}">${picked} of ${standard.length} picked</span>
+      </h3>
+          <div class="tablewrap squeeze"><table class="traits stacked">
+            <colgroup><col class="slot"><col class="cat"><col class="tname"><col class="effect"></colgroup>
+            <thead><tr><th>Slot</th><th>Category</th><th>Name</th><th>Trait / effect</th></tr></thead>
+            <tbody>
+              ${TRAIT_SLOTS.filter((s) => s.kind !== 'feat').map(row).join('')}
+              ${(slots.additional || []).map((x, i) => `<tr>
+                <td data-stack="head">Additional</td>
+                <td data-label="Category">${itemSelect('traitSlots.additional', i, 'category', x.category, categories)}</td>
+                <td data-stack="name">${itemText('traitSlots.additional', i, 'name', x.name, 'Trait')}</td>
+                <td data-label="Trait / effect"><div class="pair" style="flex-wrap:nowrap;align-items:flex-start">
+                  <div style="flex:1 1 auto;min-width:0">${foldingNote(model, `data-item="traitSlots.additional|${i}|text"`, x.text,
+    `traitSlots.additional|${i}|text`, { name: x.name })}</div>
+                  ${removeButton('traitSlots.additional', i, { what: 'trait slot' })}
+                </div></td>
+              </tr>`).join('')}
+            </tbody>
+          </table></div>
+          <div style="margin-top:8px" class="pair">
+            ${addButton('traitSlots.additional', 'Add additional trait', { category: null, name: '', text: '' })}
+            <input data-draft="traitCategory" placeholder="New category (e.g. Akashic)"
+              value="${esc(ctx.draft?.traitCategory || '')}" style="width:14rem;max-width:100%">
+            <button data-action="add-trait-category">Add category</button>
+          </div>
+          <p class="hint">
+            Traits 1–3 are the standard picks. Drawback 1 unlocks Trait 4. Drawback 2 unlocks
+            Trait 5. A Major Drawback gives a Drawback Feat, listed under <strong>Granted feats</strong>
+            on the Feats &amp; Mythic tab. You can add categories to the standard list.
+          </p>
+    </section>`;
+    const raceHtml = `<section class="panel racepanel" data-home="race-traits">
+      <h3>Race traits
+        <span class="badge">${race.filter((t) => String(t.name || '').trim() || String(t.text || '').trim()).length}${race.some((t) => !String(t.name || '').trim() && !String(t.text || '').trim()) ? ` of ${race.length}` : ''}</span>
+        ${c.identity.race ? `<span class="hint">${esc(c.identity.race)}${c.identity.variant ? ` (${esc(c.identity.variant)})` : ''}</span>` : ''}
+      </h3>
+          <div class="tablewrap"><table class="racetraits stacked">
+            <thead><tr><th>Trait</th><th>Effect</th><th></th></tr></thead>
+            <tbody>${race.map((t, i) => `<tr${String(t.name || '').trim() || String(t.text || '').trim() ? '' : ' class="needsfill" title="Empty race trait slot."'}>
+              <td data-stack="name">${itemText('raceTraits', i, 'name', t.name, 'Darkvision')}${Array.isArray(t.replaced) && t.replaced.length
+    ? ` <span class="badge player" title="${esc(`Alternate racial trait that replaced ${t.replaced.map((r) => r.name).join(' and ')}. Removing it does not restore them; add them again from the race's pack.`)}">alt</span>` : ''}</td>
+              <td data-label="Effect">${foldingNote(model, `data-item="raceTraits|${i}|text"`, t.text, `raceTraits|${i}|text`, { name: t.name })}</td>
+              ${rowRemove('raceTraits', i, { what: 'race trait' })}
+            </tr>`).join('')}
+            ${race.length ? '' : '<tr><td colspan="3" class="empty">No race traits yet.</td></tr>'}
+            </tbody>
+          </table></div>
+          <div style="margin-top:8px">${addButton('raceTraits', 'Add race trait', { name: '', text: '' })}</div>
+          <p class="hint">Traits the race grants. Add alternate racial traits here in place of the
+            traits they replace.</p>
+    </section>`;
+    return `<div class="band lead">
+      ${collapsible(model, 'traits', traitsHtml)}
+      ${collapsible(model, 'race-traits', raceHtml)}
+    </div>`;
   }

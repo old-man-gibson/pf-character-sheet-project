@@ -108,7 +108,7 @@ function grantedFeatsSection(model, ctx) {
       <p class="hint">
         ${hasMajor
           ? 'A Major Drawback gives the Drawback feat.'
-          : 'The Drawback row appears once a Major Drawback is taken on the Overview.'}
+          : 'The Drawback row appears once a Major Drawback is taken on the Background tab.'}
         ${specialty ? 'The Specialty feat is mandatory, so it is always here.'
     : 'No Specialty feat: background skills are in use.'} Oath and
         Attunement feats name their own source.

@@ -14,7 +14,7 @@
  */
 
 /** The build bar a monster opens on: the block first, then what a GM reaches for. */
-export const MONSTER_TAB_ORDER = ['statblock', 'overview', 'skills', 'features', 'gear', 'trackers', 'lore'];
+export const MONSTER_TAB_ORDER = ['statblock', 'overview', 'stats', 'skills', 'features', 'gear', 'trackers', 'lore'];
 
 /** The monster block's fields, every one present and a string where it is prose. */
 export function normalizeMonster(raw) {

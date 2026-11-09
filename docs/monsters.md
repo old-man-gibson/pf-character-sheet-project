@@ -33,7 +33,7 @@ What the reader takes, and where it goes:
 | AC n, touch n, flat-footed n (+4 deflection, +10 Dex, +8 natural, –1 size …) | the typed **AC bonus columns** on the Stats tab — deflection, dodge, natural, insight, luck, sacred, profane, circumstance; *armor* and *shield* become worn pieces on Equipment; Dex and size are worked out, not copied |
 | hp n (35d10+525); regeneration … | hit points, with Con behind them; the hit dice become a **class row** (*Outsider*, d10, ranks per HD by type); `monster.healing` |
 | Fort, Ref, Will; +8 vs. … | each save's total, and the class row's good-save flags chosen to explain it; the note on the block |
-| Defensive Abilities; DR; Immune; Resist; SR; Weaknesses | `monster.defensiveAbilities`; the five **defence boxes** on the Overview, which parse as they always have (`dr.good`, `resistance.acid`, `immune.cold` are readable and forwardable) |
+| Defensive Abilities; DR; Immune; Resist; SR; Weaknesses | `monster.defensiveAbilities`; the five **defence boxes** on the Stats tab, which parse as they always have (`dr.good`, `resistance.acid`, `immune.cold` are readable and forwardable) |
 | Speed | the movement rows; a fly speed keeps its manoeuvrability in its type (*Fly (perfect)*) |
 | Melee, Ranged | one **weapon row** per attack. *2 slams +47 (8d6+13)* is a row named Slam with a count of 2; *+5 … longsword +53/+48/+43/+38 (2d6+24/17–20 plus 1d6 cold)* is a row with enhancement 5, a crit range of 4, four iteratives, and the rider written as `[[1d6]] cold` in its properties so it rides the roll. The *or* groups are kept, so the block prints them back as written |
 | Space, Reach, Special Attacks | the block |
@@ -44,7 +44,7 @@ What the reader takes, and where it goes:
 | Skills; Racial Modifiers | ranks on the standard rows — as many as explain the number, never more than the hit dice, as a class skill; *Knowledge (arcana, history)* fans out to its rows; an unlisted skill shows its ability modifier alone. Racial modifiers stay on the block |
 | Languages; telepathy … | the language list; the part after the semicolon on the block |
 | SQ, Gear, Environment, Organization, Treasure, Tactics | the block |
-| Special Abilities | the **race-trait rows** on the Overview, one per ability with its (Ex/Su/Sp) kept in the name — because that is what they are, and because those rows are prose: a DC written as `{= 10 + con.mod + floor(level / 2)}` follows the score |
+| Special Abilities | the **race-trait rows** on the Background tab, one per ability with its (Ex/Su/Sp) kept in the name — because that is what they are, and because those rows are prose: a DC written as `{= 10 + con.mod + floor(level / 2)}` follows the score |
 | Description | the block |
 
 Anything else is **kept, not dropped**: a line the reader could not place waits in a
@@ -76,8 +76,8 @@ built like a character who has it like anyone else.
 
 ## The Stat Block tab
 
-A monster opens on it; its bar runs **Stat Block, Overview, Skills, Feats & Mythic,
-Equipment, Trackers, Lore** plus every sub-system in use, in both views. The tab is the
+A monster opens on it; its bar runs **Stat Block, Overview, Stats, Skills, Feats & Mythic,
+Equipment, Trackers, Background** plus every sub-system in use, in both views. The tab is the
 creature as a Bestiary prints it — name and CR, XP, the alignment line, Defense, Offense,
 Statistics, Ecology, Special Abilities, Description — with **every figure the model's own,
 worked out now**. A condition ticked on the Overview or a buff on the dashboard replaces
@@ -92,7 +92,7 @@ Under the block:
   pips, the psionic pool, the Spheres casting numbers and talents, veils shaped, readied
   maneuvers. They spend from the one pool the tab holds. This is how a monster is *given*
   a sub-system: switch its tab on in the ⚙ manager (or mark the system on the class row's
-  *Systems* toggles on the Overview), fill the tab in as you would for a character, and the
+  *Systems* toggles on the Classes table), fill the tab in as you would for a character, and the
   block carries it from then on.
 - **Monster fields** — the block's own lines, to edit: CR, XP, source, type and subtypes,
   hit die, space and reach, the notes, and the prose fields (senses, aura, regeneration,
@@ -120,7 +120,7 @@ the character had it; **Remove the block** takes them off again and touches noth
 
 - **Class levels on an NPC block** (*Female human rogue 3*): the line is kept on the block
   as `classLine`, but the classes are not put on the class table — the hit dice row is the
-  one built. An NPC's own classes want typing on the Overview for now.
+  one built. An NPC's own classes want typing on the Progression tab's Classes table for now.
 - **Spells** are kept as the lines they were pasted, not read into the Vancian tab. A
   caster monster the GM wants slots for is a Vancian tab switched on and filled in by hand.
 - **Gear** is a line on the block, not rows on Equipment (armor and shield from the AC

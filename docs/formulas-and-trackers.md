@@ -60,9 +60,9 @@ is inside (a folded panel, a gear row's card, a tracker's editor, a companion's 
 rows hidden until *Show all*), highlights the field and focuses it. Rows in **Needs
 attention** and **Forwarded bonuses** have the same button. It uses the search palette's
 jump, given the field's selector and its text; the place-to-jump mapping is in
-`app/js/ui/formula-places.js`. Fields on the Overview's full page (traits, defence boxes)
-are not on the session dashboard, so from the session view the button switches to the
-Build view first.
+`app/js/ui/formula-places.js`. Fields on the Overview's full page (the character's
+details) are not on the session dashboard, so from the session view the button switches
+to the Build view first.
 
 **Values you can read** — the index. Every name the character publishes, grouped into
 families, each with what it is worth right now, and clicking one puts it in the

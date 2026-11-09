@@ -26,6 +26,12 @@
  *   buildView  the field is on the Overview's full page, which the session
  *              view replaces with its dashboard
  *
+ * The Overview is read-only but for the character's details, conditions and
+ * buffs: every other field it used to hold is on the tab it belongs to now
+ * (Stats, Progression, Background, Equipment), and the places below go there.
+ * Its read-only panels each have an Edit button, which is the jump `home:<key>`
+ * to the panel marked `data-home="<key>"` (HOMES).
+ *
  * The lines of a number's breakdown panel use the same places for the field
  * each line comes from (`ability:dex`, `classes:0:goodFort`, `condition:shaken`),
  * and the same jump.
@@ -83,12 +89,46 @@ function overviewPlace(sel, keys = []) {
   return { tab: 'overview', buildView: true, sel, ...folded(keys) };
 }
 
-/** The Overview's plain fields a breakdown line can come from, and the folds each is in. */
-const OVERVIEW_FIELDS = {
-  'identity.size': [],
-  'attack.babOverride': ['sg-offenses'],
-  'attack.miscBonus': ['sg-offenses'],
-  'hp.initMisc': ['sg-defenses'],
+/** The Stats tab's three groups, as the folds they are (rows.supergroup). */
+const STATS_ABILITIES = 'sg-stats-abilities';
+const STATS_DEFENSES = 'sg-stats-defenses';
+const STATS_OFFENSES = 'sg-stats-offenses';
+
+/** A field on the Stats tab, inside whatever folds it sits in there. */
+function statsPlace(sel, keys = []) {
+  return { tab: 'stats', sel, ...folded(keys) };
+}
+
+/**
+ * The plain fields a breakdown line can come from (`overview:<path>`, the name
+ * they had when the Overview held them all), and where each is now: its tab
+ * and the folds it is in.
+ */
+const FIELD_PLACES = {
+  'identity.size': ['overview', []],
+  'attack.babOverride': ['stats', [STATS_OFFENSES]],
+  'attack.miscBonus': ['stats', [STATS_OFFENSES]],
+  'hp.initMisc': ['stats', [STATS_DEFENSES]],
+};
+
+/**
+ * Where each of the Overview's read-only panels is edited: the tab, and the
+ * folds the panel sits in there. The panel itself carries `data-home="<key>"`.
+ */
+export const HOMES = {
+  abilities: { tab: 'stats', folds: [STATS_ABILITIES] },
+  hp: { tab: 'stats', folds: [STATS_DEFENSES] },
+  ac: { tab: 'stats', folds: [STATS_DEFENSES] },
+  saves: { tab: 'stats', folds: [STATS_DEFENSES] },
+  attack: { tab: 'stats', folds: [STATS_OFFENSES] },
+  speed: { tab: 'stats', folds: [STATS_OFFENSES] },
+  classes: { tab: 'progression', folds: [] },
+  proficiencies: { tab: 'gear', folds: [] },
+  carry: { tab: 'gear', folds: [] },
+  traits: { tab: 'lore', folds: ['traits'] },
+  'race-traits': { tab: 'lore', folds: ['race-traits'] },
+  specialty: { tab: 'lore', folds: [] },
+  languages: { tab: 'lore', folds: ['languages'] },
 };
 
 /** A field of the card caster's deck, which is the tab's second view. */
@@ -218,13 +258,14 @@ function placeOf(model, ref) {
     }
     case 'approvalNotes': return { tab: 'extras', sel: [set('extras.approvalNotes')] };
     case 'background': return { tab: 'lore', sel: [item('backgroundSections', a, 'text')] };
-    case 'defenses': return overviewPlace([set(`defenses.${a}`)], ['sg-defenses']);
+    case 'defenses': return statsPlace([set(`defenses.${a}`)], [STATS_DEFENSES]);
     // A trait's effect is a note that may be folded, in a panel that may be.
     case 'trait':
       return a === 'additional'
-        ? overviewPlace([item('traitSlots.additional', b, 'text')], ['traits', `tnote:traitSlots.additional|${b}|text`])
-        : overviewPlace([set(`traitSlots.${a}.text`)], ['traits', `tnote:traitSlots.${a}.text`]);
-    case 'raceTrait': return overviewPlace([item('raceTraits', a, 'text')], ['race-traits', `tnote:raceTraits|${a}|text`]);
+        ? { tab: 'lore', sel: [item('traitSlots.additional', b, 'text')], ...folded(['traits', `tnote:traitSlots.additional|${b}|text`]) }
+        : { tab: 'lore', sel: [set(`traitSlots.${a}.text`)], ...folded(['traits', `tnote:traitSlots.${a}.text`]) };
+    case 'raceTrait':
+      return { tab: 'lore', sel: [item('raceTraits', a, 'text')], ...folded(['race-traits', `tnote:raceTraits|${a}|text`]) };
     // A buff's note is in its editor, on the Overview's Buffs panel -- and on
     // the session dashboard's Buffs card, so this one needs no Build view.
     // `buff:<i>` is its note; `buff:<i>:<field>` one of its dials or bonuses.
@@ -399,18 +440,19 @@ function placeOf(model, ref) {
     case 'skillMisc': return skillPlace(a, 'offset');
     case 'skillBudget': return { tab: 'skills', sel: [set('skillBudget.bonusPerLevel')] };
     case 'weaponMisc': return weaponPlace(model, a, 'miscDamage');
-    // The Other columns, the hit-point parts and the language slots are all on
-    // the Overview's full page, beside the totals they belong to, in the
-    // defence or offence group -- the hit-point parts in a fold of their own.
+    // The Other columns and the hit-point parts are on the Stats tab, beside
+    // the totals they belong to, in the defense or offense group -- the
+    // hit-point parts in a fold of their own. The language slots are on
+    // Background.
     case 'offset': {
-      const keys = a === 'hp.total' ? ['sg-defenses', 'hp:build']
-        : a.startsWith('attack.') ? ['sg-offenses'] : ['sg-defenses'];
-      return overviewPlace([attr('data-offset', a)], keys);
+      const keys = a === 'hp.total' ? [STATS_DEFENSES, 'hp:build']
+        : a.startsWith('attack.') ? [STATS_OFFENSES] : [STATS_DEFENSES];
+      return statsPlace([attr('data-offset', a)], keys);
     }
     case 'hp':
-      return overviewPlace([set(`hp.${a}`)], a === 'deathBonus' ? ['sg-defenses'] : ['sg-defenses', 'hp:build']);
-    case 'speed': return overviewPlace([item('identity.speeds', a, 'bonus')], ['sg-offenses']);
-    case 'languages': return overviewPlace([set('identity.languageExtra')], ['languages']);
+      return statsPlace([set(`hp.${a}`)], a === 'deathBonus' ? [STATS_DEFENSES] : [STATS_DEFENSES, 'hp:build']);
+    case 'speed': return statsPlace([item('identity.speeds', a, 'bonus')], [STATS_OFFENSES]);
+    case 'languages': return { tab: 'lore', sel: [set('identity.languageExtra')], ...folded(['languages']) };
     case 'sphereCell':
       if (a === 'guile') {
         return { tab: 'guile', sel: [item('training.guile.spheres', b, c)], ...folded(['guile-spheres']) };
@@ -439,16 +481,25 @@ function placeOf(model, ref) {
     case 'trackerForm': return trackerPlace(a, b, c, parts[4]);
 
     /* ---------------- fields a breakdown line comes from ---------------- */
-    case 'overview': return OVERVIEW_FIELDS[a] ? overviewPlace([set(a)], OVERVIEW_FIELDS[a]) : null;
-    // An ability's row: its score box, or the worked-out score when the Stats
-    // tab builds it.
-    case 'ability': return overviewPlace([set(`abilities.${a}.score`), attr('data-bd', a)]);
-    case 'drain': return overviewPlace([set(`abilities.${a}.drain`)], ['ability-harm']);
+    case 'overview': {
+      const at = FIELD_PLACES[a];
+      if (!at) return null;
+      return at[0] === 'overview' ? overviewPlace([set(a)], at[1]) : statsPlace([set(a)], at[1]);
+    }
+    // An ability's row on the Stats tab: its score box, or the worked-out
+    // score when the point-buy table builds it.
+    case 'ability': return statsPlace([set(`abilities.${a}.score`), attr('data-bd', a)], [STATS_ABILITIES]);
+    case 'drain': return statsPlace([set(`abilities.${a}.drain`)], [STATS_ABILITIES, 'ability-harm']);
     // The Mythic panel's tier and bonus hit points on Feats & Mythic.
     case 'mythicField': return { tab: 'features', sel: [set(`mythic.${a}`)], ...folded(['mythic']) };
-    case 'classes': return overviewPlace([item('classes', a, b)]);
+    case 'classes': return { tab: 'progression', sel: [item('classes', a, b)] };
     case 'armor': return { tab: 'gear', sel: [set('equipment.armor.acBonus')] };
     case 'shield': return { tab: 'gear', sel: [set(`equipment.shields.${a}.acBonus`)] };
+    // A read-only Overview panel's Edit button: the panel on its own tab.
+    case 'home': {
+      const h = HOMES[a];
+      return h ? { tab: h.tab, sel: [attr('data-home', a)], ...folded(h.folds) } : null;
+    }
     // A ticked condition: its box on the Overview, or its chip on the session
     // dashboard.
     case 'condition':

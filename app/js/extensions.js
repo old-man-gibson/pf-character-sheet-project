@@ -86,9 +86,9 @@ export const TABLE_KINDS = TABLES.map((t) => t.kind);
 
 /** What each block kind is called on a picker, and what it lands on the sheet as. */
 export const BLOCK_KINDS = {
-  class: { label: 'Class', lands: 'Classes table (Overview) and its feature column (Progression)' },
-  race: { label: 'Race', lands: 'Race, size and race traits (Overview); racial ability modifiers (Stats)' },
-  trait: { label: 'Race trait', lands: 'Race traits (Overview)' },
+  class: { label: 'Class', lands: 'Classes table and its feature column (Progression)' },
+  race: { label: 'Race', lands: 'Race and size (Overview); race traits (Background); racial ability modifiers (Stats)' },
+  trait: { label: 'Race trait', lands: 'Race traits (Background)' },
   feature: { label: 'Feature', lands: 'A feature in a template group (Template tab)' },
   template: { label: 'Feature group', lands: 'A template with its features (Template tab)' },
   tracker: { label: 'Tracker', lands: 'Trackers tab' },

@@ -158,7 +158,7 @@ export function altTrainingPrereq(model, technique) {
 
   if (key === 'bab') {
     const best = Math.max(0, ...(c.classes || []).filter((x) => x.name).map((x) => Number(x.bab) || 0));
-    if (!best) return unknown('No class on the Overview names a BAB progression.');
+    if (!best) return unknown('No class on the Classes table names a BAB progression.');
     const label = best >= 1 ? 'full' : `${Math.round(best * 4)}/4`;
     return best >= 0.75 ? met(`Best BAB progression is ${label}.`)
       : unmet(`Best BAB progression is ${label}.`);
@@ -184,8 +184,8 @@ export function altTrainingPrereq(model, technique) {
     const armor = p.armor || [];
     if (!armor.length) {
       return /armor/i.test(p.notes || '')
-        ? unknown(`Armor proficiency on the Overview is only a note: ${p.notes}`)
-        : unknown('Armor proficiency is blank on the Overview.');
+        ? unknown(`Armor proficiency is only a note: ${p.notes}`)
+        : unknown('Armor proficiency is blank on the Equipment tab.');
     }
     const label = `${armor.join(', ')} armor`;
     return armor.some((a) => /^(?:medium|heavy)$/i.test(a)) ? met(label) : unmet(label);

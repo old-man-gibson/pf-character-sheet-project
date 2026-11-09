@@ -28,13 +28,13 @@ import {
   CRAFT_TIME_BASES, GEAR_BONUS_TYPES, GEAR_BONUS_TYPE_SHORT, MONK_UNARMED_LADDER, SIZE_MODIFIERS,
   TALENTED_KNUCKLE_TALENTS, UNARMED_SPHERES, WEAPON_ATTACK_TYPES, WEAPON_CRIT_MULTS,
   WEAPON_FAMILIARITY, WEAPON_GROUPS, WEAPON_HANDEDNESS, attackModeAbility, diceString, fmt, ARMOR_TYPES,
-  COIN_KINDS, LOAD_PENALTIES, quantityOf,
+  COIN_KINDS, LOAD_PENALTIES, quantityOf, ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES,
 } from '../../rules.js';
 import { WEAPON_MODE_KEYS } from '../../roll20.js';
-import { check, field, num, autoNum, select, text } from '../fields.js';
+import { area, check, field, num, autoNum, select, text } from '../fields.js';
 import {
-  addButton, addManyButton, bigStat, collapsibleSub, editLine, exprField, itemBox, itemCheck, itemExpr,
-  itemNum, itemSelect, itemText, line, lineHtml, movedValue, removeAction, removeButton, rowRemove,
+  addButton, addManyButton, bigStat, collapsible, collapsibleSub, editLine, exprField, itemBox, itemCheck, itemExpr,
+  foldButton, itemNum, itemSelect, itemText, line, lineHtml, movedValue, removeAction, removeButton, rowRemove,
 } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
 import { currencyName } from '../../model/campaign.js';
@@ -50,16 +50,22 @@ export function renderGearPanel(model, ctx) {
     // Each section takes the width it needs and no more, and sits beside
     // the next one where the sheet is wide enough (see `.flow`). A page-wide
     // panel holding a two-row table was empty to the right of it.
+    //
+    // Proficiencies, carrying capacity and wealth were edited on the Overview
+    // until it became read-only; they sit here beside the gear they govern.
     return `<div class="grid">
       ${weaponsPanel(model, e)}
       <div class="flow span2">
         ${armorPanel(e)}
         ${loadPanel(model, e)}
+        ${carryPanel(model)}
       </div>
+      <div class="band">${proficienciesPanel(model)}</div>
       <div class="flow span2">
         ${gearSlotsPanel(model, ctx, e)}
         ${otherItemsPanel(model, ctx, e)}
       </div>
+      ${collapsible(model, 'wealth', wealthPanel(model, ctx))}
     </div>`;
   }
 
@@ -324,10 +330,10 @@ export function weaponsPanel(model, e) {
           <span class="wsep"></span>
           ${field('As', `<input type="text" value="${esc(w.baseWeapon ?? '')}" data-item="equipment.weapons|${i}|baseWeapon"
             data-kind="text" placeholder="katana" style="width:6.5rem"
-            title="The base weapon, such as katana for a named katana. Checked against the Overview's specific weapon proficiencies.">`)}
+            title="The base weapon, such as katana for a named katana. Checked against the specific weapons under Proficiencies.">`)}
           ${field('Proficient', itemSelect('equipment.weapons', i, 'proficiency', w.proficiency, [['yes', 'Yes'], ['no', 'No']],
     `Auto${w.proficient === true ? ' ✓' : w.proficient === false ? ' ✗' : ''}`, null, {
-      attrs: `title="${esc(w.proficiencyWhy || 'Auto checks this weapon against the Overview\'s proficiencies and the [Enhanced] veil rule.')}"`,
+      attrs: `title="${esc(w.proficiencyWhy || 'Auto checks this weapon against Proficiencies and the [Enhanced] veil rule.')}"`,
     }))}
           ${w.proficient === false ? field('−4 to hit', `<span title="Untick if Misc already includes the −4.">${itemBox('equipment.weapons', i, 'nonproficiencyPenalty', w.nonproficiencyPenalty !== false)}</span>`) : ''}
           ${w.proficiency ? field('Via', `<input type="text" value="${esc(w.proficiencyNote ?? '')}" data-item="equipment.weapons|${i}|proficiencyNote"
@@ -841,7 +847,7 @@ export function loadLine(c) {
     const what = `max Dex +${p.maxDex}, check penalty ${minus(p.acp)}, reduced land speed, run ×${p.run}`;
     return `${line('Load', `${name}${off ? ' (penalties off)' : ''}`)}
       <p class="hint${off ? '' : ' warn'}">${off
-    ? `A ${name.toLowerCase()} load would give ${what}. Load penalties are turned off in the Overview's Carrying capacity panel.`
+    ? `A ${name.toLowerCase()} load would give ${what}. Load penalties are turned off in the Carrying capacity panel.`
     : `${what}. Armor's own values apply where they are worse.${p.note ? ` ${p.note}` : ''}`}</p>`;
   }
 
@@ -1105,7 +1111,7 @@ function craftPost(ctx, id, label, text, rows) {
   /* ----- wealth: what the character owns and what it came to ----- */
 
   /**
-   * The wallet on the Overview: current mana, the offering owed under the Oath
+   * The wallet: current mana, the offering owed under the Oath
    * of Offerings and for material casting (the workbook's own sums), what is
    * left after it, and the ledger every reward, spend and offering is written
    * to. "Record" is the hook a session-reward automation will call; "Make
@@ -1125,7 +1131,7 @@ function craftPost(ctx, id, label, text, rows) {
 export function wealthPanel(model, ctx) {
     const v = model.wealthView();
     const n = (x) => Number(x || 0).toLocaleString('en-US');
-    const draft = { amount: ctx.draft.wealthAmount ?? '', label: ctx.draft.wealthLabel ?? '', kind: ctx.draft.wealthKind || 'session' };
+    const draft = { amount: ctx.draft?.wealthAmount ?? '', label: ctx.draft?.wealthLabel ?? '', kind: ctx.draft?.wealthKind || 'session' };
     const ledger = [...v.ledger].map((l, i) => ({ ...l, i })).reverse();
     const kindLabel = { session: 'session', reward: 'reward', spend: 'spend', offering: 'offering', adjust: 'adjustment' };
     const plural = (k, word) => `${k} ${word}${k === 1 ? '' : 's'}`;
@@ -1218,5 +1224,113 @@ export function wealthPanel(model, ctx) {
           <td class="tools">${removeAction('wealth-remove', { index: l.i }, { what: 'this line', title: 'Remove this line and undo its change.' })}</td>
         </tr>`).join('')}</tbody>
       </table>${ledger.length > 12 ? `<p class="hint">${ledger.length - 12} older line${ledger.length - 12 === 1 ? ' is' : 's are'} not shown.</p>` : ''}</div>` : ''}
+    </section>`;
+  }
+
+/* ---------------- proficiencies and carrying capacity ---------------- */
+
+  /**
+   * Weapon and armor proficiencies, as the lists a class hands them out in.
+   *
+   * The weapon side is the same four terms the Gear weapon rows carry --
+   * familiarity, handedness, weapon group, and the weapon itself -- so a row
+   * there can be read against this and say when it is not covered. Armor is
+   * its weights and shields their kinds; the chips are toggles, and specific
+   * weapons are typed in like languages.
+   */
+function proficienciesPanel(model) {
+    const p = model.data.identity.proficiencies || {};
+    const chips = (list, options, title = '') => `<div class="chips" role="group"${title ? ` aria-label="${esc(title)}"` : ''}>
+      ${options.map((o) => `<button class="chip-toggle" data-action="prof-toggle" data-list="${list}"
+        data-value="${esc(o)}" aria-pressed="${(p[list] || []).includes(o)}">${esc(o)}</button>`).join('')}
+    </div>`;
+    const row = (label, body, hint = '') => `<div class="profrow">
+      <span class="tlabel"${hint ? ` title="${esc(hint)}"` : ''}>${esc(label)}</span>${body}</div>`;
+    const weapons = p.weapons || [];
+    const named = weapons.filter((w) => String(w).trim());
+    // The named weapons are a list a race or a class hands over once and then
+    // nobody edits again, and it is the longest thing in the panel. Folded
+    // away it is a sentence; opened it is the fields it was.
+    const wkey = 'prof-weapons';
+    const wshut = !!model.data.uiPrefs?.collapsed?.[wkey];
+    const summary = [
+      ...(p.familiarities || []).map((f) => `${f.toLowerCase()} weapons`),
+      ...(p.handedness || []).map((h) => `${h.toLowerCase()} weapons`),
+      ...(p.groups || []).map((g) => `${g.toLowerCase()} group`),
+      ...named,
+    ];
+    return `<section class="panel proficiencies" data-home="proficiencies">
+      <h3>Proficiencies</h3>
+      <div class="profgrid">
+        <div class="profcol">
+          <h4>Weapons</h4>
+          ${row('Familiarities', chips('familiarities', WEAPON_FAMILIARITY, 'Weapon familiarities'), 'Simple, martial and exotic weapons.')}
+          ${row('Handedness', chips('handedness', WEAPON_HANDEDNESS, 'Weapon handedness'), 'Such as all light weapons or all one-handed weapons.')}
+          ${row('Weapon groups', chips('groups', WEAPON_GROUPS.filter((g) => g !== 'Veil'), 'Weapon groups'), 'The fighter weapon groups')}
+        </div>
+        <div class="profcol">
+          <h4>Armor</h4>
+          ${row('Armor', chips('armor', ARMOR_PROFICIENCIES, 'Armor proficiencies'), 'Light, medium and heavy armor. Some systems also have an unarmored proficiency.')}
+          <h4>Shields</h4>
+          ${row('Shields', chips('shields', SHIELD_PROFICIENCIES, 'Shield proficiencies'), 'Ticking None clears the other kinds, and ticking a kind clears None.')}
+          <label class="fld" style="margin-top:8px"><span>Notes
+            <span class="hint">(anything the lists do not cover)</span></span>
+            ${area('identity.proficiencies.notes', p.notes, 2)}</label>
+        </div>
+      </div>
+      <!-- The named weapons take the whole panel rather than half of it: a
+           race's list runs to a dozen, and a dozen chips in a half-width
+           column is a dozen rows. -->
+      <div class="profrow profwide">
+        <span class="tlabel">
+          ${foldButton(model, wkey, {
+    open: !wshut, cls: 'foldchip', title: 'Individual weapons, such as a race\'s or class\'s weapon list.',
+    text: `${wshut ? '▸' : '▾'} Specific weapons${named.length ? `<span class="badge">${named.length}</span>` : ''}`,
+  })}
+        </span>
+        <div class="profweaponbody">
+          ${wshut
+    ? `<span class="profnamed" title="Click the caret to edit them">${named.length
+      ? esc(named.join(', ')) : 'none named'}</span>`
+    : `<div class="langlist proflist">
+            ${weapons.map((w, i) => `<span class="lang">
+              ${itemText('identity.proficiencies.weapons', i, 'self', w, 'Weapon')}
+              ${removeButton('identity.proficiencies.weapons', i, { what: 'weapon proficiency', tiny: true })}
+            </span>`).join('')}
+            ${addButton('identity.proficiencies.weapons', 'Add weapon', '')}
+          </div>`}
+        </div>
+      </div>
+      <p class="hint">${summary.length
+    ? `Proficient with ${esc(summary.join(', '))}. `
+    : 'No weapon proficiencies recorded. '}Weapons on the Equipment tab are checked against these by
+        familiarity, handedness, group, name and <strong>As</strong> (the base weapon), and marked when
+        not covered. Veil weapons follow the [Enhanced] rule. A weapon's own <strong>Proficient</strong>
+        field overrides this. A nonproficient weapon takes −4 to hit; its card can turn the −4 off if
+        Misc already includes it.</p>
+    </section>`;
+  }
+
+function carryPanel(model) {
+    const c = model.data;
+    const abilities = ABILITIES.map((k) => [k, ABILITY_LABELS[k] || k]);
+    return `<section class="panel" data-home="carry">
+      <h3>Carrying capacity</h3>
+      <div class="statline"><span class="label">Carrying score</span>
+        <span class="value">${select('carry.ability', c.carry?.ability || 'str', abilities, null,
+    { attrs: 'title="The ability used for carrying capacity. Usually Strength."' })}</span></div>
+      ${['light', 'medium', 'heavy', 'offGround', 'pushDrag'].map((k) => line(
+        k === 'offGround' ? 'Off ground' : k === 'pushDrag' ? 'Push / drag' : k[0].toUpperCase() + k.slice(1),
+        c.carry?.[k] != null ? `${c.carry[k]} lbs` : '—',
+      )).join('')}
+      ${line('Currently carried', `${c.carry?.carried ?? 0} lbs`)}
+      ${loadLine(c)}
+      ${editLine('Ant Haul multiplier', 'carry.antHaul', c.carry?.antHaul ?? 1)}
+      ${editLine('Carry score bonus', 'carry.strBonus', c.carry?.strBonus ?? 0)}
+      <div class="statline"><span class="label">Quadruped</span>
+        <span class="value">${check('carry.quadruped', c.carry?.quadruped)}</span></div>
+      <div class="statline"><span class="label">Apply load penalties</span>
+        <span class="value">${check('carry.applyLoad', c.carry?.applyLoad !== false, '',
+    'A medium or heavy load caps Dex to AC, has a check penalty, and cuts land speed. Untick for a table that does not track encumbrance.')}</span></div>
     </section>`;
   }

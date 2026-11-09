@@ -75,7 +75,7 @@ export function renderSystemManagerPanel(model, ctx) {
       ${e.kind === 'system' && e.tab.custom ? '<span class="badge player">custom</span>' : ''}
       ${e.kind === 'system' ? `<span class="badge">${e.tab.rows.length} rows</span>` : ''}
       ${e.kind === 'modelled' ? (e.has ? '<span class="badge ok">in use</span>'
-    : e.tagged ? '<span class="badge ok" title="A class on the Overview marks this system">marked</span>'
+    : e.tagged ? '<span class="badge ok" title="A class on the Classes table marks this system">marked</span>'
       : '<span class="badge">empty</span>') : ''}`;
     const name = (e) => (e.kind === 'system'
       ? `<input type="text" class="tabname" value="${esc(e.label)}" data-systab-name="${e.index}" aria-label="Tab name">`
@@ -125,7 +125,7 @@ export function renderSystemManagerPanel(model, ctx) {
         <strong>Hide</strong> moves a tab to the lists below and keeps its data. The swatch on
         each row sets that tab's color and name; right-clicking the tab does the same. The color
         and name show on both bars. Each view has its own bar. The <em>build</em> view starts
-        with Overview, Stats, Lore, Skills, Progression, Feats &amp; Mythic, Alternate Training,
+        with Overview, Stats, Background, Skills, Progression, Feats &amp; Mythic, Alternate Training,
         Trackers and Equipment, <em>plus every sub-system this character uses</em>. The
         <em>session</em> view starts with only those sub-systems.
         <button data-action="tab-reset">Reset this view's bar</button>
@@ -140,7 +140,7 @@ export function renderSystemManagerPanel(model, ctx) {
       <p class="hint">
         Every other tab, in alphabetical order: built-in tabs, sub-systems and the workbook's
         worksheets. <em>In use</em> means the sub-system has data for this character.
-        <em>Marked</em> means a class on the Overview uses the system but its tab is still empty.
+        <em>Marked</em> means a class on the Classes table uses the system but its tab is still empty.
       </p>
       <div class="rowlist">
         ${hidden.map(offRow).join('') || '<p class="empty">Every tab is on the bar.</p>'}

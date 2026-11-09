@@ -1,5 +1,6 @@
 /**
- * ui/panels/stats.js -- the Stats tab: where a score comes from.
+ * ui/panels/stats.js -- the Stats tab: where a score comes from, and the
+ * numbers worked out from the scores.
  *
  * Every ability on the sheet is a sum with its sources spelled out -- point
  * buy, race, the level-4 increases, the prowess ladder, the optional array,
@@ -7,18 +8,34 @@
  * and lets each part of it be edited. The milestone pickers underneath are the
  * other half: which ability each rung of each ladder was spent on.
  *
+ * Under them are the hit points, armor class, saves, initiative, attack and
+ * speed panels, which used to be edited on the Overview. The Overview now
+ * shows their totals read-only.
+ *
  * `pickSelect` and `mythicPickAt` are exported because the Feats & Mythic tab
- * draws the same pickers; everything else here is local.
+ * draws the same pickers; `acPanel`, `savesPanel`, `attackPanel` and
+ * `restButtons` because the session dashboard draws them too.
  */
 import { esc, abAttr, picksAbility, ABILITY_LABELS_LIST } from '../html.js';
 import { campaignRules, coreAbp, mythicStatTiers } from '../../model/campaign.js';
-import { area, check, roField } from '../fields.js';
-import { exprField, itemCheck } from '../rows.js';
-import { forwardedBadge } from '../badges.js';
-import { abilityHarm } from '../../model/abilities.js';
-import { minus } from '../format.js';
+import { abilitySelect, area, autoNum, check, field, num, roField, roValue } from '../fields.js';
 import {
-  fmt, ABILITIES, ABILITY_LABELS, ABP_DEFENCE_CAP, ABP_DEFENCE_GROUPS, ABP_LEVELS,
+  collapsibleSub, editLine, exprField, foldButton, itemCheck, line, lineHtml, movedInline, movedValue,
+  stepGrid, supergroup, workingTitle,
+} from '../rows.js';
+import {
+  forwardedBadge, sheetBonusCell, sheetBonusField, sheetBonusHead, sheetBonusHint,
+} from '../badges.js';
+import { abilityHarm } from '../../model/abilities.js';
+import { abilityCollapse } from '../../model.js';
+import { minus, signed } from '../format.js';
+import { prose } from '../prose.js';
+import { rollButton } from '../roll.js';
+import { speedTable } from '../speeds.js';
+import { meterStyleButton, meterStyleEditor, meterVisual } from './trackers.js';
+import {
+  fmt, ABILITIES, ABILITY_LABELS, ALT_ATTACK_OF, ATTACK_MODES, ATTACK_MODE_KEY, ATTACK_MODE_LABELS,
+  attackModeTotal, hitDieGain, ABP_DEFENCE_CAP, ABP_DEFENCE_GROUPS, ABP_LEVELS,
   AC_BONUS_TYPES, ARRAY_LEVELS, ARRAY_MAX_SLOTS, ARRAY_SLOTS, arraySourceLevel,
   ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL,
   BUILD_DERIVED_KEYS, BUILD_OPTIONAL_KEYS, BUILD_PERMANENT_GROUPS, BUILD_TEMPORARY,
@@ -28,12 +45,40 @@ import {
 } from '../../rules.js';
 
 
+/**
+ * The Stats tab, in the order a character is built: the ability scores and
+ * where each comes from, then the defenses (hit points, armor class, saves,
+ * initiative) and offenses (attack, speed) worked out from them. The Overview
+ * shows the same numbers read-only.
+ *
+ * A character with no point-buy table (imported without one, or a monster)
+ * types its scores straight into the Ability scores panel.
+ */
 export function renderStatsPanel(model, ctx) {
   const c = model.data;
   const build = c.statsBuild;
-  if (!build) {
-    return '<div class="grid"><section class="panel"><h3>Stats</h3><p class="empty">This character has no Stats tab in its source sheet.</p></section></div>';
-  }
+  return `<div class="grid">
+      ${supergroup(model, 'stats-abilities', 'Ability scores', 'abilitygroup', `
+        ${abilityScoresPanel(model)}
+        ${build ? buildPanels(model) : ''}`)}
+      ${supergroup(model, 'stats-defenses', 'Defenses', 'defenses', `
+        ${hitPointsPanel(ctx, model)}
+        ${acPanel(model)}
+        <div class="band">
+          ${savesPanel(model)}
+          ${initiativePanel(model)}
+        </div>
+        ${build ? defenceBonusPanel(model) : ''}`)}
+      ${supergroup(model, 'stats-offenses', 'Offenses', 'offenses', `
+        ${attackPanel(model)}
+        ${speedPanel(model)}`)}
+    </div>`;
+}
+
+/** The point-buy table, the temporary columns and the ladders, for a character that has them. */
+function buildPanels(model) {
+  const c = model.data;
+  const build = c.statsBuild;
   const pb = model.pointBuySummary();
   const unlocked = model.attunementUnlocked;
   const showOptional = showOptionalBuildColumns(model, build);
@@ -88,9 +133,7 @@ export function renderStatsPanel(model, ctx) {
   const over = ABILITIES.filter((a) => build[a].resolved?.enhancementWasted > 0);
   const tempOver = ABILITIES.filter((a) => build[a].resolved?.tempEnhancementWasted > 0);
 
-  return `<div class="grid">
-      <div class="band">
-      <section class="panel">
+  return `<section class="panel">
         <h3>Permanent bonuses
           ${BUILD_OPTIONAL_KEYS.map((k) => {
           const label = allCols.find(([key]) => key === k)?.[2] || k;
@@ -175,8 +218,8 @@ export function renderStatsPanel(model, ctx) {
                 ${BUILD_TEMPORARY.map(([, label, full]) => `<th class="num" title="${esc(full)}">${esc(label)}</th>`).join('')}
                 <th class="num" title="Temporary bonuses forwarded from elsewhere on the sheet, written as {str.temp += 2 as size} or {str.score += 2 as temp.size}.">Fwd</th>
                 <th class="num" title="Total of the temporary columns.">Temp</th>
-                <th class="num" title="Ability drain, entered on the Overview: it lowers the score">Drain</th>
-                <th class="num" title="Ability damage, entered on the Overview: every 2 points give −1 to the modifier; the score does not change.">Dmg</th>
+                <th class="num" title="Ability drain, entered in the Ability scores panel. It lowers the score.">Drain</th>
+                <th class="num" title="Ability damage, entered in the Ability scores panel. Every 2 points give −1 to the modifier. The score does not change.">Dmg</th>
                 <th class="num" title="Temporary score minus drain, used by every derived stat.">Score</th>
                 <th class="num">Mod</th>
               </tr>
@@ -215,20 +258,13 @@ export function renderStatsPanel(model, ctx) {
           ${tempOver.map((a) => `<strong>${ABILITY_LABELS[a]}</strong>: ${esc(tempEnhancementNote(build[a]))}`).join(' ')}
         </p>` : ''}
       </section>
-      </div>
 
-      ${defenceBonusPanel(model)}
-      ${/* The three ladders in a row of their own. Left to the outer grid they
-            each took one 310px track, which is not enough for the array's four
-            columns and more than the other two need -- so they share a band,
-            which gives each the width its table wants. */''}
-      <div class="band">
-        ${campaignRules(model.data).abp ? abpPicksPanel(model) : ''}
-        ${coreAbp(model.data) ? abpAttunePanel(model) : ''}
-        ${milestonePicksPanel(model)}
-        ${optionalArray ? arrayPicksPanel(model) : ''}
-      </div>
-    </div>`;
+      ${/* The ladders, in the Ability scores group's band beside the tables
+            above, which gives each the width its table wants. */''}
+      ${campaignRules(model.data).abp ? abpPicksPanel(model) : ''}
+      ${coreAbp(model.data) ? abpAttunePanel(model) : ''}
+      ${milestonePicksPanel(model)}
+      ${optionalArray ? arrayPicksPanel(model) : ''}`;
 }
 
 /**
@@ -559,7 +595,7 @@ function arrayPicksPanel(model) {
   const picks = c.progressionPicks?.array || [];
   const at = (l) => picks.find((p) => p.level === l) || { slots: [] };
   const columns = Array.from({ length: ARRAY_MAX_SLOTS }, (_, i) => i);
-  return `<section class="panel">
+  return `<section class="panel fit">
       <h3>Optional array</h3>
       <p class="hint warn" style="margin-top:0">
         Bought separately, with Primordia shards. These do not come with the level.
@@ -593,3 +629,584 @@ function arrayPicksPanel(model) {
       ? ` Sheet note: ${esc(String(c.progressionPicks.arrayNote).replace(/^Array \(Optional\)\s*/, '').replace(/\s+/g, ' '))}` : ''}</p>
     </section>`;
 }
+
+/* ---------------- abilities, defenses and offenses ---------------- */
+
+/**
+ * The three rests, as the Quick actions card and the hit-point panel both
+ * offer them. Each brings back what lasts that long and takes in the shorter
+ * ones (model/rest.js), and each is one step of undo.
+ */
+/** Dead, dying or unconscious, as a warning line; nothing while the character is up. */
+export function hpStatus(hp) {
+  const status = hp.dead ? 'dead' : hp.dying ? 'dying' : hp.unconscious ? 'unconscious' : null;
+  if (!status) return '';
+  const said = status === 'dead' ? `Dead: at or below ${minus(hp.deathAt)}.`
+    : status === 'dying' ? `Dying: ${hp.current - hp.deathAt} point${hp.current - hp.deathAt === 1 ? '' : 's'} from death at ${signed(hp.deathAt)}.`
+      : hp.nonlethal >= hp.effective && hp.current > 0 ? 'Unconscious: nonlethal damage equals or exceeds current hit points.'
+        : 'Unconscious.';
+  return `<p class="hint warn">${said}</p>`;
+}
+
+export function restButtons() {
+  return `<button data-action="rest-encounter"
+      title="Reset trackers that refresh after an encounter.">End encounter</button>
+    <button data-action="rest-day"
+      title="Restore hit points, clear temporary hit points and nonlethal damage, and reset daily and encounter trackers, spell slots, power points, temporary essence and companion hit points.">New day</button>
+    <button data-action="rest-week"
+      title="A new day, plus reset weekly trackers.">New week</button>`;
+}
+
+/**
+ * Damage and drain beside a score: what each comes to, and what a score
+ * worn to nothing means. Drawn under the score's row so the grid keeps its
+ * columns.
+ */
+function harmMark(k, a) {
+    // The working score and modifier beside it already carry both; this says why.
+    const { damage, drain } = abilityHarm(a);
+    if (!damage && !drain) return '';
+    const bits = [damage ? `${damage} damage (${minus(-Math.floor(damage / 2))} mod)` : '', drain ? `${drain} drain` : ''].filter(Boolean);
+    const collapse = abilityCollapse(k, a);
+    return `<span class="abharm${collapse ? ' bad' : ''}">${esc(bits.join(', '))}${collapse ? `; ${esc(collapse)}` : ''}</span>`;
+  }
+
+/** The six damage and drain boxes, folded away until something is in them. */
+function abilityHarmTable(model) {
+    const c = model.data;
+    const any = ABILITIES.some((k) => { const h = abilityHarm(c.abilities[k]); return h.damage || h.drain; });
+    const body = `<div class="tablewrap"><table class="abdmg">
+      <thead><tr><th></th>${ABILITIES.map((k) => `<th class="num">${ABILITY_LABELS[k]}</th>`).join('')}</tr></thead>
+      <tbody>
+        <tr><th scope="row" title="Every 2 points of damage give −1 to the modifier. A New day heals 1 point of each.">Damage</th>
+          ${ABILITIES.map((k) => `<td>${num(`abilities.${k}.damage`, c.abilities[k]?.damage, `min="0" aria-label="${ABILITY_LABELS[k]} damage"`)}</td>`).join('')}</tr>
+        <tr><th scope="row" title="Lowers the score itself. Rest does not heal it.">Drain</th>
+          ${ABILITIES.map((k) => `<td>${num(`abilities.${k}.drain`, c.abilities[k]?.drain, `min="0" aria-label="${ABILITY_LABELS[k]} drain"`)}</td>`).join('')}</tr>
+      </tbody></table></div>`;
+    return collapsibleSub(model, 'ability-harm', 'Damage &amp; drain', body, '', !any);
+  }
+
+/**
+ * The six scores, their modifiers and a roll for each. `readOnly` is the
+ * Overview's copy: every score a read-out, no damage and drain boxes, and
+ * `head` (its Edit link) in the heading.
+ */
+export function abilityScoresPanel(model, { readOnly = false, head = '' } = {}) {
+    const c = model.data;
+    const cs = model.conditionState;
+    const built = !!c.statsBuild || readOnly;
+    return `<section class="panel fit"${readOnly ? '' : ' data-home="abilities"'}>
+      <h3>Ability scores ${head}</h3>
+      <div class="ability-head">
+        <span>&nbsp;</span><span>Score</span><span>Mod</span>
+        <span class="h-temp">Temp</span><span class="h-temp">Mod</span><span>Roll</span>
+      </div>
+      <div class="abilities">
+        ${ABILITIES.map((k) => {
+          const a = c.abilities[k];
+          const moved = cs.changed && cs.deltas[k];
+          // Both scores carry their whole working: the permanent one is ten
+          // columns on a tab most players never open, and the temporary one
+          // is that plus five more.
+          const tip = (key, extra = '') => esc(workingTitle(model.breakdown(key), extra));
+          // And the key the hover panel opens from -- on the read-outs only.
+          // A panel standing under a field you are typing in covers the next
+          // field, and a score typed in by hand has no working worth opening.
+          const bd = (key, extra = '') => ` data-bd="${esc(key)}"${extra ? ` data-bdx="${esc(extra)}"` : ''}`;
+          return `<div class="ability">
+            <span class="ab abmark" data-ab="${k}">${ABILITY_LABELS[k]}</span>
+            ${built
+              ? `<span class="mod working" title="${tip(k)}"${bd(k)}>${a.score}</span>`
+              : `<input type="number" value="${a.score}" data-set="abilities.${k}.score" aria-label="${ABILITY_LABELS[k]} score" title="${tip(k)}">`}
+            <span class="mod">${fmt(a.mod)}</span>
+            ${moved
+              ? movedValue(`${cs.scores[k]}`, cs.scores[k] - (a.workingScore ?? a.tempScore), {
+                tag: 'span',
+                cls: 'mod temp-score working',
+                title: workingTitle(model.breakdown(`${k}.temp`), `${a.workingScore ?? a.tempScore} before conditions`),
+                attrs: bd(`${k}.temp`, `${a.workingScore ?? a.tempScore} before conditions`).trim(),
+              })
+              : built
+                ? `<span class="mod temp-score working${abilityHarm(a).drain ? ' harmed' : ''}" title="${tip(`${k}.temp`)}"${bd(`${k}.temp`)}>${a.workingScore ?? a.tempScore}</span>`
+                : `<input class="temp-score" type="number" value="${a.tempScore}" data-set="abilities.${k}.tempScore" aria-label="${ABILITY_LABELS[k]} temporary score" title="${tip(`${k}.temp`)}">`}
+            ${movedValue(fmt(a.totalMod + (moved ? cs.deltas[k] : 0)), moved ? cs.deltas[k] : 0, {
+    tag: 'span', cls: 'mod temp temp-mod', title: moved ? `${fmt(a.totalMod)} before conditions` : '', keep: true,
+  })}
+            ${rollButton(model, 'ability', k, `a ${ABILITY_LABELS[k]} check`, cs)}
+            ${harmMark(k, a)}
+          </div>`;
+        }).join('')}
+      </div>
+      ${readOnly ? '' : abilityHarmTable(model)}
+      ${c.statsBuild && !readOnly ? `<p class="hint" style="margin-top:8px">
+        Scores are the totals of the Permanent bonuses and Temporary bonuses tables.
+      </p>` : ''}
+      ${cs.changed && ABILITIES.some((k) => cs.deltas[k]) ? `<p class="hint warn">
+        Scores and modifiers in red include the ticked conditions.
+      </p>` : ''}
+    </section>`;
+  }
+
+export function acPanel(model) {
+    const d = model.data.defenses;
+    const cs = model.conditionState;
+    const cell = (key, base) => `<td class="num total">${movedInline(cs, key, base, String, model)}</td>`;
+    return `<section class="panel fit" data-home="ac">
+      <h3>Armor class</h3>
+      <div class="tablewrap"><table class="defense fitcols">
+        <thead><tr><th></th><th class="num">Total</th>
+          <th class="num" title="Your own flat bonus">Misc</th>
+          ${sheetBonusHead()}</tr></thead>
+        <tbody>
+          <tr><td>Armor Class</td>${cell('ac', d.ac)}
+            <td class="num">${num('defenses.miscAC', d.miscAC, 'style="width:3.6rem"')}</td>
+            ${sheetBonusCell(model, 'defenses.ac')}</tr>
+          <tr><td>Touch</td>${cell('touch', d.touch)}
+            <td class="num" title="Misc AC does not apply to touch AC.">—</td>
+            ${sheetBonusCell(model, 'defenses.touch')}</tr>
+          <tr><td>Flat-footed</td>${cell('flatFooted', d.flatFooted)}
+            <td class="num">${roField(d.miscAC || 0, 'The Misc AC above. It applies to flat-footed AC.', 'style="width:3.6rem"')}</td>
+            ${sheetBonusCell(model, 'defenses.flatFooted')}</tr>
+          <tr><td title="10 + BAB + Str + Dex + special size modifier, plus circumstance, deflection, dodge, insight, luck, morale, sacred and profane AC bonuses and all AC penalties.">CMD</td>${cell('cmd', d.cmd)}
+            <td class="num">${num('defenses.miscCMD', d.miscCMD, 'style="width:3.6rem"')}</td>
+            ${sheetBonusCell(model, 'defenses.cmd')}</tr>
+        </tbody>
+      </table></div>
+      ${cs.acVsMelee || cs.acVsRanged ? `<p class="hint warn">
+        ${cs.acVsMelee ? `${fmt(cs.acVsMelee)} AC against melee` : ''}${cs.acVsMelee && cs.acVsRanged ? ', ' : ''}${
+          cs.acVsRanged ? `${fmt(cs.acVsRanged)} AC against ranged` : ''} from conditions, in addition to the numbers above.
+      </p>` : ''}
+      <div class="statline"><span class="label">AC ability</span>
+        <span class="value pair slots">${abilitySelect('defenses.acStat1', d.acStat1)}
+          <span class="hint">+</span>${abilitySelect('defenses.acStat2', d.acStat2)}</span></div>
+      <div class="statline"><span class="label">Uncanny dodge</span>
+        <span class="value">${check('defenses.uncannyDodge', d.uncannyDodge)}</span></div>
+      <div class="defboxes">
+      ${defenceBox(model, 'spellResistance', 'Spell resistance', 'Yes (17), or {= 11 + level}')}
+      ${defenceBox(model, 'dr', 'DR', '5/magic')}
+      ${defenceBox(model, 'resistance', 'Resistance', 'fire 10, cold 5')}
+      ${defenceBox(model, 'weakness', 'Vulnerability', 'sonic 5')}
+      ${defenceBox(model, 'immunities', 'Immunities', 'sleep, paralysis')}
+      </div>
+      <p class="hint">These five boxes accept <code>{…}</code> formulas. Each part is a bonus
+        target: <code>{dr.magic += 2}</code>, <code>{resistance.fire += 5}</code>,
+        <code>{immune.sleep += 1}</code>, <code>{defenses.sr += 2}</code>. A bonus to a part the box
+        does not have adds that part, so a misspelled name adds a new part instead of an error.</p>
+      ${sheetBonusHint('Deflection, natural armor, insight and the rest')}
+    </section>`;
+  }
+
+  /**
+   * The name each defence box is parsed under, and the destination that
+   * reaches every part of it at once. Immunities have no family total:
+   * an immunity is a switch, not an amount, so there is nothing to add to.
+   */
+  const DEFENCE_BOXES = {
+    spellResistance: { family: null, dest: 'defenses.sr', parts: 'sr' },
+    dr: { family: 'dr', dest: 'defenses.dr', parts: 'dr' },
+    resistance: { family: 'resistance', dest: 'defenses.resistance', parts: 'resistance' },
+    weakness: { family: 'weakness', dest: 'defenses.weakness', parts: 'weakness' },
+    immunities: { family: 'immune', dest: null, parts: 'immunities' },
+  };
+
+/**
+ * One of the five defence boxes: what was typed, and what it comes to.
+ *
+ * The box itself is prose, so a DR that follows half your level is written
+ * as the rule it is. Underneath, whenever a bonus has reached it from
+ * somewhere else on the sheet, is the line as it now stands -- because the
+ * box has to go on saying what was written in it (the same reason a skill's
+ * Misc column is never folded into), and because "18/magic" appearing in a
+ * box holding "5/magic" would be the sheet lying about what the player typed.
+ *
+ * The tooltip on that line names every rule that moved it, part by part, so
+ * the number is followed back rather than guessed at.
+ */
+function defenceBox(model, key, label, example) {
+    const d = model.data.defenses;
+    const spec = DEFENCE_BOXES[key];
+    const calc = d.calc || {};
+    const parts = key === 'spellResistance' ? [] : (calc[spec.parts] || []);
+    const moved = key === 'spellResistance'
+      ? !!calc.sr?.bonus
+      : parts.some((p) => p.bonus || p.granted);
+    const now = key === 'spellResistance' ? calc.sr?.text
+      : key === 'dr' ? calc.drText
+        : key === 'resistance' ? calc.resistanceText
+          : key === 'weakness' ? calc.weaknessText : calc.immunitiesText;
+    // One badge for the box, gathered across the family destination and
+    // every named part, saying the line as it now stands; its panel has one
+    // row a rule, each naming the part it went to.
+    const names = [spec.dest, ...parts.map((p) => p.key)];
+    return `<div class="statline defbox">
+      <span class="label" title="${esc(`For example: ${example}`)}">${esc(label)}</span>
+      <span class="value">${prose(model, `data-set="defenses.${key}"`, d[key], 1, 'grow')}
+        ${moved ? forwardedBadge(model, names, { shown: now || '—' }) : ''}</span></div>`;
+  }
+
+
+export function savesPanel(model) {
+    const s = model.data.saves;
+    const cs = model.conditionState;
+    return `<section class="panel fit" data-home="saves">
+      <h3>Saving throws</h3>
+      <div class="tablewrap"><table class="saves stacked fitcols" data-fold="shut">
+        <thead><tr><th>Save</th><th class="num">Total</th>
+          <th class="num" title="From the Classes table (gestalt)">Base</th>
+          <th>Ability</th><th title="A second ability that adds its modifier">2nd</th>
+          ${sheetBonusHead()}</tr></thead>
+        <tbody>${[['fortitude', 'Fortitude'], ['reflex', 'Reflex'], ['will', 'Will']].map(([k, label]) => `
+          <tr>
+            <td data-stack="name">${label}</td>
+            <td class="num total" data-stack="head"><span class="rollpair">${movedInline(cs, k, s[k].total, fmt, model)}${
+  rollButton(model, 'save', k, `a ${label} save`, cs)}</span></td>
+            <td class="num" data-label="Base" title="From the Classes table">${s[k].base}</td>
+            <td data-label="Ability">${abilitySelect(`saves.${k}.stat1`, s[k].stat1)}</td>
+            <td data-label="2nd ability">${abilitySelect(`saves.${k}.stat2`, s[k].stat2)}</td>
+            ${sheetBonusCell(model, `saves.${k}.total`)}
+          </tr>`).join('')}</tbody>
+      </table></div>
+      <p class="hint">Base saves come from the Classes table on the Progression tab.</p>
+      ${sheetBonusHint('Resistance bonuses, ABP and traits')}
+    </section>`;
+  }
+
+
+/**
+ * Initiative, as a row of its own: the ability it runs on, a second one
+ * where a rule adds it, a Misc box, and the Other column every reconciled
+ * number carries. It had a big number on the Overview and nothing to edit
+ * behind it -- the ability came from the import and the rest was offset.
+ */
+function initiativePanel(model) {
+    const c = model.data;
+    const cs = model.conditionState;
+    return `<section class="panel fit">
+      <h3>Initiative</h3>
+      <div class="tablewrap"><table class="saves stacked fitcols" data-fold="shut">
+        <thead><tr><th></th><th class="num">Total</th>
+          <th>Ability</th><th title="A second ability that adds its modifier">2nd</th>
+          <th class="num" title="Your own bonus, such as from a trait, feat or familiar.">Misc</th>
+          ${sheetBonusHead()}</tr></thead>
+        <tbody>
+          <tr>
+            <td data-stack="name">Initiative</td>
+            <td class="num total" data-stack="head"><span class="rollpair">${movedInline(cs, 'initiative', c.hp.initiative, fmt, model)}${
+  rollButton(model, 'initiative', 'self', 'initiative', cs)}</span></td>
+            <td data-label="Ability">${abilitySelect('hp.initAbility', c.hp.initAbility || 'Dex')}</td>
+            <td data-label="2nd ability">${abilitySelect('hp.initAbility2', c.hp.initAbility2)}</td>
+            <td class="num" data-label="Misc">${num('hp.initMisc', c.hp.initMisc, 'style="width:3.6rem"')}</td>
+            ${sheetBonusCell(model, 'initiative')}
+          </tr>
+        </tbody>
+      </table></div>
+      ${sheetBonusHint('Improved Initiative, a trait, a familiar’s Alertness')}
+    </section>`;
+  }
+
+
+export function attackPanel(model) {
+    const c = model.data;
+    const cs = model.conditionState;
+    return `<section class="panel fit" data-home="attack">
+      <h3>Attack</h3>
+      ${lineHtml('Melee', `${movedInline(cs, 'melee', c.attack.totalMelee, fmt, model)}${
+        rollButton(model, 'mode', 'melee', 'a melee attack', cs)}`, true)}
+      ${lineHtml('Ranged', `${movedInline(cs, 'ranged', c.attack.totalRanged, fmt, model)}${
+        rollButton(model, 'mode', 'ranged', 'a ranged attack', cs)}`, true)}
+      ${lineHtml('CMB', `${movedInline(cs, 'cmb', c.attack.totalCmb, fmt, model)}${
+        rollButton(model, 'mode', 'cmb', 'a combat maneuver', cs)}`, true)}
+      ${line('Iteratives', c.attack.iterative)}
+      ${(() => {
+    // BAB comes off the class table now, gestalt-style, so the field is a
+    // read-out with an override behind it -- the same arrangement as a class's
+    // Levels, and for the same reason.
+    const base = Number(c.attack.babBase) || 0;
+    const over = c.attack.babOverride == null ? null : Number(c.attack.babOverride);
+    const why = over == null
+      ? `From the Classes table: the best BAB progression among the classes on each level, summed and floored. Type a number to override it.`
+      : `Pinned at ${over}. The Classes table comes to ${base}; clear the box to go back to that.`;
+    return lineHtml('Base attack bonus', autoNum('data-set="attack.babOverride"', over, {
+      auto: true, placeholder: base, width: '4.2rem', title: why, label: 'Base attack bonus',
+    }));
+  })()}
+      ${editLine('Misc attack bonus', 'attack.miscBonus', c.attack.miscBonus)}
+      ${cs.changed && cs.delta.damage ? `<p class="hint warn">${fmt(cs.delta.damage)} on weapon damage rolls from ${cs.sources}.</p>` : ''}
+      <div class="tablewrap" style="margin-top:8px"><table class="attackmodes fitcols">
+        <thead><tr><th>Mode</th>
+          <th class="num" title="An alternate uses the same attack with a different ability.">Total</th>
+          ${sheetBonusHead()}
+          <th>Ability</th><th title="A second ability that adds its modifier">2nd</th></tr></thead>
+        <tbody>${ATTACK_MODES.map((k) => {
+          const alt = ALT_ATTACK_OF[k];
+          const shut = !!model.data.uiPrefs?.collapsed?.[`atk:${alt || k}`];
+          // An alternate is folded into the attack it is an alternate of: the
+          // caret is on that row and says what is under it, so a sheet with
+          // nothing but a finesse swap does not carry six rows to say three.
+          if (alt && shut) return '';
+          const total = attackModeTotal(c, k) ?? 0;
+          const delta = cs.changed && cs.delta[k] ? cs.delta[k] : 0;
+          const altOf = ATTACK_MODES.find((m) => ALT_ATTACK_OF[m] === k);
+          const altTotal = altOf ? attackModeTotal(c, altOf) ?? 0 : 0;
+          const altStat = altOf ? (c.attack.modes[altOf]?.stat1 || '—') : '';
+          const caret = altOf ? foldButton(model, `atk:${k}`, {
+            open: !shut,
+            cls: 'disclose',
+            title: shut ? `Show the alternate (${altStat}, ${fmt(altTotal)})` : 'Hide the alternate',
+          }) : '';
+          // An alternate is the base attack with one ability swapped, so it
+          // is already carrying the base's Other -- editing it here would be
+          // editing the same number twice. The number is shown all the same,
+          // read-only, so the row adds up in front of the reader.
+          const other = alt
+            ? `<td class="num" data-label="Other">${roValue(model.offsetOf(ATTACK_MODE_KEY[alt]),
+              `Shares ${ATTACK_MODE_LABELS[alt]}'s. An alternate is that attack with a different ability.`)}</td>`
+            : sheetBonusCell(model, ATTACK_MODE_KEY[k]);
+          return `
+          ${/* Not a stacked table, deliberately. Folded to a name and a total it
+                would say exactly what the three big stat lines above it already
+                say, and every row here carries a disclosure of its own for its
+                alternate -- a second caret beside that one reads as a bug. It
+                keeps its 188px of scroll. */''}
+          <tr class="${alt ? 'altrow' : ''}"><td>${caret}${ATTACK_MODE_LABELS[k]}</td>
+            ${/* Only a real mode has a working of its own: an alternate is the
+                  same attack with another ability in the slot, and shares its
+                  BAB, misc, size and reconciliation. */''}
+            <td class="num total"><span class="rollpair">${movedInline(cs, k, total, fmt, alt ? null : model)}${
+  rollButton(model, 'mode', k, `${ATTACK_MODE_LABELS[k].toLowerCase()} attacks`, cs)}</span></td>
+            ${other}
+            <td>${abilitySelect(`attack.modes.${k}.stat1`, c.attack.modes[k]?.stat1)}</td>
+            <td>${abilitySelect(`attack.modes.${k}.stat2`, c.attack.modes[k]?.stat2)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+      <p class="hint">Base attack bonus comes from the Classes table on the Progression tab. An <strong>alternate</strong>
+        is the same attack with a different ability, such as Dex for a finesse weapon or Wis for a
+        monk's unarmed strike. It shares the same BAB, misc and size bonuses.</p>
+      ${sheetBonusHint('a weapon’s enhancement, a size bonus, anything a talent added')}
+    </section>`;
+  }
+
+  /**
+   * Movement, with the bonus as a formula field.
+   *
+   * The bonus is where class features land -- fast movement, a boots-of-
+   * striding enhancement -- and those are rules, so the field takes one:
+   * `floor(level / 3) * 10` stays right as the character levels. The final
+   * column is the model's, so it moves the moment either field does.
+   */
+function speedPanel(model) {
+    const c = model.data;
+    const cs = model.conditionState;
+    const speeds = c.identity.speeds || [];
+    return `<section class="panel fit" data-home="speed">
+      <h3>Speed</h3>
+      ${speedTable('identity.speeds', speeds, speeds.map((sp) => ({
+    bonus: sp.bonusNum, error: sp.bonusError, handle: sp.handle, final: sp.final,
+    loadSlowed: sp.loadSlowed,
+  })), {
+    named: true,
+    exampleFor: ' for fast movement',
+    // What conditions and buffs do to the rate, where they move it.
+    final: (i, w) => {
+      const adj = cs.speeds[i];
+      const moved = cs.changed && adj && adj.adjusted !== adj.final
+        ? movedValue(`${adj.adjusted} ft.`, adj.adjusted - adj.final, { base: `${adj.final} ft.`, sources: cs.sources })
+        : null;
+      if (!w.loadSlowed) return moved;
+      return `${moved ?? `${Number(w.final) || 0} ft.`} <span class="badge" title="Reduced by a medium or heavy load.">load</span>`;
+    },
+    badge: (handle) => forwardedBadge(model, handle),
+  })}
+      <p class="hint">Bonus accepts a formula, such as <code>floor(level / 3) * 10</code> for
+        fast movement. Each rate is named by its type: formulas read <code>speed.land</code>, and a
+        feature adds to it with <code>{speed.land += 10}</code>, or to every speed with
+        <code>{speed += 10}</code>. A rate can read the rates above it, not below.</p>
+    </section>`;
+  }
+
+/**
+ * One of the three typed parts of the hit-point total, which takes a formula
+ * as readily as a number: a favoured-class bonus is "one per level you took
+ * it", and written out it stops going stale at the next level-up.
+ */
+function hpPart(c, key, title, width = '5.4rem') {
+  const raw = c.hp[key];
+  return exprField(`data-set="hp.${key}"`, raw ?? 0, {
+    width,
+    value: typeof raw === 'string' && raw.trim() ? c.hp[`${key}Resolved`] : null,
+    error: c.hp[`${key}Error`],
+    title,
+  });
+}
+
+/**
+ * Where the maximum came from, and the fields that decide it.
+ *
+ * The workbook worked hit points out on Character Info and this sheet only
+ * kept the answer, so the four inputs it kept alongside -- the ability, the
+ * favoured-class points, Toughness, the miscellany -- were imported and then
+ * never shown. They are the difference between a total that moves with the
+ * classes and one that does not, so they are fields, and the sum is spelled
+ * out above them in the order the parts are added.
+ *
+ * The maximum itself is a read-out with an override behind it, the same
+ * arrangement as the base attack bonus and a class's Levels: type a number to
+ * pin it, clear the box to hand it back to the class table.
+ */
+function hpBuild(model) {
+  const c = model.data;
+  const g = c.gestalt?.hp || {};
+  const level = Number(c.identity?.level) || 0;
+  const base = Number(c.hp.base) || 0;
+  const other = model.offsetOf('hp.total');
+  const abilityMod = Number(g.abilityMod) || 0;
+  const shut = !!c.uiPrefs?.collapsed?.['hp:build'];
+  // How the dice count (campaign rules): which die each level, and how much of it.
+  const rules = campaignRules(c);
+  const dice = c.gestalt?.dice || [];
+  const counted = { max: '', average: ', averaged after 1st', rolled: ', rolled after 1st' }[rules.hitPoints];
+
+  // Only the parts that are doing something, so a plain character reads as
+  // "dice plus Con" rather than as a form with four zeroes in it. A part that
+  // takes hit points away is parenthesised rather than signed, because the
+  // pluses between the terms are already doing that job.
+  const term = (n) => (n < 0 ? `(${String(n).replace('-', '−')})` : String(n));
+  const fcb = Number(c.hp.fcbResolved ?? c.hp.fcb) || 0;
+  const tough = Number(c.hp.toughnessResolved ?? c.hp.toughness) || 0;
+  const misc = Number(c.hp.miscResolved ?? c.hp.misc) || 0;
+  const parts = [
+    [term(c.gestalt?.hdTotal ?? 0), `hit dice over ${level} level${level === 1 ? '' : 's'}${counted}`],
+    abilityMod ? [term(abilityMod * level), `${c.hp.ability || 'ability'}${
+      c.hp.ability2 ? ` + ${c.hp.ability2}` : ''} ${fmt(abilityMod)} × ${level}`] : null,
+    // The three typed parts as they resolved, since any of them may have been
+    // written as a rule rather than a number.
+    fcb ? [term(fcb), 'favored class'] : null,
+    tough ? [term(tough * level), `Toughness ${fmt(tough)} × ${level}`] : null,
+    model.mythicHp ? [term(model.mythicHp),
+      `${c.mythic?.path || 'mythic'} tier ${c.identity?.mythicTier || 0}`] : null,
+    misc ? [term(misc), 'misc'] : null,
+    other ? [term(other), 'other: what the source sheet added that this sheet cannot read'] : null,
+  ].filter(Boolean);
+
+  const why = `${rules.gestalt ? 'The best hit die on each level' : 'The hit die of the class taken at each level'}${
+    counted ? ` (${counted.slice(2)})` : ''} from the Classes table, plus every part below,`
+    + ' including Other.';
+
+  /*
+   * The two ability slots are one field, the way the saves table and the AC row
+   * already say it: "the ability, and a second one that adds its modifier". As
+   * two full-width fields they were two rows of a narrow panel spent on three
+   * letters each, and the second one read as a thing of its own rather than as
+   * the other half of the first.
+   */
+  const abilityPair = field('HP ability',
+    `<span class="pair slots">${abilitySelect('hp.ability', c.hp.ability)}
+      <span class="hint">+</span>${abilitySelect('hp.ability2', c.hp.ability2)}</span>`);
+
+  return `<div class="fieldgrid two">
+        ${/* A read-out, not a box. It used to take a number that was *pinned*
+              over the total, which froze every part below it -- and since an
+              imported sheet whose classes cannot reach its own total is pinned
+              from the moment it lands, that was most characters: raising
+              Toughness moved nothing and the panel did not say why. The
+              difference lives in Other now, and everything stays live. */''}
+        ${field('Maximum', `<span class="value working" title="${esc(workingTitle(model.breakdown('hp'), why))}"
+          data-bd="hp" data-bdx="${esc(why)}">${model.hpMax}</span>`)}
+        ${abilityPair}
+      </div>
+      <p class="hint">${parts.map(([n, label]) => `<span title="${esc(label)}">${n}</span>`).join(' + ')}
+        = <strong>${base + other}</strong>
+        ${foldButton(null, 'hp:build', {
+    open: !shut, cls: 'foldchip', title: shut ? 'Show the parts to edit them.' : 'Hide the parts.',
+    text: shut ? '▸ More options' : '▾ Close',
+  })}</p>
+      ${shut ? '' : `${/* Three short figures across, then Misc on a row of its
+            own: the first two hold a number or a small rule, while Misc is
+            where everything the table gave you lands and is the one most
+            likely to be written out longhand. A 5.4rem box is no place for
+            `if(level >= 10, con.mod * 2, con.mod)`. */''}
+      <div class="fieldgrid tight">
+        ${field('Favored class HP', hpPart(c, 'fcb', 'A number or a formula, e.g. class.fighter.level'))}
+        ${field('Toughness / level', hpPart(c, 'toughness', 'A number or a formula, e.g. if(level >= 10, 2, 1)'))}
+        ${field('Mythic bonus', `<span class="value" title="${esc(`${
+    c.mythic?.path || 'No path'}, ${c.identity?.mythicTier || 0} tier${
+    (c.identity?.mythicTier || 0) === 1 ? '' : 's'}. Set the per-tier amount on the Features tab.`)}"
+          >${fmt(model.mythicHp)}</span>`)}
+        ${field('Other', `<span title="${esc('The difference between the imported total and the parts above, '
+            + 'such as rolled hit points or a bonus from the GM. You can also add your own number or '
+            + 'formula here.')}">${
+  sheetBonusField(model, 'hp.total', '5.4rem')}</span>`)}
+      </div>
+      <div class="fieldgrid" style="margin-top:8px">
+        ${field('Misc', hpPart(c, 'misc', 'A number or a formula, e.g. con.mod * 2', '100%'), 'wide')}
+      </div>`}
+      ${/* Rolled hit points (a campaign rule): a box per level after the
+            first, blank counting the average, which the box shows. A fold of
+            its own, open, so the rolls are there at a level-up whether or
+            not the parts above are. */''}
+      ${rules.hitPoints === 'rolled' && level > 1 ? collapsibleSub(model, 'hp:rolls', 'Rolled each level', `
+      ${stepGrid('hp.rolls', c.hp.rolls, 2, level, (l) => hitDieGain(dice[l - 1], l, 'average'),
+    (l) => `Hit points rolled at level ${l}, on a d${dice[l - 1] || 0}`)}
+      <p class="hint">1st level gets the full die. A blank level, or a roll above the die, counts as
+        the average shown in its box.</p>`) : ''}
+      ${rules.hitPoints !== 'max' && other ? `<p class="hint warn">Other holds ${term(other)}. An imported
+        sheet with rolled hit points puts the difference there. Hit points are now ${rules.hitPoints === 'rolled' ? 'rolled' : 'averaged'}
+        here too, so clear Other if that is what it holds.</p>` : ''}`;
+}
+
+function hitPointsPanel(ctx, model) {
+    const hp = model.hpState;
+    return `<section class="panel hitpoints" data-home="hp">
+      <h3>Hit points
+        ${hp.temp > 0 ? `<span class="badge">+${hp.temp} temp</span>` : ''}
+        ${hp.nonlethal > 0 ? `<span class="badge${hp.nonlethal >= hp.effective ? ' err' : ''}">${hp.nonlethal} nonlethal</span>` : ''}
+        ${meterStyleButton(ctx, 'hp')}
+      </h3>
+      ${meterVisual(model.meterSpec('hp'))}
+      ${meterStyleEditor(model, ctx, 'hp')}
+      <div class="hprow">
+        ${num('hp.current', hp.baseCurrent)}<span class="hpsep">/</span>
+        <span class="value" title="Maximum hit points from the Classes table, plus forwarded bonuses.">${hp.baseMax}</span>
+        ${hp.temp > 0 ? `<span class="hptemp" title="Temporary hit points, used first.">+${hp.temp}</span>` : ''}
+        ${hp.shift ? `<span class="hint" title="Each negative level lowers current and maximum hit points by 5, and a buff to the maximum raises both. The box values return when these end."
+          >now ${hp.current}/${hp.max}</span>` : ''}
+      </div>
+      ${hpBuild(model)}
+      ${model.forwardedInto('hp.total')
+        ? `<div class="fieldgrid two">${field('Forwarded',
+          `<span class="value">${forwardedBadge(model, 'hp.total')}</span>`)}</div>` : ''}
+      <div class="fieldgrid two">
+        ${field('Temporary', `${num('hp.temp', hp.typedTemp)}${
+          hp.tempGranted ? forwardedBadge(model, 'hp.temp', {
+            shown: `+${hp.tempGrantLeft}`,
+            note: `${hp.tempGranted} temporary hit point${hp.tempGranted === 1 ? '' : 's'} forwarded here${
+              hp.tempGranted === hp.tempGrantLeft ? '' : `, ${hp.tempGranted - hp.tempGrantLeft} of them already spent`
+            }. Damage uses the box first, then these.`,
+          }) : ''}`)}
+        ${field('Nonlethal', num('hp.nonlethal', hp.nonlethal))}
+      </div>
+      <div class="fieldgrid two">
+        ${field('Death threshold +', `${exprField('data-set="hp.deathBonus"', model.data.hp.deathBonus ?? 0, {
+          width: '5.4rem',
+          value: typeof model.data.hp.deathBonus === 'string' && model.data.hp.deathBonus.trim()
+            ? model.data.hp.deathBonusResolved : null,
+          error: model.data.hp.deathBonusError,
+          title: 'A number or a formula, e.g. con.mod or floor(level / 2)',
+        })}${forwardedBadge(model, 'hp.deathBonus')}`)}
+        ${field('Dead at', `<span class="value${hp.dying ? ' bad' : ''}">${minus(hp.deathAt)}</span>`)}
+      </div>
+      ${hpStatus(hp)}
+      <div class="hpactions">
+        <input type="number" value="0" data-hp-amount aria-label="Amount" min="0">
+        <button data-hp="damage" class="danger">Damage</button>
+        <button data-hp="nonlethal">Nonlethal</button>
+        <button data-hp="heal">Heal</button>
+      </div>
+      <div class="hpactions">${restButtons()}</div>
+      <p class="hint">Damage uses temporary hit points first. You die at
+        −(${hp.hardToKill ? '2 × Con' : 'Con'} ${hp.deathBonus ? `+ ${hp.deathBonus} ` : ''}).${hp.hardToKill ? ' The doubling is from Hard to Kill at 1st mythic tier.' : ''}
+        Use Death threshold + for effects such as Death's Door. End encounter, New day and New week
+        each restore what lasts that long, including shorter rests, and can be undone.</p>
+    </section>`;
+  }

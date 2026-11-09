@@ -534,3 +534,16 @@ export function collapsibleSub(model, key, title, bodyHtml, className = '', defa
     ${collapsed ? '' : bodyHtml}
   </div>`;
 }
+
+/**
+ * A labeled band of panels, foldable down to its label (the Overview's and the
+ * Stats tab's Defenses and Offenses). The fold is `sg-<key>` in the same key
+ * store as every panel's own, so a band left shut stays shut.
+ */
+export function supergroup(model, key, title, bodyClass, body) {
+  const shut = isCollapsed(model, `sg-${key}`);
+  return `<div class="supergroup span2${shut ? ' collapsed' : ''}" aria-label="${esc(title)}">
+      <div class="supergroup-title">${esc(title)} ${foldButton(model, `sg-${key}`)}</div>
+      ${shut ? '' : `<div class="supergroup-body band ${bodyClass}">${body}</div>`}
+    </div>`;
+}
