@@ -404,8 +404,8 @@ owed. Armored Discipline and the Vancian techniques grant no talents and add not
 
 **The prerequisite is checked, and says so when it can't be.** BAB comes off the Classes
 table, spherecasting off the Magic Spheres types (Advanced Magic Training's mythic
-version counts as Mid), Vancian casting off the Vancian tab, armor off the Overview's
-proficiencies. It is a note, never a lock — Bryva has had Armored Discipline for sixteen
+version counts as Mid), Vancian casting off the Vancian tab, armor off the
+proficiencies on Equipment. It is a note, never a lock — Bryva has had Armored Discipline for sixteen
 levels and her sheet never imported an armor proficiency, so hers reads *prerequisite
 unchecked* rather than a "no" that is really "I could not tell". Psionics is a plain
 worksheet here, so Piercing Eye is always unchecked.

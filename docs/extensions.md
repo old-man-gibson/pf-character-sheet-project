@@ -306,7 +306,7 @@ slot with room.
 off its own text ("This racial trait replaces defensive training and hatred", "in place of
 stonecunning") unless the pack says otherwise — and the shelf shows it. Adding the trait
 removes those rows from the character and keeps them on the new row as its history
-(`replaced`, an **alt** badge on the Overview). A later alternate that overlaps undoes
+(`replaced`, an **alt** badge on the Background tab). A later alternate that overlaps undoes
 exactly the right amount: if *Sky Sentinel* replaced defensive training, hatred and
 stonecunning, and *Ancient Enmity* (which replaces hatred) is then added, Sky Sentinel is
 displaced, hatred moves into Ancient Enmity's history, and defensive training and

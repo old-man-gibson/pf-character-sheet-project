@@ -12630,7 +12630,7 @@ console.log('proficiencies -- a weapon on Gear is read against them');
   // The base weapon: a named blade that is a katana.
   check('"As" reads against the specific list', wp({ name: 'Enpitsu to Keshi', familiarity: 'Exotic', baseWeapon: 'katana' }), true);
   check('and a base weapon nothing covers refuses on its own', wp({ name: 'Thing', baseWeapon: 'nodachi' }), false);
-  check('and says why', weaponProficient(prof, { name: 'Enpitsu to Keshi', baseWeapon: 'Katana' }).why, 'katana on the Overview');
+  check('and says why', weaponProficient(prof, { name: 'Enpitsu to Keshi', baseWeapon: 'Katana' }).why, 'katana in Proficiencies');
   // The [Enhanced] veil rule: a veilweaver is always proficient with what a veil creates.
   const veil = weaponProficient(prof, { name: 'Bloodburst Blade', familiarity: 'Exotic', groups: ['Veil', 'Heavy Blades'] });
   check('a weapon in the Veil group is proficient by the [Enhanced] rule', [veil.state, veil.source], [true, 'veil']);

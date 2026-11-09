@@ -189,7 +189,7 @@ run.addEventListener('click', async () => {
     await test('A date box being typed in is drawn again once it is left', async () => {
       const root = sheet.shadowRoot;
       sheet.model.set('wealth.oathOfOfferings', true);   // the box takes a date only while something is owed
-      root.getElementById('tab-overview').click();
+      root.getElementById('tab-gear').click();
       const box = root.querySelector('[data-set="wealth.lastOffering"]');
       assert(box && !box.disabled, 'Last offering box missing');
       // Past the window in which the check before's press could still be
@@ -375,7 +375,7 @@ run.addEventListener('click', async () => {
     // it was given none: one chip per line, each broken at its longest word.
     await test('The proficiency chips take the row beside their label', async () => {
       const root = sheet.shadowRoot;
-      root.getElementById('tab-overview').click();
+      root.getElementById('tab-gear').click();
       const lists = [...root.querySelectorAll('.panel.proficiencies .profrow .chips')];
       assert(lists.length >= 5, 'Proficiency chip lists missing');
       for (const list of lists) {
@@ -392,7 +392,7 @@ run.addEventListener('click', async () => {
     // lose them; before, it kept whichever it had.
     await test('A sheet crossing 620px wide gains and loses the narrow layout', async () => {
       const root = sheet.shadowRoot;
-      root.getElementById('tab-overview').click();
+      root.getElementById('tab-stats').click();
       // The sheet hears of its width from a ResizeObserver, which reports on
       // drawn frames only; a window behind another draws none.
       const drawing = await new Promise((resolve) => {

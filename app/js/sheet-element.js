@@ -206,7 +206,7 @@ const TABS = [
   ['trackers', 'Trackers'],
   ['progression', 'Progression'],
   ['extras', 'Extras & Notes'],
-  ['lore', 'Lore'],
+  ['lore', 'Background'],
   ['formulas', 'Formulas'],
   ['audit', 'Formula Audit'],
 ];
@@ -8644,6 +8644,11 @@ export class CharacterSheetElement extends HTMLElement {
         this.#model.removeClassFeatureRuleGroup(button?.dataset.class,
           Number(button?.dataset.col), Number(button?.dataset.group));
         this.#render();
+        break;
+      // A read-only Overview panel's Edit button: the same panel on the tab
+      // it is edited on (`home:<key>` in ui/formula-places.js).
+      case 'go-home':
+        this.#formulaJump(button?.dataset.place);
         break;
       case 'add-condition': {
         const name = String(this.#view.draft.condition || '').trim();

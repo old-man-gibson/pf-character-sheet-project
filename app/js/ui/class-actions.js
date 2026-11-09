@@ -25,7 +25,7 @@ export function classActionsPanel(model) {
         ${routineEditor(model,f,`feature:${i}`)}
         <button data-feature-pin="${i}">${model.data.session?.cards?.some(c=>c.source===`class-feature:${f.id}`)?'Pinned to session':'Pin to session'}</button>
         <button data-feature-remove="${i}">Remove feature</button>`, 'session-editor', true)).join('')}
-      <button data-feature-add="${esc(name)}">+ Class feature</button>`, '', true)).join('') || '<p class="hint">Add a class on Overview to start defining class features.</p>'}</section>`, true);
+      <button data-feature-add="${esc(name)}">+ Class feature</button>`, '', true)).join('') || '<p class="hint">Add a class to the Classes table to start defining class features.</p>'}</section>`, true);
 }
 
 export function bindClassActions(root,model,render) {

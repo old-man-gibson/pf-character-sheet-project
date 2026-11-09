@@ -4323,6 +4323,16 @@ button.foldchip .badge { margin-left: 4px; }
    can use more width, take most of what is left. */
 .band > .panel.proficiencies { flex: 3 1 20rem; }
 
+/* The Overview's read-only panels (overview.js): the heading button that goes
+   to the tab the panel is edited on, and the plain tables they read out in. */
+.panel > h3 button.editlink {
+  font-size: 0.68rem; padding: 1px 8px; font-weight: 600;
+  text-transform: none; letter-spacing: 0; white-space: nowrap;
+}
+.rosummary th[scope="row"] { text-align: left; font-weight: 600; vertical-align: top; }
+.rosummary td { vertical-align: top; }
+.rosummary th[scope="row"] .hint { font-weight: 400; }
+
 /* A companion's skills, in two tables side by side -- one across the panel
    put a skill's name in a box four times its length. Every column but the
    name is as wide as what it holds; the name takes the rest of its half. */

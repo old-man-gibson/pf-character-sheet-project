@@ -36,8 +36,8 @@ edits still move things correctly — raise Con by 2 and Fortitude rises by exac
 The UI shows which values have drifted from the source sheet.
 
 Offsets are ordinary editable fields, not hidden bookkeeping: AC, touch, flat-footed
-and CMD carry one each in the Overview's Defense panel, and the three saves in the
-Saves panel, under **Other**. Nothing extra is stored for one edited to a number: the
+and CMD carry one each in the Stats tab's Armor class panel, and the three saves in the
+Saving throws panel, under **Other**. Nothing extra is stored for one edited to a number: the
 offset is recovered on load as `savedTotal − computedFromVisibleParts`, so it round-trips
 through `localStorage` and Export JSON exactly as an imported one does. One written as a
 **formula** (`floor(level / 4)`) is the one exception, because a rule cannot be recovered
@@ -79,7 +79,7 @@ points a level** as a starting maximum (a plain number to overwrite once the cla
 in), two empty perk slots, three empty race-trait slots, every companion tab empty and
 waiting in ⚙, and nothing else. Empty slots the character is owed — Traits 1–3, the
 race-trait rows, the perks — carry a red wash until filled, and the panel headers count
-them (*0 of 3 picked*). Classes go in on the Overview and onto the Progression tracks;
+them (*0 of 3 picked*). Classes go in on the Progression tab's Classes table and onto its tracks;
 hit-point maximum and base attack are typed, as they are on the workbook; everything
 downstream recalculates as it does for an imported character.
 

@@ -3,34 +3,36 @@
  *
  * In the build view the Overview is the whole character on one page: who they
  * are, the numbers a table asks for, the classes those numbers come out of,
- * what defends them and what they attack with. In the session view the same
- * tab is a dashboard of cards -- the readings that come up in play, arranged
- * the way the player arranged them, with the build machinery a click away.
+ * what defends them and what they attack with. It is read-only but for the
+ * Details, Conditions and Buffs panels; every other panel is a summary of one
+ * edited on another tab (Stats, Progression, Background, Equipment), with an
+ * Edit button that goes there (ui/formula-places.js `HOMES`).
  *
- * The classes and hit-points panels live here too, because both views show
- * them and neither has a tab of its own.
+ * In the session view the same tab is a dashboard of cards -- the readings
+ * that come up in play, arranged the way the player arranged them, with the
+ * build machinery a click away.
  *
  * Bodies keep the indentation they had as methods, because the markup they
  * return is whitespace-sensitive; see ui/panels/gear.js for the reasoning.
  */
 import { esc, portraitFrame } from '../html.js';
+import { HOMES } from '../formula-places.js';
+import { abilityScoresPanel, acPanel, attackPanel, hpStatus, restButtons, savesPanel } from './stats.js';
+import { BAB_RATES, languageCopy } from './lore.js';
 import { renderSessionBoard } from './session.js';
 import { field } from '../fields.js';
-import { effectiveMythicTier, hitDieGain } from '../../rules.js';
+import { effectiveMythicTier } from '../../rules.js';
 import { minus, signed } from '../format.js';
-import { collapsible, collapsibleSub, foldButton, isCollapsed, isOpen, stepGrid } from '../rows.js';
+import { collapsible, foldButton, isOpen, supergroup } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
-import { foldingNote } from '../talents.js';
 import { proseText } from '../rows.js';
-import { forwardedBadge, sheetBonusCell, sheetBonusField, sheetBonusHead, sheetBonusHint } from '../badges.js';
 import { rollButton } from '../roll.js';
 import { weaponNow } from '../weapon-now.js';
-import { speedTable } from '../speeds.js';
 import {
-  guileTalentRows, ownTalentRows, plannedLevels, trackTalentSide, trainingSideInUse,
+  guileTalentRows, ownTalentRows, trackTalentSide, trainingSideInUse,
 } from '../../model.js';
 import {
-  formulaMeta, meterStyleButton, meterStyleEditor, meterVisual, powerPointStepper, trackerLine,
+  formulaMeta, meterVisual, powerPointStepper, trackerLine,
 } from './trackers.js';
 import { slotSpend } from './subsystems.js';
 
@@ -62,69 +64,29 @@ const DASH_CARDS = [
 
 const DASH_CARD_LABELS = new Map(DASH_CARDS);
 
-/** The base attack progressions a class can run, as the rules name them. */
-// Characters, not entities: the dropdown escapes its labels like every other.
-const BAB_RATES = [[1, 'full'], [0.75, '¾'], [0.5, '½'], [0, 'none']];
-
-/** The hit dice a class can have, as the workbook's own HD Size column listed them. */
-const HIT_DICE = [4, 6, 8, 10, 12];
-
-/**
- * One of the class table's two progression dropdowns.
- *
- * HD and BAB are the same control asking two questions, so they are built by
- * the same function: a fixed list of what the rules allow, plus whatever the
- * row already holds if a pack or an import put something else there -- which
- * is how a d20 hit die or a 2/3 progression survives being looked at.
- */
-function progressionSelect(i, field, value, choices, label, format = String, beaten = null) {
-  const now = Number(value) || 0;
-  const known = choices.some(([v]) => v === now);
-  const opts = known ? choices : [...choices, [now, format(now)]];
-  // Marked when another class present at the same levels is doing better,
-  // because that is when changing this dropdown moves nothing on the sheet.
-  const lost = beaten?.count || 0;
-  const all = lost > 0 && lost === beaten.levels;
-  const where = beaten?.levels === 1 ? 'its only level'
-    : all ? `all ${lost} of its levels`
-      : `${lost} of its ${beaten?.levels} levels`;
-  const why = lost
-    ? `Another class has a better ${beaten.noun} at ${where}, so this one${
-      all ? ' has no effect' : ' only counts at the other levels'}.`
-    : '';
-  return itemSelect('classes', i, field, now, opts, null, null, {
-    kind: 'number', attrs: `aria-label="${esc(label)}" class="${all ? 'beaten' : ''}"${why ? ` title="${esc(why)}"` : ''}`,
-  });
-}
-import { loadLine, weaponsPanel, wealthPanel } from './gear.js';
+import { loadLine, weaponsPanel } from './gear.js';
 import { playLogPanel } from '../play-log.js';
 import {
-  ABILITIES, ABILITY_LABELS, ALT_ATTACK_OF, ATTACK_MODES, ATTACK_MODE_KEY,
-  ATTACK_MODE_LABELS, BONUS_TYPES, BUFF_MOD_KEYS, BUFF_TARGETS, CONDITIONS, CONDITION_CATS, GAME_SYSTEMS,
-  SIZE_MODIFIERS, TRAIT_SLOTS, WEAPON_GROUPS, WEAPON_FAMILIARITY, WEAPON_HANDEDNESS,
-  ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES, attackModeTotal, castingNoun,
-  conditionInfo, conditionTotals, fmt, prepStyle, skillConditionDelta, skillLabel, statModDelta,
+  ABILITIES, ABILITY_LABELS, ALT_ATTACK_OF, ATTACK_MODES, ATTACK_MODE_LABELS, BONUS_TYPES, BUFF_MOD_KEYS,
+  BUFF_TARGETS, CONDITIONS, CONDITION_CATS, SIZE_MODIFIERS, TRAIT_SLOTS, attackModeTotal, castingNoun,
+  conditionInfo, conditionTotals, fmt, prepStyle, skillConditionDelta, skillLabel,
 } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
-import { abilityCollapse, abilityHarm, blankClassRow, maneuverDetails } from '../../model.js';
+import { maneuverDetails } from '../../model.js';
 import { colorControl } from '../color-control.js';
 import { AGE_CATEGORIES, campaignRules, isAntihero, levelProgress, specialtyInPlay } from '../../model/campaign.js';
-import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
+import { check, num, select, text } from '../fields.js';
 import {
-  addButton, bigStat, editLine, exprField, grip, itemCheck, itemExpr, itemNum, itemSelect,
-  itemText, line, lineHtml, movedInline, movedSub, movedTitle, movedValue, removeAction, removeButton,
-  removeControl, rowRemove, rowTools, workingTitle,
+  addButton, bigStat, exprField, itemCheck, itemExpr, itemNum, itemSelect, itemText, line, lineHtml,
+  movedInline, movedSub, movedTitle, movedValue, removeAction, removeButton, removeControl,
 } from '../rows.js';
-import {
-  TRAIT_CATEGORIES,
-} from '../../rules.js';
 
   /**
-   * The Overview, top to bottom: who the character is, the numbers a table
-   * asks for, the classes those numbers come out of, then what defends them
-   * and what they attack with -- each of those a supergroup of the panels that
-   * belong together -- and last the things that change less often: conditions,
-   * the wallet, traits.
+   * The Overview, top to bottom: the headline numbers; the two panels edited
+   * here (Details beside the ability scores, then Conditions and Buffs); and
+   * then, read-only and in the order a character is built, the classes, the
+   * background, the defenses and the offenses. Each read-only panel's Edit
+   * button goes to the tab it is edited on.
    */
 export function renderOverviewPanel(model, ctx) {
     const c = model.data;
@@ -166,45 +128,31 @@ export function renderOverviewPanel(model, ctx) {
 
       <div class="band lead">
         ${detailsPanel(model, ctx)}
-        ${abilityScoresPanel(model)}
+        ${abilityScoresPanel(model, { readOnly: true, head: editLink(model, 'abilities') })}
       </div>
-      <div class="band">
-        ${/* Background skills (a campaign rule) replace the Specialty. */''}
-        ${specialtyInPlay(model.data) ? specialtyPanel(model) : ''}
-        ${languagesPanel(model)}
-      </div>
-
-      ${classesPanel(model, ctx)}
-
-      ${supergroup(model, 'defenses', 'Defenses', 'defenses', `
-          ${hitPointsPanel(ctx, model)}
-          ${acPanel(model)}
-          <div class="band">
-            ${savesPanel(model)}
-            ${initiativePanel(model)}
-          </div>`)}
-
-      ${supergroup(model, 'offenses', 'Offenses', 'offenses', `
-          ${attackPanel(model)}
-          ${speedPanel(model)}
-          ${proficienciesPanel(model)}`)}
-
       <div class="band lead">
         ${conditionsPanel(model)}
-        ${carryPanel(model)}
-      </div>
-      ${/*
-           * Wealth is capped at 54rem -- a ledger reads worse the wider it gets --
-           * which on a laptop left 495px of empty grid beside it, and Buffs is a
-           * short row of chips directly above. Paired, so the gap holds the thing
-           * that was going to be under it anyway. Where the two do not fit side
-           * by side the band stacks them (see `.band`).
-           */''}
-      <div class="band">
-        ${collapsible(model, 'wealth', wealthPanel(model, ctx))}
         ${collapsible(model, 'buffs', buffsPanel(model, ctx))}
       </div>
-      ${traitsPanel(model, ctx)}
+
+      ${classesSummary(model)}
+
+      ${supergroup(model, 'background', 'Background', 'background', `
+          ${raceTraitsSummary(model)}
+          ${traitsSummary(model)}
+          ${specialtyInPlay(c) ? specialtySummary(model) : ''}
+          ${languagesSummary(model)}`)}
+
+      ${supergroup(model, 'defenses', 'Defenses', 'defenses', `
+          ${hitPointsSummary(model)}
+          ${armorClassSummary(model)}
+          ${savesSummary(model)}`)}
+
+      ${supergroup(model, 'offenses', 'Offenses', 'offenses', `
+          ${attackSummary(model)}
+          ${speedSummary(model)}
+          ${carrySummary(model)}
+          ${proficienciesSummary(model)}`)}
     </div>`;
   }
 
@@ -771,19 +719,6 @@ function dashEffectsCard(model) {
     </section>`;
   }
 
-/**
- * The three rests, as the Quick actions card and the hit-point panel both
- * offer them. Each brings back what lasts that long and takes in the shorter
- * ones (model/rest.js), and each is one step of undo.
- */
-function restButtons() {
-  return `<button data-action="rest-encounter"
-      title="Reset trackers that refresh after an encounter.">End encounter</button>
-    <button data-action="rest-day"
-      title="Restore hit points, clear temporary hit points and nonlethal damage, and reset daily and encounter trackers, spell slots, power points, temporary essence and companion hit points.">New day</button>
-    <button data-action="rest-week"
-      title="A new day, plus reset weekly trackers.">New week</button>`;
-}
 
 /**
  * Quick actions: the four buttons a table presses every round, and the one
@@ -1246,967 +1181,268 @@ function characterColorRow(value) {
     </div>`;
   }
 
-  /**
-   * A labelled band of panels, foldable down to its label.
-   *
-   * Defenses and Offenses are the two tallest things on the Overview and the
-   * two a player is least often here to edit -- on a phone they are most of
-   * the scrolling between the top of the tab and everything under them. The
-   * fold uses the same key store and the same button as every panel's own, so
-   * a band left shut stays shut and travels with the character.
-   */
-function supergroup(model, key, title, bodyClass, body) {
-    const shut = isCollapsed(model, `sg-${key}`);
-    return `<div class="supergroup span2${shut ? ' collapsed' : ''}" aria-label="${esc(title)}">
-        <div class="supergroup-title">${esc(title)} ${foldButton(model, `sg-${key}`)}</div>
-        ${shut ? '' : `<div class="supergroup-body band ${bodyClass}">${body}</div>`}
-      </div>`;
-  }
 
-  /**
-   * The specialty: what the character did before, the feat it grants and its
-   * perks. The feat is the same field as the Granted feats row on Feats &
-   * Mythic -- one home, seen from two places.
-   *
-   * Two perks, always. A specialty grants the pair; there is no order to them
-   * and neither is optional, so the row carries no arrows and no cross -- and
-   * nothing offers to add a third. A document that arrived with more shows
-   * them all rather than hiding what it holds.
-   */
-function specialtyPanel(model) {
-    const c = model.data;
-    const perks = c.identity.specialtyPerks || [];
-    const slots = Math.max(2, perks.length);
-    return `<section class="panel">
-      <h3>Specialty</h3>
-      <div class="fieldgrid two">
-        ${field('Specialty', text('identity.specialty', c.identity.specialty, 'Chef, Gambling Villain…'))}
-        ${field('Specialty feat', text('grantedFeats.specialty.name', c.grantedFeats?.specialty?.name, 'Which feat?'))}
-      </div>
-      <div class="perkfields">
-        ${Array.from({ length: slots }, (_, i) => `<label class="fld">
-          <span>Perk ${i + 1}</span>
-          ${prose(model, `data-item="identity.specialtyPerks|${i}|self"`, perks[i] ?? '', 1, 'grow')}
-        </label>`).join('')}
-      </div>
-      <p class="hint">The specialty feat is also listed under <strong>Granted feats</strong>
-        on Feats &amp; Mythic. The three specialty skills are chosen on the Skills tab.</p>
-    </section>`;
-  }
 
-  /**
-   * Languages, against the slots the character has for them.
-   *
-   * One slot per point of Int bonus and one per Linguistics rank are the
-   * rules; anything else that grants some is a number or a formula in Extra,
-   * so a "+1 per two levels" stays true as the character levels.
-   *
-   * The list is edited once and read constantly, so folded down the panel is
-   * the thing that gets read: every language the character speaks on one line,
-   * in a box, ready to be copied into a post. Opened it is the fields again,
-   * and the order is the player's -- a chip can be dragged past its
-   * neighbours by the grip, which is what keeps the trade tongues at the front
-   * and the dead ones at the back.
-   */
-function languagesPanel(model) {
-    const c = model.data;
-    const i = c.identity;
-    const slots = i.languageSlots || { int: 0, linguistics: 0, extra: 0, total: 0, known: 0 };
-    const langs = i.languages || [];
-    const spare = slots.total - slots.known;
-    const shut = !!c.uiPrefs?.collapsed?.languages;
-    const spoken = [...String(i.nativeLanguages || '').split(/[,;]/), ...langs]
-      .map((s) => String(s).trim()).filter(Boolean);
-    const head = `<h3>Languages
-        <span class="badge${spare < 0 ? ' err' : ''}" title="Languages known / slots from Int, Linguistics and Extra.">${slots.known} / ${slots.total}</span>
-        ${foldButton(null, 'languages', {
-    open: !shut, cls: 'disclose', title: shut ? 'Open the list to edit it' : 'Fold it down to one line',
-  })}
-      </h3>`;
-    if (shut) {
-      /*
-       * A textarea rather than an input, because an input is one line by
-       * definition: a character with a good Int bonus and ranks in Linguistics
-       * speaks more languages than fit across a third of a row, and the rest
-       * of them scrolled out of sight with nothing to say they were there.
-       *
-       * It is still a form control rather than a div, because the Copy button
-       * beside it reads `.value`, and because a field is what you can click
-       * into and select all of. `#bindReadOnlyBoxes` sizes it to its content
-       * after every render, so the box is as tall as the list and never grows
-       * a scrollbar of its own.
-       */
-      return `<section class="panel collapsed">
-        ${head}
-        <div class="langcopy">
-          <textarea class="ro" data-post="languages" readonly rows="1" spellcheck="false"
-            placeholder="No languages yet." aria-label="Every language spoken">${esc(spoken.join(', '))}</textarea>
-          <button data-view data-copy="languages" title="Copy the list.">Copy</button>
-        </div>
-      </section>`;
-    }
-    return `<section class="panel">
-      ${head}
-      <div class="fieldgrid">
-        ${field('Native', text('identity.nativeLanguages', i.nativeLanguages, 'Common'))}
-        ${field('From Int', `<span class="value" title="One per point of Intelligence bonus">${slots.int}</span>`)}
-        ${field('From Linguistics', `<span class="value" title="One per Linguistics rank">${slots.linguistics}</span>`)}
-        ${field('Extra slots', exprField('data-set="identity.languageExtra"', i.languageExtra, {
-          width: '100%',
-          value: typeof i.languageExtra === 'string' && i.languageExtra.trim() ? slots.extra : null,
-          error: slots.extraError,
-          title: 'A number or a formula, e.g. floor(level / 2)',
-        }))}
-      </div>
-      <div class="langlist">
-        ${langs.map((l, li) => `<span class="lang" data-rowdrop="identity.languages|${li}" data-rowaxis="x">
-          ${grip()}
-          ${itemText('identity.languages', li, 'self', l, 'Language')}
-          ${removeButton('identity.languages', li, { what: 'language', tiny: true })}
-        </span>`).join('')}
-      </div>
-      <div class="pair" style="margin-top:8px">
-        ${addButton('identity.languages', 'Add language', '')}
-        <span class="hint">${spare > 0 ? `${spare} slot${spare === 1 ? '' : 's'} free`
-    : spare < 0 ? `${-spare} over the limit` : 'all slots used'}</span>
-      </div>
-      <p class="hint">Native languages are free. You get one slot per point of Int bonus and one per
-        Linguistics rank. <strong>Extra</strong> takes a number or a formula for slots a race
-        or a trait adds.</p>
-    </section>`;
-  }
 
+
+
+
+
+
+
+
+
+
+
+/* ---------------- the read-only summaries ---------------- */
+
+/** The tabs the read-only panels are edited on, by the name each has until the player renames it. */
+const HOME_TAB_NAMES = { stats: 'Stats', progression: 'Progression', gear: 'Equipment', lore: 'Background' };
 
 /**
- * Damage and drain beside a score: what each comes to, and what a score
- * worn to nothing means. Drawn under the score's row so the grid keeps its
- * columns.
+ * The button in a read-only panel's heading that goes to the panel it
+ * summarizes, on the tab it is edited on (`home:<key>`, ui/formula-places.js).
  */
-function harmMark(k, a) {
-    // The working score and modifier beside it already carry both; this says why.
-    const { damage, drain } = abilityHarm(a);
-    if (!damage && !drain) return '';
-    const bits = [damage ? `${damage} damage (${minus(-Math.floor(damage / 2))} mod)` : '', drain ? `${drain} drain` : ''].filter(Boolean);
-    const collapse = abilityCollapse(k, a);
-    return `<span class="abharm${collapse ? ' bad' : ''}">${esc(bits.join(', '))}${collapse ? `; ${esc(collapse)}` : ''}</span>`;
-  }
+function editLink(model, key) {
+  const tab = HOMES[key]?.tab;
+  const name = model.tabName?.(tab) || HOME_TAB_NAMES[tab] || tab;
+  return `<button type="button" class="editlink" data-view data-action="go-home" data-place="home:${esc(key)}"
+      title="${esc(`Edit this on the ${name} tab.`)}">Edit on ${esc(name)}</button>`;
+}
 
-/** The six damage and drain boxes, folded away until something is in them. */
-function abilityHarmTable(model) {
-    const c = model.data;
-    const any = ABILITIES.some((k) => { const h = abilityHarm(c.abilities[k]); return h.damage || h.drain; });
-    const body = `<div class="tablewrap"><table class="abdmg">
-      <thead><tr><th></th>${ABILITIES.map((k) => `<th class="num">${ABILITY_LABELS[k]}</th>`).join('')}</tr></thead>
-      <tbody>
-        <tr><th scope="row" title="Every 2 points of damage give −1 to the modifier. A New day heals 1 point of each.">Damage</th>
-          ${ABILITIES.map((k) => `<td>${num(`abilities.${k}.damage`, c.abilities[k]?.damage, `min="0" aria-label="${ABILITY_LABELS[k]} damage"`)}</td>`).join('')}</tr>
-        <tr><th scope="row" title="Lowers the score itself. Rest does not heal it.">Drain</th>
-          ${ABILITIES.map((k) => `<td>${num(`abilities.${k}.drain`, c.abilities[k]?.drain, `min="0" aria-label="${ABILITY_LABELS[k]} drain"`)}</td>`).join('')}</tr>
-      </tbody></table></div>`;
-    return collapsibleSub(model, 'ability-harm', 'Damage &amp; drain', body, '', !any);
-  }
-
-function abilityScoresPanel(model) {
-    const c = model.data;
-    const cs = model.conditionState;
-    const built = !!c.statsBuild;
-    return `<section class="panel">
-      <h3>Ability scores</h3>
-      <div class="ability-head">
-        <span>&nbsp;</span><span>Score</span><span>Mod</span>
-        <span class="h-temp">Temp</span><span class="h-temp">Mod</span><span>Roll</span>
-      </div>
-      <div class="abilities">
-        ${ABILITIES.map((k) => {
-          const a = c.abilities[k];
-          const moved = cs.changed && cs.deltas[k];
-          // Both scores carry their whole working: the permanent one is ten
-          // columns on a tab most players never open, and the temporary one
-          // is that plus five more.
-          const tip = (key, extra = '') => esc(workingTitle(model.breakdown(key), extra));
-          // And the key the hover panel opens from -- on the read-outs only.
-          // A panel standing under a field you are typing in covers the next
-          // field, and a score typed in by hand has no working worth opening.
-          const bd = (key, extra = '') => ` data-bd="${esc(key)}"${extra ? ` data-bdx="${esc(extra)}"` : ''}`;
-          return `<div class="ability">
-            <span class="ab abmark" data-ab="${k}">${ABILITY_LABELS[k]}</span>
-            ${built
-              ? `<span class="mod working" title="${tip(k)}"${bd(k)}>${a.score}</span>`
-              : `<input type="number" value="${a.score}" data-set="abilities.${k}.score" aria-label="${ABILITY_LABELS[k]} score" title="${tip(k)}">`}
-            <span class="mod">${fmt(a.mod)}</span>
-            ${moved
-              ? movedValue(`${cs.scores[k]}`, cs.scores[k] - (a.workingScore ?? a.tempScore), {
-                tag: 'span',
-                cls: 'mod temp-score working',
-                title: workingTitle(model.breakdown(`${k}.temp`), `${a.workingScore ?? a.tempScore} before conditions`),
-                attrs: bd(`${k}.temp`, `${a.workingScore ?? a.tempScore} before conditions`).trim(),
-              })
-              : built
-                ? `<span class="mod temp-score working${abilityHarm(a).drain ? ' harmed' : ''}" title="${tip(`${k}.temp`)}"${bd(`${k}.temp`)}>${a.workingScore ?? a.tempScore}</span>`
-                : `<input class="temp-score" type="number" value="${a.tempScore}" data-set="abilities.${k}.tempScore" aria-label="${ABILITY_LABELS[k]} temporary score" title="${tip(`${k}.temp`)}">`}
-            ${movedValue(fmt(a.totalMod + (moved ? cs.deltas[k] : 0)), moved ? cs.deltas[k] : 0, {
-    tag: 'span', cls: 'mod temp temp-mod', title: moved ? `${fmt(a.totalMod)} before conditions` : '', keep: true,
-  })}
-            ${rollButton(model, 'ability', k, `a ${ABILITY_LABELS[k]} check`, cs)}
-            ${harmMark(k, a)}
-          </div>`;
-        }).join('')}
-      </div>
-      ${abilityHarmTable(model)}
-      ${built ? `<p class="hint" style="margin-top:8px">
-        Scores are built from point buy, race, ABP and other sources.
-        Edit them on the <strong>Stats</strong> tab.
-      </p>` : ''}
-      ${cs.changed && ABILITIES.some((k) => cs.deltas[k]) ? `<p class="hint warn">
-        Scores and modifiers in red include the ticked conditions.
-      </p>` : ''}
+/** The classes, their levels and what each advances. */
+function classesSummary(model) {
+  const c = model.data;
+  const rows = (c.classes || []).filter((x) => String(x.name || '').trim());
+  const rate = (v) => BAB_RATES.find(([r]) => r === Number(v))?.[1] ?? fmt(Number(v) || 0);
+  const good = (x) => [x.goodFort && 'Fort', x.goodRef && 'Ref', x.goodWill && 'Will'].filter(Boolean).join(', ') || '—';
+  const archetypes = (x) => [...(Array.isArray(x.archetypeStack) ? x.archetypeStack.map((a) => a.name) : []),
+    ...String(x.archetypes || '').split(/\s*[,;]\s*/)].map((a) => String(a || '').trim()).filter(Boolean).join(', ');
+  return `<section class="panel span2">
+      <h3>Classes ${editLink(model, 'classes')}</h3>
+      ${rows.length ? `<div class="tablewrap"><table class="rosummary stacked cardrows">
+        <thead><tr><th>Class</th><th class="num">Levels</th><th class="num">HD</th><th>BAB</th>
+          <th>Good saves</th><th class="num">Ranks</th><th>Archetypes</th></tr></thead>
+        <tbody>${rows.map((x) => `<tr>
+          <td data-stack="name"><strong>${esc(x.name)}</strong></td>
+          <td class="num" data-label="Levels" data-inline="spec">${esc(x.levelsOverride ?? x.gestaltLevels ?? 0)}</td>
+          <td class="num" data-label="Hit die" data-inline="spec">${x.hd ? `d${esc(x.hd)}` : '—'}</td>
+          <td data-label="BAB" data-inline="spec">${esc(rate(x.bab))}</td>
+          <td data-label="Good saves" data-inline="save">${esc(good(x))}</td>
+          <td class="num" data-label="Ranks" data-inline="spec">${esc(x.skillRanks ?? 0)}</td>
+          <td data-label="Archetypes">${esc(archetypes(x)) || '—'}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>` : '<p class="empty">No classes yet.</p>'}
     </section>`;
-  }
+}
 
+/** A trait's or feature's effect, as its text reads with any formulas worked out. */
+function effectText(model, text) {
+  return String(text ?? '').trim() ? renderedProse(model, text, null, { links: true }) : '';
+}
 
-function acPanel(model) {
-    const d = model.data.defenses;
-    const cs = model.conditionState;
-    const cell = (key, base) => `<td class="num total">${movedInline(cs, key, base, String, model)}</td>`;
-    return `<section class="panel fit">
-      <h3>Armor class</h3>
-      <div class="tablewrap"><table class="defense fitcols">
-        <thead><tr><th></th><th class="num">Total</th>
-          <th class="num" title="Your own flat bonus">Misc</th>
-          ${sheetBonusHead()}</tr></thead>
-        <tbody>
-          <tr><td>Armor Class</td>${cell('ac', d.ac)}
-            <td class="num">${num('defenses.miscAC', d.miscAC, 'style="width:3.6rem"')}</td>
-            ${sheetBonusCell(model, 'defenses.ac')}</tr>
-          <tr><td>Touch</td>${cell('touch', d.touch)}
-            <td class="num" title="Misc AC does not apply to touch AC.">—</td>
-            ${sheetBonusCell(model, 'defenses.touch')}</tr>
-          <tr><td>Flat-footed</td>${cell('flatFooted', d.flatFooted)}
-            <td class="num">${roField(d.miscAC || 0, 'The Misc AC above. It applies to flat-footed AC.', 'style="width:3.6rem"')}</td>
-            ${sheetBonusCell(model, 'defenses.flatFooted')}</tr>
-          <tr><td title="10 + BAB + Str + Dex + special size modifier, plus circumstance, deflection, dodge, insight, luck, morale, sacred and profane AC bonuses and all AC penalties.">CMD</td>${cell('cmd', d.cmd)}
-            <td class="num">${num('defenses.miscCMD', d.miscCMD, 'style="width:3.6rem"')}</td>
-            ${sheetBonusCell(model, 'defenses.cmd')}</tr>
-        </tbody>
-      </table></div>
+function raceTraitsSummary(model) {
+  const c = model.data;
+  const race = (c.raceTraits || []).filter((t) => String(t.name || '').trim() || String(t.text || '').trim());
+  const who = [c.identity.race, c.identity.variant ? `(${c.identity.variant})` : ''].filter(Boolean).join(' ');
+  return `<section class="panel racepanel">
+      <h3>Race traits <span class="badge">${race.length}</span>
+        ${who ? `<span class="hint">${esc(who)}</span>` : ''} ${editLink(model, 'race-traits')}</h3>
+      ${race.length ? `<div class="tablewrap"><table class="rosummary">
+        <tbody>${race.map((t) => (String(t.name || '').trim()
+    ? `<tr><th scope="row">${esc(t.name)}</th><td>${effectText(model, t.text)}</td></tr>`
+    : `<tr><td colspan="2">${effectText(model, t.text)}</td></tr>`)).join('')}</tbody>
+      </table></div>` : '<p class="empty">No race traits yet.</p>'}
+    </section>`;
+}
+
+function traitsSummary(model) {
+  const c = model.data;
+  const slots = c.traitSlots || {};
+  const filled = (v) => !!(v?.name || v?.text);
+  const rows = [
+    ...TRAIT_SLOTS.filter((d) => d.kind !== 'feat' && filled(slots[d.key])).map((d) => [d.label, slots[d.key]]),
+    ...(slots.additional || []).filter(filled).map((x) => ['Additional', x]),
+  ];
+  const picked = ['trait1', 'trait2', 'trait3'].filter((k) => slots[k]?.name || slots[k]?.text || slots[k]?.category).length;
+  return `<section class="panel traitspanel">
+      <h3>Traits &amp; drawbacks
+        <span class="badge${picked < 3 ? ' err' : ' ok'}">${picked} of 3 picked</span> ${editLink(model, 'traits')}</h3>
+      ${rows.length ? `<div class="tablewrap"><table class="rosummary">
+        <tbody>${rows.map(([slot, v]) => `<tr><th scope="row">${esc(v.name || slot)}${v.name ? `<div class="hint">${esc(slot)}</div>` : ''}</th>
+          <td>${effectText(model, v.text)}</td></tr>`).join('')}</tbody>
+      </table></div>` : '<p class="empty">No traits picked yet.</p>'}
+    </section>`;
+}
+
+function specialtySummary(model) {
+  const c = model.data;
+  const perks = (c.identity.specialtyPerks || []).filter((t) => String(t ?? '').trim());
+  return `<section class="panel">
+      <h3>Specialty ${editLink(model, 'specialty')}</h3>
+      ${line('Specialty', c.identity.specialty || '—')}
+      ${line('Specialty feat', c.grantedFeats?.specialty?.name || '—')}
+      ${perks.map((t, i) => lineHtml(`Perk ${i + 1}`, effectText(model, t))).join('')}
+    </section>`;
+}
+
+function languagesSummary(model) {
+  const i = model.data.identity;
+  const slots = i.languageSlots || { total: 0, known: 0 };
+  return `<section class="panel">
+      <h3>Languages
+        <span class="badge${slots.known > slots.total ? ' err' : ''}" title="Languages known / slots from Int, Linguistics and Extra.">${slots.known} / ${slots.total}</span>
+        ${editLink(model, 'languages')}</h3>
+      ${languageCopy(i)}
+    </section>`;
+}
+
+function hitPointsSummary(model) {
+  const hp = model.hpState;
+  return `<section class="panel hitpoints">
+      <h3>Hit points
+        ${hp.nonlethal > 0 ? `<span class="badge${hp.nonlethal >= hp.effective ? ' err' : ''}">${hp.nonlethal} nonlethal</span>` : ''}
+        ${editLink(model, 'hp')}</h3>
+      ${meterVisual(model.meterSpec('hp'))}
+      ${lineHtml('Current', `${hp.current} / ${hp.max}${hp.temp > 0
+    ? ` <span class="hptemp" title="Temporary hit points, used first.">+${hp.temp}</span>` : ''}`, true)}
+      ${line('Dead at', minus(hp.deathAt))}
+      ${hpStatus(hp)}
+    </section>`;
+}
+
+/** The five defense boxes as they now stand, once formulas and forwarded bonuses are in. */
+function defenseLines(model) {
+  const d = model.data.defenses;
+  const calc = d.calc || {};
+  return [
+    ['Spell resistance', calc.sr?.text, d.spellResistance], ['DR', calc.drText, d.dr],
+    ['Resistance', calc.resistanceText, d.resistance], ['Vulnerability', calc.weaknessText, d.weakness],
+    ['Immunities', calc.immunitiesText, d.immunities],
+  ].map(([label, now, typed]) => [label, String(now || '').trim() || proseText(model, typed || '').trim()])
+    .filter(([, shown]) => shown)
+    .map(([label, shown]) => line(label, shown)).join('');
+}
+
+function armorClassSummary(model) {
+  const d = model.data.defenses;
+  const cs = model.conditionState;
+  return `<section class="panel fit">
+      <h3>Armor class ${editLink(model, 'ac')}</h3>
+      ${lineHtml('Armor Class', movedInline(cs, 'ac', d.ac, String, model), true)}
+      ${lineHtml('Touch', movedSub(cs, 'touch', d.touch, String))}
+      ${lineHtml('Flat-footed', movedSub(cs, 'flatFooted', d.flatFooted, String))}
+      ${lineHtml('CMD', movedInline(cs, 'cmd', d.cmd, String, model))}
+      ${lineHtml('Flat-footed CMD', movedSub(cs, 'ffCmd', d.ffCmd, String))}
+      ${line('AC ability', [d.acStat1, d.acStat2].filter(Boolean).join(' + ') || '—')}
+      ${d.uncannyDodge ? line('Uncanny dodge', 'Yes') : ''}
+      ${defenseLines(model)}
       ${cs.acVsMelee || cs.acVsRanged ? `<p class="hint warn">
         ${cs.acVsMelee ? `${fmt(cs.acVsMelee)} AC against melee` : ''}${cs.acVsMelee && cs.acVsRanged ? ', ' : ''}${
           cs.acVsRanged ? `${fmt(cs.acVsRanged)} AC against ranged` : ''} from conditions, in addition to the numbers above.
       </p>` : ''}
-      <div class="statline"><span class="label">AC ability</span>
-        <span class="value pair slots">${abilitySelect('defenses.acStat1', d.acStat1)}
-          <span class="hint">+</span>${abilitySelect('defenses.acStat2', d.acStat2)}</span></div>
-      <div class="statline"><span class="label">Uncanny dodge</span>
-        <span class="value">${check('defenses.uncannyDodge', d.uncannyDodge)}</span></div>
-      <div class="defboxes">
-      ${defenceBox(model, 'spellResistance', 'Spell resistance', 'Yes (17), or {= 11 + level}')}
-      ${defenceBox(model, 'dr', 'DR', '5/magic')}
-      ${defenceBox(model, 'resistance', 'Resistance', 'fire 10, cold 5')}
-      ${defenceBox(model, 'weakness', 'Vulnerability', 'sonic 5')}
-      ${defenceBox(model, 'immunities', 'Immunities', 'sleep, paralysis')}
-      </div>
-      <p class="hint">These five boxes accept <code>{…}</code> formulas. Each part is a bonus
-        target: <code>{dr.magic += 2}</code>, <code>{resistance.fire += 5}</code>,
-        <code>{immune.sleep += 1}</code>, <code>{defenses.sr += 2}</code>. A bonus to a part the box
-        does not have adds that part, so a misspelled name adds a new part instead of an error.</p>
-      ${sheetBonusHint('Deflection, natural armor, insight and the rest')}
     </section>`;
-  }
+}
 
-  /**
-   * The name each defence box is parsed under, and the destination that
-   * reaches every part of it at once. Immunities have no family total:
-   * an immunity is a switch, not an amount, so there is nothing to add to.
-   */
-  const DEFENCE_BOXES = {
-    spellResistance: { family: null, dest: 'defenses.sr', parts: 'sr' },
-    dr: { family: 'dr', dest: 'defenses.dr', parts: 'dr' },
-    resistance: { family: 'resistance', dest: 'defenses.resistance', parts: 'resistance' },
-    weakness: { family: 'weakness', dest: 'defenses.weakness', parts: 'weakness' },
-    immunities: { family: 'immune', dest: null, parts: 'immunities' },
-  };
-
-/**
- * One of the five defence boxes: what was typed, and what it comes to.
- *
- * The box itself is prose, so a DR that follows half your level is written
- * as the rule it is. Underneath, whenever a bonus has reached it from
- * somewhere else on the sheet, is the line as it now stands -- because the
- * box has to go on saying what was written in it (the same reason a skill's
- * Misc column is never folded into), and because "18/magic" appearing in a
- * box holding "5/magic" would be the sheet lying about what the player typed.
- *
- * The tooltip on that line names every rule that moved it, part by part, so
- * the number is followed back rather than guessed at.
- */
-function defenceBox(model, key, label, example) {
-    const d = model.data.defenses;
-    const spec = DEFENCE_BOXES[key];
-    const calc = d.calc || {};
-    const parts = key === 'spellResistance' ? [] : (calc[spec.parts] || []);
-    const moved = key === 'spellResistance'
-      ? !!calc.sr?.bonus
-      : parts.some((p) => p.bonus || p.granted);
-    const now = key === 'spellResistance' ? calc.sr?.text
-      : key === 'dr' ? calc.drText
-        : key === 'resistance' ? calc.resistanceText
-          : key === 'weakness' ? calc.weaknessText : calc.immunitiesText;
-    // One badge for the box, gathered across the family destination and
-    // every named part, saying the line as it now stands; its panel has one
-    // row a rule, each naming the part it went to.
-    const names = [spec.dest, ...parts.map((p) => p.key)];
-    return `<div class="statline defbox">
-      <span class="label" title="${esc(`For example: ${example}`)}">${esc(label)}</span>
-      <span class="value">${prose(model, `data-set="defenses.${key}"`, d[key], 1, 'grow')}
-        ${moved ? forwardedBadge(model, names, { shown: now || '—' }) : ''}</span></div>`;
-  }
-
-
-function savesPanel(model) {
-    const s = model.data.saves;
-    const cs = model.conditionState;
-    return `<section class="panel fit">
-      <h3>Saving throws</h3>
-      <div class="tablewrap"><table class="saves stacked fitcols" data-fold="shut">
-        <thead><tr><th>Save</th><th class="num">Total</th>
-          <th class="num" title="From the Classes table (gestalt)">Base</th>
-          <th>Ability</th><th title="A second ability that adds its modifier">2nd</th>
-          ${sheetBonusHead()}</tr></thead>
-        <tbody>${[['fortitude', 'Fortitude'], ['reflex', 'Reflex'], ['will', 'Will']].map(([k, label]) => `
-          <tr>
-            <td data-stack="name">${label}</td>
-            <td class="num total" data-stack="head"><span class="rollpair">${movedInline(cs, k, s[k].total, fmt, model)}${
-  rollButton(model, 'save', k, `a ${label} save`, cs)}</span></td>
-            <td class="num" data-label="Base" title="From the Classes table">${s[k].base}</td>
-            <td data-label="Ability">${abilitySelect(`saves.${k}.stat1`, s[k].stat1)}</td>
-            <td data-label="2nd ability">${abilitySelect(`saves.${k}.stat2`, s[k].stat2)}</td>
-            ${sheetBonusCell(model, `saves.${k}.total`)}
-          </tr>`).join('')}</tbody>
-      </table></div>
-      <p class="hint">Base saves come from the Classes table.</p>
-      ${sheetBonusHint('Resistance bonuses, ABP and traits')}
-    </section>`;
-  }
-
-
-/**
- * Initiative, as a row of its own: the ability it runs on, a second one
- * where a rule adds it, a Misc box, and the Other column every reconciled
- * number carries. It had a big number on the Overview and nothing to edit
- * behind it -- the ability came from the import and the rest was offset.
- */
-function initiativePanel(model) {
-    const c = model.data;
-    const cs = model.conditionState;
-    return `<section class="panel fit">
-      <h3>Initiative</h3>
-      <div class="tablewrap"><table class="saves stacked fitcols" data-fold="shut">
-        <thead><tr><th></th><th class="num">Total</th>
-          <th>Ability</th><th title="A second ability that adds its modifier">2nd</th>
-          <th class="num" title="Your own bonus, such as from a trait, feat or familiar.">Misc</th>
-          ${sheetBonusHead()}</tr></thead>
+/** The three saves and initiative: totals with a roll each, and the abilities they use. */
+function savesSummary(model) {
+  const c = model.data;
+  const s = c.saves;
+  const cs = model.conditionState;
+  const abilities = (a, b) => esc([a, b].filter(Boolean).join(' + ') || '—');
+  const row = (label, total, roll, base, a, b) => `<tr>
+      <th scope="row">${label}</th>
+      <td class="num total"><span class="rollpair">${total}${roll}</span></td>
+      <td class="num">${base}</td>
+      <td>${abilities(a, b)}</td>
+    </tr>`;
+  return `<section class="panel fit">
+      <h3>Saves &amp; initiative ${editLink(model, 'saves')}</h3>
+      <div class="tablewrap"><table class="rosummary fitcols">
+        <thead><tr><th></th><th class="num">Total</th><th class="num" title="From the Classes table">Base</th><th>Ability</th></tr></thead>
         <tbody>
-          <tr>
-            <td data-stack="name">Initiative</td>
-            <td class="num total" data-stack="head"><span class="rollpair">${movedInline(cs, 'initiative', c.hp.initiative, fmt, model)}${
-  rollButton(model, 'initiative', 'self', 'initiative', cs)}</span></td>
-            <td data-label="Ability">${abilitySelect('hp.initAbility', c.hp.initAbility || 'Dex')}</td>
-            <td data-label="2nd ability">${abilitySelect('hp.initAbility2', c.hp.initAbility2)}</td>
-            <td class="num" data-label="Misc">${num('hp.initMisc', c.hp.initMisc, 'style="width:3.6rem"')}</td>
-            ${sheetBonusCell(model, 'initiative')}
-          </tr>
+          ${[['fortitude', 'Fortitude'], ['reflex', 'Reflex'], ['will', 'Will']].map(([k, label]) => row(label,
+    movedInline(cs, k, s[k].total, fmt, model), rollButton(model, 'save', k, `a ${label} save`, cs),
+    esc(s[k].base), s[k].stat1, s[k].stat2)).join('')}
+          ${row('Initiative', movedInline(cs, 'initiative', c.hp.initiative, fmt, model),
+    rollButton(model, 'initiative', 'self', 'initiative', cs), '—', c.hp.initAbility || 'Dex', c.hp.initAbility2)}
         </tbody>
       </table></div>
-      ${sheetBonusHint('Improved Initiative, a trait, a familiar’s Alertness')}
     </section>`;
-  }
+}
 
-
-function attackPanel(model) {
-    const c = model.data;
-    const cs = model.conditionState;
-    return `<section class="panel fit">
-      <h3>Attack</h3>
+function attackSummary(model) {
+  const c = model.data;
+  const cs = model.conditionState;
+  const modes = c.attack.modes || {};
+  // An alternate shows once it uses another ability than the attack it is an alternate of.
+  const alts = ATTACK_MODES.filter((k) => ALT_ATTACK_OF[k] && modes[k]?.stat1
+    && modes[k].stat1 !== modes[ALT_ATTACK_OF[k]]?.stat1);
+  return `<section class="panel fit">
+      <h3>Attack ${editLink(model, 'attack')}</h3>
       ${lineHtml('Melee', `${movedInline(cs, 'melee', c.attack.totalMelee, fmt, model)}${
         rollButton(model, 'mode', 'melee', 'a melee attack', cs)}`, true)}
       ${lineHtml('Ranged', `${movedInline(cs, 'ranged', c.attack.totalRanged, fmt, model)}${
         rollButton(model, 'mode', 'ranged', 'a ranged attack', cs)}`, true)}
       ${lineHtml('CMB', `${movedInline(cs, 'cmb', c.attack.totalCmb, fmt, model)}${
         rollButton(model, 'mode', 'cmb', 'a combat maneuver', cs)}`, true)}
-      ${line('Iteratives', c.attack.iterative)}
-      ${(() => {
-    // BAB comes off the class table now, gestalt-style, so the field is a
-    // read-out with an override behind it -- the same arrangement as a class's
-    // Levels, and for the same reason.
-    const base = Number(c.attack.babBase) || 0;
-    const over = c.attack.babOverride == null ? null : Number(c.attack.babOverride);
-    const why = over == null
-      ? `From the Classes table: the best BAB progression among the classes on each level, summed and floored. Type a number to override it.`
-      : `Pinned at ${over}. The Classes table comes to ${base}; clear the box to go back to that.`;
-    return lineHtml('Base attack bonus', autoNum('data-set="attack.babOverride"', over, {
-      auto: true, placeholder: base, width: '4.2rem', title: why, label: 'Base attack bonus',
-    }));
-  })()}
-      ${editLine('Misc attack bonus', 'attack.miscBonus', c.attack.miscBonus)}
+      ${alts.map((k) => lineHtml(`${ATTACK_MODE_LABELS[k]} (${modes[k].stat1})`,
+    `${movedInline(cs, k, attackModeTotal(c, k) ?? 0, fmt)}${rollButton(model, 'mode', k, `${ATTACK_MODE_LABELS[k].toLowerCase()} attacks`, cs)}`)).join('')}
+      ${line('Base attack bonus', fmt(c.attack.bab))}
+      ${line('Iteratives', c.attack.iterative || '—')}
       ${cs.changed && cs.delta.damage ? `<p class="hint warn">${fmt(cs.delta.damage)} on weapon damage rolls from ${cs.sources}.</p>` : ''}
-      <div class="tablewrap" style="margin-top:8px"><table class="attackmodes fitcols">
-        <thead><tr><th>Mode</th>
-          <th class="num" title="An alternate uses the same attack with a different ability.">Total</th>
-          ${sheetBonusHead()}
-          <th>Ability</th><th title="A second ability that adds its modifier">2nd</th></tr></thead>
-        <tbody>${ATTACK_MODES.map((k) => {
-          const alt = ALT_ATTACK_OF[k];
-          const shut = !!model.data.uiPrefs?.collapsed?.[`atk:${alt || k}`];
-          // An alternate is folded into the attack it is an alternate of: the
-          // caret is on that row and says what is under it, so a sheet with
-          // nothing but a finesse swap does not carry six rows to say three.
-          if (alt && shut) return '';
-          const total = attackModeTotal(c, k) ?? 0;
-          const delta = cs.changed && cs.delta[k] ? cs.delta[k] : 0;
-          const altOf = ATTACK_MODES.find((m) => ALT_ATTACK_OF[m] === k);
-          const altTotal = altOf ? attackModeTotal(c, altOf) ?? 0 : 0;
-          const altStat = altOf ? (c.attack.modes[altOf]?.stat1 || '—') : '';
-          const caret = altOf ? foldButton(model, `atk:${k}`, {
-            open: !shut,
-            cls: 'disclose',
-            title: shut ? `Show the alternate (${altStat}, ${fmt(altTotal)})` : 'Hide the alternate',
-          }) : '';
-          // An alternate is the base attack with one ability swapped, so it
-          // is already carrying the base's Other -- editing it here would be
-          // editing the same number twice. The number is shown all the same,
-          // read-only, so the row adds up in front of the reader.
-          const other = alt
-            ? `<td class="num" data-label="Other">${roValue(model.offsetOf(ATTACK_MODE_KEY[alt]),
-              `Shares ${ATTACK_MODE_LABELS[alt]}'s. An alternate is that attack with a different ability.`)}</td>`
-            : sheetBonusCell(model, ATTACK_MODE_KEY[k]);
-          return `
-          ${/* Not a stacked table, deliberately. Folded to a name and a total it
-                would say exactly what the three big stat lines above it already
-                say, and every row here carries a disclosure of its own for its
-                alternate -- a second caret beside that one reads as a bug. It
-                keeps its 188px of scroll. */''}
-          <tr class="${alt ? 'altrow' : ''}"><td>${caret}${ATTACK_MODE_LABELS[k]}</td>
-            ${/* Only a real mode has a working of its own: an alternate is the
-                  same attack with another ability in the slot, and shares its
-                  BAB, misc, size and reconciliation. */''}
-            <td class="num total"><span class="rollpair">${movedInline(cs, k, total, fmt, alt ? null : model)}${
-  rollButton(model, 'mode', k, `${ATTACK_MODE_LABELS[k].toLowerCase()} attacks`, cs)}</span></td>
-            ${other}
-            <td>${abilitySelect(`attack.modes.${k}.stat1`, c.attack.modes[k]?.stat1)}</td>
-            <td>${abilitySelect(`attack.modes.${k}.stat2`, c.attack.modes[k]?.stat2)}</td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table></div>
-      <p class="hint">Base attack bonus comes from the Classes table. An <strong>alternate</strong>
-        is the same attack with a different ability, such as Dex for a finesse weapon or Wis for a
-        monk's unarmed strike. It shares the same BAB, misc and size bonuses.</p>
-      ${sheetBonusHint('a weapon’s enhancement, a size bonus, anything a talent added')}
     </section>`;
-  }
+}
 
-  /**
-   * Movement, with the bonus as a formula field.
-   *
-   * The bonus is where class features land -- fast movement, a boots-of-
-   * striding enhancement -- and those are rules, so the field takes one:
-   * `floor(level / 3) * 10` stays right as the character levels. The final
-   * column is the model's, so it moves the moment either field does.
-   */
-function speedPanel(model) {
-    const c = model.data;
-    const cs = model.conditionState;
-    const speeds = c.identity.speeds || [];
-    return `<section class="panel fit">
-      <h3>Speed</h3>
-      ${speedTable('identity.speeds', speeds, speeds.map((sp) => ({
-    bonus: sp.bonusNum, error: sp.bonusError, handle: sp.handle, final: sp.final,
-    loadSlowed: sp.loadSlowed,
-  })), {
-    named: true,
-    exampleFor: ' for fast movement',
-    // What conditions and buffs do to the rate, where they move it.
-    final: (i, w) => {
-      const adj = cs.speeds[i];
-      const moved = cs.changed && adj && adj.adjusted !== adj.final
-        ? movedValue(`${adj.adjusted} ft.`, adj.adjusted - adj.final, { base: `${adj.final} ft.`, sources: cs.sources })
-        : null;
-      if (!w.loadSlowed) return moved;
-      return `${moved ?? `${Number(w.final) || 0} ft.`} <span class="badge" title="Reduced by a medium or heavy load.">load</span>`;
-    },
-    badge: (handle) => forwardedBadge(model, handle),
-  })}
-      <p class="hint">Bonus accepts a formula, such as <code>floor(level / 3) * 10</code> for
-        fast movement. Each rate is named by its type: formulas read <code>speed.land</code>, and a
-        feature adds to it with <code>{speed.land += 10}</code>, or to every speed with
-        <code>{speed += 10}</code>. A rate can read the rates above it, not below.</p>
+function speedSummary(model) {
+  const c = model.data;
+  const cs = model.conditionState;
+  // The rates the character has; a Fly or Swim row at 0 ft. is a row waiting to be filled in.
+  const speeds = (c.identity.speeds || []).filter((sp) => Number(sp.final) > 0);
+  return `<section class="panel fit">
+      <h3>Speed ${editLink(model, 'speed')}</h3>
+      ${speeds.length ? speeds.map((sp) => {
+    const i = c.identity.speeds.indexOf(sp);
+    const adj = cs.speeds?.[i];
+    const shown = cs.changed && adj && adj.adjusted !== adj.final
+      ? movedValue(`${adj.adjusted} ft.`, adj.adjusted - adj.final, { base: `${adj.final} ft.`, sources: cs.sources })
+      : esc(`${Number(sp.final) || 0} ft.`);
+    return lineHtml(sp.type || 'Speed', `${shown}${sp.loadSlowed
+      ? ' <span class="badge" title="Reduced by a medium or heavy load.">load</span>' : ''}`);
+  }).join('') : '<p class="empty">No speeds yet.</p>'}
     </section>`;
-  }
+}
 
-  /**
-   * Weapon and armor proficiencies, as the lists a class hands them out in.
-   *
-   * The weapon side is the same four terms the Gear weapon rows carry --
-   * familiarity, handedness, weapon group, and the weapon itself -- so a row
-   * there can be read against this and say when it is not covered. Armor is
-   * its weights and shields their kinds; the chips are toggles, and specific
-   * weapons are typed in like languages.
-   */
-function proficienciesPanel(model) {
-    const p = model.data.identity.proficiencies || {};
-    const chips = (list, options, title = '') => `<div class="chips" role="group"${title ? ` aria-label="${esc(title)}"` : ''}>
-      ${options.map((o) => `<button class="chip-toggle" data-action="prof-toggle" data-list="${list}"
-        data-value="${esc(o)}" aria-pressed="${(p[list] || []).includes(o)}">${esc(o)}</button>`).join('')}
-    </div>`;
-    const row = (label, body, hint = '') => `<div class="profrow">
-      <span class="tlabel"${hint ? ` title="${esc(hint)}"` : ''}>${esc(label)}</span>${body}</div>`;
-    const weapons = p.weapons || [];
-    const named = weapons.filter((w) => String(w).trim());
-    // The named weapons are a list a race or a class hands over once and then
-    // nobody edits again, and it is the longest thing in the panel. Folded
-    // away it is a sentence; opened it is the fields it was.
-    const wkey = 'prof-weapons';
-    const wshut = !!model.data.uiPrefs?.collapsed?.[wkey];
-    const summary = [
-      ...(p.familiarities || []).map((f) => `${f.toLowerCase()} weapons`),
-      ...(p.handedness || []).map((h) => `${h.toLowerCase()} weapons`),
-      ...(p.groups || []).map((g) => `${g.toLowerCase()} group`),
-      ...named,
-    ];
-    return `<section class="panel proficiencies">
-      <h3>Proficiencies</h3>
-      <div class="profgrid">
-        <div class="profcol">
-          <h4>Weapons</h4>
-          ${row('Familiarities', chips('familiarities', WEAPON_FAMILIARITY, 'Weapon familiarities'), 'Simple, martial and exotic weapons.')}
-          ${row('Handedness', chips('handedness', WEAPON_HANDEDNESS, 'Weapon handedness'), 'Such as all light weapons or all one-handed weapons.')}
-          ${row('Weapon groups', chips('groups', WEAPON_GROUPS.filter((g) => g !== 'Veil'), 'Weapon groups'), 'The fighter weapon groups')}
-        </div>
-        <div class="profcol">
-          <h4>Armor</h4>
-          ${row('Armor', chips('armor', ARMOR_PROFICIENCIES, 'Armor proficiencies'), 'Light, medium and heavy armor. Some systems also have an unarmored proficiency.')}
-          <h4>Shields</h4>
-          ${row('Shields', chips('shields', SHIELD_PROFICIENCIES, 'Shield proficiencies'), 'Ticking None clears the other kinds, and ticking a kind clears None.')}
-          <label class="fld" style="margin-top:8px"><span>Notes
-            <span class="hint">(anything the lists do not cover)</span></span>
-            ${area('identity.proficiencies.notes', p.notes, 2)}</label>
-        </div>
-      </div>
-      <!-- The named weapons take the whole panel rather than half of it: a
-           race's list runs to a dozen, and a dozen chips in a half-width
-           column is a dozen rows. -->
-      <div class="profrow profwide">
-        <span class="tlabel">
-          ${foldButton(model, wkey, {
-    open: !wshut, cls: 'foldchip', title: 'Individual weapons, such as a race\'s or class\'s weapon list.',
-    text: `${wshut ? '▸' : '▾'} Specific weapons${named.length ? `<span class="badge">${named.length}</span>` : ''}`,
-  })}
-        </span>
-        <div class="profweaponbody">
-          ${wshut
-    ? `<span class="profnamed" title="Click the caret to edit them">${named.length
-      ? esc(named.join(', ')) : 'none named'}</span>`
-    : `<div class="langlist proflist">
-            ${weapons.map((w, i) => `<span class="lang">
-              ${itemText('identity.proficiencies.weapons', i, 'self', w, 'Weapon')}
-              ${removeButton('identity.proficiencies.weapons', i, { what: 'weapon proficiency', tiny: true })}
-            </span>`).join('')}
-            ${addButton('identity.proficiencies.weapons', 'Add weapon', '')}
-          </div>`}
-        </div>
-      </div>
-      <p class="hint">${summary.length
-    ? `Proficient with ${esc(summary.join(', '))}. `
-    : 'No weapon proficiencies recorded. '}Weapons on the Equipment tab are checked against these by
-        familiarity, handedness, group, name and <strong>As</strong> (the base weapon), and marked when
-        not covered. Veil weapons follow the [Enhanced] rule. A weapon's own <strong>Proficient</strong>
-        field overrides this. A nonproficient weapon takes −4 to hit; its card can turn the −4 off if
-        Misc already includes it.</p>
-    </section>`;
-  }
-
-
-function carryPanel(model) {
-    const c = model.data;
-    const abilities = ABILITIES.map((k) => [k, ABILITY_LABELS[k] || k]);
-    return `<section class="panel">
-      <h3>Carrying capacity</h3>
-      <div class="statline"><span class="label">Carrying score</span>
-        <span class="value">${select('carry.ability', c.carry?.ability || 'str', abilities, null,
-    { attrs: 'title="The ability used for carrying capacity. Usually Strength."' })}</span></div>
-      ${['light', 'medium', 'heavy', 'offGround', 'pushDrag'].map((k) => line(
-        k === 'offGround' ? 'Off ground' : k === 'pushDrag' ? 'Push / drag' : k[0].toUpperCase() + k.slice(1),
-        c.carry?.[k] != null ? `${c.carry[k]} lbs` : '—',
-      )).join('')}
+function carrySummary(model) {
+  const c = model.data;
+  const lbs = (v) => (v != null ? `${v} lbs` : '—');
+  return `<section class="panel fit">
+      <h3>Carrying capacity ${editLink(model, 'carry')}</h3>
+      ${line('Light', lbs(c.carry?.light))}
+      ${line('Medium', lbs(c.carry?.medium))}
+      ${line('Heavy', lbs(c.carry?.heavy))}
       ${line('Currently carried', `${c.carry?.carried ?? 0} lbs`)}
       ${loadLine(c)}
-      ${editLine('Ant Haul multiplier', 'carry.antHaul', c.carry?.antHaul ?? 1)}
-      ${editLine('Carry score bonus', 'carry.strBonus', c.carry?.strBonus ?? 0)}
-      <div class="statline"><span class="label">Quadruped</span>
-        <span class="value">${check('carry.quadruped', c.carry?.quadruped)}</span></div>
-      <div class="statline"><span class="label">Apply load penalties</span>
-        <span class="value">${check('carry.applyLoad', c.carry?.applyLoad !== false, '',
-    'A medium or heavy load caps Dex to AC, has a check penalty, and cuts land speed. Untick for a table that does not track encumbrance.')}</span></div>
     </section>`;
-  }
-
-  /* ---------------- classes (gestalt) ---------------- */
-
-  /**
-   * The class table, and the levels each class actually runs for.
-   *
-   * Levels is a read-out before it is a field: the number is how often the
-   * Planner features that class at or below the character's own level, which
-   * is what every other tab means by "class level". Left alone it stays that
-   * count and moves when the Planner does; a number typed in pins it instead,
-   * and clearing the box hands it back.
-   *
-   * The gestalt summary under the table is for a character running more than
-   * one class track. On a single track there is no best-of to take, so the
-   * same three numbers are said without the gestalt language.
-   */
-function classesPanel(model, ctx) {
-    const c = model.data;
-    const g = c.gestalt || { saves: {} };
-    const sv = (k) => g.saves?.[k] || {};
-    const level = Number(c.identity.level) || 0;
-    // Gestalt off (a campaign rule): one class a level, each its own progression.
-    const core = !campaignRules(c).gestalt;
-    const gestalt = !core && (c.progression?.tracks ?? 1) > 1;
-    // Classes the Planner gives no level to, with gestalt off.
-    const idle = core ? (c.classes || []).filter((x) => x.name && !x.gestaltLevels).map((x) => x.name) : [];
-    const aligns = model.alignedSteps().filter((s) => s.class);
-    // The sub-system picker: a row of toggles under the class it belongs to.
-    // Marking a system badges its tabs in the ⚙ manager and puts them on the
-    // session view's bar before anything is typed into them.
-    const sysButton = (x, i) => {
-      const n = (x.systems || []).length;
-      const open = ctx.openClassSystems === i;
-      return `<button data-action="class-systems" data-index="${i}" aria-expanded="${open}"
-        title="Choose the sub-systems this class uses. Their tabs are marked on the ⚙ tab and shown in session view.">
-        ${open ? '▾' : '▸'} ${n || '—'}</button>`;
-    };
-    const sysPicker = (x, i) => {
-      if (ctx.openClassSystems !== i) return '';
-      const on = new Set(x.systems || []);
-      const known = new Set(GAME_SYSTEMS.map((s) => s.id));
-      const extra = [...on].filter((id) => !known.has(id));
-      return `<tr class="syspicker"><td colspan="11">
-        <p class="hint" style="margin:2px 0 6px">
-          The sub-systems ${esc(x.name || 'this class')} uses. Their tabs are marked on the ⚙ tab
-          and shown on the session view's bar.
-        </p>
-        <div class="pair" style="flex-wrap:wrap">
-          ${GAME_SYSTEMS.map((s) => `<button data-action="class-system-toggle" data-index="${i}"
-            data-system="${s.id}" aria-pressed="${on.has(s.id)}">${esc(s.label)}</button>`).join('')}
-          ${extra.map((id) => `<button data-action="class-system-toggle" data-index="${i}"
-            data-system="${esc(id)}" aria-pressed="true"
-            title="A system from an extension pack that has no tab in this app.">${esc(id)}</button>`).join('')}
-        </div>
-      </td></tr>`;
-    };
-    return `<section class="panel span2">
-      <h3>Classes</h3>
-      <div class="tablewrap squeeze"><table class="classes stacked cardrows">
-        <colgroup><col class="cls"><col class="lvl"><col class="hd"><col class="bab">
-          <col class="save"><col class="save"><col class="save">
-          <col class="ranks"><col class="arch"><col class="sys"><col class="tools"></colgroup>
-        <thead><tr>
-          <th>Class</th>
-          <th class="num" title="The number of levels in this class, from the Planner. Saves, hit points, BAB and casting use it. Type a number to override it.">Levels</th>
-          <th class="num">HD</th>
-          <th title="Base attack progression. The character's BAB uses the best one at each level.">BAB</th>
-          <th class="mid" title="Good Fortitude">Fort</th><th class="mid" title="Good Reflex">Ref</th><th class="mid" title="Good Will">Will</th>
-          <th class="num" title="Skill ranks per level">Ranks</th>
-          <th>Archetypes</th>
-          <th title="The sub-systems this class uses.">Systems</th><th></th>
-        </tr></thead>
-        <tbody>${c.classes.map((x, i) => {
-          const over = x.levelsOverride == null ? null : Number(x.levelsOverride);
-          // What the box goes back to when cleared: the Planner's rows, or
-          // every level when the Planner never names the class.
-          const planned = plannedLevels(model, x.name, level).filter(Boolean).length;
-          const auto = planned || level;
-          const from = planned
-            ? `the Planner lists it on ${planned} of ${level} level${level === 1 ? '' : 's'}`
-            : `the Planner does not list it, so it counts every level (${level})`;
-          // Levels a prestige class adds as an aligned class, which count for
-          // class features and not here.
-          const aligned = aligns.filter((s) => s.class === x.name && s.level <= level);
-          const from2 = [...new Set(aligned.map((s) => s.prestige))];
-          const extra = aligned.length
-            ? ` ${from2.join(' and ')} add${from2.length === 1 ? 's' : ''} ${aligned.length} aligned level${aligned.length === 1 ? '' : 's'} for class features.`
-            : '';
-          const why = over == null
-            ? `${from[0].toUpperCase()}${from.slice(1)}. Type a number to override it.${extra}`
-            : `Set to ${over}. If cleared, ${from}.${extra}`;
-          return `<tr>
-          <td data-stack="name">${itemText('classes', i, 'name', x.name)}</td>
-          <td class="num" data-label="Levels" data-inline="spec">${autoNum(`data-item="classes|${i}|levelsOverride"`, over, {
-    auto: true, placeholder: auto, title: why, label: `Levels of ${x.name || 'this class'}`,
-  })}</td>
-          <td class="num" data-label="Hit die" data-inline="spec">${progressionSelect(i, 'hd', x.hd,
-    HIT_DICE.map((d) => [d, `d${d}`]), `Hit die for ${x.name || 'this class'}`, (d) => `d${d}`,
-    { count: x.gestaltBeaten?.hd, levels: x.gestaltBeaten?.levels, noun: 'hit die' })}</td>
-          ${/* The progression, not a bonus: what the class adds to BAB per level.
-              Kept as the fraction the rules state it in, because that is what
-              the gestalt sum adds up and floors. */ ''}
-          <td data-label="BAB" data-inline="spec">${progressionSelect(i, 'bab', x.bab, BAB_RATES,
-    `BAB progression for ${x.name || 'this class'}`, String,
-    { count: x.gestaltBeaten?.bab, levels: x.gestaltBeaten?.levels, noun: 'progression' })}</td>
-          <td class="mid" data-label="Good Fort" data-inline="save">${itemCheck('classes', i, 'goodFort', x.goodFort)}</td>
-          <td class="mid" data-label="Good Ref" data-inline="save">${itemCheck('classes', i, 'goodRef', x.goodRef)}</td>
-          <td class="mid" data-label="Good Will" data-inline="save">${itemCheck('classes', i, 'goodWill', x.goodWill)}</td>
-          ${/* Ranks is the fourth of the four numbers a class advances at, and
-                sits after the saves only because that is the column order. The
-                card puts it back with the other three; see `data-inline` in the
-                stylesheet, which groups by `order` rather than by markup so the
-                table's columns are left alone. */''}
-          <td class="num" data-label="Ranks" data-inline="spec">${itemNum('classes', i, 'skillRanks', x.skillRanks)}</td>
-          <td data-label="Archetypes">${(Array.isArray(x.archetypeStack) && x.archetypeStack.length) ? `<span class="pills">${x.archetypeStack.map((a) => `
-            <span class="pill" title="${esc(`${a.name}: an archetype from an extension pack.${a.removedCells?.length ? ` Replaced ${[...new Set(a.removedCells.map((r) => r.name))].join(', ')}.` : ''}${a.touches?.length ? ` Changes: ${a.touches.join(', ')}.` : ''} × removes it and restores the class's features.`)}">
-              ${esc(a.name)}${removeAction('arch-remove', { class: x.name, name: a.name }, { what: a.name })}
-            </span>`).join('')}</span>` : ''}${itemText('classes', i, 'archetypes', x.archetypes)}</td>
-          <td class="mid" data-label="Systems">${sysButton(x, i)}</td>
-          ${rowTools('classes', i)}
-        </tr>${sysPicker(x, i)}`;
-        }).join('')}</tbody>
-      </table></div>
-      <div style="margin-top:8px">${addButton('classes', 'Add class', blankClassRow())}</div>
-      <div class="fieldgrid" style="margin-top:8px">
-        <div class="statline"><span class="label">Save bases${gestalt ? ' (gestalt)' : ''}</span>
-          <span class="value">Fort ${sv('fortitude').base ?? 0} &middot;
-            Ref ${sv('reflex').base ?? 0} &middot; Will ${sv('will').base ?? 0}</span></div>
-        <div class="statline"><span class="label">Base attack bonus${gestalt ? ' (gestalt)' : ''}</span>
-          <span class="value" title="${esc(`${g.babPerLevel ?? 0} per level, ${core ? 'each class rounded down separately' : 'summed and rounded down once'}${
-    c.attack?.babOverride == null ? '' : `. Set to ${c.attack.babOverride} on the Attack panel`}.`)}"
-            >+${esc(g.bab ?? 0)}${c.attack?.babOverride == null ? '' : ` <span class="badge">pinned +${esc(c.attack.babOverride)}</span>`}</span></div>
-        <div class="statline"><span class="label">HP / level${gestalt ? ' (best HD)' : ''}</span>
-          <span class="value">d${g.hpPerLevel || 0}</span></div>
-        <div class="statline"><span class="label">Hit points from these classes</span>
-          <span class="value" title="${esc(`${g.hdTotal ?? 0} from hit dice over ${level} level${level === 1 ? '' : 's'}, before Con, favored class, Toughness and mythic tiers.`)}"
-            >${g.hdTotal ?? 0} &rarr; ${g.hp?.base ?? 0} total</span></div>
-        ${core ? `<div class="statline"><span class="label">Skill ranks from classes</span>
-          <span class="value" title="Each class's ranks per level, times its levels.">${g.ranksTotal || 0}</span></div>`
-    : `<div class="statline"><span class="label">Skill ranks / level${gestalt ? ' (best)' : ''}</span>
-          <span class="value">${g.ranksPerLevel || 0}</span></div>`}
-      </div>
-      <p class="hint">
-        ${gestalt ? `Gestalt: each level uses the best progression among the classes at that level,
-        from the Planner. Good saves give +2 once plus &frac12; per level. Poor saves give &#8531; per level.`
-    : core ? `One class per level, from the Planner's first track. Each class's good saves give +2 plus
-        &frac12; per level and poor saves &#8531; per level, and each class's base attack bonus is rounded
-        down separately.${idle.length ? ` <strong>${esc(idle.join(', '))}</strong>
-        ${idle.length === 1 ? 'has' : 'have'} no levels: add ${idle.length === 1 ? 'it' : 'them'} to the Planner's first track, or type a level count here.` : ''}`
-      : `Good saves give +2 once plus &frac12; per level. Poor saves give &#8531; per level.`}
-        The Saves, Attack and Hit points panels use these bases.${gestalt
-    ? ` A hit die or progression that another class already beats has no effect; hover over it
-        to see why.` : ''}
-      </p>
-    </section>`;
-  }
-
-
-  /* ----- the import offset, as a field -----
-
-   * The four builders are in ui/badges.js, where the panel modules can reach
-   * them; what they need from here is the model, so that is what is passed.
-   */
-
-
-
-
-
-
-
-/**
- * One of the three typed parts of the hit-point total, which takes a formula
- * as readily as a number: a favoured-class bonus is "one per level you took
- * it", and written out it stops going stale at the next level-up.
- */
-function hpPart(c, key, title, width = '5.4rem') {
-  const raw = c.hp[key];
-  return exprField(`data-set="hp.${key}"`, raw ?? 0, {
-    width,
-    value: typeof raw === 'string' && raw.trim() ? c.hp[`${key}Resolved`] : null,
-    error: c.hp[`${key}Error`],
-    title,
-  });
 }
 
-/**
- * Where the maximum came from, and the fields that decide it.
- *
- * The workbook worked hit points out on Character Info and this sheet only
- * kept the answer, so the four inputs it kept alongside -- the ability, the
- * favoured-class points, Toughness, the miscellany -- were imported and then
- * never shown. They are the difference between a total that moves with the
- * classes and one that does not, so they are fields, and the sum is spelled
- * out above them in the order the parts are added.
- *
- * The maximum itself is a read-out with an override behind it, the same
- * arrangement as the base attack bonus and a class's Levels: type a number to
- * pin it, clear the box to hand it back to the class table.
- */
-function hpBuild(model) {
-  const c = model.data;
-  const g = c.gestalt?.hp || {};
-  const level = Number(c.identity?.level) || 0;
-  const base = Number(c.hp.base) || 0;
-  const other = model.offsetOf('hp.total');
-  const abilityMod = Number(g.abilityMod) || 0;
-  const shut = !!c.uiPrefs?.collapsed?.['hp:build'];
-  // How the dice count (campaign rules): which die each level, and how much of it.
-  const rules = campaignRules(c);
-  const dice = c.gestalt?.dice || [];
-  const counted = { max: '', average: ', averaged after 1st', rolled: ', rolled after 1st' }[rules.hitPoints];
-
-  // Only the parts that are doing something, so a plain character reads as
-  // "dice plus Con" rather than as a form with four zeroes in it. A part that
-  // takes hit points away is parenthesised rather than signed, because the
-  // pluses between the terms are already doing that job.
-  const term = (n) => (n < 0 ? `(${String(n).replace('-', '−')})` : String(n));
-  const fcb = Number(c.hp.fcbResolved ?? c.hp.fcb) || 0;
-  const tough = Number(c.hp.toughnessResolved ?? c.hp.toughness) || 0;
-  const misc = Number(c.hp.miscResolved ?? c.hp.misc) || 0;
-  const parts = [
-    [term(c.gestalt?.hdTotal ?? 0), `hit dice over ${level} level${level === 1 ? '' : 's'}${counted}`],
-    abilityMod ? [term(abilityMod * level), `${c.hp.ability || 'ability'}${
-      c.hp.ability2 ? ` + ${c.hp.ability2}` : ''} ${fmt(abilityMod)} × ${level}`] : null,
-    // The three typed parts as they resolved, since any of them may have been
-    // written as a rule rather than a number.
-    fcb ? [term(fcb), 'favored class'] : null,
-    tough ? [term(tough * level), `Toughness ${fmt(tough)} × ${level}`] : null,
-    model.mythicHp ? [term(model.mythicHp),
-      `${c.mythic?.path || 'mythic'} tier ${c.identity?.mythicTier || 0}`] : null,
-    misc ? [term(misc), 'misc'] : null,
-    other ? [term(other), 'other: what the source sheet added that this sheet cannot read'] : null,
-  ].filter(Boolean);
-
-  const why = `${rules.gestalt ? 'The best hit die on each level' : 'The hit die of the class taken at each level'}${
-    counted ? ` (${counted.slice(2)})` : ''} from the Classes table, plus every part below,`
-    + ' including Other.';
-
-  /*
-   * The two ability slots are one field, the way the saves table and the AC row
-   * already say it: "the ability, and a second one that adds its modifier". As
-   * two full-width fields they were two rows of a narrow panel spent on three
-   * letters each, and the second one read as a thing of its own rather than as
-   * the other half of the first.
-   */
-  const abilityPair = field('HP ability',
-    `<span class="pair slots">${abilitySelect('hp.ability', c.hp.ability)}
-      <span class="hint">+</span>${abilitySelect('hp.ability2', c.hp.ability2)}</span>`);
-
-  return `<div class="fieldgrid two">
-        ${/* A read-out, not a box. It used to take a number that was *pinned*
-              over the total, which froze every part below it -- and since an
-              imported sheet whose classes cannot reach its own total is pinned
-              from the moment it lands, that was most characters: raising
-              Toughness moved nothing and the panel did not say why. The
-              difference lives in Other now, and everything stays live. */''}
-        ${field('Maximum', `<span class="value working" title="${esc(workingTitle(model.breakdown('hp'), why))}"
-          data-bd="hp" data-bdx="${esc(why)}">${model.hpMax}</span>`)}
-        ${abilityPair}
-      </div>
-      <p class="hint">${parts.map(([n, label]) => `<span title="${esc(label)}">${n}</span>`).join(' + ')}
-        = <strong>${base + other}</strong>
-        ${foldButton(null, 'hp:build', {
-    open: !shut, cls: 'foldchip', title: shut ? 'Show the parts to edit them.' : 'Hide the parts.',
-    text: shut ? '▸ More options' : '▾ Close',
-  })}</p>
-      ${shut ? '' : `${/* Three short figures across, then Misc on a row of its
-            own: the first two hold a number or a small rule, while Misc is
-            where everything the table gave you lands and is the one most
-            likely to be written out longhand. A 5.4rem box is no place for
-            `if(level >= 10, con.mod * 2, con.mod)`. */''}
-      <div class="fieldgrid tight">
-        ${field('Favored class HP', hpPart(c, 'fcb', 'A number or a formula, e.g. class.fighter.level'))}
-        ${field('Toughness / level', hpPart(c, 'toughness', 'A number or a formula, e.g. if(level >= 10, 2, 1)'))}
-        ${field('Mythic bonus', `<span class="value" title="${esc(`${
-    c.mythic?.path || 'No path'}, ${c.identity?.mythicTier || 0} tier${
-    (c.identity?.mythicTier || 0) === 1 ? '' : 's'}. Set the per-tier amount on the Features tab.`)}"
-          >${fmt(model.mythicHp)}</span>`)}
-        ${field('Other', `<span title="${esc('The difference between the imported total and the parts above, '
-            + 'such as rolled hit points or a bonus from the GM. You can also add your own number or '
-            + 'formula here.')}">${
-  sheetBonusField(model, 'hp.total', '5.4rem')}</span>`)}
-      </div>
-      <div class="fieldgrid" style="margin-top:8px">
-        ${field('Misc', hpPart(c, 'misc', 'A number or a formula, e.g. con.mod * 2', '100%'), 'wide')}
-      </div>`}
-      ${/* Rolled hit points (a campaign rule): a box per level after the
-            first, blank counting the average, which the box shows. A fold of
-            its own, open, so the rolls are there at a level-up whether or
-            not the parts above are. */''}
-      ${rules.hitPoints === 'rolled' && level > 1 ? collapsibleSub(model, 'hp:rolls', 'Rolled each level', `
-      ${stepGrid('hp.rolls', c.hp.rolls, 2, level, (l) => hitDieGain(dice[l - 1], l, 'average'),
-    (l) => `Hit points rolled at level ${l}, on a d${dice[l - 1] || 0}`)}
-      <p class="hint">1st level gets the full die. A blank level, or a roll above the die, counts as
-        the average shown in its box.</p>`) : ''}
-      ${rules.hitPoints !== 'max' && other ? `<p class="hint warn">Other holds ${term(other)}. An imported
-        sheet with rolled hit points puts the difference there. Hit points are now ${rules.hitPoints === 'rolled' ? 'rolled' : 'averaged'}
-        here too, so clear Other if that is what it holds.</p>` : ''}`;
-}
-
-function hitPointsPanel(ctx, model) {
-    const hp = model.hpState;
-    const status = hp.dead ? 'dead' : hp.dying ? 'dying' : hp.unconscious ? 'unconscious' : null;
-    return `<section class="panel hitpoints">
-      <h3>Hit points
-        ${hp.temp > 0 ? `<span class="badge">+${hp.temp} temp</span>` : ''}
-        ${hp.nonlethal > 0 ? `<span class="badge${hp.nonlethal >= hp.effective ? ' err' : ''}">${hp.nonlethal} nonlethal</span>` : ''}
-        ${meterStyleButton(ctx, 'hp')}
-      </h3>
-      ${meterVisual(model.meterSpec('hp'))}
-      ${meterStyleEditor(model, ctx, 'hp')}
-      <div class="hprow">
-        ${num('hp.current', hp.baseCurrent)}<span class="hpsep">/</span>
-        <span class="value" title="Maximum hit points from the Classes table, plus forwarded bonuses.">${hp.baseMax}</span>
-        ${hp.temp > 0 ? `<span class="hptemp" title="Temporary hit points, used first.">+${hp.temp}</span>` : ''}
-        ${hp.shift ? `<span class="hint" title="Each negative level lowers current and maximum hit points by 5, and a buff to the maximum raises both. The box values return when these end."
-          >now ${hp.current}/${hp.max}</span>` : ''}
-      </div>
-      ${hpBuild(model)}
-      ${model.forwardedInto('hp.total')
-        ? `<div class="fieldgrid two">${field('Forwarded',
-          `<span class="value">${forwardedBadge(model, 'hp.total')}</span>`)}</div>` : ''}
-      <div class="fieldgrid two">
-        ${field('Temporary', `${num('hp.temp', hp.typedTemp)}${
-          hp.tempGranted ? forwardedBadge(model, 'hp.temp', {
-            shown: `+${hp.tempGrantLeft}`,
-            note: `${hp.tempGranted} temporary hit point${hp.tempGranted === 1 ? '' : 's'} forwarded here${
-              hp.tempGranted === hp.tempGrantLeft ? '' : `, ${hp.tempGranted - hp.tempGrantLeft} of them already spent`
-            }. Damage uses the box first, then these.`,
-          }) : ''}`)}
-        ${field('Nonlethal', num('hp.nonlethal', hp.nonlethal))}
-      </div>
-      <div class="fieldgrid two">
-        ${field('Death threshold +', `${exprField('data-set="hp.deathBonus"', model.data.hp.deathBonus ?? 0, {
-          width: '5.4rem',
-          value: typeof model.data.hp.deathBonus === 'string' && model.data.hp.deathBonus.trim()
-            ? model.data.hp.deathBonusResolved : null,
-          error: model.data.hp.deathBonusError,
-          title: 'A number or a formula, e.g. con.mod or floor(level / 2)',
-        })}${forwardedBadge(model, 'hp.deathBonus')}`)}
-        ${field('Dead at', `<span class="value${hp.dying ? ' bad' : ''}">${minus(hp.deathAt)}</span>`)}
-      </div>
-      ${status ? `<p class="hint warn">${status === 'dead' ? `Dead: at or below ${minus(hp.deathAt)}.`
-        : status === 'dying' ? `Dying: ${hp.current - hp.deathAt} point${hp.current - hp.deathAt === 1 ? '' : 's'} from death at ${signed(hp.deathAt)}.`
-          : hp.nonlethal >= hp.effective && hp.current > 0 ? 'Unconscious: nonlethal damage equals or exceeds current hit points.'
-            : 'Unconscious.'}</p>` : ''}
-      <div class="hpactions">
-        <input type="number" value="0" data-hp-amount aria-label="Amount" min="0">
-        <button data-hp="damage" class="danger">Damage</button>
-        <button data-hp="nonlethal">Nonlethal</button>
-        <button data-hp="heal">Heal</button>
-      </div>
-      <div class="hpactions">${restButtons()}</div>
-      <p class="hint">Damage uses temporary hit points first. You die at
-        −(${hp.hardToKill ? '2 × Con' : 'Con'} ${hp.deathBonus ? `+ ${hp.deathBonus} ` : ''}).${hp.hardToKill ? ' The doubling is from Hard to Kill at 1st mythic tier.' : ''}
-        Use Death threshold + for effects such as Death's Door. End encounter, New day and New week
-        each restore what lasts that long, including shorter rests, and can be undone.</p>
+function proficienciesSummary(model) {
+  const p = model.data.identity.proficiencies || {};
+  const list = (xs) => (xs || []).map((x) => String(x || '').trim()).filter(Boolean);
+  const weapons = [
+    ...list(p.familiarities).map((f) => `${f.toLowerCase()} weapons`),
+    ...list(p.handedness).map((h) => `${h.toLowerCase()} weapons`),
+    ...list(p.groups).map((g) => `${g.toLowerCase()} group`),
+    ...list(p.weapons),
+  ];
+  return `<section class="panel proficiencies">
+      <h3>Proficiencies ${editLink(model, 'proficiencies')}</h3>
+      ${line('Weapons', weapons.join(', ') || 'None')}
+      ${line('Armor', list(p.armor).join(', ') || 'None')}
+      ${line('Shields', list(p.shields).join(', ') || 'None')}
+      ${String(p.notes || '').trim() ? line('Notes', p.notes) : ''}
     </section>`;
-  }
+}
 
   /**
    * Conditions, as switches -- and one counter.
@@ -2293,90 +1529,3 @@ function conditionsPanel(model) {
   }
 
 
-function traitsPanel(model, ctx) {
-    const c = model.data;
-    const slots = c.traitSlots || {};
-    const categories = [...TRAIT_CATEGORIES, ...(c.traitCategories || [])];
-    const filled = (key) => !!(slots[key]?.name || slots[key]?.text || slots[key]?.category);
-
-    const standard = ['trait1', 'trait2', 'trait3'];
-    const picked = standard.filter(filled).length;
-    const row = (def) => {
-      const v = slots[def.key] || {};
-      const locked = def.requires && !filled(def.requires);
-      const isDrawback = def.kind !== 'trait';
-      // The three standard picks are owed; an empty one says so.
-      const owed = standard.includes(def.key) && !filled(def.key);
-      const wants = locked ? `Take ${TRAIT_SLOTS.find((s) => s.key === def.requires)?.label} first`
-        : owed ? 'Pick a trait' : '';
-      return `<tr class="${locked ? 'lockedslot' : ''}${owed ? ' needsfill' : ''}"${owed ? ' title="Empty trait slot."' : ''}>
-        <td data-stack="head">${esc(def.label)}${def.requires ? `<div class="hint">needs ${esc(TRAIT_SLOTS.find((s) => s.key === def.requires)?.label)}</div>` : ''}</td>
-        <td data-label="Category">${isDrawback ? '<span class="hint">—</span>'
-          : select(`traitSlots.${def.key}.category`, v.category, categories)}</td>
-        <td data-stack="name">${text(`traitSlots.${def.key}.name`, v.name, wants || (isDrawback ? 'Drawback' : 'Trait'))}</td>
-        <td data-label="Trait / effect">${foldingNote(model, `data-set="traitSlots.${def.key}.text"`, v.text,
-    `traitSlots.${def.key}.text`, { name: v.name })}</td>
-      </tr>`;
-    };
-
-    const race = c.raceTraits || [];
-    // Two panels side by side in a band, each folding on its own like every
-    // other panel on the Overview, rather than two lists inside one panel.
-    const traitsHtml = `<section class="panel traitspanel">
-      <h3>Traits &amp; drawbacks
-        <span class="badge${picked < standard.length ? ' err' : ' ok'}">${picked} of ${standard.length} picked</span>
-      </h3>
-          <div class="tablewrap squeeze"><table class="traits stacked">
-            <colgroup><col class="slot"><col class="cat"><col class="tname"><col class="effect"></colgroup>
-            <thead><tr><th>Slot</th><th>Category</th><th>Name</th><th>Trait / effect</th></tr></thead>
-            <tbody>
-              ${TRAIT_SLOTS.filter((s) => s.kind !== 'feat').map(row).join('')}
-              ${(slots.additional || []).map((x, i) => `<tr>
-                <td data-stack="head">Additional</td>
-                <td data-label="Category">${itemSelect('traitSlots.additional', i, 'category', x.category, categories)}</td>
-                <td data-stack="name">${itemText('traitSlots.additional', i, 'name', x.name, 'Trait')}</td>
-                <td data-label="Trait / effect"><div class="pair" style="flex-wrap:nowrap;align-items:flex-start">
-                  <div style="flex:1 1 auto;min-width:0">${foldingNote(model, `data-item="traitSlots.additional|${i}|text"`, x.text,
-    `traitSlots.additional|${i}|text`, { name: x.name })}</div>
-                  ${removeButton('traitSlots.additional', i, { what: 'trait slot' })}
-                </div></td>
-              </tr>`).join('')}
-            </tbody>
-          </table></div>
-          <div style="margin-top:8px" class="pair">
-            ${addButton('traitSlots.additional', 'Add additional trait', { category: null, name: '', text: '' })}
-            <input data-draft="traitCategory" placeholder="New category (e.g. Akashic)"
-              value="${esc(ctx.draft.traitCategory || '')}" style="width:14rem;max-width:100%">
-            <button data-action="add-trait-category">Add category</button>
-          </div>
-          <p class="hint">
-            Traits 1–3 are the standard picks. Drawback 1 unlocks Trait 4. Drawback 2 unlocks
-            Trait 5. A Major Drawback gives a Drawback Feat, listed under <strong>Granted feats</strong>
-            on the Feats &amp; Mythic tab. You can add categories to the standard list.
-          </p>
-    </section>`;
-    const raceHtml = `<section class="panel racepanel">
-      <h3>Race traits
-        <span class="badge">${race.filter((t) => String(t.name || '').trim() || String(t.text || '').trim()).length}${race.some((t) => !String(t.name || '').trim() && !String(t.text || '').trim()) ? ` of ${race.length}` : ''}</span>
-        ${c.identity.race ? `<span class="hint">${esc(c.identity.race)}${c.identity.variant ? ` (${esc(c.identity.variant)})` : ''}</span>` : ''}
-      </h3>
-          <div class="tablewrap"><table class="racetraits stacked">
-            <thead><tr><th>Trait</th><th>Effect</th><th></th></tr></thead>
-            <tbody>${race.map((t, i) => `<tr${String(t.name || '').trim() || String(t.text || '').trim() ? '' : ' class="needsfill" title="Empty race trait slot."'}>
-              <td data-stack="name">${itemText('raceTraits', i, 'name', t.name, 'Darkvision')}${Array.isArray(t.replaced) && t.replaced.length
-    ? ` <span class="badge player" title="${esc(`Alternate racial trait that replaced ${t.replaced.map((r) => r.name).join(' and ')}. Removing it does not restore them; add them again from the race's pack.`)}">alt</span>` : ''}</td>
-              <td data-label="Effect">${foldingNote(model, `data-item="raceTraits|${i}|text"`, t.text, `raceTraits|${i}|text`, { name: t.name })}</td>
-              ${rowRemove('raceTraits', i, { what: 'race trait' })}
-            </tr>`).join('')}
-            ${race.length ? '' : '<tr><td colspan="3" class="empty">No race traits yet.</td></tr>'}
-            </tbody>
-          </table></div>
-          <div style="margin-top:8px">${addButton('raceTraits', 'Add race trait', { name: '', text: '' })}</div>
-          <p class="hint">Traits the race grants. Add alternate racial traits here in place of the
-            traits they replace.</p>
-    </section>`;
-    return `<div class="band lead">
-      ${collapsible(model, 'traits', traitsHtml)}
-      ${collapsible(model, 'race-traits', raceHtml)}
-    </div>`;
-  }

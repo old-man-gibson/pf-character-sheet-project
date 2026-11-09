@@ -163,7 +163,7 @@ function hpBreakdown(model) {
 function abilityBreakdown(model, key, which) {
   const build = model.data.statsBuild?.[key];
   const a = model.data.abilities[key] || {};
-  const drain = at(part('drain', -abilityHarm(a).drain, 'ability drain, set on the Overview'), `drain:${key}`);
+  const drain = at(part('drain', -abilityHarm(a).drain, 'ability drain, set on the Stats tab'), `drain:${key}`);
   // A column of the ability's row on the Stats tab.
   const column = (p, col) => at(p, `statsBuild:${key}:${col}`);
   if (!build) {

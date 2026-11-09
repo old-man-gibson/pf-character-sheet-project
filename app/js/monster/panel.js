@@ -255,7 +255,7 @@ export function renderStatBlockPanel(model, ctx = {}) {
     const systems = dashSystemCards(model);
     const systemsPanel = systems ? `<section class="panel span2 sb-systems">
       <h3>From the sub-systems</h3>
-      <p class="hint">The creature's sub-system resources, as shown on the session dashboard. Pips and squares spend from the same pool as the tab. Turn a sub-system's tab on in the ⚙ tab, or mark it with the <em>Systems</em> toggles on the Overview's class rows.</p>
+      <p class="hint">The creature's sub-system resources, as shown on the session dashboard. Pips and squares spend from the same pool as the tab. Turn a sub-system's tab on in the ⚙ tab, or mark it with the <em>Systems</em> toggles on the Classes table.</p>
       <div class="grid dashboard">${systems}</div>
     </section>` : '';
 
@@ -381,7 +381,7 @@ function unreadPanel(model, m) {
     if (!rows.length) return '';
     return `<section class="panel span2">
       <h3>Not read <span class="badge">${rows.length}</span></h3>
-      <p class="hint">Lines from the pasted block that were not recognized. Copy each line into the right field above or on the Overview, then remove it. Lines left here are saved with the creature.</p>
+      <p class="hint">Lines from the pasted block that were not recognized. Copy each line into the right field above or on another tab, then remove it. Lines left here are saved with the creature.</p>
       <div class="tablewrap"><table class="gridtab"><tbody>
         ${rows.map((r, ri) => `<tr><td>${itemText('monster.unread', ri, 'text', r.text)}</td>${rowTools('monster.unread', ri)}</tr>`).join('')}
       </tbody></table></div>

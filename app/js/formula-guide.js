@@ -130,7 +130,7 @@ export const VALUE_SECTIONS = [
 export const TARGET_SECTIONS = [
   { key: 'mine', label: 'Named by you', blurb: 'Every {name = …} on this character. A bonus adds to the name’s value.' },
   { key: 'weapon', label: 'Weapons and damage', blurb: 'Attack and damage for all weapons, one kind of weapon, or one weapon.' },
-  { key: 'attack', label: 'Attack', blurb: 'The three attack numbers on the Overview.' },
+  { key: 'attack', label: 'Attack', blurb: 'The three attack numbers on the Stats tab.' },
   { key: 'defence', label: 'Health, armor, saves', blurb: 'Hit points, armor class, the three saves, damage reduction, energy resistance and immunities.' },
   { key: 'ability', label: 'Ability scores', blurb: 'The ability score. Everything based on it changes too.' },
   { key: 'skill', label: 'Skills', blurb: 'Each skill by name, or every skill at once.' },

@@ -40,15 +40,15 @@ and anything downstream recalculates immediately.
   title and your notes. Under each, folded, are the play log's lines from that day.
 - Conditions are switches (negative levels and bleed a count) that show what they cost — tick
   one and every number it moves reads out its conditioned value beside the base.
-- **Ability damage and drain** are entered under *Damage & drain* on the Overview's
-  ability scores. Damage is −1 to the modifier per 2 points and leaves the score; drain
-  lowers the score itself. The Overview's working score and modifier, and the Stats tab's
-  Temporary bonuses table (with Drain and Dmg columns), show them taken off. Constitution
+- **Ability damage and drain** are entered under *Damage & drain* in the Stats tab's
+  Ability scores panel. Damage is −1 to the modifier per 2 points and leaves the score; drain
+  lowers the score itself. The working score and modifier (on Stats and on the Overview),
+  and the Stats tab's Temporary bonuses table (with Drain and Dmg columns), show them taken off. Constitution
   damage or drain lowers current hit points with the maximum, so the damage already taken
   stays the same. A New day heals 1 point of damage in each ability; drain stays.
   A score worn to 0 says what that means (Str helpless, Dex paralyzed, Con dead, the
   mental scores unconscious).
-  See *The Overview* below.
+  See *The Stats tab* below.
 - Hero points, and resource trackers with click-to-spend pips — add, edit, restyle
   and delete any of them (Mythic Power excepted; every character keeps that one).
 - The built-in meters — hit points, essence, power points — take that same styling:
@@ -59,10 +59,11 @@ and anything downstream recalculates immediately.
 
 **Editable everywhere**
 - *Overview* — name, race, level, size, alignment, deity, portrait, **character
-  colour**, speeds (add/remove, bonus as a formula), hit points, hero points, defenses
-  and save bonuses, DR/SR/immunities/resistances, carrying capacity, conditions,
-  character traits and race traits.
-- *Stats* — the full ability build (see below).
+  color**, hero points, conditions and buffs. Every other panel on it is read-only and
+  has an **Edit on …** button that goes to the tab where it is edited.
+- *Stats* — the full ability build (see below), ability damage and drain, hit points,
+  armor class, DR/SR/immunities/resistances, saves, initiative, attack and speeds
+  (add/remove, bonus as a formula).
 - *Skills* — ranks, class-skill flag, key ability, misc bonus, notes, and the variant
   of an Artistry/Craft/Lore/Profession/Perform; add and remove skills. Unused skills are
   hidden behind a **Show all** toggle.
@@ -92,10 +93,10 @@ and anything downstream recalculates immediately.
   only a New day rest heals; **Free rounds** spends one use of mythic power for half the
   tier in rounds without damage.
 - *Equipment* — every slot with bonuses, weight and cost, plus a running carried-weight
-  total against your light load.
+  total against your light load; proficiencies, carrying capacity and wealth.
 - *Crafting* — speed increases, base costs, cost reductions, projects and their DCs,
   with the Discord posts generated from them.
-- *Progression* — the level-by-level planner.
+- *Progression* — the Classes table and the level-by-level planner.
 - *Extras & Notes* — free-form notes to jot on (add, retitle, delete), the workbook's
   **Approvals** table (what was applied for, who approved it, the link) with a notes
   box under it, and whatever else the ExtrasNotes worksheet held, as an editable grid.
@@ -105,7 +106,8 @@ and anything downstream recalculates immediately.
   abbreviated. On import each of the sheet's *Range* columns becomes one note and its
   Approvals rows become rows; the template's own hint lines ("This sheet is not
   referenced anywhere.", "Go ham.") are dropped, and the raw grid is retired.
-- *Lore* — every background section.
+- *Background* — race traits, traits and drawbacks, specialty, languages and the story
+  sections.
 
 **On a phone.** The sheet nests four deep — the wrap, a supergroup band, a panel, a
 cell — and every level pays twice, so below 620px the furniture is drawn thinner: the
@@ -187,9 +189,9 @@ crit lines are always shown and simply ignored on a miss.
 | Where | What it copies |
 |---|---|
 | *Overview* → **At a glance** | **Init**, off the tile itself. |
-| *Overview* → **Ability scores** | An ability check: `1d20` plus the temporary modifier, which is the column the button sits in. |
-| *Overview* → **Saving throws** | The save's total. |
-| *Overview* → **Attack** | Melee and Ranged copy the whole iterative sequence, one row per attack; CMB copies the maneuver alone. The mode table below them does the same for all six slots, **alternates included**. |
+| *Overview* or *Stats* → **Ability scores** | An ability check: `1d20` plus the temporary modifier, which is the column the button sits in. |
+| *Overview* → **Saves & initiative**, *Stats* → **Saving throws** and **Initiative** | The save's or initiative's total. |
+| *Overview* or *Stats* → **Attack** | Melee and Ranged copy the whole iterative sequence, one row per attack; CMB copies the maneuver alone. The mode table on Stats does the same for all six slots, **alternates included**. |
 | *Skills* | The skill's **Total** — ranks, ability, the class-skill bonus, armour check penalty and Misc, already summed. |
 | *Equipment* → **Weapons** | The attack (iteratives included), the damage, the confirmation roll and the critical damage. |
 | *Magic Spheres* → **Casting numbers** | The global **concentration** check, with the caster level behind it. |
@@ -306,12 +308,12 @@ the one exception, and that is the same edit the group's own **▸** makes.
 
 ## The tab bar and the ⚙ manager
 
-A sheet opens with nine tabs across the top — **Overview, Stats, Lore, Skills, Progression,
+A sheet opens with nine tabs across the top — **Overview, Stats, Background, Skills, Progression,
 Feats & Mythic, Primordia, Trackers, Equipment** — **plus every sub-system the character
 actually uses**, and everything else waits in the **⚙** manager at the end of the bar. A
 workbook that arrives carrying maneuvers, veils and a familiar opens on all three rather
 than leaving them in the manager for you to know to go and look for. *Uses* means what the
-manager's badges mean: the sub-system holds data (*in use*), or a class on the Overview
+manager's badges mean: the sub-system holds data (*in use*), or a class on the Classes table
 names it (*marked*) — so you can say "this one is a veilweaver" before there is a veil on
 the sheet, and the tab is there when you go to add one.
 
@@ -698,7 +700,7 @@ build bar, and both arrangements survive a reload and travel with an export.
 
 ### Marking a class's systems
 
-On the Overview's **Classes** table, the **Systems** column expands into a row of
+On the **Classes** table (Progression tab), the **Systems** column expands into a row of
 toggles — Spheres of Power, Spheres of Might, Champion of the Spheres, Spheres of Guile,
 Vancian magic, Path of War, Psionics, Akashic, Cardcasting, the three companions,
 Techniques, Cooking, Item crafting. Marking one says "this class plays with that machinery"
@@ -747,15 +749,27 @@ minimized; all of this persists per character.
 
 ## The Overview
 
-Top to bottom, the Overview reads: **At a glance** (the eight numbers a table asks
-for), **Details** (what the player writes about the character) beside the ability
-scores, **Specialty** beside **Languages**, the **Classes** table — the levels every
-number below it comes out of — then two supergroups: **Defenses** (hit points, armor
-class, saving throws, initiative) and **Offenses** (attack, speed and proficiencies,
-three panels to a row where the width is there). **Initiative** is its own row: the
-ability it runs on (Dex unless a rule says otherwise), a second ability where one adds,
-a Misc box of your own, and the Other column every reconciled number carries. Last come conditions beside carrying capacity, the
-wallet, and traits.
+The Overview is the whole character on one page, and it is read-only except for three
+panels: **Details**, **Conditions** and **Buffs**. Every other panel is a summary of
+one edited on another tab, and its **Edit on …** button goes to that panel there:
+
+| Overview panel | Edited on |
+|---|---|
+| Ability scores, Hit points, Armor class, Saves & initiative, Attack, Speed | Stats |
+| Classes | Progression |
+| Race traits, Traits & drawbacks, Specialty, Languages | Background |
+| Carrying capacity, Proficiencies | Equipment |
+
+Top to bottom it reads: **At a glance** (the numbers a table asks for), **Details**
+beside the ability scores, **Conditions** beside **Buffs**, then the rest in the order a
+character is built: **Classes**, **Background** (race traits, traits and drawbacks,
+specialty, languages), **Defenses** (hit points, armor class, saves and initiative) and
+**Offenses** (attack, speed, carrying capacity, proficiencies). The panels described
+below are the ones on those tabs.
+
+**Initiative** is its own row on Stats: the ability it runs on (Dex unless a rule says
+otherwise), a second ability where one adds, a Misc box of your own, and the Other column
+every reconciled number carries.
 
 **Conditions** are switches, not number boxes: all of them are on or off except
 negative levels, which count. They are laid out three to a row — the standard
@@ -868,7 +882,7 @@ proficient by the Enhanced-veil rule (a veilweaver is always proficient with wha
 creates), and the row's own **Proficient** field — Auto / Yes / No, with a *via* note for
 Custom Training, a class feature, whatever the lists cannot say — overrides all of it. The
 heading shows *proficient · veil* or *proficient · Custom Training* when the answer came
-from one of those rather than the Overview. A weapon the character is not proficient with
+from one of those rather than the Proficiencies lists. A weapon the character is not proficient with
 takes **−4 to hit**, and its badge says *not proficient · −4*. Where the −4 is already
 written in Misc, untick **−4 to hit** on the weapon's card; a row that was flagged before
 the sheet applied the −4 itself opens with it unticked, so its total did not move. The
@@ -884,7 +898,7 @@ are split into name and effect on import.
 ## Wealth — the wallet in mana
 
 The campaign's currency is mana, and the workbook's wallet block (Character Info, beside
-the mythic path) is what the Overview's **Wealth** panel and its **Mana** stat in *At a
+the mythic path) is what the Equipment tab's **Wealth** panel and the Overview's **Mana** stat in *At a
 glance* read: the balance recorded after the last Oath of Offerings, whether the
 character keeps the Oath and casts materially, when the last offering was made, the mana
 earned a day and the mana earned in sessions since ("Sessions" on the sheet is that
@@ -1136,7 +1150,7 @@ at 3rd, +2 at 8th, +3 at 10th, +4 at 13th, +5 at 14th; deflection +1 at 5th, +2 
 bonus of the same kind beside it (*Resist.*, *Deflect.*, *E. Nat*), and the pair adds up
 to at most +5 — unless the typed side is past +5 on its own, in which case it stands
 alone, the way a +6 item would. All five characters' imported ABP values sit exactly on
-the ladder, so nothing moved. On the Overview, the flat-footed row's *Misc* is a
+the ladder, so nothing moved. In the Armor class panel, the flat-footed row's *Misc* is a
 read-only mirror of the AC row's, since misc AC is armour-side and flat-footed keeps it.
 
 The columns come in from the workbook's own defined names: `ABPFort`/`ABPRef`/`ABPWill`
@@ -1214,7 +1228,7 @@ with the level filter applied.
 
 ## Classes (gestalt) & traits
 
-The Classes table lives on the Overview, above the Defenses. **Levels** is a read-out
+The Classes table is at the top of the Progression tab. **Levels** is a read-out
 before it is a field: the number in the box is how many of the character's levels
 feature that class in the Planner, which is what every other tab means by "class
 level", and hovering it says so — *featured on 8 of 9 levels*. The name is matched
@@ -1438,7 +1452,7 @@ the day it lands rather than the day someone remembers to tag it.
 
 A **weapon's Base** is coloured too, though its choices are attack modes rather than
 abilities: *Alt Melee* wears the colour of whatever ability that mode is keyed to on the
-Overview. It is the one place the two can disagree and the disagreement is the point —
+Stats tab. It is the one place the two can disagree and the disagreement is the point —
 a finessed rapier reads *Alt Melee* in Dex green beside *Str* in red, which is exactly
 what a finesse weapon is: attacking off one ability and damaging off the other. A mode
 keyed to two abilities takes the primary, since two colours would be no colour at all;

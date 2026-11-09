@@ -188,16 +188,19 @@ export function buildIndex(model, { tabs = [], isAdmin = false } = {}) {
 
 /**
  * The numbers a table asks for out loud. These lead the index because they
- * lead the questions: an empty palette opens on them.
+ * lead the questions: an empty palette opens on them. Each goes to the Stats
+ * panel it is edited on, inside its group's fold.
  */
 function vitals(model, add) {
   const c = model.data;
   const hp = model.hpState;
   const d = c.defenses;
   const a = c.attack;
+  const defenses = { tab: 'stats', expand: 'sg-stats-defenses' };
+  const offenses = { tab: 'stats', expand: 'sg-stats-offenses' };
 
   add({
-    kind: 'stat', title: 'Hit points', tab: 'overview', start: true,
+    kind: 'stat', title: 'Hit points', ...defenses, start: true,
     value: `${hp.current}/${hp.max}`,
     sub: bits(hp.temp ? `${hp.temp} temporary` : '', hp.nonlethal ? `${hp.nonlethal} nonlethal` : '',
       `dies at ${hp.deathAt}`),
@@ -205,21 +208,21 @@ function vitals(model, add) {
     find: 'Hit points',
   });
   add({
-    kind: 'stat', title: 'Armor Class', tab: 'overview', start: true, value: String(d.ac),
+    kind: 'stat', title: 'Armor Class', ...defenses, start: true, value: String(d.ac),
     sub: bits(`touch ${d.touch}`, `flat-footed ${d.flatFooted}`, d.acStat1 ? `on ${d.acStat1}` : ''),
     keys: 'ac defense armour touch flat footed',
   });
   add({
-    kind: 'stat', title: 'CMD', tab: 'overview', start: true, value: String(d.cmd),
+    kind: 'stat', title: 'CMD', ...defenses, start: true, value: String(d.cmd),
     sub: bits(`flat-footed ${d.ffCmd}`), keys: 'combat maneuver defense',
   });
   add({
-    kind: 'stat', title: 'Initiative', tab: 'overview', start: true,
+    kind: 'stat', title: 'Initiative', ...defenses, start: true,
     value: fmt(c.hp?.initiative ?? 0), sub: bits(text(c.hp?.initAbility) && `on ${text(c.hp.initAbility)}`),
     roll: { kind: 'initiative', ref: 'self', what: 'initiative' }, keys: 'init',
   });
   add({
-    kind: 'stat', title: 'Base attack bonus', tab: 'overview', start: true,
+    kind: 'stat', title: 'Base attack bonus', ...offenses, start: true,
     value: fmt(a.bab), sub: bits(a.iterative && `iteratives ${a.iterative}`), keys: 'bab',
   });
   for (const [key, label, total] of [
@@ -228,7 +231,7 @@ function vitals(model, add) {
     ['cmb', 'Combat maneuver bonus', a.totalCmb],
   ]) {
     add({
-      kind: 'stat', title: label, tab: 'overview', start: true, value: fmt(total),
+      kind: 'stat', title: label, ...offenses, start: true, value: fmt(total),
       sub: bits(c.attack.modes?.[key]?.stat1 && `on ${c.attack.modes[key].stat1}`),
       roll: { kind: 'mode', ref: key }, keys: key === 'cmb' ? 'cmb maneuver' : key,
     });
@@ -237,7 +240,7 @@ function vitals(model, add) {
     const s = c.saves?.[key];
     if (!s) continue;
     add({
-      kind: 'stat', title: `${label} save`, tab: 'overview', start: true, value: fmt(s.total),
+      kind: 'stat', title: `${label} save`, ...defenses, start: true, value: fmt(s.total),
       sub: bits(`base ${s.base}`, s.stat1 && `on ${s.stat1}`), roll: { kind: 'save', ref: key },
       keys: 'saving throw', find: label,
     });
@@ -246,7 +249,7 @@ function vitals(model, add) {
     const ab = c.abilities?.[key];
     if (!ab) continue;
     add({
-      kind: 'stat', title: ABILITY_LABELS[key], tab: 'stats', start: true,
+      kind: 'stat', title: ABILITY_LABELS[key], tab: 'stats', expand: 'sg-stats-abilities', start: true,
       value: `${ab.workingScore ?? ab.tempScore ?? ab.score} (${fmt(ab.totalMod ?? ab.mod)})`,
       sub: bits(ab.tempScore !== ab.score ? `base ${ab.score}` : '', 'ability score'),
       roll: { kind: 'ability', ref: key }, keys: `${key} ability score modifier`,
@@ -255,7 +258,7 @@ function vitals(model, add) {
   for (const sp of c.identity?.speeds || []) {
     if (!(Number(sp.final) || 0)) continue;
     add({
-      kind: 'stat', title: `${text(sp.type) || 'Movement'} speed`, tab: 'overview',
+      kind: 'stat', title: `${text(sp.type) || 'Movement'} speed`, ...offenses,
       value: `${sp.final} ft.`, sub: bits(sp.bonus ? `base ${sp.base}` : ''), keys: 'move speed',
       find: text(sp.type),
     });
@@ -280,7 +283,7 @@ function vitals(model, add) {
   ]) {
     const shown = text(resolved) || text(d?.[field]);
     if (!shown) continue;
-    add({ kind: 'stat', title: label, tab: 'overview', value: clip(shown, 40), keys: 'defense' });
+    add({ kind: 'stat', title: label, ...defenses, value: clip(shown, 40), keys: 'defense' });
   }
   // Progress toward the next level or tier, when the campaign counts it.
   const lp = levelProgress(c);
@@ -314,7 +317,7 @@ function identity(model, add) {
   for (const [label, value] of pairs) {
     if (!text(value)) continue;
     add({
-      kind: 'stat', title: label, tab: 'overview', value: clip(value, 40), keys: 'identity',
+      kind: 'stat', title: label, tab: label === 'Specialty' ? 'lore' : 'overview', value: clip(value, 40), keys: 'identity',
       find: text(value),
     });
   }
@@ -326,7 +329,7 @@ function identity(model, add) {
   }
   for (const lang of i.languages || []) {
     if (!text(lang)) continue;
-    add({ kind: 'lore', title: text(lang), sub: 'Language', tab: 'overview', keys: 'language' });
+    add({ kind: 'lore', title: text(lang), sub: 'Language', tab: 'lore', keys: 'language' });
   }
   const prof = i.proficiencies || {};
   for (const [field, label] of [
@@ -346,7 +349,7 @@ function classes(model, add) {
   (model.data.classes || []).forEach((cl, i) => {
     if (!text(cl.name)) return;
     add({
-      kind: 'class', title: text(cl.name), tab: 'overview',
+      kind: 'class', title: text(cl.name), tab: 'progression',
       value: cl.gestaltLevels ? `Lv ${cl.gestaltLevels}` : '',
       sub: bits(cl.hd && `d${cl.hd}`, text(cl.archetypes) && `archetype: ${text(cl.archetypes)}`,
         [cl.goodFort && 'Fort', cl.goodRef && 'Ref', cl.goodWill && 'Will'].filter(Boolean).join('/')),
@@ -355,7 +358,7 @@ function classes(model, add) {
     for (const arch of text(cl.archetypes).split(/\s*[,;]\s*/)) {
       if (!arch) continue;
       add({
-        kind: 'class', title: arch, sub: `Archetype · ${text(cl.name)}`, tab: 'overview',
+        kind: 'class', title: arch, sub: `Archetype · ${text(cl.name)}`, tab: 'progression',
         sel: `[data-item^="classes|${i}|"]`, keys: 'archetype',
       });
     }
@@ -468,7 +471,7 @@ function feats(model, add) {
     const title = text(slot.name) || clip(slot.text, 50);
     if (!title) continue;
     add({
-      kind: 'feat', title, tab: 'features',
+      kind: 'feat', title, tab: 'lore', expand: 'traits',
       sub: bits(/drawback/i.test(key) ? 'Drawback' : 'Trait', text(slot.category), clip(slot.text, 70)),
       keys: 'trait drawback',
     });
@@ -477,7 +480,7 @@ function feats(model, add) {
     const title = text(t.name) || clip(t.text, 50);
     if (!title) return;
     add({
-      kind: 'feat', title, tab: 'features', sub: bits('Trait', text(t.category), clip(t.text, 70)),
+      kind: 'feat', title, tab: 'lore', expand: 'traits', sub: bits('Trait', text(t.category), clip(t.text, 70)),
       sel: `[data-item^="traitSlots.additional|${i}|"]`, keys: 'trait',
     });
   });
@@ -485,7 +488,7 @@ function feats(model, add) {
     const title = nameOf(t);
     if (!title) return;
     add({
-      kind: 'feat', title, tab: 'overview',
+      kind: 'feat', title, tab: 'lore', expand: 'race-traits',
       sub: bits('Race trait', clip(typeof t === 'string' ? '' : t.text, 80)),
       sel: `[data-item^="raceTraits|${i}|"]`, keys: 'racial trait',
     });

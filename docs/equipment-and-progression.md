@@ -119,7 +119,7 @@ The worksheet's four systems, separated and computed:
   load's and the armour's figures applies, never both, so the AC, the skills and the
   `ac.maxDex` / `ac.acp` formula names all follow. While medium or heavy armour is worn
   the speed you typed (which already carries the armour's cut) stands. **Apply load
-  penalties** on the Overview's Carrying capacity panel turns them off; a sheet that was
+  penalties** on the Carrying capacity panel turns them off; a sheet that was
   already past a light load when the penalties arrived opens with them off, so its totals
   did not move. **Carrying score** reads capacity from another ability score, for a feature
   that carries by Intelligence.
@@ -319,7 +319,7 @@ ring, 110,000 gross, a sale at cost, 20 days, and a take-10 check of 56.
 ## Progression
 
 A structured plan, not a cell dump: a **static level list 1–20** with a class-track
-dropdown per track (choices come from the Overview's class table; "+ Class track"
+dropdown per track (choices come from the Classes table above it; "+ Class track"
 adds a third for tristalt and beyond, and each track has a × to delete it), and
 read-only **HP, ranks, Fort/Ref/Will per level** computed gestalt-style from the
 classes chosen on that row (good ½, poor ⅓).

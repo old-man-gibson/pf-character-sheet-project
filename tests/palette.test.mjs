@@ -36,7 +36,7 @@ const TABS = [
   ['features', 'Feats & Mythic'], ['gear', 'Equipment'],
   ['akashic', 'Akashic'], ['maneuvers', 'Maneuvers'], ['vancian', 'Vancian'],
   ['psionics', 'Psionics'], ['trackers', 'Trackers'], ['progression', 'Progression'],
-  ['lore', 'Lore'], ['extras', 'Extras & Notes'],
+  ['lore', 'Background'], ['extras', 'Extras & Notes'],
 ].map(([id, label]) => ({ key: id, id, label, kind: 'core', inUse: true }));
 
 const index = (model) => buildIndex(model, { tabs: TABS });

@@ -81,7 +81,7 @@ export const PROFICIENCY_LISTS = {
 };
 
 /**
- * A new row on the Classes table. Add class on the Overview starts from it
+ * A new row on the Classes table. Add class on the Progression tab starts from it
  * and a pack's class block fills it in, so the two carry the same fields.
  */
 export const blankClassRow = () => ({
@@ -225,7 +225,7 @@ export function normalizeProficiencies(raw) {
  *  - the [Enhanced] veil rule: a veilweaver is always proficient with the
  *    weapon a veil creates, so a row in the Veil group, or naming [Enhanced],
  *    is proficient with no list consulted;
- *  - the Overview's specific weapons, against the row's name and its base
+ *  - the specific weapons in Proficiencies, against the row's name and its base
  *    weapon ("As: katana") -- and against a group the fixed list does not know;
  *  - the row's familiarity, handedness and groups against the chips.
  * Handedness alone does not describe a weapon well enough to refuse it.
@@ -260,17 +260,17 @@ export function weaponProficient(prof, w) {
     if (name && (n === name || name.includes(n) || n.includes(name))) return true;
     return groups.some((g) => eq(g, n));
   });
-  if (hit) return { state: true, why: `${hit} on the Overview`, source: 'overview' };
+  if (hit) return { state: true, why: `${hit} in Proficiencies`, source: 'overview' };
   if (w.familiarity && (prof.familiarities || []).some((f) => eq(f, w.familiarity))) {
-    return { state: true, why: `${w.familiarity.toLowerCase()} weapons on the Overview`, source: 'overview' };
+    return { state: true, why: `${w.familiarity.toLowerCase()} weapons in Proficiencies`, source: 'overview' };
   }
   if (w.handedness && (prof.handedness || []).some((h) => eq(h, w.handedness))) {
-    return { state: true, why: `${w.handedness.toLowerCase()} weapons on the Overview`, source: 'overview' };
+    return { state: true, why: `${w.handedness.toLowerCase()} weapons in Proficiencies`, source: 'overview' };
   }
   const g = groups.find((x) => (prof.groups || []).some((y) => eq(x, y)));
-  if (g) return { state: true, why: `the ${g} group on the Overview`, source: 'overview' };
+  if (g) return { state: true, why: `the ${g} group in Proficiencies`, source: 'overview' };
   return (w.familiarity || groups.length || base)
-    ? { state: false, why: 'nothing on the Overview\'s Proficiencies covers this weapon\'s familiarity, handedness, group, name or base weapon', source: 'overview' }
+    ? { state: false, why: 'nothing in Proficiencies covers this weapon\'s familiarity, handedness, group, name or base weapon', source: 'overview' }
     : none;
 }
 

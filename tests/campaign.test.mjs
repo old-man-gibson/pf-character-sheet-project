@@ -355,8 +355,8 @@ console.log('\ngestalt off: one class a level, each its own progression');
   p.set('identity.level', 5);
   p.set('campaign.gestalt', false);
   check('an empty Planner: the pinned count, then the first class unnamed', p.data.classes.map((x) => x.gestaltLevels), [3, 2, 0]);
-  const { renderOverviewPanel } = await import('../app/js/ui/panels/overview.js');
-  check('and the class left without levels is named', renderOverviewPanel(p, { draft: {}, buildView: true }).includes('<strong>Rogue</strong>'), true);
+  const { renderProgressionPanel } = await import('../app/js/ui/panels/lore.js');
+  check('and the class left without levels is named', renderProgressionPanel(p, { draft: {} }).includes('<strong>Rogue</strong>'), true);
 }
 
 console.log('\nhit points: maximum, average or rolled after 1st');
@@ -595,6 +595,10 @@ console.log('\nbackground skills in place of the Specialty');
   const { isBackgroundSkill } = await import('../app/js/rules.js');
   const { renderSkillsPanel } = await import('../app/js/ui/panels/skills.js');
   const { renderOverviewPanel } = await import('../app/js/ui/panels/overview.js');
+  const { renderLorePanel } = await import('../app/js/ui/panels/lore.js');
+  // The Specialty panel is edited on Background and read on the Overview.
+  const specialtyShown = (m) => [renderLorePanel(m, { draft: {} }).includes('<h3>Specialty</h3>'),
+    /<h3>Specialty <button[^>]*data-place="home:specialty"/.test(renderOverviewPanel(m, { draft: {}, buildView: true }))];
   const key = (s) => `${s.name}|${s.spec || ''}`;
   const c = new Character(blankDocument({ name: 'Background', level: 1 }));
   c.set('identity.level', 6);
@@ -608,13 +612,13 @@ console.log('\nbackground skills in place of the Specialty');
   c.set('grantedFeats.specialty.name', 'Skill Focus');
   check('specialty: a specialty skill at full ranks, its feat counted',
     [specialtyInPlay(c.data), skill('Perception').totalRanks, featNames(c.data).includes('Skill Focus')], [true, 6, true]);
-  check('specialty: the Specialty panel and skills', [renderOverviewPanel(c, { draft: {}, buildView: true }).includes('<h3>Specialty</h3>'),
-    renderSkillsPanel(c, { showAllSkills: true }).includes('Specialty skills')], [true, true]);
+  check('specialty: the Specialty panel and skills', [...specialtyShown(c),
+    renderSkillsPanel(c, { showAllSkills: true }).includes('Specialty skills')], [true, true, true]);
 
   c.set('campaign.skillSystem', 'background');
   check('background: the Specialty goes, all of it', [specialtyInPlay(c.data), skill('Perception').totalRanks,
-    featNames(c.data).includes('Skill Focus'), renderOverviewPanel(c, { draft: {}, buildView: true }).includes('<h3>Specialty</h3>'),
-    renderSkillsPanel(c, { showAllSkills: true }).includes('Background skills')], [false, 0, false, false, true]);
+    featNames(c.data).includes('Skill Focus'), ...specialtyShown(c),
+    renderSkillsPanel(c, { showAllSkills: true }).includes('Background skills')], [false, 0, false, false, false, true]);
   check('background: what it held is kept', [c.data.specialtySkills.free, c.data.grantedFeats.specialty.name], [key(skill('Perception')), 'Skill Focus']);
 
   // Allocated: a pick for each rank a level, each at full ranks, nothing typed.
