@@ -1569,6 +1569,19 @@ console.log('\nthe Extensions tab: a shelf of many blocks arrives with every pac
   c.data.uiPrefs.collapsed = { 'extpack:small-a': false };
   ok('and a pack opened by hand stays open', packs(draw()).filter((x) => !x).length === 1);
   ok('a search still shows what it finds', /data-action="ext-add-block"/.test(draw('more-3 note 7')));
+  // A keystroke in the search redraws only the list and the count
+  // (sheet-element.js #refreshShelf); they must read as the panel draws them.
+  const alone = (extSearch) => manager.extensionShelf(c, { ...shutCtx(), extSearch });
+  const same = (extSearch) => {
+    const html = draw(extSearch);
+    const { count, list } = alone(extSearch);
+    return html.includes(`<span data-ext-count style="display:contents">${count}</span>`)
+      && html.includes(`<div class="rowlist" data-ext-shelf>${list}</div>`);
+  };
+  ok('the shelf drawn alone matches the panel, searching or not',
+    ['', 'note', 'more-3 note 7', 'nothing like this'].every(same));
+  ok('its count says how many match', alone('more-3').count.includes('30 of 240')
+    && alone('').count === '' && /Nothing matches/.test(alone('nothing like this').list));
   runtime.bundled = had;
 }
 

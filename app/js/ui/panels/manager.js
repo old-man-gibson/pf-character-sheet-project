@@ -165,6 +165,23 @@ export function renderSystemManagerPanel(model, ctx) {
     ${extensionBlocksPanel(model, ctx)}</div>`;
 }
 
+/*
+ * What a search looks through, per block. The block list is rebuilt only
+ * when the packs change, so the text is worked out once per block rather
+ * than on every keystroke.
+ */
+const HAYSTACKS = new WeakMap();
+function haystack(b) {
+  let text = HAYSTACKS.get(b);
+  if (text === undefined) {
+    text = [b.name, b.kind, BLOCK_KINDS[b.kind]?.label, b.extName, b.class, b.group, b.feature,
+      ...(b.features || []).flatMap((f) => [f.name, ...(f.replaces || []), ...(f.alters || [])]),
+      ...(b.options || []).map((o) => o.name)].filter(Boolean).join(' ').toLowerCase();
+    HAYSTACKS.set(b, text);
+  }
+  return text;
+}
+
 /**
  * The building blocks the enabled extension packs offer -- a class, a race,
  * a feature, a tracker -- each with a button that copies it into this
@@ -172,6 +189,39 @@ export function renderSystemManagerPanel(model, ctx) {
  * only the shelf.
  */
 function extensionBlocksPanel(model, ctx) {
+    const { packs, blocks, kinds, filter, byKind, count, list } = shelfParts(model, ctx);
+    return `<section class="panel span2">
+      <h3>Extension blocks</h3>
+      <p class="hint">
+        Blocks from the active extension packs: ${packs.length
+    ? `${packs.length} pack${packs.length === 1 ? '' : 's'} on, ${blocks.length} block${blocks.length === 1 ? '' : 's'}.`
+    : 'no packs are active.'} <strong>+ Add</strong> copies a block onto the sheet, such as a
+        class into the Classes table or a tracker onto Trackers. You can edit the copy. Manage
+        packs with the <em>Extensions and Rules</em> button.
+      </p>
+      ${blocks.length ? `<p class="pair extfind" style="margin:0 0 6px">
+        ${kinds.length > 1 ? `<button data-view data-action="ext-filter" data-kind="" aria-pressed="${!filter}">All</button>
+        ${kinds.map((k) => `<button data-view data-action="ext-filter" data-kind="${k}" aria-pressed="${filter === k}">${esc(BLOCK_KINDS[k]?.label || k)}</button>`).join('')}` : ''}
+        <input type="search" data-ext-search="1" value="${esc(ctx.extSearch)}" spellcheck="false"
+          placeholder="Search ${byKind.length} block${byKind.length === 1 ? '' : 's'}…"
+          title="Search by name, pack, class, or the features a block adds or replaces.">
+        <span data-ext-count style="display:contents">${count}</span>
+      </p>` : ''}
+      <div class="rowlist" data-ext-shelf>${list}</div>
+    </section>`;
+}
+
+/**
+ * The shelf's search count and its list of blocks, without the panel around
+ * them. A keystroke in the search redraws only these two
+ * (sheet-element.js `#refreshShelf`).
+ */
+export function extensionShelf(model, ctx) {
+  const { count, list } = shelfParts(model, ctx);
+  return { count, list };
+}
+
+function shelfParts(model, ctx) {
     const packs = extensionRuntime.active();
     const blocks = extensionRuntime.blocks();
     const kinds = [...new Set(blocks.map((b) => b.kind))];
@@ -181,9 +231,6 @@ function extensionBlocksPanel(model, ctx) {
     // words are looked for in the block's name, its pack and what it is for,
     // so "warrior" finds an archetype that replaces warrior's grace.
     const words = ctx.extSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    const haystack = (b) => [b.name, b.kind, BLOCK_KINDS[b.kind]?.label, b.extName, b.class, b.group, b.feature,
-      ...(b.features || []).flatMap((f) => [f.name, ...(f.replaces || []), ...(f.alters || [])]),
-      ...(b.options || []).map((o) => o.name)].filter(Boolean).join(' ').toLowerCase();
     const shown = words.length ? byKind.filter((b) => { const h = haystack(b); return words.every((w) => h.includes(w)); }) : byKind;
     // Searching looks through what a block is for as well as what it is called,
     // so "warrior" finds an archetype that replaces warrior's grace. A block
@@ -325,27 +372,9 @@ function extensionBlocksPanel(model, ctx) {
       </div>`;
     }).join('');
 
-    return `<section class="panel span2">
-      <h3>Extension blocks</h3>
-      <p class="hint">
-        Blocks from the active extension packs: ${packs.length
-    ? `${packs.length} pack${packs.length === 1 ? '' : 's'} on, ${blocks.length} block${blocks.length === 1 ? '' : 's'}.`
-    : 'no packs are active.'} <strong>+ Add</strong> copies a block onto the sheet, such as a
-        class into the Classes table or a tracker onto Trackers. You can edit the copy. Manage
-        packs with the <em>Extensions and Rules</em> button.
-      </p>
-      ${blocks.length ? `<p class="pair extfind" style="margin:0 0 6px">
-        ${kinds.length > 1 ? `<button data-view data-action="ext-filter" data-kind="" aria-pressed="${!filter}">All</button>
-        ${kinds.map((k) => `<button data-view data-action="ext-filter" data-kind="${k}" aria-pressed="${filter === k}">${esc(BLOCK_KINDS[k]?.label || k)}</button>`).join('')}` : ''}
-        <input type="search" data-ext-search="1" value="${esc(ctx.extSearch)}" spellcheck="false"
-          placeholder="Search ${byKind.length} block${byKind.length === 1 ? '' : 's'}…"
-          title="Search by name, pack, class, or the features a block adds or replaces.">
-        ${words.length ? `<span class="hint" style="margin:0">${shown.length} of ${byKind.length}${
-    drawn.length < shown.length ? `, first ${drawn.length} shown` : ''}</span>` : ''}
-      </p>` : ''}
-      <div class="rowlist">
-        ${packList || `<p class="empty">${words.length ? `Nothing matches “${esc(ctx.extSearch)}”.`
-    : packs.length ? 'The active packs have tables but no blocks.' : 'No blocks available.'}</p>`}
-      </div>
-    </section>`;
+    const count = words.length ? `<span class="hint" style="margin:0">${shown.length} of ${byKind.length}${
+      drawn.length < shown.length ? `, first ${drawn.length} shown` : ''}</span>` : '';
+    const list = packList || `<p class="empty">${words.length ? `Nothing matches “${esc(ctx.extSearch)}”.`
+      : packs.length ? 'The active packs have tables but no blocks.' : 'No blocks available.'}</p>`;
+    return { packs, blocks, kinds, filter, byKind, count, list };
 }
