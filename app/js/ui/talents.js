@@ -11,7 +11,7 @@
 import { esc, nameDatalist } from './html.js';
 import { hasView, prose } from './prose.js';
 import { foldButton } from './folds.js';
-import { linkedText } from './links.js';
+import { richText } from './links.js';
 import { hasTokens, plainTokens } from '../inline.js';
 import {
   catalogueEntry, sphereCatalogue, sphereTalent, talentPackage,
@@ -259,58 +259,6 @@ function talentInfo(model, sphere, value) {
     text: pack ? pack.text : hit.text,
     aria: `${hit.name}, from the sphere catalog`,
   };
-}
-
-/**
- * Rules text for the panel, with its tables drawn as tables.
- *
- * A pack's text keeps a table as tab-separated rows -- the most a plain
- * string can do, and what a Notes box shows as it stands, since a text box
- * has no tables in it. The panel is markup, so here a run of such rows is a
- * real one: the first row its header, and a `Table: …` line just above it the
- * caption. Two rows at least, because one line with a tab in it is a line
- * with a tab in it. Everything else is the text, escaped, as it was, with
- * any web address a link (ui/links.js), in a cell or out of one.
- *
- * Built without newlines between the tags: the text around it is
- * `white-space: pre-wrap`, and a line break in the markup would be drawn.
- */
-export function richText(text) {
-  const lines = String(text ?? '').split('\n');
-  const out = [];
-  let plain = [];
-  const flush = () => { if (plain.length) { out.push(linkedText(plain.join('\n'))); plain = []; } };
-  /*
-   * Two spellings of a row, because both are out there: tabs, which is what
-   * the reader leaves a wiki table as, and `| a | b |`, which is what an
-   * earlier build of the wiki packs wrote for base abilities and what a
-   * player pasting markdown writes. A note filled from one of those packs
-   * keeps its pipes for good -- a fill never overwrites -- so the panel has
-   * to read them rather than wait for them to go away.
-   */
-  const piped = (l) => /^\s*\|.*\|\s*$/.test(l);
-  const isRow = (l) => l.includes('\t') || piped(l);
-  const cellsOf = (l) => (piped(l) ? l.trim().slice(1, -1).split('|') : l.split('\t')).map((c) => c.trim());
-  // Markdown's `|---|:--:|` rule under a header is punctuation, not a row.
-  const isRule = (row) => row.every((c) => /^:?-+:?$/.test(c));
-  for (let i = 0; i < lines.length; i++) {
-    let end = i;
-    while (end < lines.length && isRow(lines[end])) end++;
-    if (end - i < 2) { plain.push(lines[i]); continue; }
-    let caption = '';
-    // The caption may sit right above the rows, or a blank line above them.
-    while (plain.length && !plain[plain.length - 1].trim()) plain.pop();
-    if (plain.length && /^table\b/i.test(plain[plain.length - 1].trim())) caption = plain.pop().trim();
-    while (plain.length && !plain[plain.length - 1].trim()) plain.pop();
-    flush();
-    const rows = lines.slice(i, end).map(cellsOf).filter((row) => !isRule(row));
-    const cells = (row, tag) => `<tr>${row.map((c) => `<${tag}>${linkedText(c)}</${tag}>`).join('')}</tr>`;
-    out.push(`<table class="peektable">${caption ? `<caption>${esc(caption)}</caption>` : ''}`
-      + `<thead>${cells(rows[0], 'th')}</thead><tbody>${rows.slice(1).map((r) => cells(r, 'td')).join('')}</tbody></table>`);
-    i = end - 1;
-  }
-  flush();
-  return out.join('');
 }
 
 /**

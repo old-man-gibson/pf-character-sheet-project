@@ -156,6 +156,9 @@ export function slugId(s) {
 
 /* ---------------- normalising a document ---------------- */
 
+/** The numbers a class block sets on a class row. */
+const CLASS_ROW_STATS = ['hd', 'bab', 'goodFort', 'goodRef', 'goodWill', 'skillRanks'];
+
 /** One block, in its canonical shape; null when it is not a block at all. */
 export function normalizeBlock(block) {
   const b = obj(block);
@@ -191,6 +194,9 @@ export function normalizeBlock(block) {
           name: str(f?.name).trim(),
           text: str(f?.text),
         })).filter((f) => f.name),
+        // Numbers a class read from a catalogue entry did not state (see
+        // classBlockFromEntry): adding it over a class row leaves those be.
+        ...(arr(b.unstated).length ? { unstated: arr(b.unstated).filter((k) => CLASS_ROW_STATS.includes(k)) } : {}),
       };
     case 'race':
       return {
@@ -506,6 +512,9 @@ export function parseSwaps(text, className = '') {
   const BARE = /^(?:the\s+)?(?:kiai arts?|iaijutsu techniques?|rage powers?|deeds?|talents?|discover(?:y|ies)|hexe?s?|revelations?|exploits?)$/i;
   for (const m of str(text).matchAll(re)) {
     const verb = m[1].toLowerCase();
+    // "If successful, the poison's type changes to contact" says what a thing
+    // becomes, not which feature is given up.
+    if (/^(?:to|into)\s/i.test(m[2].trim())) continue;
     let list = m[2].trim()
       // "…alters Spirit and counts as such for items, class features, and feats"
       .replace(/\s+and\s+counts?\s+as\s+.*$/i, '')
@@ -523,13 +532,35 @@ export function parseSwaps(text, className = '') {
       for (const l of at) push(verb === 'replaces' ? replaces : alters, swapAt(key, l));
       continue;
     }
+    // The same written the other way round: "the rogue talents gained at 2nd
+    // and 6th levels", "the bonus feat gained at 1st level".
+    const gained = list.match(/^(?:the\s+)?(.+?)\s+(?:gained|granted|received|obtained)\s+at\s+((?:\d{1,2}(?:st|nd|rd|th))(?:\s*(?:,|and|&)\s*(?:and\s+)?\d{1,2}(?:st|nd|rd|th))*)(?:\s+levels?)?$/i);
+    if (gained) {
+      const key = swapKey(gained[1], className);
+      for (const x of gained[2].matchAll(/(\d{1,2})(?:st|nd|rd|th)/gi)) push(verb === 'replaces' ? replaces : alters, swapAt(key, Number(x[1])));
+      continue;
+    }
     // "the duty's call, charm kiai art" -> kiai art, altered: one named sub-ability, commas and all
     const named = list.match(SUB);
     if (named && verb === 'replaces' && !BARE.test(list)) { push(alters, swapKey(named[1], className)); continue; }
     // "weapon and armor proficiencies" is one thing, whatever the "and"
     if (/proficienc/i.test(list) && !/,/.test(list)) { push(verb === 'replaces' ? replaces : alters, 'weapon and armor proficiency'); continue; }
     const parts = list.replace(/\s*,?\s+(?:and|or)\s+/gi, ', ').split(/,\s*/).map((x) => x.trim()).filter(Boolean);
-    for (const p of parts) push(verb === 'replaces' ? replaces : alters, swapKey(p, className));
+    // "armor training 1, 2, 3, and 4" is every step of one feature: the
+    // feature, once, rather than a key per bare number.
+    const steps = [];
+    let series = false;
+    for (const p of parts) {
+      const bare = /^\d+$/.test(p);
+      if (bare && steps.length && (series || /\s\d+$/.test(steps[steps.length - 1]))) {
+        steps[steps.length - 1] = steps[steps.length - 1].replace(/\s\d+$/, '');
+        series = true;
+        continue;
+      }
+      series = false;
+      steps.push(p);
+    }
+    for (const p of steps) push(verb === 'replaces' ? replaces : alters, swapKey(p, className));
   }
   return { replaces, alters };
 }
@@ -1386,21 +1417,26 @@ export function activeBlocks(extensions) {
       out.push({ ...block, extId: ext.id, extName: ext.name, index });
     });
   }
-  // A catalogue pack's classes are blocks too, made from their entries --
-  // numbered after the pack's own, and never over a class somebody wrote as
-  // a block, which is the better of the two. Between two packs deriving the
-  // same class, the later one's stands: the packs arrive bundled first and
-  // local after, and somebody's own pack overrides a bundled one.
-  const written = new Set(out.filter((b) => b.kind === 'class').map((b) => lower(b.name)));
+  // A catalogue pack's classes, archetypes, races and alternate racial traits
+  // are blocks too, made from their entries (DERIVED_BLOCKS) -- numbered after
+  // the pack's own, and never over the same block somebody wrote into a pack,
+  // which is the better of the two. Between two packs deriving the same block,
+  // the later one's stands: the packs arrive bundled first and local after,
+  // and somebody's own pack overrides a bundled one.
+  const written = new Set(out.map(derivedKey));
   const derived = new Map();
   for (const ext of arr(extensions)) {
     let index = arr(ext.blocks).length;
     for (const cat of arr(ext.provides?.catalogues?.catalogues)) {
-      if (lower(cat?.kind) !== 'class' && lower(cat?.kind) !== 'prestige class') continue;
+      const kind = lower(cat?.kind);
+      const how = DERIVED_BLOCKS.find((d) => d.kinds.includes(kind));
+      if (!how) continue;
       for (const entry of arr(cat.entries)) {
-        const block = readEntry(entry, 'class block', () => classBlockFromEntry(entry));
-        if (!block || written.has(lower(block.name))) continue;
-        derived.set(lower(block.name), { ...block, extId: ext.id, extName: ext.name, index: index++ });
+        for (const block of readEntry(entry, how.reading, () => how.read(entry).filter(Boolean))) {
+          const key = derivedKey(block);
+          if (written.has(key)) continue;
+          derived.set(key, { ...block, extId: ext.id, extName: ext.name, index: index++ });
+        }
       }
     }
   }
@@ -1433,7 +1469,8 @@ export function applyBlock(model, rawBlock) {
       };
       if (existing === -1) model.listAdd('classes', { ...blankClassRow(), ...row, systems: block.systems });
       else {
-        for (const [k, v] of Object.entries(row)) model.setItem('classes', existing, k, v);
+        const unstated = new Set(block.unstated || []);
+        for (const [k, v] of Object.entries(row)) if (!unstated.has(k)) model.setItem('classes', existing, k, v);
         // The block's system tags join the row's rather than replace them --
         // whatever the player already marked by hand stays marked.
         const had = (model.data.classes[existing].systems || []);
@@ -1815,7 +1852,8 @@ export function optionCataloguesFromTables(tables) {
       : [];
     // An entry named for the list itself -- "Vigilante Talent" among the
     // vigilante's talents -- is the list's own rules, not one more to pick.
-    const menuName = [g.class, g.feature].filter(Boolean).join(' ');
+    // "Rogue Talent" already names its class; "Talent" needs it in front.
+    const menuName = g.class && !lower(g.feature).startsWith(lower(g.class)) ? `${g.class} ${g.feature}` : g.feature || g.class;
     const about = g.entries.length > 1 ? g.entries.find((e) => lower(e.name) === lower(menuName)) : null;
     const options = listed.length ? [...listed] : g.entries.filter((e) => e !== about).map((e) => readEntry(e, `option|${g.feature}`, () => {
       const { name, type } = splitAbilityType(e.name);
@@ -1865,16 +1903,19 @@ export function optionCataloguesFromTables(tables) {
 }
 
 /** What opens a class's page and is about the class, not something it gains at a level. */
-const CLASS_FRONT_MATTER = /^(?:role|alignment|hit dic?e|starting wealth|class skills|skill ranks(?: per level)?|legendary class|table|parent class(?:es)?)\b/i;
+const CLASS_FRONT_MATTER = /^(?:role|alignment|hit dic?e|starting wealth|class skills|skill (?:ranks|points)(?: (?:per|at each) level)?|legendary class|table|parent class(?:es)?|requirements?)\b/i;
 
-/** A page's labelled paragraphs as features: `{name, type, text}`, front matter left out. */
-function pageFeatures(text) {
+/**
+ * A page's labelled paragraphs as features: `{name, type, text}`, front matter
+ * left out. `front` says which labels are front matter: a class's by default.
+ */
+function pageFeatures(text, front = CLASS_FRONT_MATTER) {
   const out = [];
   let open = null;
   for (const para of str(text).split(/\n{2,}/)) {
     // A label ends in a colon, so a paragraph without one is not a label.
     const m = para.includes(':') && para.match(/^\*{0,2}([A-Z][^.:*\n]{1,60}?)(?:\s*\((Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?\))?\*{0,2}:\*{0,2}\s+(\S[\s\S]*)$/);
-    if (m && !CLASS_FRONT_MATTER.test(m[1])) {
+    if (m && !front.test(m[1])) {
       open = { name: m[1].trim(), type: m[2] || '', text: m[3].trim() };
       out.push(open);
     } else if (m) open = null;
@@ -1896,16 +1937,23 @@ function pageFeatures(text) {
  * repeats lands once, where it starts; the player spreads it from there.
  */
 export function classBlockFromEntry(entry) {
-  const name = str(entry?.name).replace(/\s*\([^)]*\)\s*$/, '').trim();
+  const name = classNameOf(entry);
   if (!name) return null;
-  const fields = new Map(arr(entry?.fields).map(([k, v]) => [lower(k), str(v).trim()]));
+  const fields = fieldMap(entry);
   const hd = Number((fields.get('hit die') || '').replace(/^d/i, ''));
   const features = pageFeatures(entry.text).map((f) => {
     const at = f.text.match(/\b(\d{1,2})(?:st|nd|rd|th)[ -]level\b/i);
     return { level: at ? Number(at[1]) : 1, name: f.type ? `${f.name} (${f.type})` : f.name, text: f.text };
   });
   if (!hd && !features.length) return null;
-  const skills = str(entry.text).match(/^Class Skills:\s*(?:[^\n]*?\bare\s+)?([^\n]+)$/mi)?.[1] || '';
+  const skills = fields.get('class skills') || str(entry.text).match(/^Class Skills:\s*(?:[^\n]*?\bare\s+)?([^\n]+)$/mi)?.[1] || '';
+  // The numbers the entry does not state. Adding the class to a sheet that
+  // already has it leaves those alone rather than writing defaults over them.
+  const unstated = [
+    !hd && 'hd', !fields.get('base attack bonus') && 'bab',
+    !fields.get('fort save') && 'goodFort', !fields.get('ref save') && 'goodRef', !fields.get('will save') && 'goodWill',
+    !Number(fields.get('skill ranks')) && 'skillRanks',
+  ].filter(Boolean);
   return normalizeBlock({
     kind: 'class', name, source: str(entry.source),
     hd: hd || 8, bab: fields.get('base attack bonus') || '3/4',
@@ -1914,8 +1962,127 @@ export function classBlockFromEntry(entry) {
     classSkills: skills.replace(/\.\s*$/, '').split(/,\s*(?:and\s+)?|\s+and\s+/)
       .map((x) => x.replace(/\s*\((?:Str|Dex|Con|Int|Wis|Cha)\)\s*$/i, '').trim()).filter((x) => x && x.length < 40),
     features,
+    unstated,
   });
 }
+
+/**
+ * A class's name off its catalogue entry. A bracket saying the page is a class
+ * goes; any other bracket names a different class ("Warlock (Revised)") and stays.
+ */
+const classNameOf = (entry) => str(entry?.name).replace(/\s*\((?:[\w-]+\s+)?class\)\s*$/i, '').trim();
+
+/** An entry's fields by lower-cased label. */
+const fieldMap = (entry) => new Map(arr(entry?.fields).map(([k, v]) => [lower(k), str(v).trim()]));
+
+/** "Scout (Rogue)", "Scout (Monk (Revised))": the name and what its last bracket holds. */
+const splitBracket = (s) => {
+  const m = str(s).match(/^(.*?)\s*\(((?:[^()]|\([^()]*\))*)\)\s*$/);
+  return m ? { name: m[1].trim(), inner: m[2].trim() } : { name: str(s).trim(), inner: '' };
+};
+
+/**
+ * A labelled paragraph that only suggests what goes well with an archetype
+ * ("Rogue Talents: The following rogue talents complement the scout
+ * archetype: …"). It is advice, not a feature the archetype grants.
+ */
+const ARCHETYPE_ADVICE = /^(?:the following|these)\b[^.]*?\b(?:complement|are (?:recommended|suggested|good choices))/i;
+
+/**
+ * The archetypes a catalogue pack carries as reference entries, as the blocks
+ * a player adds: one per class the entry names (its Class field, or the
+ * bracket after its name, "Scout (Rogue)"). Every labelled paragraph is a
+ * feature, and what it replaces or alters is read off its own text, as for
+ * an archetype block. Familiar and companion archetypes are left to the
+ * companion sums.
+ */
+export function archetypeBlocksFromEntry(entry) {
+  const full = str(entry?.name).trim();
+  if (!full) return [];
+  const { name: bare, inner } = splitBracket(full);
+  const stated = fieldMap(entry).get('class') || '';
+  const classes = (stated ? stated.split(/\s*,\s*/) : [inner]).map((c) => c.trim()).filter(Boolean)
+    .filter((c) => !COMPANION_ARCHETYPE_KINDS.some((k) => k.cls.test(c)));
+  if (!classes.length) return [];
+  // The bracket is dropped from the name only when it is the class.
+  const name = inner && classes.some((c) => lower(c) === lower(inner)) ? bare : full;
+  const text = str(entry.text);
+  const all = pageFeatures(text);
+  const features = all.filter((f) => !ARCHETYPE_ADVICE.test(f.text)).map((f) => ({ name: f.name, type: f.type, text: f.text }));
+  if (!features.length) return [];
+  // What the page says before its first feature is the archetype's own description.
+  const first = text.split(/\n{2,}/).findIndex((p) => p.replace(/^\*+/, '').startsWith(all[0].name));
+  const intro = first > 0 ? text.split(/\n{2,}/).slice(0, first).join('\n\n').trim() : '';
+  return classes.map((cls) => normalizeBlock({
+    kind: 'archetype', name, class: cls, source: str(entry.source), text: intro, features,
+  }));
+}
+
+/** Labels on a race's page that are its numbers or its description, not traits. */
+const RACE_FRONT_MATTER = /^(?:[+\-–−]\s*\d|ability score|(?:normal |slow |fast )?speed$|size$|type$|subtypes?$|languages?$|(?:fine|diminutive|tiny|small|medium|large|huge|gargantuan|colossal)$|physical description|society|relations|alignment(?: and religion)?$|religion$|adventurers$|(?:[\w ]+ )?names$)/i;
+
+const ABILITY_KEYS = { str: 'str', dex: 'dex', con: 'con', int: 'int', wis: 'wis', cha: 'cha' };
+
+/**
+ * A race a catalogue pack carries as a reference entry, as the block a player
+ * adds. Size, speed, ability modifiers and languages come from its fields
+ * ("Ability Score Modifiers: Dex +2, Con -2", "Speed: 30 ft."); its traits are
+ * the labelled paragraphs after a "… Racial Traits" line, or the whole page's
+ * when it has none, less the ones the fields already say.
+ */
+export function raceBlockFromEntry(entry) {
+  const name = str(entry?.name).trim();
+  if (!name) return null;
+  const fields = fieldMap(entry);
+  const abilityMods = {};
+  for (const m of str(fields.get('ability score modifiers')).matchAll(/\b(Str|Dex|Con|Int|Wis|Cha)\w*\s*([+\-–−]\s*\d+)/gi)) {
+    abilityMods[ABILITY_KEYS[lower(m[1])]] = Number(m[2].replace(/[–−]/, '-').replace(/\s+/g, ''));
+  }
+  const text = str(entry.text);
+  const head = text.search(/^[^\n]*\bracial traits[ \t]*$/im);
+  // A trait named for the race itself is the line saying what type of
+  // creature it is ("Stoneborn: Stoneborn are humanoids with …").
+  const traits = pageFeatures(head >= 0 ? text.slice(head) : text, RACE_FRONT_MATTER)
+    .filter((f) => lower(f.name) !== lower(name))
+    .map((f) => ({ name: f.type ? `${f.name} (${f.type})` : f.name, text: f.text }));
+  const size = (str(fields.get('size')).match(/\b(fine|diminutive|tiny|small|medium|large|huge|gargantuan|colossal)\b/i) || [])[1] || '';
+  const speed = Number(str(fields.get('speed')).match(/\d+/)?.[0]) || null;
+  if (!traits.length && !size && !speed && !Object.keys(abilityMods).length) return null;
+  return normalizeBlock({
+    kind: 'race', name, source: str(entry.source),
+    size: size ? size[0].toUpperCase() + size.slice(1).toLowerCase() : '',
+    speed, abilityMods, traits,
+    languages: str(fields.get('languages')).split(/\s*,\s*/).filter(Boolean),
+  });
+}
+
+/**
+ * An alternate racial trait a catalogue pack carries as a reference entry, as
+ * the trait block a player adds. Its race is its Race field, and a name
+ * written "Dwarf - Stonesinger" loses the race in front.
+ */
+export function traitBlockFromEntry(entry) {
+  const full = str(entry?.name).trim();
+  const race = fieldMap(entry).get('race') || '';
+  const m = full.match(/^(.+?)\s+-\s+(.+)$/);
+  const name = m && (!race || lower(m[1]) === lower(race)) ? m[2].trim() : full;
+  if (!name || !str(entry?.text).trim()) return null;
+  return normalizeBlock({ kind: 'trait', name, race: race || (m ? m[1].trim() : ''), text: str(entry.text), source: str(entry.source) });
+}
+
+/**
+ * The catalogue kinds that are also blocks a player adds, and how each entry
+ * becomes its blocks. The key says which two blocks are the same one: a block
+ * written into a pack wins over one derived from an entry, and between two
+ * packs deriving the same block the later pack's stands.
+ */
+const DERIVED_BLOCKS = [
+  { kinds: ['class', 'prestige class'], reading: 'class block', read: (e) => [classBlockFromEntry(e)] },
+  { kinds: ['archetype'], reading: 'archetype blocks', read: archetypeBlocksFromEntry },
+  { kinds: ['race'], reading: 'race block', read: (e) => [raceBlockFromEntry(e)] },
+  { kinds: ['alternate racial trait'], reading: 'trait block', read: (e) => [traitBlockFromEntry(e)] },
+];
+const derivedKey = (b) => `${b.kind}|${lower(b.name)}|${b.kind === 'archetype' ? lower(b.class) : b.kind === 'trait' ? lower(b.race) : ''}`;
 
 /**
  * The features a class's or an archetype's page describes, by name.
@@ -1953,6 +2120,80 @@ export function classFeatureTextFromTables(tables) {
     }
   }
   return out;
+}
+
+/** A class table column that is a spell level: "0", "1st" … "9th". */
+const SPELL_LEVEL_COLUMN = /^(?:0|0th|[1-9](?:st|nd|rd|th))$/i;
+
+/**
+ * A class's casting table, read off the tables on its page, in a casting
+ * pack's shape: one row per class level, ten cells (spell levels 0 to 9),
+ * null where the table has no entry. Slots per day come from the table whose
+ * spell columns sit under "Spells Per Day" (the class table); spells known
+ * from one under or after a "Spells Known" or "Spells Prepared" line. A cell written "1+1" is one
+ * slot and one bonus slot (a domain slot), kept as `bonus`. Null when the
+ * page has no spell columns.
+ */
+export function castingTableFromText(name, text) {
+  const lines = str(text).split('\n');
+  const isRow = (l) => /^\s*\|/.test(l);
+  const cells = (l) => l.trim().replace(/^\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+  const blank = () => Array(10).fill(null);
+  const grids = {};
+  for (let i = 0; i < lines.length;) {
+    if (!isRow(lines[i])) { i++; continue; }
+    const start = i;
+    while (i < lines.length && isRow(lines[i])) i++;
+    const rows = lines.slice(start, i).map(cells);
+    const head = rows.findIndex((r) => /^level$/i.test(r[0]) && r.some((c) => SPELL_LEVEL_COLUMN.test(c)));
+    if (head < 0) continue;
+    // What the table counts: its own heading rows say, or else the lines above it.
+    const over = rows.slice(0, head).flat().join(' ');
+    // A hybrid caster's "Spells Prepared" table is its daily list, read as known.
+    const label = /\bknown\b|\bprepared\b|\bper day\b/i.test(over) ? over : lines.slice(Math.max(0, start - 2), start).join(' ');
+    const kind = /\bknown\b|\bprepared\b/i.test(label) && !/\bper day\b/i.test(label) ? 'known' : 'perDay';
+    if (grids[kind]) continue;
+    const cols = rows[head].map((c) => (SPELL_LEVEL_COLUMN.test(c) ? parseInt(c, 10) : -1));
+    const counts = [];
+    const extra = [];
+    for (const r of rows.slice(head + 1)) {
+      const level = Number(str(r[0]).match(/^(\d{1,2})(?:st|nd|rd|th)$/i)?.[1]);
+      if (!level || level > 20) continue;
+      counts[level - 1] = blank();
+      extra[level - 1] = blank();
+      cols.forEach((spell, k) => {
+        if (spell < 0) return;
+        const m = str(r[k]).replace(/[*†¹²³⁴⁵⁶⁷⁸⁹⁰]/g, '').match(/^(\d+)(?:\s*\+\s*(\d+))?$/);
+        if (!m) return;
+        counts[level - 1][spell] = Number(m[1]);
+        if (m[2]) extra[level - 1][spell] = Number(m[2]);
+      });
+    }
+    if (!counts.length) continue;
+    for (let l = 0; l < counts.length; l++) { counts[l] ||= blank(); extra[l] ||= blank(); }
+    grids[kind] = counts;
+    if (kind === 'perDay' && extra.some((r) => r.some((v) => v !== null))) grids.bonus = extra;
+  }
+  if (!grids.perDay) return null;
+  return { name, perDay: grids.perDay, known: grids.known || null, ...(grids.bonus ? { bonus: grids.bonus } : {}) };
+}
+
+/**
+ * The casting tables catalogue packs carry inside their class pages, one per
+ * class whose page has spell columns. Between two packs with the same class,
+ * the later one's stands.
+ */
+export function castingTablesFromTables(tables) {
+  const out = new Map();
+  for (const cat of arr(tables?.catalogues?.catalogues)) {
+    const kind = lower(cat?.kind);
+    if (kind !== 'class' && kind !== 'prestige class') continue;
+    for (const e of arr(cat.entries)) {
+      const t = readEntry(e, 'casting table', () => castingTableFromText(classNameOf(e), e?.text));
+      if (t?.name) out.set(lower(t.name), t);
+    }
+  }
+  return [...out.values()];
 }
 
 /**

@@ -20,6 +20,7 @@ import { setOptionCatalogues } from './model.js';
 import {
   TABLES, extensionStore, loadBundledExtensions, activeExtensions, activeBlocks, mergeTables, registerTables,
   optionCataloguesFrom, optionCataloguesFromTables, classFeatureTextFromTables, namedTextFrom, companionArchetypesFrom,
+  castingTablesFromTables,
   isPackKey, packsWorthMoving,
 } from './extensions.js';
 // Straight from the module rather than through model.js, which does not
@@ -39,7 +40,17 @@ const REGISTRARS = Object.fromEntries(TABLES.map((t) => [t.setter, model[t.sette
  */
 export function registerPacks(packs) {
   const tables = mergeTables(packs);
-  const failed = registerTables(tables, REGISTRARS);
+  const failed = [];
+  // Casting tables read off catalogue class pages, for classes no pack
+  // writes a casting table for: a written table is the one meant.
+  try {
+    const written = new Set((tables.vancian?.classes || []).map((c) => String(c?.name || '').trim().toLowerCase()));
+    const read = castingTablesFromTables(tables).filter((c) => !written.has(c.name.toLowerCase()));
+    if (read.length) tables.vancian = { ...tables.vancian, classes: [...(tables.vancian?.classes || []), ...read] };
+  } catch (err) {
+    failed.push({ name: 'castingTablesFromTables', error: err?.message || String(err) });
+  }
+  failed.push(...registerTables(tables, REGISTRARS));
   // The option menus a pack carries as blocks, so a feature column pointing
   // at one by name finds it as soon as its pack is switched on.
   const blocks = activeBlocks(packs);

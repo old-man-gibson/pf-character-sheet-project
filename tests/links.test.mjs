@@ -7,7 +7,8 @@ import { fieldUrl, findLinks, findUrls, hasLink, linkedText } from '../app/js/ui
 import { prose, renderedProse } from '../app/js/ui/prose.js';
 import { linkField, text } from '../app/js/ui/fields.js';
 import { itemText } from '../app/js/ui/rows.js';
-import { noteField, richText } from '../app/js/ui/talents.js';
+import { noteField } from '../app/js/ui/talents.js';
+import { richText } from '../app/js/ui/links.js';
 
 let pass = 0;
 let fail = 0;

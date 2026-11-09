@@ -23,6 +23,7 @@
  */
 
 import { normalizeName } from '../util.js';
+import { classLevels } from '../../text.js';
 
 const str = (v) => (v === null || v === undefined ? '' : String(v));
 const arr = (v) => (Array.isArray(v) ? v : []);
@@ -45,16 +46,13 @@ const uniqueBy = (list, key = (s) => lower(s)) => {
  */
 function classList(raw) {
   if (Array.isArray(raw)) {
-    return raw.map((c) => (typeof c === 'string'
-      ? { name: c.trim(), level: null }
-      : { name: str(c?.name).trim(), level: Number.isFinite(Number(c?.level)) ? Number(c.level) : null }))
-      .filter((c) => c.name);
+    return raw.map((c) => {
+      if (typeof c === 'string') return { name: c.trim(), level: null };
+      const only = str(c?.only).trim();
+      return { name: str(c?.name).trim(), level: Number.isFinite(Number(c?.level)) ? Number(c.level) : null, ...(only ? { only } : {}) };
+    }).filter((c) => c.name);
   }
-  return str(raw).split(/\s*,\s*/).map((part) => {
-    const m = part.trim().match(/^(.*?)\s+(\d+)$/);
-    if (m) return { name: m[1].trim(), level: Number(m[2]) };
-    return part.trim() ? { name: part.trim(), level: null } : null;
-  }).filter(Boolean);
+  return classLevels(raw);
 }
 
 /* ---------------- one catalogue ---------------- */
@@ -208,6 +206,7 @@ const SPELLS = catalogue({
     ['School', s.school], ['Descriptors', s.descriptor], ['Components', s.components],
     ['Casting time', s.time], ['Range', s.range], ['Target', s.target],
     ['Duration', s.duration], ['Saving throw', s.save], ['Spell resistance', s.sr],
+    ['Restricted', s.classes.filter((c) => c.only).map((c) => `${c.name}${c.level === null ? '' : ` ${c.level}`} (${c.only})`).join(', ')],
   ]),
 });
 

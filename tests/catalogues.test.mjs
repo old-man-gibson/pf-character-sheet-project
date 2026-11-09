@@ -459,5 +459,40 @@ console.log('a veil applied from a block');
     JSON.stringify(alone.toJSON()).includes(TEXT));
 }
 
+console.log('a level limited to some casters');
+{
+  const r = readStructured(`# Spells
+
+#### Ember Ward
+* **Spell level:** sorcerer 2, warlock (revised) 3, wizard 2 (followers of Ilvara), druid 4 (Ashfolk, Stoneborn)
+* **School:** abjuration
+* **Source:** Made-up Book p. 4
+
+A ward of embers.
+
+#### Other Spell
+* **Spell level:** sorcerer 1
+* **School:** evocation
+* **Source:** Made-up Book p. 5
+
+Text.
+`);
+  const ward = r.spells.find((s) => s.name === 'Ember Ward');
+  check('a comma inside brackets does not split, and the bracket after a level is kept apart',
+    ward.classes, [{ name: 'sorcerer', level: 2 }, { name: 'warlock (revised)', level: 3 },
+      { name: 'wizard', level: 2, only: 'followers of Ilvara' }, { name: 'druid', level: 4, only: 'Ashfolk, Stoneborn' }]);
+  setSpellCatalogue(mergeTables([{ format: EXTENSION_FORMAT, provides: { spells: { spells: r.spells } } }]).spells);
+  check('the limited list still offers the spell at its level',
+    spellsAvailable({ classes: ['Wizard'], level: 2 }).map((s) => s.name), ['Ember Ward']);
+  check('and the face says who it is limited to',
+    spellDetails({ name: 'Ember Ward' }).fields.find(([k]) => k === 'Restricted'),
+    ['Restricted', 'wizard 2 (followers of Ilvara), druid 4 (Ashfolk, Stoneborn)']);
+  check('a spell with no limit has no such line',
+    spellDetails({ name: 'Other Spell' }).fields.some(([k]) => k === 'Restricted'), false);
+  ok('a table in the text is drawn as a table',
+    catalogueFace({ known: true, fields: [], text: 'Embers by level:\n\n| Level | Embers |\n| 1st | 2 |\n| 5th | 4 |' }, { compact: false })
+      .includes('<table class="peektable">'));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
