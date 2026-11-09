@@ -67,7 +67,7 @@ import {
   CONJURED_TABLE, COMPANION_KINDS, companionBreakdown, companionScopeName, defaultCompanion, normalizeCompanion,
   splitAbilities, setCompanionAbilityText, companionAbilityText, abilityTextKey, companionById, companionEntries,
   companionNameTest, levelSourceOf, levelSourceLabel, COMPANION_LEVEL_SOURCES, CONJURED_LEVEL_SOURCES, naturalAttack,
-  setCompanionArchetypes, companionArchetype, companionArchetypeNames,
+  setCompanionArchetypes, companionArchetype, companionArchetypeNames, addedAbilitiesOf,
 } from '../app/js/companions.js';
 import { namedTextFrom, companionArchetypesFrom } from '../app/js/extensions.js';
 import { parseDiceExpr as readDice, stepDamageDice, stepDiceMap } from '../app/js/rules.js';
@@ -13205,8 +13205,18 @@ console.log('companions -- an archetype replaces the table abilities its text na
     ad.gains.find((g) => g.level === 3).abilities, [...plain[1], 'Extra Sense']);
   check('one not reached yet, or with no name, is not there',
     ad.gains.flatMap((g) => g.abilities).some((n) => /far off/i.test(n) || !n.trim()), false);
-  check('and it says it was added', ad.abilityInfo['extra sense'], { added: true });
+  check('the sheet is given the rest of the rows apart',
+    ad.abilitiesListed.some((r) => r.name === 'Extra Sense'), false);
+  check('every saved row is read with its place, even one not reached or unnamed',
+    addedAbilitiesOf(c.data.familiar[0]).map((a) => [a.index, a.level, a.name]),
+    [[0, 3, 'Extra Sense'], [1, 99, 'Far Off'], [2, 1, '']]);
+  check('a row read from a broken file keeps its place in the list',
+    addedAbilitiesOf({ addedAbilities: [null, { name: 'B', level: 'x', notes: 5 }] }), [{ index: 1, level: 1, name: 'B', notes: '5' }]);
   c.set('familiar.0.addedAbilities', []);
+  c.set('familiar.0.replacedAbilities.alertness', 'ALERTNESS');
+  check('a name box holding the ability’s own name replaces nothing',
+    [c.data.familiar[0].calc.gains[0].abilities[0], c.data.familiar[0].calc.abilityInfo.alertness], ['Alertness', undefined]);
+  c.set('familiar.0.replacedAbilities.alertness', '');
 
   // A pack archetype's abilities can be replaced or removed by hand as well.
   c.set('familiar.0.archetypes', 'Valet');

@@ -89,9 +89,13 @@ export function area(path, value, rows = 3) {
   return `<textarea data-set="${path}" data-kind="text" rows="${rows}">${esc(value ?? '')}</textarea>`;
 }
 
-/** `title` is for a rule the switch obeys but should not be labelled with. */
-export function check(path, value, label = '', title = '') {
-  return `<label class="chk"${title ? ` title="${esc(title)}"` : ''}><input type="checkbox" ${value ? 'checked' : ''}
+/**
+ * `title` is for a rule the switch obeys but should not be labelled with.
+ * `tick` lays one with no words out as a table's column of ticks
+ * (rows.itemCheck's `tick`).
+ */
+export function check(path, value, label = '', title = '', { tick = false } = {}) {
+  return `<label class="chk${tick ? ' tick' : ''}"${title ? ` title="${esc(title)}"` : ''}><input type="checkbox" ${value ? 'checked' : ''}
       data-set="${path}" data-kind="bool">${label ? `<span>${esc(label)}</span>` : ''}</label>`;
 }
 

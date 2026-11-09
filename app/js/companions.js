@@ -633,11 +633,12 @@ export function companionArchetypeNames(kind) {
  * `table` is every level's Special entry, not only those reached, so a feature
  * can say it replaces one that has not arrived yet.
  *
- * Returns `{ gains, info, applied, missing, clashes, removed }`: the gains in
- * the shape `computeCompanion` makes them, `info[abilityTextKey(shown name)]`
- * saying where a changed one came from, the archetypes found, those not
- * found, each pair of them that changes the same ability, and the abilities
- * removed by hand (`{ level, name }`) so they can be put back.
+ * Returns `{ gains, info, applied, missing, clashes, removed, listed }`: the
+ * gains in the shape `computeCompanion` makes them, `info[abilityTextKey(shown
+ * name)]` saying where a changed one came from, the archetypes found, those
+ * not found, each pair of them that changes the same ability, the abilities
+ * removed by hand (`{ level, name }`) so they can be put back, and every row
+ * but those added by hand (`{ level, name }`, null when nothing changed).
  */
 export function swapCompanionAbilities(kind, b, gains, level, table) {
   const names = archetypeNamesOf(kind, b);
@@ -645,13 +646,10 @@ export function swapCompanionAbilities(kind, b, gains, level, table) {
   const own = (m) => (m && typeof m === 'object' && !Array.isArray(m) ? Object.entries(m) : []);
   const byHand = new Map(own(b?.replacedAbilities).map(([k, v]) => [k, String(v ?? '').trim()]).filter(([, v]) => v));
   const takenOut = new Set(own(b?.removedAbilities).filter(([, v]) => v === true).map(([k]) => k));
-  const added = (Array.isArray(b?.addedAbilities) ? b.addedAbilities : [])
-    .filter((a) => a && typeof a === 'object')
-    .map((a) => ({ level: Math.max(1, Math.floor(Number(a.level)) || 1), name: String(a.name ?? '').trim() }))
-    .filter((a) => a.name && a.level <= level);
+  const added = addedAbilitiesOf(b).filter((a) => a.name && a.level <= level);
   const cited = new Map(own(b?.citedArchetypes));
   if (!ARCHETYPE_FIELD[kind] || (!names.length && !byHand.size && !takenOut.size && !added.length)) {
-    return { gains, info: {}, applied: [], missing: [], clashes: [], removed: [] };
+    return { gains, info: {}, applied: [], missing: [], clashes: [], removed: [], listed: null };
   }
 
   const word = ARCHETYPE_CLASS_WORD[kind] || '';
@@ -723,15 +721,16 @@ export function swapCompanionAbilities(kind, b, gains, level, table) {
   for (const r of rows) {
     const was = abilityTextKey(r.name);
     const to = byHand.get(was);
-    if (!to) continue;
+    // The name box holds the ability's own name until it is typed over.
+    if (!to || abilityTextKey(to) === was) continue;
     info.set(abilityTextKey(to), { was: r.name, wasKey: was });
     r.name = to;
   }
+  // The sheet draws the ones added by hand from `addedAbilities` itself, so
+  // it is given the rest apart.
+  const listed = rows.map((r) => ({ level: r.level, name: r.name }));
   // Each goes to the end of its level when the rows are grouped below.
-  for (const a of added) {
-    rows.push({ level: a.level, name: a.name });
-    if (!info.has(abilityTextKey(a.name))) info.set(abilityTextKey(a.name), { added: true });
-  }
+  for (const a of added) rows.push({ level: a.level, name: a.name });
 
   // Back into gains, a level at a time, in the order the rows now stand; a
   // level that kept a note keeps it.
@@ -744,7 +743,23 @@ export function swapCompanionAbilities(kind, b, gains, level, table) {
   const out = [...byLevel].sort((x, y) => x[0] - y[0]).map(([lv, list]) => ({
     level: lv, text: list.join(', '), abilities: list, ...(notes.has(lv) ? { note: notes.get(lv) } : {}),
   }));
-  return { gains: out, info: Object.fromEntries(info), applied, missing, clashes, removed };
+  return { gains: out, info: Object.fromEntries(info), applied, missing, clashes, removed, listed };
+}
+
+/**
+ * The abilities added to a companion by hand, each with its place in
+ * `addedAbilities` (`index`), its level as a whole number from 1, and its own
+ * notes. One with no name yet is kept, so the sheet can show it to be named.
+ */
+export function addedAbilitiesOf(b) {
+  return (Array.isArray(b?.addedAbilities) ? b.addedAbilities : [])
+    .map((a, index) => (a && typeof a === 'object' && !Array.isArray(a) ? {
+      index,
+      level: Math.max(1, Math.floor(Number(a.level)) || 1),
+      name: String(a.name ?? '').trim(),
+      notes: String(a.notes ?? ''),
+    } : null))
+    .filter(Boolean);
 }
 
 /**
@@ -1537,6 +1552,7 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     calc.archetypesMissing = swapped.missing;
     calc.archetypeClashes = swapped.clashes;
     calc.abilitiesRemoved = swapped.removed;
+    calc.abilitiesListed = swapped.listed;
   }
   if (kind === 'familiar') {
     calc.tableInt = row.int;
