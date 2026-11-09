@@ -13,6 +13,7 @@ import { ABILITIES, ABILITY_LABELS } from '../rules.js';
 
 import { esc } from '../html-escape.js';
 import { foldButton } from './folds.js';
+import { richText } from './links.js';
 
 export { esc };
 
@@ -113,7 +114,9 @@ export function catalogueFace(details, { compact = true, ctx = null, key = '' } 
   const fields = (details.fields || [])
     .map(([k, v]) => `<span class="catfield"><i>${esc(k)}</i> ${esc(v)}</span>`).join('');
   const text = String(details.text ?? '').trim();
-  const html = esc(text).replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>');
+  // Tables drawn as tables; the markup has no line breaks of its own, so every
+  // one left is the text's.
+  const html = richText(text).replace(/\n/g, '<br>');
   // Compact, the whole text sits in the Read all box veils and maneuvers use
   // (packText), rather than being cut at some length with no way to the rest.
   const body = !text ? ''

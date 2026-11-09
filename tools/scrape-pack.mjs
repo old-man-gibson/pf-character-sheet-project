@@ -42,7 +42,7 @@ import { parsePaste, readStructured } from '../app/js/paste-import.js';
 import { convertPack } from './veils-to-table.mjs';
 // The app's own id rule, so a pack built here and one built in the app from the
 // same name ("Café" -> cafe) replace each other on import.
-import { slugId } from '../app/js/extensions.js';
+import { slugId, TABLES } from '../app/js/extensions.js';
 import { readArgs } from './lib/cli.mjs';
 
 /* ---------------- arguments ---------------- */
@@ -149,14 +149,21 @@ const ordered = (blocks) => [...blocks].sort(sort === 'bind' ? byBind : (a, b) =
 
 /* ---------------- writing ---------------- */
 
+/** "1,234 entries read from 30 scraper documents.": blocks and every table's entries. */
+const describe = (blocks, provides, sources) => {
+  const n = blocks.length + TABLES.reduce((sum, t) => sum + (provides?.[t.kind] ? t.count(provides[t.kind]) : 0), 0);
+  return `${n.toLocaleString('en-US')} entr${n === 1 ? 'y' : 'ies'} read from ${sources.length === 1 ? 'a scraper document' : `${sources.length} scraper documents`}.`;
+};
+
 const pack = (id, name, blocks, provides, sources) => ({
   format: 'character-sheet-extension',
   formatVersion: 1,
   id,
   name,
   author,
-  description: `${blocks.length} entr${blocks.length === 1 ? 'y' : 'ies'} read from a scraper document.`,
-  source: sources.slice(0, 3).join('; '),
+  description: describe(blocks, provides, sources),
+  // Up to three file names, and how many more there were.
+  source: [...sources.slice(0, 3), ...(sources.length > 3 ? [`${sources.length - 3} more`] : [])].join('; '),
   license: '',
   revision: 1,
   createdAt: now,

@@ -915,7 +915,7 @@ console.log('\nno character text reaches the page as markup');
  * one. And it is pack text going into `innerHTML`, so every cell is escaped.
  */
 {
-  const { richText } = await import('../app/js/ui/talents.js');
+  const { richText } = await import('../app/js/ui/links.js');
   console.log('\nrules text in the panel -- tables drawn, and nothing let through');
   const html = richText('Fire grows.\n\nTable: Fire Size\nLevel\tSize\n1st\tFine\n3rd\t<svg/onload=x>\n\nAfter it.');
   check('a run of tabbed rows is a table, its first row the header',

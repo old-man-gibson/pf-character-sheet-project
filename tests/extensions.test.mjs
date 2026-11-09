@@ -10,6 +10,7 @@ import {
   isPackKey, packsWorthMoving, mergeSphere, catalogueEntryKey, splitAbilityType, minLevelIn,
   swapKey, parseSwaps, parseStacksWith, archetypeStatus, removeArchetype,
   ruleForLevels, repeatColumns, optionCataloguesFrom, optionCataloguesFromTables, classFeatureTextFromTables, parseOptionReplaces, applyArchetype, swapsMeet,
+  castingTableFromText,
 } from '../app/js/extensions.js';
 import {
   parseClassFeatures, parseGroupFeatures, parseNamedLines, parseMenuOptions, menuOptionLines,
@@ -1824,6 +1825,78 @@ console.log('a catalogue pack\'s tables are menus too: class options, and powers
       ['Iron Root (Su)', ['Rooted Stance (Ex)', 'Iron Root (Su)']]);
   }
 
+  // A class entry whose page states nothing but its features: added over a
+  // class the sheet already has, it leaves that row's numbers alone.
+  {
+    const bare = normalizeExtension({ format: 'character-sheet-extension', formatVersion: 1, id: 'bare', name: 'bare',
+      provides: { catalogues: { catalogues: [{ kind: 'class', entries: [
+        { name: 'Stancer', fields: [], source: 'Book p. 2', text: 'Skill Points at each Level: 4 + Int modifier.\n\nRooted Stance (Ex): She plants her feet.' },
+        { name: 'Stancer (Revised)', fields: [['Class skills', 'Climb (Str), and Swim (Str)']], source: 'Book p. 3', text: 'Requirements: none.\n\nIron Root (Su): At 4th level she cannot be moved.' },
+      ] }] } } });
+    const [plain, revised] = activeBlocks([bare]).filter((b) => b.kind === 'class');
+    check('a bracket that is not "class" stays in the name, and skill points and requirements are not features',
+      [plain.name, plain.features.map((f) => f.name), revised.name, revised.classSkills, revised.features.map((f) => f.name)],
+      ['Stancer', ['Rooted Stance (Ex)'], 'Stancer (Revised)', ['Climb', 'Swim'], ['Iron Root (Su)']]);
+    check('the numbers it does not state are marked', plain.unstated, ['hd', 'bab', 'goodFort', 'goodRef', 'goodWill', 'skillRanks']);
+    const s = new Character(blankDocument({ name: 'Stan', level: 2 }));
+    s.listAdd('classes', { name: 'Stancer', hd: 12, bab: 1, goodFort: true, goodRef: false, goodWill: true, skillRanks: 6 });
+    applyBlock(s, plain);
+    const row = s.data.classes.find((c) => c.name === 'Stancer');
+    check('so adding it over a class row keeps that row\'s numbers', [row.hd, row.bab, row.goodFort, row.goodWill, row.skillRanks], [12, 1, true, true, 6]);
+  }
+
+  // An archetype entry is an archetype block for each class it names.
+  {
+    const arch = (entries, blocks = []) => normalizeExtension({ format: 'character-sheet-extension', formatVersion: 1, id: 'arch', name: 'arch', blocks,
+      provides: { catalogues: { catalogues: [{ kind: 'archetype', entries }] } } });
+    const drifter = { name: 'Drifter (Stancer)', fields: [], source: 'Book p. 9',
+      text: 'Drifters never stay.\n\nWander (Su): At 3rd level she drifts. This ability replaces iron root.\n\nStancer Tricks: The following tricks complement the drifter archetype: low sweep and high guard.' };
+    const [d] = activeBlocks([arch([drifter])]).filter((b) => b.kind === 'archetype');
+    check('its class from the bracket, its description before the first feature, swaps read, advice left out',
+      [d.name, d.class, d.text, d.features.map((f) => [f.level, f.name, f.replaces])],
+      ['Drifter', 'Stancer', 'Drifters never stay.', [[3, 'Wander', ['iron root']]]]);
+    check('a Class field naming two classes is two blocks',
+      activeBlocks([arch([{ ...drifter, name: 'Drifter', fields: [['Class', 'Stancer, Rogue']] }])]).filter((b) => b.kind === 'archetype').map((b) => [b.name, b.class]),
+      [['Drifter', 'Stancer'], ['Drifter', 'Rogue']]);
+    check('a familiar\'s archetype is left to the companion sums',
+      activeBlocks([arch([{ ...drifter, name: 'Valiant (Familiar)' }])]).filter((b) => b.kind === 'archetype').length, 0);
+    check('one written into a pack is the one offered',
+      activeBlocks([arch([drifter], [{ kind: 'archetype', name: 'Drifter', class: 'Stancer', features: [{ name: 'Own', level: 1 }] }])])
+        .filter((b) => b.kind === 'archetype').map((b) => b.features.map((f) => f.name)), [['Own']]);
+  }
+
+  // A race entry is a race block, and an alternate racial trait a trait block.
+  {
+    const raced = normalizeExtension({ format: 'character-sheet-extension', formatVersion: 1, id: 'race', name: 'race',
+      provides: { catalogues: { catalogues: [
+        { kind: 'race', entries: [{ name: 'Stoneborn', source: 'Book p. 20',
+          fields: [['Ability Score Modifiers', 'Con +2, Wis +2, Cha -2'], ['Size', 'Medium'], ['Speed', '20 ft.'], ['Languages', 'Common, Terran']],
+          text: 'Stoneborn are sturdy.\n\nSociety: They dig.\n\nStoneborn Racial Traits\n\nStoneborn: Stoneborn are humanoids with the stoneborn subtype.\n\n+2 Constitution, +2 Wisdom, -2 Charisma: Sturdy and wise.\n\nMedium: Stoneborn are Medium creatures.\n\nSlow Speed: Stoneborn have a base speed of 20 feet.\n\nDarkvision: Stoneborn see in the dark up to 60 feet.\n\nStonecunning: A +2 bonus on Perception checks to notice unusual stonework.\n\nLanguages: Stoneborn begin play speaking Common and Terran.' }] },
+        { kind: 'alternate racial trait', entries: [{ name: 'Stoneborn - Deep Sight', fields: [['Race', 'Stoneborn']], source: 'Book p. 21',
+          text: 'Darkvision to 90 feet. This racial trait replaces stonecunning.' }] },
+      ] } } });
+    const blocks = activeBlocks([raced]);
+    const race = blocks.find((b) => b.kind === 'race');
+    check('a race: its numbers from the fields, its traits after the racial traits line, less what the fields say',
+      [race.name, race.size, race.speed, race.abilityMods, race.languages, race.traits.map((t) => t.name)],
+      ['Stoneborn', 'Medium', 20, { con: 2, wis: 2, cha: -2 }, ['Common', 'Terran'], ['Darkvision', 'Stonecunning']]);
+    const trait = blocks.find((b) => b.kind === 'trait');
+    check('an alternate racial trait: named without its race, with what it replaces',
+      [trait.name, trait.race, trait.replaces], ['Deep Sight', 'Stoneborn', ['stonecunning']]);
+  }
+
+  check('a menu whose option names its class is not named for the class twice',
+    optionCataloguesFromTables({ catalogues: { catalogues: [{ kind: 'class option', entries: [
+      { name: 'Low Sweep (Ex)', fields: [['Class', 'Stancer'], ['Option', 'Stancer Trick']], text: 'Trips.' },
+      { name: 'High Guard (Su)', fields: [['Class', 'Stancer'], ['Option', 'Stancer Trick']], text: 'Blocks.' },
+    ] }] } }).map((m) => m.name), ['Stancer Trick']);
+  check('parseSwaps: every step of one feature is the feature',
+    parseSwaps('This ability replaces armor training 1, 2, 3, and 4.'), { replaces: ['armor training'], alters: [] });
+  check('parseSwaps: what a thing changes to is not a swap',
+    parseSwaps('She can rework a poison. If successful, the poison\'s type changes to contact or inhaled.'), { replaces: [], alters: [] });
+  check('parseSwaps: grants named by the levels they are gained at',
+    parseSwaps('This ability replaces the rogue talents gained at 2nd and 8th levels.'), { replaces: ['rogue talent@2', 'rogue talent@8'], alters: [] });
+
   setOptionCatalogues(pageText);
   check('none of it is a menu a column picks from', optionCatalogues().length, 0);
   {
@@ -2297,6 +2370,39 @@ console.log('runtime -- the active packs, their blocks and their menus are worke
   check('and so are its entries', [ash().minLevel, ash().replaces], [8, []]);
   registerPacks(runtime.active());
   check('which is what the model is handed', optionCatalogue('Stancer Stance').options.find((o) => o.name === 'Ash Step').minLevel, 8);
+
+  // A class page's spell tables are a casting table, under one a pack writes out.
+  {
+    const { castingTable, castingTableNames, setVancianTables } = await import('../app/js/model.js');
+    const page = [
+      'Stancers chant.',
+      '',
+      '| | Spells Per Day |',
+      '| Level | Base Attack Bonus | Special | 0 | 1st | 2nd |',
+      '| 1st | +0 | Chant | 3 | 1+1 | - |',
+      '| 2nd | +1 | — | 4 | 2+1 | — |',
+      '| 3rd | +1 | — | 4 | 2+1 | 1+1 |',
+      '',
+      'Spells Known',
+      '',
+      '| Level | 0 | 1st | 2nd |',
+      '| 1st | 4 | 2 | -',
+      '| 2nd | 5 | 2 | -',
+      '| 3rd | 5 | 3 | 1',
+    ].join('\n');
+    const t = castingTableFromText('Stancer', page);
+    check('slots per day by class level, "1+1" a bonus slot, "-" no entry',
+      [t.perDay[0].slice(0, 3), t.bonus[2].slice(0, 3), t.perDay[1][2]], [[3, 1, null], [null, 1, 1], null]);
+    check('spells known from the table after a "Spells Known" line, trailing pipe or not', t.known.map((r) => r.slice(0, 3)), [[4, 2, null], [5, 2, null], [5, 3, 1]]);
+    check('a page with no spell columns has none', castingTableFromText('Stancer', '| Level | Special |\n| 1st | Chant |'), null);
+    const classPack = (id, vancian) => normalizeExtension({ format: EXTENSION_FORMAT, formatVersion: 1, id, name: id,
+      provides: { catalogues: { catalogues: [{ kind: 'class', entries: [{ name: 'Stancer', fields: [], text: page }] }] }, ...(vancian ? { vancian } : {}) } });
+    registerPacks([classPack('pages')]);
+    check('registered for a class no pack writes one for', [castingTableNames(), castingTable('Stancer').perDay[2][2]], [['Stancer'], 1]);
+    registerPacks([classPack('pages'), classPack('written', { classes: [{ name: 'Stancer', perDay: [[9]] }] })]);
+    check('a written table is the one used', [castingTableNames(), castingTable('Stancer').perDay[0][0]], [['Stancer'], 9]);
+    setVancianTables({ classes: [] });
+  }
 
   await runtime.store.setEnabled('local', false);
   check('a pack switched off drops out', runtime.active().map((p) => p.id), ['b1']);

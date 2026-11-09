@@ -25,7 +25,7 @@
 
 import { babFromText, minLevelIn, normalizeBlock, featureKey } from './extensions.js';
 import { isGuileSphere, sphereSide } from './rules.js';
-import { TEXT_STEPS, cleanText } from './text.js';
+import { TEXT_STEPS, cleanText, classLevels } from './text.js';
 import { looksLikePackageList, readPackageList } from './package-text.js';
 
 // One definition, shared: the block reader needs it to tell which of a class's
@@ -1263,23 +1263,6 @@ export function readVeil(lines, pre = new Set()) {
 }
 
 /**
- * `Wizard 3, Cleric 4` -- whose list a spell or a power is on, and at what
- * level. The pair is how every book states it and how the wiki's infobox
- * numbers it, and it is what a picker narrows on: a caster is offered the
- * spells on *their* class's list, the way a chakra offers its own veils.
- *
- * A name with no number keeps the name and no level, rather than being
- * dropped -- "Unlisted" is a real answer for a spell nobody's list carries.
- */
-function listedClasses(raw) {
-  return String(raw ?? '').split(/\s*,\s*/).map((part) => {
-    const m = part.trim().match(/^(.*?)\s+(\d+)$/);
-    if (m) return { name: m[1].trim(), level: Number(m[2]) };
-    return part.trim() ? { name: part.trim(), level: null } : null;
-  }).filter(Boolean);
-}
-
-/**
  * A feat, a spell, a psionic power and a kineticist wild talent, each out of
  * a structured entry.
  *
@@ -1305,7 +1288,7 @@ function structuredFeat(e) {
 }
 
 function structuredSpell(e) {
-  const classes = listedClasses(pick(e.fields, 'spell level', 'level'));
+  const classes = classLevels(pick(e.fields, 'spell level', 'level'));
   const levels = classes.map((c) => c.level).filter((n) => Number.isFinite(n));
   return {
     name: e.name,
@@ -1328,7 +1311,7 @@ function structuredSpell(e) {
 }
 
 function structuredPower(e) {
-  const classes = listedClasses(pick(e.fields, 'power level', 'level'));
+  const classes = classLevels(pick(e.fields, 'power level', 'level'));
   const levels = classes.map((c) => c.level).filter((n) => Number.isFinite(n));
   return {
     name: e.name,
