@@ -133,14 +133,20 @@ when the pack is a big one — editing the copy is free, saving it is what spend
 storage the original was not using; **From this character…**
 lifts the open sheet's classes, race, feature groups and trackers into a new pack, which
 is how something built by hand gets shared. A pack imported with the same id as one
-already here replaces it (that is how a friend's rev 2 lands); a local pack cannot take
-a bundled pack's id.
+already here replaces it (that is how a friend's rev 2 lands), unless its revision is
+lower than the stored one's: remove the stored pack first to go back to an older
+revision. A local pack cannot take a bundled pack's id.
+
+**Removing packs.** Each pack under *Mine* has its own ×. **Remove N packs** under the
+*Mine* heading removes every pack the search box and All/On/Off buttons show, and each
+author fold has the same button for its own packs. Both ask once more before removing.
 
 **Moving the whole set.** **Export library** writes every pack under *Mine* and which
 packs are on (bundled ones included) as one `.json` (`format:
 `character-sheet-extension-library`). Import it in another browser or on the deployed
 site the same way as a pack: drop it on the page, or **Import packs…**. Packs not there
-yet are added, packs that differ are updated, packs already current are left alone, and
+yet are added, packs that differ are updated, packs already current are left alone, an
+older revision of a pack here is skipped and listed, and
 the switches are applied; the notice says which browser the library came from, when,
 and the counts. Each pack under *Mine* also shows when it was last imported or saved.
 

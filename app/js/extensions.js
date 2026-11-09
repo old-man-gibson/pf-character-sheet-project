@@ -656,6 +656,15 @@ export function buildLibrary({ packs = [], enabled = {}, from = '', campaignRule
   };
 }
 
+/**
+ * Is an imported pack (`summary`, from `inspectExtension`) an older revision
+ * than `row`, the stored pack with the same id? An import never replaces a
+ * newer revision; the player removes the stored pack first to go back.
+ */
+export function olderRevision(summary, row) {
+  return !!row && num(summary?.revision, 1) < num(row.revision, 1);
+}
+
 /** A pack's content with the timestamps the store rewrites on every save left out. */
 const packFingerprint = (ext) => {
   const { createdAt, updatedAt, ...rest } = normalizeExtension(ext);
@@ -669,8 +678,9 @@ const packFingerprint = (ext) => {
  * `local` is the store's `list()`; `read(id)` returns a stored pack's document.
  * Each pack in the library lands in one of four lists: `add` (not here),
  * `update` (here, and different), `unchanged` (here, and the same apart from
- * the timestamps), `skipped` (not a pack, or a bundled id). `enabled` is the
- * library's switch map limited to ids this browser will have.
+ * the timestamps), `skipped` (not a pack, a bundled id, or an older revision
+ * than the one here). `enabled` is the library's switch map limited to ids
+ * this browser will have.
  */
 export function planLibrary(lib, { bundledIds = [], local = [], read = () => null } = {}) {
   const plan = { add: [], update: [], unchanged: [], skipped: [], enabled: {} };
@@ -683,6 +693,11 @@ export function planLibrary(lib, { bundledIds = [], local = [], read = () => nul
     const { id } = verdict.summary;
     if (bundled.has(id)) { plan.skipped.push({ id, why: 'the same id as a bundled pack' }); continue; }
     if (!here.has(id)) { plan.add.push(doc); continue; }
+    const have = here.get(id);
+    if (olderRevision(verdict.summary, have)) {
+      plan.skipped.push({ id, why: `rev ${verdict.summary.revision} is older than rev ${num(have.revision, 1)} in this browser` });
+      continue;
+    }
     const current = read(id);
     if (current && packFingerprint(current) === packFingerprint(doc)) plan.unchanged.push(id);
     else plan.update.push(doc);
@@ -930,14 +945,16 @@ export function extensionStore(medium = globalThis.localStorage) {
         [extensionKey(ext.id), JSON.stringify(ext)],
         [EXTENSIONS_KEY, JSON.stringify(index)],
       ]);
-      return { ...row, local: true, replaced: !!prior };
+      return { ...row, local: true, replaced: !!prior, previousRevision: prior ? num(prior.revision, 1) : null };
     },
 
+    /** Remove a pack, or a list of them as one write (Remove N packs). */
     async remove(id) {
       await open();
+      const ids = new Set([id].flat());
       const index = readIndex();
-      index.extensions = index.extensions.filter((e) => e.id !== id);
-      await write([[EXTENSIONS_KEY, JSON.stringify(index)], [extensionKey(id), null]]);
+      index.extensions = index.extensions.filter((e) => !ids.has(e.id));
+      await write([[EXTENSIONS_KEY, JSON.stringify(index)], ...[...ids].map((one) => [extensionKey(one), null])]);
     },
 
     /**

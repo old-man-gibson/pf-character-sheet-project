@@ -29,7 +29,7 @@ import { readShared, sharedRules, writeShared } from './shared-rules.js';
 import {
   BLOCK_KINDS, TABLE_KINDS, inspectExtension, normalizeExtension, normalizeBlock, blankExtension,
   describeSummary, summarize, slugId, looksLikeExtension, looksLikeLibrary, buildLibrary, planLibrary,
-  blocksFromCharacter, mergeSphere, catalogueEntryKey,
+  olderRevision, blocksFromCharacter, mergeSphere, catalogueEntryKey,
   splitAbilityType,
 } from './extensions.js';
 import { parsePaste, readStructured, splitChunk } from './paste-import.js';
@@ -148,7 +148,8 @@ const CSS = `
 /* A long section of the list, filed by author: one fold per author. */
 .extmgr details.packgroup { border-top: 1px solid var(--line, #333); }
 .extmgr details.packgroup > summary { cursor: pointer; padding: 6px 0; }
-.extmgr details.packgroup .gacts { display: inline-flex; gap: 6px; margin-left: 8px; vertical-align: middle; }
+.extmgr details.packgroup .gacts { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 8px; vertical-align: middle; }
+.extmgr .bulk { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 6px; }
 .extmgr details.packgroup .gacts button { padding: 1px 9px; font-size: 0.76rem; }
 .extmgr details.packgroup > .row { margin-left: 16px; }
 .extmgr button { font: inherit; font-size: 0.82rem; color: inherit; background: transparent; border: 1px solid var(--line, #555); border-radius: 16px; padding: 3px 11px; cursor: pointer; }
@@ -241,6 +242,9 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
   let notice = null;
   let showPaste = false;
   let confirmRemove = null;
+  // The Remove N packs button waiting on its Really remove: 'local' for the
+  // whole Mine list, or a fold's data-group key.
+  let confirmBulk = null;
   // The pack list's search, its All/On/Off choice, and which author folds are open.
   let packQuery = '';
   let packShow = 'all';
@@ -310,6 +314,7 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
             <span class="gacts">
               <button data-group-switch="on" title="Switch on every pack shown in this group">All on</button>
               <button data-group-switch="off" title="Switch off every pack shown in this group">All off</button>
+              ${key === 'local' ? bulkButtons(group) : ''}
             </span></summary>
           ${list.map((it) => row(it.s, it)).join('')}
         </details>`;
@@ -344,7 +349,9 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
 
       <h3>Mine, in this browser${tally(localItems)}</h3>
       ${localItems.length
-    ? `<p class="hint">${libraryLine(localItems)}</p>${section('local', localItems)}`
+    ? `<div data-bulk-scope><p class="hint">${libraryLine(localItems)}</p>
+        ${localItems.length > 1 ? `<div class="bulk">${bulkButtons('local')}</div>` : ''}
+        ${section('local', localItems)}</div>`
     : '<p class="hint">No packs yet. Create or import one below.</p>'}
 
       <div class="actions">
@@ -400,6 +407,21 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
       Export library saves all of them and their on/off settings as one file.`;
   }
 
+  /**
+   * Remove every local pack shown in a scope: the whole Mine list ('local')
+   * or one fold (its data-group key). The label's count is filled by
+   * applyPackFilter, so it follows the search and the All/On/Off buttons.
+   */
+  function bulkButtons(scope) {
+    return confirmBulk === scope
+      ? `<button class="danger" data-bulk-confirm>Really remove <span data-bulk-count></span></button><button data-bulk-cancel>Keep</button>`
+      : `<button class="danger" data-bulk-remove="${esc(scope)}" title="Remove every pack shown here from this browser.">Remove <span data-bulk-count></span></button>`;
+  }
+
+  /** The scope a bulk button acts on, and the ids of the packs shown in it. */
+  const bulkScope = (button) => button.closest('details.packgroup, [data-bulk-scope]');
+  const shownIds = (scope) => [...scope.querySelectorAll('.row[data-id]:not([hidden])')].map((r) => r.dataset.id);
+
   const packFiltering = () => !!lower(packQuery) || packShow !== 'all';
 
   /*
@@ -428,6 +450,11 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
     }
     const counter = dialog.querySelector('[data-pack-count]');
     if (counter) counter.textContent = filtering ? `${shown} of ${rows.length}` : '';
+    for (const span of dialog.querySelectorAll('[data-bulk-count]')) {
+      const n = shownIds(bulkScope(span)).length;
+      span.textContent = `${n} pack${n === 1 ? '' : 's'}`;
+      span.closest('button').disabled = !n;
+    }
   }
 
   /**
@@ -1359,7 +1386,31 @@ Hit Die: d12.
         const doc = el.dataset.bundled === 'true' ? runtime.bundled.find((e) => e.id === id) : runtime.store.read(id);
         if (doc) download(doc);
       }));
-      qa('[data-remove]').forEach((el) => el.addEventListener('click', () => { confirmRemove = el.dataset.remove; render(); }));
+      qa('[data-remove]').forEach((el) => el.addEventListener('click', () => { confirmRemove = el.dataset.remove; confirmBulk = null; render(); }));
+      // Buttons in a fold's heading would fold it as well, hence preventDefault.
+      qa('[data-bulk-remove]').forEach((el) => el.addEventListener('click', (e) => {
+        e.preventDefault();
+        confirmBulk = el.dataset.bulkRemove; confirmRemove = null; render();
+      }));
+      q('[data-bulk-cancel]')?.addEventListener('click', (e) => { e.preventDefault(); confirmBulk = null; render(); });
+      q('[data-bulk-confirm]')?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        // What is shown when Really remove is pressed, so a search typed in
+        // between is what decides.
+        const ids = shownIds(bulkScope(e.currentTarget));
+        if (ids.length) {
+          try {
+            await runtime.store.remove(ids);
+            notice = `Removed ${ids.length} pack${ids.length === 1 ? '' : 's'} from this browser.`; error = null;
+          } catch (err) {
+            notice = null;
+            error = `Could not remove those packs: ${err.message}`;
+          }
+          runtime.refresh();
+        }
+        confirmBulk = null;
+        render();
+      });
       q('[data-remove-cancel]')?.addEventListener('click', () => { confirmRemove = null; render(); });
       qa('[data-remove-confirm]').forEach((el) => el.addEventListener('click', async () => {
         const id = el.dataset.removeConfirm;
@@ -1822,18 +1873,43 @@ Hit Die: d12.
     return { ok: !r.failed.length, error, library: r };
   }
 
+  /**
+   * Why a pack file may not be stored here, or null: it has a bundled pack's
+   * id, or it is an older revision of a pack this browser has. `why` follows
+   * the file's name; `fix` is said only when one file was imported.
+   */
+  function refusal(summary) {
+    if (runtime.bundled.some((e) => e.id === summary.id)) {
+      return { why: `has the same id as the bundled pack “${summary.name}”`,
+        fix: 'Change the "id" in the file, or copy the bundled pack and edit the copy.' };
+    }
+    const have = runtime.store.list().find((e) => e.id === summary.id);
+    if (olderRevision(summary, have)) {
+      return { why: `is rev ${summary.revision} of “${summary.name}”, older than rev ${have.revision} in this browser`,
+        fix: 'Remove the pack first to import an older revision.' };
+    }
+    return null;
+  }
+
+  /** "Imported X rev 2" or "Updated X from rev 2 to rev 3". */
+  const importedLine = (row) => (!row.replaced ? `Imported ${row.name} rev ${row.revision}`
+    : row.previousRevision !== null && row.previousRevision !== row.revision
+      ? `Updated ${row.name} from rev ${row.previousRevision} to rev ${row.revision}`
+      : `Updated ${row.name} rev ${row.revision}`);
+
   async function importDoc(doc, label = 'the pack') {
     if (looksLikeLibrary(doc)) return importLibrary(doc, label);
     const verdict = inspectExtension(doc);
     if (!verdict.ok) { error = `${label}: ${verdict.error}`; notice = null; render(); return verdict; }
-    if (runtime.bundled.some((e) => e.id === verdict.summary.id)) {
-      error = `${label} has the same id as the bundled pack “${verdict.summary.name}”. Change the "id" in the file, or copy the bundled pack and edit the copy.`;
-      render(); return { ok: false, error };
+    const refused = refusal(verdict.summary);
+    if (refused) {
+      error = `${label} ${refused.why}. ${refused.fix}`;
+      notice = null; render(); return { ok: false, error };
     }
     try {
       const row = await runtime.store.save(doc, { origin: 'import' });
       runtime.refresh();
-      notice = `${row.replaced ? 'Updated' : 'Imported'} ${row.name} rev ${row.revision} (${describeSummary(row)}).`
+      notice = `${importedLine(row)} (${describeSummary(row)}).`
         + (verdict.warnings?.length ? ` Note: ${verdict.warnings.join('; ')}.` : '');
       error = null; showPaste = false;
       say('ok', notice);
@@ -1885,10 +1961,8 @@ Hit Die: d12.
       }
       const verdict = inspectExtension(doc);
       if (!verdict.ok) { failed.push(`${file.name}: ${verdict.error}`); continue; }
-      if (runtime.bundled.some((e) => e.id === verdict.summary.id)) {
-        failed.push(`${file.name} has the same id as the bundled pack “${verdict.summary.name}”`);
-        continue;
-      }
+      const refused = refusal(verdict.summary);
+      if (refused) { failed.push(`${file.name} ${refused.why}`); continue; }
       try {
         done.push(await runtime.store.save(doc, { origin: 'import' }));
       } catch (err) {
