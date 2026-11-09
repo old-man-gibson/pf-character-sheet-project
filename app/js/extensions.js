@@ -505,7 +505,9 @@ export function parseSwaps(text, className = '') {
   const push = (list, k) => { if (k && k.length <= 50 && !list.includes(k)) list.push(k); };
   // "This ability replaces X." / "This alters X" (a line with no full stop) /
   // "Topological Draw alters Iaijutsu Techniques." / "Topological Step: Projection replaces Dragon Defense."
-  const re = /(?:^|[.\n]\s*)(?:This (?:ability |alteration |feature |alternative class feature |option )?|[A-Z][^.\n:]{0,40}?(?::\s+[A-Z][^.\n]{0,40}?)?\s+)(replaces|alters|modifies|changes)\s+([^.\n]+?)(?:\.|\n|$)/g;
+  // The sentence may be in italics or bold ("*This replaces trapfinding.*"),
+  // so emphasis marks may open and close it.
+  const re = /(?:^|[.\n]\s*)(?:(?:\*+|_+|'{2,3})\s*)?(?:This (?:ability |alteration |feature |alternative class feature |option )?|[A-Z][^.\n:]{0,40}?(?::\s+[A-Z][^.\n]{0,40}?)?\s+)(replaces|alters|modifies|changes)\s+([^.\n]+?)(?:\*+|_+|'{2,3})?(?:\.|\n|$)/g;
   // a named sub-ability -- "the duty's call kiai art", "the Ranged Cut and Armor Rending Slash Iaijutsu Techniques":
   // definite ("the …"), so not "challenge and kiai arts"
   const SUB = /^the\s+.+?\s+(kiai art|iaijutsu technique|rage power|deed|talent|discovery|hex|revelation|exploit)s?$/i;
