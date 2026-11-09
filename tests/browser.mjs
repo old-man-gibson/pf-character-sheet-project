@@ -483,6 +483,41 @@ run.addEventListener('click', async () => {
         page.scrollTop = 0;
       }
     });
+    // A keystroke in the block shelf's search redrew the whole sheet, which
+    // lagged with many packs loaded. Now only the shelf's list and count are
+    // redrawn, and what is in them must still work.
+    await test('Searching the block shelf redraws only its list, and + Add still works', async () => {
+      const { runtime } = await import('../app/js/extension-runtime.js');
+      const { normalizeExtension } = await import('../app/js/extensions.js');
+      const root = sheet.shadowRoot;
+      const had = runtime.bundled;
+      try {
+        runtime.bundled = [normalizeExtension({ id: 'browser-check-shelf', name: 'Browser check shelf', blocks: [
+          { kind: 'tracker', name: 'Alpha pool', max: '2' },
+          { kind: 'tracker', name: 'Gamma pool', max: '3' },
+        ] })];
+        root.getElementById('tab-systabs').click();
+        const input = root.querySelector('[data-ext-search]');
+        const wrap = root.querySelector('.wrap');
+        assert(input && wrap, 'The shelf search is missing');
+        input.focus();
+        input.value = 'gamma';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        assert(root.querySelector('.wrap') === wrap, 'The whole sheet was redrawn');
+        assert(root.querySelector('[data-ext-search]') === input && root.activeElement === input, 'The search box lost focus');
+        const names = [...root.querySelectorAll('[data-ext-shelf] strong')].map((s) => s.textContent);
+        assert(names.join() === 'Gamma pool', `The shelf shows ${names.join(', ') || 'nothing'}`);
+        assert(/1 of 2/.test(root.querySelector('[data-ext-count]').textContent), 'The count is wrong');
+        const trackers = sheet.model.trackers.length;
+        root.querySelector('[data-ext-shelf] [data-action="ext-add-block"]').click();
+        assert(sheet.model.trackers.length === trackers + 1
+          && sheet.model.trackers.at(-1).name === 'Gamma pool', '+ Add did not add the tracker');
+      } finally {
+        runtime.bundled = had;
+        for (const t of sheet.model.trackers.filter((x) => x.name === 'Gamma pool')) sheet.model.removeTracker(t.id);
+        root.getElementById('tab-overview')?.click();
+      }
+    });
   } finally {
     sheet.remove();
     await forget(id);

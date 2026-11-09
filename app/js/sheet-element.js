@@ -4853,6 +4853,57 @@ export class CharacterSheetElement extends HTMLElement {
     });
   }
 
+  /*
+   * Folding something away, or opening it back up.
+   *
+   * The button says what to store rather than the handler working it out:
+   * every one is drawn by ui/folds.js `foldButton`, which knows both things
+   * the value depends on -- what is on screen, and which way the key reads.
+   * On screen, because a block that starts folded by default and has never
+   * been clicked has nothing stored, and toggling `undefined` would fold
+   * something that already looked folded. Which way, because three families
+   * of key store *open* rather than *collapsed* (see `storesOpen`), and a
+   * rule inferred here once left two of them dead: they wrote back the state
+   * they were already in.
+   *
+   * Scoped, so a part of the sheet redrawn alone (`#refreshShelf`) can bind
+   * its own.
+   */
+  #bindFolds(scope) {
+    scope.querySelectorAll('[data-collapse]').forEach((b) => {
+      b.addEventListener('click', () => {
+        this.#model.data.uiPrefs.collapsed[b.dataset.collapse] = b.dataset.collapseTo === 'true';
+        this.#model.recompute();
+        this.#render();
+      });
+    });
+  }
+
+  /**
+   * Redraw the block shelf's list and search count alone, for a keystroke in
+   * its search. A full render per key redrew and laid out the whole sheet,
+   * which with a thousand packs loaded made typing lag. The search box is not
+   * replaced, so it keeps its focus and caret.
+   *
+   * The list holds + Add buttons, fold buttons and long hints, so those three
+   * are bound or marked here the way `#render` does it for the whole sheet.
+   */
+  #refreshShelf(input) {
+    const root = this.shadowRoot;
+    const list = root.querySelector('[data-ext-shelf]');
+    const count = root.querySelector('[data-ext-count]');
+    if (!list || !count || this.isPublished) {
+      this.#rerender(input);
+      return;
+    }
+    const shelf = manager.extensionShelf(this.#model, this.#ctx());
+    count.innerHTML = shelf.count;
+    list.innerHTML = shelf.list;
+    this.#bindActions(list);
+    this.#bindFolds(list);
+    this.#clampHints(list);
+  }
+
   /**
    * Redraw the header alone.
    *
@@ -5499,10 +5550,11 @@ export class CharacterSheetElement extends HTMLElement {
    * At every width since 2026-10-12, not only on a phone: the helper text at
    * the foot of a panel is read once and then in the way, on any screen.
    */
-  #clampHints() {
+  #clampHints(scope = null) {
     const wrap = this.shadowRoot.querySelector('.wrap');
     if (!wrap) return;
-    const long = [...this.shadowRoot.querySelectorAll('.body .hint')]
+    // `scope` is a part redrawn alone; its hints are numbered among themselves.
+    const long = [...(scope ? scope.querySelectorAll('.hint') : this.shadowRoot.querySelectorAll('.body .hint'))]
       .filter((hint) => hint.textContent.trim().length > HELP_LENGTH)
       .map((hint) => ({ hint, key: helpKey(hint), label: helpLabel(hint) }));
     // Where a heading still does not tell two helps apart -- two notes at the
@@ -6428,12 +6480,11 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
-    // The block shelf's search: typed into, so it filters as you go and keeps
-    // the caret where it was.
+    // The block shelf's search: typed into, so it filters as you go.
     root.querySelectorAll('[data-ext-search]').forEach((input) => {
       input.addEventListener('input', () => {
         this.#view.extSearch = input.value;
-        this.#rerender(input);
+        this.#refreshShelf(input);
       });
     });
 
@@ -6578,26 +6629,7 @@ export class CharacterSheetElement extends HTMLElement {
       bar.scrollLeft = to;
     }, { passive: false });
 
-    /*
-     * Folding something away, or opening it back up.
-     *
-     * The button says what to store rather than the handler working it out:
-     * every one is drawn by ui/folds.js `foldButton`, which knows both things
-     * the value depends on -- what is on screen, and which way the key reads.
-     * On screen, because a block that starts folded by default and has never
-     * been clicked has nothing stored, and toggling `undefined` would fold
-     * something that already looked folded. Which way, because three families
-     * of key store *open* rather than *collapsed* (see `storesOpen`), and a
-     * rule inferred here once left two of them dead: they wrote back the state
-     * they were already in.
-     */
-    root.querySelectorAll('[data-collapse]').forEach((b) => {
-      b.addEventListener('click', () => {
-        this.#model.data.uiPrefs.collapsed[b.dataset.collapse] = b.dataset.collapseTo === 'true';
-        this.#model.recompute();
-        this.#render();
-      });
-    });
+    this.#bindFolds(root);
 
     // A two-ladder table's headings: the one pressed gets the room, pressed
     // again it gives it back. Kept with the character, like a fold. The key
