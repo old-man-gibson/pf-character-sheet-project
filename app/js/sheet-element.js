@@ -615,6 +615,8 @@ export class CharacterSheetElement extends HTMLElement {
   // "Every character" pressed once on the Campaign rules panel, where nothing
   // is shared yet: the second press shares this character's rules with all.
   #campaignShareArmed = false;
+  // True while this sheet writes the shared campaign rules itself; see #writeSharedRules.
+  #writingShared = false;
   #publishedLink = null;    // { url, rev, summary, copied } after Publish, until dismissed
   #storageFailed = false;   // the working state is not being written -- see #writeWorking
   #changePending = false;   // an edit has announced itself and its one write is queued
@@ -793,8 +795,23 @@ export class CharacterSheetElement extends HTMLElement {
    * character follows them, and redraw the ⚙ tab, which says whom they are for.
    */
   #onSharedRules = () => {
-    if (this.#followSharedRules() || this.#tab === 'systabs') this.#render();
+    const pulled = this.#followSharedRules();
+    if (pulled || (this.#tab === 'systabs' && !this.#writingShared)) this.#render();
   };
+
+  /*
+   * Write the shared campaign rules from this sheet. Every caller draws the
+   * sheet itself, so the change event this write fires does not draw it a
+   * second time: on the ⚙ tab that was a second full render per edit.
+   */
+  #writeSharedRules(change) {
+    this.#writingShared = true;
+    try {
+      return writeShared(change);
+    } finally {
+      this.#writingShared = false;
+    }
+  }
 
   /**
    * Take the shared campaign rules, where this character follows them and its
@@ -824,7 +841,7 @@ export class CharacterSheetElement extends HTMLElement {
     const d = this.#model.data;
     const shared = readShared();
     if (!followsShared(d, shared) || sameCampaign(d.campaign, shared.rules)) return;
-    writeShared({ rules: d.campaign || {} });
+    this.#writeSharedRules({ rules: d.campaign || {} });
   }
 
   /**
@@ -7806,7 +7823,7 @@ export class CharacterSheetElement extends HTMLElement {
         } else {
           this.#campaignShareArmed = false;
           delete d.campaignOwn;
-          writeShared({ on: true, rules: d.campaign || {} });
+          this.#writeSharedRules({ on: true, rules: d.campaign || {} });
           this.#model.recompute();
           this.#historyNote = 'Every character without its own rules now uses these campaign rules.';
         }

@@ -1578,12 +1578,18 @@ console.log('\nthe Extensions tab: a shelf of many blocks arrives with every pac
   const c = new Character(blankDocument({ name: 'Shelf', level: 1 }));
   const draw = (extSearch = '') => manager.renderSystemManagerPanel(c, { ...shutCtx(), extSearch });
   const packs = (html) => [...html.matchAll(/<div class="foldsub extpack( collapsed)?">/g)].map((m) => !!m[1]);
+  const panelShut = (html) => /<section class="panel span2 collapsed"><h3>Extension blocks/.test(html);
   runtime.bundled = [pack('small-a', 30), pack('small-b', 30)];
   ok('a short shelf draws its small packs open', packs(draw()).join() === 'false,false');
+  ok('and its panel starts open', !panelShut(draw()));
   runtime.bundled = [pack('small-a', 30), pack('small-b', 30), ...Array.from({ length: 6 }, (_, i) => pack(`more-${i}`, 30))];
+  // Every edit on the ⚙ tab redraws this panel, so a long shelf starts as its heading alone.
+  const shut = draw();
+  ok('a long shelf starts folded to its heading', panelShut(shut) && packs(shut).length === 0);
+  c.data.uiPrefs.collapsed = { 'ext-blocks': false };
   const many = draw();
-  ok('a long one folds every pack', packs(many).length === 8 && packs(many).every(Boolean) && !/data-action="ext-add-block"/.test(many));
-  c.data.uiPrefs.collapsed = { 'extpack:small-a': false };
+  ok('opened, it folds every pack', packs(many).length === 8 && packs(many).every(Boolean) && !/data-action="ext-add-block"/.test(many));
+  c.data.uiPrefs.collapsed = { 'ext-blocks': false, 'extpack:small-a': false };
   ok('and a pack opened by hand stays open', packs(draw()).filter((x) => !x).length === 1);
   ok('a search still shows what it finds', /data-action="ext-add-block"/.test(draw('more-3 note 7')));
   // A keystroke in the search redraws only the list and the count

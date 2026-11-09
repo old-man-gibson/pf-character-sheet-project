@@ -2,6 +2,7 @@ import '../app/js/sheet-element.js';
 import { blankDocument } from '../app/js/convert.js';
 import { SCHEMA_VERSION } from '../app/js/model.js';
 import { historyFor, workingKey, forget } from '../app/js/history.js';
+import { readShared } from '../app/js/shared-rules.js';
 
 const run = document.querySelector('#run');
 const status = document.querySelector('#status');
@@ -437,6 +438,32 @@ run.addEventListener('click', async () => {
       } finally {
         if (layout) sheet.setAttribute('layout', layout);
         mount.style.width = '';
+      }
+    });
+    // An edit to campaign rules every character shares writes the shared copy,
+    // which announces itself. The sheet that wrote it draws once, not again for
+    // its own write: on the ⚙ tab that second draw doubled every edit.
+    await test('A shared campaign rule edit draws the sheet once', async () => {
+      const key = 'character-sheet:campaign-rules';
+      const kept = localStorage.getItem(key);
+      const watch = new MutationObserver(() => {});
+      try {
+        localStorage.setItem(key, JSON.stringify({ on: true, rules: {}, updatedAt: Date.now() }));
+        sheet.character = doc;
+        await sheet.whenReady();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        sheet.shadowRoot.querySelector('button[aria-label="Settings"]').click();
+        const box = sheet.shadowRoot.querySelector('[data-set="campaign.minLevel"]');
+        assert(box, 'Lowest level box missing');
+        watch.observe(sheet.shadowRoot, { childList: true });
+        box.value = '2';
+        box.dispatchEvent(new Event('change', { bubbles: true }));
+        const draws = watch.takeRecords().flatMap((r) => [...r.addedNodes]).filter((n) => n.classList?.contains('wrap')).length;
+        assert(readShared()?.rules.minLevel === 2, 'The edit did not reach the shared rules');
+        assert(draws === 1, `The sheet was drawn ${draws} times`);
+      } finally {
+        watch.disconnect();
+        if (kept === null) localStorage.removeItem(key); else localStorage.setItem(key, kept);
       }
     });
     // The app page scrolls the sheet in a box of its own under the app's bar,
