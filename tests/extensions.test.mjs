@@ -1355,6 +1355,14 @@ console.log('apply -- blocks land on a blank character through the model');
   check('parseSwaps: a sub-ability replaced alters its parent', parseSwaps('x. This ability replaces the determined ability of the resolve class feature.', LS), { replaces: [], alters: ['resolve'] });
   check('parseSwaps: a named kiai art replaced alters kiai arts', parseSwaps("x. This ability replaces the duty's call, charm kiai art.", LS), { replaces: [], alters: ['kiai art'] });
   check('parseSwaps: oxford list', parseSwaps('x. This replaces challenge, iaijutsu techniques, and kiai arts.', LS), { replaces: ['challenge', 'iaijutsu technique', 'kiai art'], alters: [] });
+  // Pack text may put the sentence in italics, as its own paragraph.
+  check('parseSwaps: an italic sentence', parseSwaps('At 3rd level, x.\n\n*This ability replaces the uncanny dodge class feature.*', 'Barbarian'), { replaces: ['uncanny dodge'], alters: [] });
+  check('parseSwaps: italics with no full stop', parseSwaps('x.\n* This ability replaces the fast movement and damage reduction class features*', 'Barbarian'), { replaces: ['fast movement', 'damage reduction'], alters: [] });
+  check('parseSwaps: bold, underscores and doubled apostrophes', [
+    parseSwaps('**This ability replaces trapfinding.**', 'Rogue'),
+    parseSwaps('_This alters kiai arts._', LS),
+    parseSwaps("''This replaces challenge.''", LS),
+  ], [{ replaces: ['trapfinding'], alters: [] }, { replaces: [], alters: ['kiai art'] }, { replaces: ['challenge'], alters: [] }]);
   check('parseStacksWith', parseStacksWith("This alters iaijutsu strike. This alternative class feature can be combined with either the Yumi Sniper archetype or the Skirmisher's Strike alternative class feature (but not both), in which case both alterations apply."), ['Yumi Sniper', "Skirmisher's Strike"]);
   check('archetype block reads swaps and levels off its features', normalizeBlock({ kind: 'archetype', name: 'A', class: LS, features: [{ name: 'Gun Fusion', type: 'Ex', text: 'At 10th level, x. This ability replaces iaijutsu master.' }, { name: 'Bullet Control', text: 'y. This ability alters sheathe control.' }] }).features.map((f) => [f.name, f.level, f.replaces, f.alters]),
     [['Gun Fusion', 10, ['iaijutsu master'], []], ['Bullet Control', 1, [], ['sheath control']]]);
