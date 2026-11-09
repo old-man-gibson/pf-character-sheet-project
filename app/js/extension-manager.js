@@ -29,7 +29,7 @@ import { readShared, sharedRules, writeShared } from './shared-rules.js';
 import {
   BLOCK_KINDS, TABLE_KINDS, inspectExtension, normalizeExtension, normalizeBlock, blankExtension,
   describeSummary, summarize, slugId, looksLikeExtension, looksLikeLibrary, buildLibrary, planLibrary,
-  olderRevision, blocksFromCharacter, mergeSphere, catalogueEntryKey,
+  LIBRARY_FORMAT, olderRevision, blocksFromCharacter, mergeSphere, catalogueEntryKey,
   splitAbilityType,
 } from './extensions.js';
 import { parsePaste, readStructured, splitChunk } from './paste-import.js';
@@ -149,7 +149,14 @@ const CSS = `
 .extmgr details.packgroup { border-top: 1px solid var(--line, #333); }
 .extmgr details.packgroup > summary { cursor: pointer; padding: 6px 0; }
 .extmgr details.packgroup .gacts { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 8px; vertical-align: middle; }
-.extmgr .bulk { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 6px; }
+.extmgr .bulk { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 4px 0 6px; }
+.extmgr details.packgroup > summary input[type=checkbox] { vertical-align: middle; margin: 0 4px 0 0; }
+/* Add or Replace, for a library or several files imported at once. */
+.extmgr .choice { border: 1px solid var(--accent, #d4a24a); border-radius: 8px; padding: 8px 10px; margin: 6px 0 12px; }
+.extmgr .choice p { margin: 0 0 6px; }
+.extmgr .choice .pick { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+.extmgr .choice .pick button { flex: none; min-width: 10rem; }
+.extmgr .choice .pick span { flex: 1; min-width: 12rem; font-size: 0.8rem; opacity: 0.8; }
 .extmgr details.packgroup .gacts button { padding: 1px 9px; font-size: 0.76rem; }
 .extmgr details.packgroup > .row { margin-left: 16px; }
 .extmgr button { font: inherit; font-size: 0.82rem; color: inherit; background: transparent; border: 1px solid var(--line, #555); border-radius: 16px; padding: 3px 11px; cursor: pointer; }
@@ -242,9 +249,14 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
   let notice = null;
   let showPaste = false;
   let confirmRemove = null;
-  // The Remove N packs button waiting on its Really remove: 'local' for the
-  // whole Mine list, or a fold's data-group key.
-  let confirmBulk = null;
+  // Selecting packs to remove: whether the list is in that mode, which local
+  // packs are ticked, and whether Remove is waiting on its Really remove.
+  let picking = false;
+  const picked = new Set();
+  let confirmPick = false;
+  // A library or several files waiting on Add or Replace:
+  // { lib, what, failed, plan } (see offerBatch).
+  let pendingImport = null;
   // The pack list's search, its All/On/Off choice, and which author folds are open.
   let packQuery = '';
   let packShow = 'all';
@@ -276,17 +288,26 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
     const bundled = runtime.bundled;
     const off = store ? store.disabledBundled() : new Set();
     const local = store ? store.list() : [];
+    // A ticked pack removed meanwhile (another window) is not ticked any more.
+    const localIds = new Set(local.map((e) => e.id));
+    for (const id of picked) if (!localIds.has(id)) picked.delete(id);
+    // While packs are being selected for removal, a local row's box selects
+    // it and its buttons step aside.
     const row = (s, { bundled: isBundled, enabled }) => `
       <div class="row ${enabled ? '' : 'off'}" data-id="${esc(s.id)}" data-find="${esc(packFindText(s))}">
-        <label class="sw" title="${enabled ? 'On: its tables and blocks are in use.' : 'Off: not used.'}">
+        ${picking && !isBundled
+    ? `<label class="sw" title="Select to remove">
+          <input type="checkbox" data-pick="${esc(s.id)}" aria-label="Select ${esc(s.name)}" ${picked.has(s.id) ? 'checked' : ''}>
+        </label>`
+    : `<label class="sw" title="${enabled ? 'On: its tables and blocks are in use.' : 'Off: not used.'}">
           <input type="checkbox" data-toggle="${esc(s.id)}" data-bundled="${isBundled}" ${enabled ? 'checked' : ''}>
-        </label>
+        </label>`}
         <div class="main">
           <div class="name">${esc(s.name)} <span style="opacity:.55;font-weight:400">rev ${esc(s.revision)}${s.author ? ` · ${esc(s.author)}` : ''}</span></div>
           <div class="meta">${esc(describeSummary(s))}${s.description ? ` · ${esc(s.description)}` : ''}${sourceLink(s.source)}${
   isBundled || !s.updatedAt ? '' : ` · ${s.origin === 'import' ? 'imported' : 'saved'} ${esc(String(s.updatedAt).slice(0, 10))}`}</div>
         </div>
-        <div class="acts">
+        ${picking ? '' : `<div class="acts">
           ${isBundled
     ? `<button data-copy="${esc(s.id)}" title="Make an editable local copy of this pack">Copy to mine</button>`
     : `<button data-edit="${esc(s.id)}">Edit</button>`}
@@ -294,7 +315,7 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
           ${isBundled ? '' : (confirmRemove === s.id
     ? `<button class="danger" data-remove-confirm="${esc(s.id)}">Really remove</button><button data-remove-cancel>Keep</button>`
     : `<button class="danger" data-remove="${esc(s.id)}" title="Remove this pack from this browser.">×</button>`)}
-        </div>
+        </div>`}
       </div>`;
 
     /*
@@ -309,13 +330,13 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
         const group = `${key}|${author}`;
         const count = `${list.length} pack${list.length === 1 ? '' : 's'} · ${list.filter((it) => it.enabled).length} on`;
         return `<details class="packgroup" data-group="${esc(group)}"${openGroups.has(group) ? ' open' : ''}>
-          <summary><strong>${esc(author || 'No author')}</strong>
+          <summary>${picking && key === 'local'
+    ? `<input type="checkbox" data-pick-group aria-label="Select every pack shown from ${esc(author || 'No author')}"> ` : ''}<strong>${esc(author || 'No author')}</strong>
             <span class="d" data-group-count data-text="${esc(count)}">${esc(count)}</span>
-            <span class="gacts">
+            ${picking ? '' : `<span class="gacts">
               <button data-group-switch="on" title="Switch on every pack shown in this group">All on</button>
               <button data-group-switch="off" title="Switch off every pack shown in this group">All off</button>
-              ${key === 'local' ? bulkButtons(group) : ''}
-            </span></summary>
+            </span>`}</summary>
           ${list.map((it) => row(it.s, it)).join('')}
         </details>`;
       }).join('');
@@ -339,18 +360,19 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
         import. Packs and campaign rules are saved in this browser.</p>
       ${notice ? `<p class="ok">${esc(notice)}</p>` : ''}
       ${error ? `<p class="err">${esc(error)}</p>` : ''}
+      ${choiceHtml()}
       ${rulesHtml()}
       ${finder}
 
-      <h3>Bundled with this deployment${tally(bundledItems)}</h3>
+      ${picking ? '' : `<h3>Bundled with this deployment${tally(bundledItems)}</h3>
       ${bundledItems.length
     ? section('bundled', bundledItems)
-    : '<p class="hint">No packs are bundled with this site.</p>'}
+    : '<p class="hint">No packs are bundled with this site.</p>'}`}
 
       <h3>Mine, in this browser${tally(localItems)}</h3>
       ${localItems.length
-    ? `<div data-bulk-scope><p class="hint">${libraryLine(localItems)}</p>
-        ${localItems.length > 1 ? `<div class="bulk">${bulkButtons('local')}</div>` : ''}
+    ? `<div data-pick-scope><p class="hint">${libraryLine(localItems)}</p>
+        ${localItems.length > 1 ? `<div class="bulk">${pickBar()}</div>` : ''}
         ${section('local', localItems)}</div>`
     : '<p class="hint">No packs yet. Create or import one below.</p>'}
 
@@ -408,19 +430,73 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
   }
 
   /**
-   * Remove every local pack shown in a scope: the whole Mine list ('local')
-   * or one fold (its data-group key). The label's count is filled by
-   * applyPackFilter, so it follows the search and the All/On/Off buttons.
+   * The bar over Mine for removing several packs: a button that starts
+   * selecting, then an All shown box, the count, and Remove. The counts are
+   * filled by syncPicks.
    */
-  function bulkButtons(scope) {
-    return confirmBulk === scope
-      ? `<button class="danger" data-bulk-confirm>Really remove <span data-bulk-count></span></button><button data-bulk-cancel>Keep</button>`
-      : `<button class="danger" data-bulk-remove="${esc(scope)}" title="Remove every pack shown here from this browser.">Remove <span data-bulk-count></span></button>`;
+  function pickBar() {
+    if (!picking) return '<button data-pick-start title="Tick packs or publishers, then remove them together.">Select packs to remove</button>';
+    return `<label class="sw"><input type="checkbox" data-pick-all> All shown</label>
+      <span class="d" data-pick-count></span>
+      ${confirmPick
+    ? '<button class="danger" data-pick-confirm>Really remove <span data-pick-n></span></button><button data-pick-keep>Keep</button>'
+    : '<button class="danger" data-pick-remove>Remove <span data-pick-n></span></button><button data-pick-stop>Cancel</button>'}`;
   }
 
-  /** The scope a bulk button acts on, and the ids of the packs shown in it. */
-  const bulkScope = (button) => button.closest('details.packgroup, [data-bulk-scope]');
+  /** The ids of the local packs a scope shows (not hidden by the search or All/On/Off). */
   const shownIds = (scope) => [...scope.querySelectorAll('.row[data-id]:not([hidden])')].map((r) => r.dataset.id);
+
+  /** Every box, count and Remove button follows `picked` and what is shown. */
+  function syncPicks() {
+    if (!picking) return;
+    for (const box of dialog.querySelectorAll('[data-pick]')) box.checked = picked.has(box.dataset.pick);
+    const mark = (box, ids) => {
+      const n = ids.filter((id) => picked.has(id)).length;
+      box.checked = ids.length > 0 && n === ids.length;
+      box.indeterminate = n > 0 && n < ids.length;
+      box.disabled = !ids.length;
+    };
+    for (const g of dialog.querySelectorAll('details.packgroup')) {
+      const box = g.querySelector('[data-pick-group]');
+      if (box) mark(box, shownIds(g));
+    }
+    const all = dialog.querySelector('[data-pick-all]');
+    const scope = dialog.querySelector('[data-pick-scope]');
+    if (all && scope) mark(all, shownIds(scope));
+    const n = picked.size;
+    const count = dialog.querySelector('[data-pick-count]');
+    if (count) count.textContent = `${n} selected`;
+    for (const span of dialog.querySelectorAll('[data-pick-n]')) {
+      span.textContent = `${n} pack${n === 1 ? '' : 's'}`;
+      span.closest('button').disabled = !n;
+    }
+  }
+
+  /**
+   * A library file, or several pack files, that would leave different packs
+   * here added than replacing: the player picks one.
+   */
+  function choiceHtml() {
+    if (!pendingImport) return '';
+    const { plan, what } = pendingImport;
+    const n = plan.add.length + plan.update.length + plan.unchanged.length + plan.older.length;
+    const counts = [[plan.add.length, 'new'], [plan.update.length, 'changed'], [plan.unchanged.length, 'unchanged'],
+      [plan.older.length, 'older than yours']].filter(([k]) => k).map(([k, w]) => `${k} ${w}`).join(', ');
+    const missing = plan.missing.length;
+    const older = plan.older.length;
+    const replaceLine = [
+      missing ? `${missing} of your packs ${missing === 1 ? 'is' : 'are'} not in it and will be removed.` : '',
+      older ? `${older} older revision${older === 1 ? '' : 's'} will replace yours.` : '',
+    ].filter(Boolean).join(' ');
+    return `<div class="choice" data-import-choice>
+        <p>${esc(what)} ${n} pack${n === 1 ? '' : 's'}: ${esc(counts)}.</p>
+        <div class="pick"><button class="primary" data-import-mode="add">Add to my packs</button>
+          <span>New and changed packs are imported. Your other packs stay.${older ? ' Older revisions are skipped.' : ''}</span></div>
+        <div class="pick"><button class="danger" data-import-mode="replace">Replace my packs</button>
+          <span>${esc(replaceLine)}</span></div>
+        <div class="pick"><button data-import-mode="cancel">Cancel</button></div>
+      </div>`;
+  }
 
   const packFiltering = () => !!lower(packQuery) || packShow !== 'all';
 
@@ -450,11 +526,7 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
     }
     const counter = dialog.querySelector('[data-pack-count]');
     if (counter) counter.textContent = filtering ? `${shown} of ${rows.length}` : '';
-    for (const span of dialog.querySelectorAll('[data-bulk-count]')) {
-      const n = shownIds(bulkScope(span)).length;
-      span.textContent = `${n} pack${n === 1 ? '' : 's'}`;
-      span.closest('button').disabled = !n;
-    }
+    syncPicks();
   }
 
   /**
@@ -1386,31 +1458,53 @@ Hit Die: d12.
         const doc = el.dataset.bundled === 'true' ? runtime.bundled.find((e) => e.id === id) : runtime.store.read(id);
         if (doc) download(doc);
       }));
-      qa('[data-remove]').forEach((el) => el.addEventListener('click', () => { confirmRemove = el.dataset.remove; confirmBulk = null; render(); }));
-      // Buttons in a fold's heading would fold it as well, hence preventDefault.
-      qa('[data-bulk-remove]').forEach((el) => el.addEventListener('click', (e) => {
-        e.preventDefault();
-        confirmBulk = el.dataset.bulkRemove; confirmRemove = null; render();
+      qa('[data-remove]').forEach((el) => el.addEventListener('click', () => { confirmRemove = el.dataset.remove; render(); }));
+
+      // Selecting packs to remove. A tick changes no markup, only the boxes
+      // and counts (syncPicks), so the list does not jump under the pointer.
+      const endPicking = () => { picking = false; picked.clear(); confirmPick = false; };
+      q('[data-pick-start]')?.addEventListener('click', () => {
+        picking = true; picked.clear(); confirmPick = false; confirmRemove = null;
+        render();
+        q('[data-pick-scope]')?.scrollIntoView({ block: 'start' });
+      });
+      q('[data-pick-stop]')?.addEventListener('click', () => { endPicking(); render(); });
+      qa('[data-pick]').forEach((box) => box.addEventListener('change', () => {
+        if (box.checked) picked.add(box.dataset.pick); else picked.delete(box.dataset.pick);
+        syncPicks();
       }));
-      q('[data-bulk-cancel]')?.addEventListener('click', (e) => { e.preventDefault(); confirmBulk = null; render(); });
-      q('[data-bulk-confirm]')?.addEventListener('click', async (e) => {
-        e.preventDefault();
-        // What is shown when Really remove is pressed, so a search typed in
-        // between is what decides.
-        const ids = shownIds(bulkScope(e.currentTarget));
-        if (ids.length) {
-          try {
-            await runtime.store.remove(ids);
-            notice = `Removed ${ids.length} pack${ids.length === 1 ? '' : 's'} from this browser.`; error = null;
-          } catch (err) {
-            notice = null;
-            error = `Could not remove those packs: ${err.message}`;
-          }
-          runtime.refresh();
+      const pickShown = (box, scope) => {
+        for (const id of shownIds(scope)) { if (box.checked) picked.add(id); else picked.delete(id); }
+        syncPicks();
+      };
+      qa('[data-pick-group]').forEach((box) => box.addEventListener('change', () => pickShown(box, box.closest('details.packgroup'))));
+      q('[data-pick-all]')?.addEventListener('change', (e) => pickShown(e.target, q('[data-pick-scope]')));
+      q('[data-pick-remove]')?.addEventListener('click', () => { confirmPick = true; render(); });
+      q('[data-pick-keep]')?.addEventListener('click', () => { confirmPick = false; render(); });
+      q('[data-pick-confirm]')?.addEventListener('click', async () => {
+        const ids = [...picked];
+        try {
+          await runtime.store.remove(ids);
+          notice = `Removed ${ids.length} pack${ids.length === 1 ? '' : 's'} from this browser.`; error = null;
+        } catch (err) {
+          notice = null;
+          error = `Could not remove those packs: ${err.message}`;
         }
-        confirmBulk = null;
+        runtime.refresh();
+        endPicking();
         render();
       });
+
+      // Add or Replace, for a library or several files imported at once.
+      qa('[data-import-mode]').forEach((el) => el.addEventListener('click', () => {
+        const waiting = pendingImport;
+        if (!waiting) return;
+        if (el.dataset.importMode === 'cancel') {
+          pendingImport = null; notice = 'Import canceled.'; error = null;
+          render(); return;
+        }
+        finishBatch(waiting, el.dataset.importMode === 'replace');
+      }));
       q('[data-remove-cancel]')?.addEventListener('click', () => { confirmRemove = null; render(); });
       qa('[data-remove-confirm]').forEach((el) => el.addEventListener('click', async () => {
         const id = el.dataset.removeConfirm;
@@ -1817,19 +1911,36 @@ Hit Die: d12.
 
   /* ---------------- bringing a pack in ---------------- */
 
+  /** What importing `lib` would do here (planLibrary against this browser). */
+  function planHere(lib) {
+    const store = runtime.store;
+    return planLibrary(lib, {
+      bundledIds: runtime.bundled.map((e) => e.id), local: store.list(), read: (id) => store.read(id),
+    });
+  }
+
   /**
    * A library: every pack it holds that is new or changed here is stored,
    * and the switches it carries are applied to the packs this browser then
-   * has. Nothing is refreshed or drawn; the caller does that once.
+   * has. `replace` also removes the local packs it does not hold and stores
+   * its older revisions, so this browser ends up with the library's packs.
+   * Nothing is refreshed or drawn; the caller does that once.
    */
-  async function applyLibrary(lib) {
+  async function applyLibrary(lib, { replace = false } = {}) {
     const store = runtime.store;
-    const plan = planLibrary(lib, {
-      bundledIds: runtime.bundled.map((e) => e.id), local: store.list(), read: (id) => store.read(id),
-    });
+    const plan = planHere(lib);
     const rows = [];
     const failed = plan.skipped.map((s) => `${s.id}: ${s.why}`);
-    for (const doc of [...plan.add, ...plan.update]) {
+    if (!replace) failed.push(...plan.older.map((o) => `${o.id}: ${o.why}`));
+    let removed = 0;
+    if (replace && plan.missing.length) {
+      try {
+        await store.remove(plan.missing);
+        removed = plan.missing.length;
+      } catch (err) { failed.push(`could not remove ${plan.missing.length} packs (${err.message})`); }
+    }
+    const saving = [...plan.add, ...plan.update, ...(replace ? plan.older.map((o) => o.doc) : [])];
+    for (const doc of saving) {
       try {
         rows.push(await store.save(doc, { origin: 'import', enabled: plan.enabled[doc.id] ?? null }));
       } catch (err) {
@@ -1848,35 +1959,66 @@ Hit Die: d12.
     // The campaign rules every character shares travel with the library.
     if (lib.campaignRules) writeShared(lib.campaignRules);
     return {
-      rows, failed, added: plan.add.length, updated: plan.update.length, unchanged: plan.unchanged.length,
-      rules: !!lib.campaignRules,
+      rows, failed, removed, unchanged: plan.unchanged.length,
+      added: rows.filter((r) => !r.replaced).length, updated: rows.filter((r) => r.replaced).length,
+      switches: Object.keys(plan.enabled).length > 0, rules: !!lib.campaignRules,
     };
   }
 
-  /** The import notice for a library: where it came from, and what it changed here. */
-  function libraryNotice(lib, r) {
+  /** The notice for a batch: where a library came from, and what changed here. */
+  function batchNotice(lib, title, r) {
     const origin = [lib.from ? `from ${lib.from}` : '', lib.exportedAt ? `exported ${String(lib.exportedAt).slice(0, 10)}` : '']
       .filter(Boolean).join(', ');
     const parts = [`${r.added} added`, `${r.updated} updated`, `${r.unchanged} unchanged`];
-    return `Library${origin ? ` (${origin})` : ''}: ${parts.join(', ')}. On/off settings${r.rules ? ' and shared campaign rules' : ''} applied.`;
+    if (r.removed) parts.push(`${r.removed} removed`);
+    const applied = [r.switches ? 'On/off settings' : '', r.rules ? 'shared campaign rules' : ''].filter(Boolean).join(' and ');
+    return `${title}${origin ? ` (${origin})` : ''}: ${parts.join(', ')}.${applied ? ` ${applied[0].toUpperCase()}${applied.slice(1)} applied.` : ''}`;
   }
 
-  async function importLibrary(lib, label = 'the library') {
-    const r = await applyLibrary(lib);
+  /**
+   * A library file, or several files read as one (importFiles). When adding
+   * it and replacing with it would leave different packs here -- packs of
+   * yours it does not have, or older revisions of yours -- the player picks
+   * Add or Replace first; otherwise it is added at once.
+   *
+   * `title` names it in the notice ("Library", "3 files"), `what` starts the
+   * question ("This library has"), and `failed` is what could not be read.
+   */
+  async function offerBatch(lib, { title, what, failed = [] }) {
+    const plan = planHere(lib);
+    const waiting = { lib, title, what, failed, plan };
+    if (!plan.missing.length && !plan.older.length) return finishBatch(waiting, false);
+    pendingImport = waiting;
+    notice = null; error = null;
+    render();
+    // The question sits under the dialog's heading; the Import packs button
+    // that led here is at the foot.
+    dialog.scrollTop = 0;
+    dialog.querySelector('[data-import-mode="add"]')?.focus({ preventScroll: true });
+    return { ok: true, pending: true };
+  }
+
+  async function finishBatch({ lib, title, failed }, replace) {
+    pendingImport = null;
+    const r = await applyLibrary(lib, { replace });
     runtime.refresh();
-    notice = libraryNotice(lib, r);
-    error = r.failed.length ? `${label}: ${r.failed.length} pack${r.failed.length === 1 ? ' was' : 's were'} not imported: ${r.failed.slice(0, 6).join('; ')}.` : null;
+    const all = [...failed, ...r.failed];
+    notice = batchNotice(lib, title, r);
+    error = all.length
+      ? `${all.length} not imported: ${all.slice(0, 6).join('; ')}${all.length > 6 ? `; and ${all.length - 6} more` : ''}.`
+      : null;
     showPaste = false;
     say('ok', notice);
     if (error) say('err', error);
     render();
-    return { ok: !r.failed.length, error, library: r };
+    return { ok: !all.length, error, library: r };
   }
 
   /**
-   * Why a pack file may not be stored here, or null: it has a bundled pack's
-   * id, or it is an older revision of a pack this browser has. `why` follows
-   * the file's name; `fix` is said only when one file was imported.
+   * Why a single pack file may not be stored here, or null: it has a bundled
+   * pack's id, or it is an older revision of a pack this browser has. `why`
+   * follows the file's name and `fix` says what to do. Several files at once
+   * go through planLibrary instead, which sorts out the same two cases.
    */
   function refusal(summary) {
     if (runtime.bundled.some((e) => e.id === summary.id)) {
@@ -1898,7 +2040,7 @@ Hit Die: d12.
       : `Updated ${row.name} rev ${row.revision}`);
 
   async function importDoc(doc, label = 'the pack') {
-    if (looksLikeLibrary(doc)) return importLibrary(doc, label);
+    if (looksLikeLibrary(doc)) return offerBatch(doc, { title: 'Library', what: 'This library has' });
     const verdict = inspectExtension(doc);
     if (!verdict.ok) { error = `${label}: ${verdict.error}`; notice = null; render(); return verdict; }
     const refused = refusal(verdict.summary);
@@ -1938,9 +2080,10 @@ Hit Die: d12.
    * A book split into packs is a folder of them -- nine hundred, for one wiki
    * -- and choosing them one at a time through a file dialog is not a way to
    * load a folder. One file still goes the way it always has, message and
-   * all. More than one are each checked and stored in turn, and said once at
-   * the end: how many went in, and by name which did not and why, because a
-   * bad file among forty should cost that file and not the other thirty-nine.
+   * all. More than one are read into one library -- the packs of every file,
+   * and the switches and rules of any library among them -- and imported
+   * the way a library is (offerBatch), Add or Replace included. A file that
+   * cannot be read is named in the notice and costs only itself.
    *
    * The tables are rebuilt once, after the last, rather than after each: a
    * refresh re-reads every stored pack, and doing that per file is what would
@@ -1948,44 +2091,22 @@ Hit Die: d12.
    */
   async function importFiles(files) {
     if (files.length === 1) return importFile(files[0]);
-    const done = [];
     const failed = [];
+    const lib = { format: LIBRARY_FORMAT, packs: [], enabled: {} };
     for (const file of files) {
       let doc;
       try { doc = JSON.parse(await file.text()); } catch (err) { failed.push(`${file.name} is not valid JSON`); continue; }
       if (looksLikeLibrary(doc)) {
-        const r = await applyLibrary(doc);
-        done.push(...r.rows);
-        failed.push(...r.failed.map((f) => `${file.name}: ${f}`));
+        if (Array.isArray(doc.packs)) lib.packs.push(...doc.packs);
+        if (doc.enabled && typeof doc.enabled === 'object') Object.assign(lib.enabled, doc.enabled);
+        if (doc.campaignRules) lib.campaignRules = doc.campaignRules;
         continue;
       }
       const verdict = inspectExtension(doc);
       if (!verdict.ok) { failed.push(`${file.name}: ${verdict.error}`); continue; }
-      const refused = refusal(verdict.summary);
-      if (refused) { failed.push(`${file.name} ${refused.why}`); continue; }
-      try {
-        done.push(await runtime.store.save(doc, { origin: 'import' }));
-      } catch (err) {
-        failed.push(err.name === 'QuotaExceededError'
-          ? `${file.name}: this browser is out of space` : `${file.name}: ${err.message}`);
-        // Out of room is out of room for every file after it, too.
-        if (err.name === 'QuotaExceededError') break;
-      }
+      lib.packs.push(doc);
     }
-    runtime.refresh();
-    const updated = done.filter((r) => r.replaced).length;
-    const names = done.slice(0, 4).map((r) => r.name).join(', ') + (done.length > 4 ? `, and ${done.length - 4} more` : '');
-    notice = done.length
-      ? `Imported ${done.length} pack${done.length === 1 ? '' : 's'}${updated ? ` (${updated} updated)` : ''}: ${names}.`
-      : null;
-    error = failed.length
-      ? `${failed.length} file${failed.length === 1 ? ' was' : 's were'} not imported: ${failed.slice(0, 6).join('; ')}${failed.length > 6 ? `; and ${failed.length - 6} more` : ''}.`
-      : null;
-    if (notice) say('ok', notice);
-    if (error) say('err', error);
-    showPaste = false;
-    render();
-    return { ok: !failed.length, imported: done.length, failed };
+    return offerBatch(lib, { title: `${files.length} files`, what: `These ${files.length} files have`, failed });
   }
 
   function importText(text) {
@@ -2019,7 +2140,12 @@ Hit Die: d12.
   }
 
   return {
-    open() { view = 'list'; error = null; notice = null; confirmRemove = null; render(); if (!dialog.open) dialog.showModal(); },
+    open() {
+      view = 'list'; error = null; notice = null; confirmRemove = null;
+      picking = false; picked.clear(); confirmPick = false; pendingImport = null;
+      render();
+      if (!dialog.open) dialog.showModal();
+    },
     close() { dialog.close(); },
     importFile(file) { this.open(); return importFile(file); },
     importFiles(files) { this.open(); return importFiles([...files]); },

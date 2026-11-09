@@ -2205,10 +2205,17 @@ console.log('library -- every local pack and the switches as one file, imported 
   // Pack B is rev 3 here now; a library holding its rev 2 does not replace it.
   const older = { ...lib, packs: [{ ...lib.packs[1], revision: 2, description: 'older' }] };
   const p4 = planLibrary(older, against());
-  check('an older revision is skipped, not updated', [p4.update, p4.skipped], [[], [{ id: 'pack-b', why: 'rev 2 is older than rev 3 in this browser' }]]);
+  check('an older revision is listed apart, not updated', [p4.update, p4.skipped, p4.older.map((o) => [o.id, o.doc.revision, o.why])],
+    [[], [], [['pack-b', 2, 'rev 2 is older than rev 3 in this browser']]]);
   check('its switch still applies', p4.enabled['pack-b'], false);
+  check('the local packs it does not have are what a replace removes', p4.missing, ['pack-a', 'pack-c']);
+  check('a library with every local pack has none missing', planLibrary({ ...lib, packs: [...lib.packs, b.read('pack-c')] }, against()).missing, []);
   const newer = { ...lib, packs: [{ ...lib.packs[1], revision: 4 }] };
   check('a newer revision updates', planLibrary(newer, against()).update.map((d) => d.id), ['pack-b']);
+  // Two revisions of one pack in one import: the higher counts, in either order.
+  const twice = (revs) => planLibrary({ ...lib, packs: revs.map((revision) => ({ ...lib.packs[1], revision })) }, against());
+  check('a pack listed twice counts once, at its higher revision',
+    [twice([5, 4]).update.map((d) => d.revision), twice([4, 5]).update.map((d) => d.revision), twice([2, 5]).older.length], [[5], [5], 0]);
   check('olderRevision', [olderRevision({ revision: 2 }, { revision: 3 }), olderRevision({ revision: 3 }, { revision: 3 }),
     olderRevision({ revision: 4 }, { revision: 3 }), olderRevision({ revision: 1 }, null), olderRevision({}, {})], [true, false, false, false, false]);
   check('not a library, no plan', planLibrary({ format: 'x' }).add, []);

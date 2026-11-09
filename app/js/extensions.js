@@ -676,33 +676,41 @@ const packFingerprint = (ext) => {
  *
  * `bundledIds` are the deployment's packs, which a local pack may not shadow;
  * `local` is the store's `list()`; `read(id)` returns a stored pack's document.
- * Each pack in the library lands in one of four lists: `add` (not here),
+ * Each pack in the library lands in one of five lists: `add` (not here),
  * `update` (here, and different), `unchanged` (here, and the same apart from
- * the timestamps), `skipped` (not a pack, a bundled id, or an older revision
- * than the one here). `enabled` is the library's switch map limited to ids
- * this browser will have.
+ * the timestamps), `older` (`{id, doc, why}`: an older revision than the one
+ * here, which only a replace stores), `skipped` (not a pack, or a bundled
+ * id). A pack listed twice counts once, at its higher revision. `missing`
+ * is the local ids the library does not have, which a replace removes.
+ * `enabled` is the library's switch map limited to ids this browser will have.
  */
 export function planLibrary(lib, { bundledIds = [], local = [], read = () => null } = {}) {
-  const plan = { add: [], update: [], unchanged: [], skipped: [], enabled: {} };
+  const plan = { add: [], update: [], unchanged: [], older: [], skipped: [], missing: [], enabled: {} };
   if (!looksLikeLibrary(lib)) return plan;
   const bundled = new Set(arr(bundledIds).map(str));
   const here = new Map(arr(local).map((row) => [row.id, row]));
+  const byId = new Map();
   for (const doc of arr(lib.packs)) {
     const verdict = inspectExtension(doc);
     if (!verdict.ok) { plan.skipped.push({ id: str(doc?.id || doc?.name || '?'), why: verdict.error }); continue; }
-    const { id } = verdict.summary;
+    const { id, revision } = verdict.summary;
     if (bundled.has(id)) { plan.skipped.push({ id, why: 'the same id as a bundled pack' }); continue; }
-    if (!here.has(id)) { plan.add.push(doc); continue; }
+    if (byId.has(id) && byId.get(id).revision > revision) continue;
+    byId.set(id, { doc, revision });
+  }
+  for (const [id, { doc, revision }] of byId) {
     const have = here.get(id);
-    if (olderRevision(verdict.summary, have)) {
-      plan.skipped.push({ id, why: `rev ${verdict.summary.revision} is older than rev ${num(have.revision, 1)} in this browser` });
+    if (!have) { plan.add.push(doc); continue; }
+    if (olderRevision({ revision }, have)) {
+      plan.older.push({ id, doc, why: `rev ${revision} is older than rev ${num(have.revision, 1)} in this browser` });
       continue;
     }
     const current = read(id);
     if (current && packFingerprint(current) === packFingerprint(doc)) plan.unchanged.push(id);
     else plan.update.push(doc);
   }
-  const willHave = new Set([...bundled, ...here.keys(), ...plan.add.map((d) => str(d.id)), ...plan.update.map((d) => str(d.id))]);
+  plan.missing = [...here.keys()].filter((id) => !byId.has(id));
+  const willHave = new Set([...bundled, ...here.keys(), ...byId.keys()]);
   for (const [id, on] of Object.entries(obj(lib.enabled))) {
     // Ids a normalized pack would take, so a library written by hand still matches.
     const key = slugId(id) || id;

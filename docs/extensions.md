@@ -137,18 +137,25 @@ already here replaces it (that is how a friend's rev 2 lands), unless its revisi
 lower than the stored one's: remove the stored pack first to go back to an older
 revision. A local pack cannot take a bundled pack's id.
 
-**Removing packs.** Each pack under *Mine* has its own ×. **Remove N packs** under the
-*Mine* heading removes every pack the search box and All/On/Off buttons show, and each
-author fold has the same button for its own packs. Both ask once more before removing.
+**Removing packs.** Each pack under *Mine* has its own ×. **Select packs to remove**
+under the *Mine* heading gives every pack a checkbox, and each author fold a checkbox
+that selects all its packs. **All shown** selects every pack the search box and
+All/On/Off buttons show. **Remove N packs** asks once more, then removes the selected
+packs.
 
 **Moving the whole set.** **Export library** writes every pack under *Mine* and which
 packs are on (bundled ones included) as one `.json` (`format:
 `character-sheet-extension-library`). Import it in another browser or on the deployed
 site the same way as a pack: drop it on the page, or **Import packs…**. Packs not there
-yet are added, packs that differ are updated, packs already current are left alone, an
-older revision of a pack here is skipped and listed, and
+yet are added, packs that differ are updated, packs already current are left alone, and
 the switches are applied; the notice says which browser the library came from, when,
 and the counts. Each pack under *Mine* also shows when it was last imported or saved.
+
+**Add or Replace.** A library file, or several pack files imported at once, asks first
+when this browser has packs the import does not, or newer revisions than it. **Add to
+my packs** keeps those packs and skips the older revisions. **Replace my packs** removes
+the packs the import does not have and stores its older revisions, so this browser ends
+up with the import's packs.
 
 ### Disciplines
 
