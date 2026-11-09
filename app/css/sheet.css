@@ -4170,35 +4170,30 @@ button.badge:hover { background: color-mix(in srgb, currentColor 10%, transparen
 .rowlist .item:last-child { border-bottom: 0; }
 .rowlist .item .t { font-size: 0.85rem; font-weight: 600; }
 .rowlist .item .d { font-size: 0.78rem; color: var(--cs-muted); }
-/* ---------- what a companion's table grants, opened out ----------
+/* ---------- a companion's abilities ----------
  *
- * The level is a heading and the abilities it granted sit under it, each
- * opening on what it does. The text is a pack's or the player's own, never
- * this engine's -- see `companionAbilityText`.
- *
- * Deliberately stacked rather than the label-and-value line this used to be.
- * A level can grant two rules ("Ability score increase, Multiattack"), and two
- * of them opened side by side against a level number is not a row any more.
+ * A row per ability, read as a talent ladder is: the level, the name, where
+ * it came from, and a Notes cell that folds with the pack's text under the
+ * player's note. The text is a pack's or the player's own, never this
+ * engine's -- see `companionAbilityText`. Level, From and the tick are held
+ * narrow; Notes takes what is left.
  */
-.gains { display: grid; gap: 2px; }
-/* The name, and the fold hard against the edge so a column of them lines up
-   whatever the names beside them are doing. */
-.gainrow > .statline { border-bottom: 0; padding: 0; gap: 6px; }
-.gainrow > .statline > button { flex: none; margin-left: auto; }
-.gainbody { padding: 2px 0 6px; display: grid; gap: 5px; }
-/* A pack's paragraph: reference rather than the character's own, so it is set
-   as the sheet sets everything it did not write, and credited. */
-.gainbody .packsays {
-  margin: 0; white-space: pre-wrap; border-left: 2px solid var(--cs-line); padding-left: 8px;
+table.compabilities > tbody > tr > td { vertical-align: top; }
+table.compabilities th.lvl, table.compabilities td.lvl { width: 3.6rem; text-align: center; }
+table.compabilities td.lvl input[type="number"] { width: 3.2rem; }
+table.compabilities th.aname { width: 30%; }
+table.compabilities th.from { width: 18%; }
+table.compabilities td.from { font-size: 0.74rem; color: var(--cs-muted); }
+table.compabilities th.tools, table.compabilities td.mid, table.compabilities td.tools { width: 1%; text-align: center; }
+/* Removed by hand, or notes for one no longer listed: kept, dimmed, the
+   removed one struck, so it can be put back. */
+table.compabilities tr.removed td, table.compabilities tr.unlisted td { color: var(--cs-muted); }
+table.compabilities tr.removed .aname { text-decoration: line-through; }
+/* A card has no column to keep: a table ability with nothing to say where it
+   came from drops the empty From line. */
+@container (max-width: 620px) {
+  table.compabilities.stacked > tbody > tr > td.from:empty { display: none; }
 }
-.gainbody .packfrom {
-  display: block; margin-top: 3px; font-size: 0.7rem; font-style: italic; opacity: 0.75;
-}
-/* Replaced by and the Removed tick on one line, wrapping on a phone. */
-.gainbody .byhand { display: flex; flex-wrap: wrap; align-items: end; gap: 6px 12px; }
-.gainbody .byhand > label.fld { flex: 1 1 14rem; max-width: 21rem; }
-/* Removed by hand: kept in its level, struck, so it can be put back. */
-.gainrow.removed > .statline > .value { text-decoration: line-through; color: var(--cs-muted); }
 /* Archetype pills on a class row: the name, and a cross that removes it and restores the class's own features. */
 .pills { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-right: 6px; vertical-align: middle; }
 .pill { display: inline-flex; align-items: center; gap: 2px; font-size: 0.74rem; padding: 1px 4px 1px 8px; border-radius: 12px;

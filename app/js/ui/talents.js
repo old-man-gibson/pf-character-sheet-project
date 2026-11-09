@@ -102,9 +102,12 @@ export function noteField(model, binding, text) {
  * the feat. It folds with the note under the one caret, and when the note is
  * empty the shut line is the start of `belowText`. `was` is the key that
  * entry folded under before it shared the caret, read while the player has
- * not chosen again.
+ * not chosen again. `startShut` overrides the length rule for a cell that
+ * has never been folded or opened.
  */
-export function foldingNote(model, binding, value, path, { name = '', below = '', belowText = '', was = '' } = {}) {
+export function foldingNote(model, binding, value, path, {
+  name = '', below = '', belowText = '', was = '', startShut = null,
+} = {}) {
   const text = String(value ?? '');
   const field = noteField(model, binding, text);
   const foldable = !!below || text.length > 60 || text.includes('\n');
@@ -112,7 +115,7 @@ export function foldingNote(model, binding, value, path, { name = '', below = ''
   const key = `tnote:${path}`;
   const folds = model.data?.uiPrefs?.collapsed || {};
   const said = folds[key] ?? (was ? folds[was] : undefined);
-  const shut = said === undefined ? text.length > LONG_NOTE : !!said;
+  const shut = said === undefined ? (startShut ?? text.length > LONG_NOTE) : !!said;
   const what = below ? 'the note and what the pack says' : 'the whole note';
   const caret = foldButton(model, key, {
     open: !shut, cls: 'disclose catfold', title: shut ? `Show ${what}` : 'Collapse it to one line',
