@@ -42,6 +42,13 @@ const EXT_PACK_FOLD = 60;
 const EXT_SHELF_FOLD = 200;
 
 /*
+ * The fold of the whole Extension blocks panel. Past EXT_SHELF_FOLD it starts
+ * folded too: a heading per pack was over a thousand elements, redrawn by
+ * every edit on the ⚙ tab, the campaign rules included.
+ */
+const EXT_BLOCKS_KEY = 'ext-blocks';
+
+/*
  * The most blocks a search draws. A search folds nothing, so one letter
  * matched nearly every block.
  */
@@ -162,7 +169,7 @@ export function renderSystemManagerPanel(model, ctx) {
         <button class="primary" data-action="add-system">+ Add system tab</button>
       </div>
     </section>
-    ${extensionBlocksPanel(model, ctx)}</div>`;
+    ${rows.collapsible(model, EXT_BLOCKS_KEY, extensionBlocksPanel(model, ctx), extensionRuntime.blocks().length > EXT_SHELF_FOLD)}</div>`;
 }
 
 /*
