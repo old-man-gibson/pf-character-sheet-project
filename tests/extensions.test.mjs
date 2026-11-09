@@ -22,7 +22,7 @@ import {
   veilDetails, veilOwn, veilIsWritten,
 } from '../app/js/model.js';
 import { storageMedium, indexedDbMedium, packMedium, PACK_STORE } from '../app/js/pack-storage.js';
-import { LIBRARY_FORMAT, buildLibrary, looksLikeLibrary, planLibrary } from '../app/js/extensions.js';
+import { LIBRARY_FORMAT, buildLibrary, looksLikeLibrary, planLibrary, olderRevision } from '../app/js/extensions.js';
 import { convertPack, liftClassAccess } from '../tools/veils-to-table.mjs';
 import { isBasePick } from '../app/js/rules.js';
 import { splitBaseAbilities } from '../app/js/paste-import.js';
@@ -225,6 +225,7 @@ console.log('store -- save, list, read, enable, remove; bundled toggles remember
   check('missing reads null', store.read('nope'), null);
   const again = await store.save({ format: EXTENSION_FORMAT, id: 'pack-a', name: 'Pack A2', revision: 2 });
   check('same id replaces', [again.replaced, again.revision, store.list().length, store.list()[0].name], [true, 2, 1, 'Pack A2']);
+  check('and says which revision it replaced', [row.previousRevision, again.previousRevision], [null, 1]);
   await store.setEnabled('pack-a', false);
   check('disabled', store.list()[0].enabled, false);
   await store.setEnabled('bundled-x', false, { bundled: true });
@@ -241,8 +242,9 @@ console.log('store -- save, list, read, enable, remove; bundled toggles remember
   check('bundled lists too', [...store.disabledBundled()], ['b2']);
   await store.setEnabled(['b2'], true, { bundled: true });
   await store.remove('pack-b');
-  await store.remove('pack-c');
-  await store.remove('pack-a');
+  check('one removed', store.list().map((e) => e.id), ['pack-a', 'pack-c']);
+  // Remove N packs takes a list, as one write.
+  await store.remove(['pack-c', 'pack-a']);
   check('removed from index and storage', [store.list(), storage.keys().filter((k) => k.includes(':ext:'))], [[], []]);
   let threw = false;
   try { await store.save({ format: EXTENSION_FORMAT, name: '' }); } catch { threw = true; }
@@ -2200,6 +2202,22 @@ console.log('library -- every local pack and the switches as one file, imported 
   const p3 = planLibrary(changed, against());
   check('a changed pack is an update', p3.update.map((d) => d.id), ['pack-a']);
   check('a bundled id and junk are skipped', p3.skipped.map((s) => s.id), ['bundled-x', '?']);
+  // Pack B is rev 3 here now; a library holding its rev 2 does not replace it.
+  const older = { ...lib, packs: [{ ...lib.packs[1], revision: 2, description: 'older' }] };
+  const p4 = planLibrary(older, against());
+  check('an older revision is listed apart, not updated', [p4.update, p4.skipped, p4.older.map((o) => [o.id, o.doc.revision, o.why])],
+    [[], [], [['pack-b', 2, 'rev 2 is older than rev 3 in this browser']]]);
+  check('its switch still applies', p4.enabled['pack-b'], false);
+  check('the local packs it does not have are what a replace removes', p4.missing, ['pack-a', 'pack-c']);
+  check('a library with every local pack has none missing', planLibrary({ ...lib, packs: [...lib.packs, b.read('pack-c')] }, against()).missing, []);
+  const newer = { ...lib, packs: [{ ...lib.packs[1], revision: 4 }] };
+  check('a newer revision updates', planLibrary(newer, against()).update.map((d) => d.id), ['pack-b']);
+  // Two revisions of one pack in one import: the higher counts, in either order.
+  const twice = (revs) => planLibrary({ ...lib, packs: revs.map((revision) => ({ ...lib.packs[1], revision })) }, against());
+  check('a pack listed twice counts once, at its higher revision',
+    [twice([5, 4]).update.map((d) => d.revision), twice([4, 5]).update.map((d) => d.revision), twice([2, 5]).older.length], [[5], [5], 0]);
+  check('olderRevision', [olderRevision({ revision: 2 }, { revision: 3 }), olderRevision({ revision: 3 }, { revision: 3 }),
+    olderRevision({ revision: 4 }, { revision: 3 }), olderRevision({ revision: 1 }, null), olderRevision({}, {})], [true, false, false, false, false]);
   check('not a library, no plan', planLibrary({ format: 'x' }).add, []);
 }
 

@@ -656,6 +656,15 @@ export function buildLibrary({ packs = [], enabled = {}, from = '', campaignRule
   };
 }
 
+/**
+ * Is an imported pack (`summary`, from `inspectExtension`) an older revision
+ * than `row`, the stored pack with the same id? An import never replaces a
+ * newer revision; the player removes the stored pack first to go back.
+ */
+export function olderRevision(summary, row) {
+  return !!row && num(summary?.revision, 1) < num(row.revision, 1);
+}
+
 /** A pack's content with the timestamps the store rewrites on every save left out. */
 const packFingerprint = (ext) => {
   const { createdAt, updatedAt, ...rest } = normalizeExtension(ext);
@@ -667,27 +676,41 @@ const packFingerprint = (ext) => {
  *
  * `bundledIds` are the deployment's packs, which a local pack may not shadow;
  * `local` is the store's `list()`; `read(id)` returns a stored pack's document.
- * Each pack in the library lands in one of four lists: `add` (not here),
+ * Each pack in the library lands in one of five lists: `add` (not here),
  * `update` (here, and different), `unchanged` (here, and the same apart from
- * the timestamps), `skipped` (not a pack, or a bundled id). `enabled` is the
- * library's switch map limited to ids this browser will have.
+ * the timestamps), `older` (`{id, doc, why}`: an older revision than the one
+ * here, which only a replace stores), `skipped` (not a pack, or a bundled
+ * id). A pack listed twice counts once, at its higher revision. `missing`
+ * is the local ids the library does not have, which a replace removes.
+ * `enabled` is the library's switch map limited to ids this browser will have.
  */
 export function planLibrary(lib, { bundledIds = [], local = [], read = () => null } = {}) {
-  const plan = { add: [], update: [], unchanged: [], skipped: [], enabled: {} };
+  const plan = { add: [], update: [], unchanged: [], older: [], skipped: [], missing: [], enabled: {} };
   if (!looksLikeLibrary(lib)) return plan;
   const bundled = new Set(arr(bundledIds).map(str));
   const here = new Map(arr(local).map((row) => [row.id, row]));
+  const byId = new Map();
   for (const doc of arr(lib.packs)) {
     const verdict = inspectExtension(doc);
     if (!verdict.ok) { plan.skipped.push({ id: str(doc?.id || doc?.name || '?'), why: verdict.error }); continue; }
-    const { id } = verdict.summary;
+    const { id, revision } = verdict.summary;
     if (bundled.has(id)) { plan.skipped.push({ id, why: 'the same id as a bundled pack' }); continue; }
-    if (!here.has(id)) { plan.add.push(doc); continue; }
+    if (byId.has(id) && byId.get(id).revision > revision) continue;
+    byId.set(id, { doc, revision });
+  }
+  for (const [id, { doc, revision }] of byId) {
+    const have = here.get(id);
+    if (!have) { plan.add.push(doc); continue; }
+    if (olderRevision({ revision }, have)) {
+      plan.older.push({ id, doc, why: `rev ${revision} is older than rev ${num(have.revision, 1)} in this browser` });
+      continue;
+    }
     const current = read(id);
     if (current && packFingerprint(current) === packFingerprint(doc)) plan.unchanged.push(id);
     else plan.update.push(doc);
   }
-  const willHave = new Set([...bundled, ...here.keys(), ...plan.add.map((d) => str(d.id)), ...plan.update.map((d) => str(d.id))]);
+  plan.missing = [...here.keys()].filter((id) => !byId.has(id));
+  const willHave = new Set([...bundled, ...here.keys(), ...byId.keys()]);
   for (const [id, on] of Object.entries(obj(lib.enabled))) {
     // Ids a normalized pack would take, so a library written by hand still matches.
     const key = slugId(id) || id;
@@ -930,14 +953,16 @@ export function extensionStore(medium = globalThis.localStorage) {
         [extensionKey(ext.id), JSON.stringify(ext)],
         [EXTENSIONS_KEY, JSON.stringify(index)],
       ]);
-      return { ...row, local: true, replaced: !!prior };
+      return { ...row, local: true, replaced: !!prior, previousRevision: prior ? num(prior.revision, 1) : null };
     },
 
+    /** Remove a pack, or a list of them as one write (Remove N packs). */
     async remove(id) {
       await open();
+      const ids = new Set([id].flat());
       const index = readIndex();
-      index.extensions = index.extensions.filter((e) => e.id !== id);
-      await write([[EXTENSIONS_KEY, JSON.stringify(index)], [extensionKey(id), null]]);
+      index.extensions = index.extensions.filter((e) => !ids.has(e.id));
+      await write([[EXTENSIONS_KEY, JSON.stringify(index)], ...[...ids].map((one) => [extensionKey(one), null])]);
     },
 
     /**
