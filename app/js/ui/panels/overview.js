@@ -13,7 +13,9 @@
  * Bodies keep the indentation they had as methods, because the markup they
  * return is whitespace-sensitive; see ui/panels/gear.js for the reasoning.
  */
-import { esc, portraitFrame } from '../html.js';
+import { esc, nameDatalist, portraitFrame } from '../html.js';
+import { runtime as extensionRuntime } from '../../extension-runtime.js';
+import { archetypesForClassRow } from '../../extensions.js';
 import { renderSessionBoard } from './session.js';
 import { field } from '../fields.js';
 import { effectiveMythicTier, hitDieGain } from '../../rules.js';
@@ -95,6 +97,22 @@ function progressionSelect(i, field, value, choices, label, format = String, bea
   return itemSelect('classes', i, field, now, opts, null, null, {
     kind: 'number', attrs: `aria-label="${esc(label)}" class="${all ? 'beaten' : ''}"${why ? ` title="${esc(why)}"` : ''}`,
   });
+}
+
+/**
+ * A class row's Archetypes cell: the text naming its archetypes, which
+ * suggests the ones the active packs offer for the class as it is typed in
+ * (`#fillDatalist`). A name typed or picked there that is one of them is
+ * added as from Extension blocks (`data-archcell`, `typeArchetypes`). With
+ * none to offer it is the plain text box it always was.
+ */
+function archetypeCell(model, x, i) {
+  if (!archetypesForClassRow(model, extensionRuntime.blocks(), i).length) {
+    return itemText('classes', i, 'archetypes', x.archetypes);
+  }
+  const id = `archetypes:classes|${i}`;
+  return `${itemText('classes', i, 'archetypes', x.archetypes, '', { list: id, attrs: 'data-archcell' })}${
+    nameDatalist(id, 'archetypes', { classes: [x.name] })}`;
 }
 import { loadLine, weaponsPanel, wealthPanel } from './gear.js';
 import { playLogPanel } from '../play-log.js';
@@ -1965,7 +1983,7 @@ function classesPanel(model, ctx) {
           <td data-label="Archetypes">${(Array.isArray(x.archetypeStack) && x.archetypeStack.length) ? `<span class="pills">${x.archetypeStack.map((a) => `
             <span class="pill" title="${esc(`${a.name}: an archetype from an extension pack.${a.removedCells?.length ? ` Replaced ${[...new Set(a.removedCells.map((r) => r.name))].join(', ')}.` : ''}${a.touches?.length ? ` Changes: ${a.touches.join(', ')}.` : ''} × removes it and restores the class's features.`)}">
               ${esc(a.name)}${removeAction('arch-remove', { class: x.name, name: a.name }, { what: a.name })}
-            </span>`).join('')}</span>` : ''}${itemText('classes', i, 'archetypes', x.archetypes)}</td>
+            </span>`).join('')}</span>` : ''}${archetypeCell(model, x, i)}</td>
           <td class="mid" data-label="Systems">${sysButton(x, i)}</td>
           ${rowTools('classes', i)}
         </tr>${sysPicker(x, i)}`;

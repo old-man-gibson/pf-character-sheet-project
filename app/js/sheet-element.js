@@ -61,7 +61,7 @@ import {
 import { runtime as extensionRuntime } from './extension-runtime.js';
 import { packageBlocks, packageId, swapPackage } from './packages.js';
 import { COMPANION_KINDS, COMPANION_LABELS } from './companions.js';
-import { applyBlock, looksLikeExtension, looksLikeLibrary, removeArchetype } from './extensions.js';
+import { applyBlock, looksLikeExtension, looksLikeLibrary, removeArchetype, typeArchetypes } from './extensions.js';
 import { describePublish, publishDocument } from './publish.js';
 import { SHEET_LINK, adoptSheetStyles } from './styles.js';
 import {
@@ -3888,6 +3888,7 @@ export class CharacterSheetElement extends HTMLElement {
       sphere: list.dataset.sphere || '',
       query: input.value,
       max: DATALIST_MAX,
+      model: this.#model,
     });
     if (!hits) return;
     // Rebuilt only when the answer actually changed: typing another letter
@@ -5879,6 +5880,21 @@ export class CharacterSheetElement extends HTMLElement {
     });
 
     /*
+     * A class's Archetypes cell. A name typed or picked there that is an
+     * archetype the active packs offer for the class is added as from
+     * Extension blocks; the rest is kept as text (typeArchetypes). Skipped by
+     * the generic writer below.
+     */
+    root.querySelectorAll('[data-archcell]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const index = Number(input.dataset.item.split('|')[1]);
+        const said = typeArchetypes(this.#model, index, input.value, extensionRuntime.blocks());
+        if (said) this.#historyNote = said;
+        this.#rerender(input);
+      });
+    });
+
+    /*
      * A catalogue cell's suggestions, filled while it is typed into.
      *
      * The `<datalist>` is emitted empty (see `nameDatalist`) because carrying
@@ -5907,7 +5923,7 @@ export class CharacterSheetElement extends HTMLElement {
 
     // Generic list-item field -> model path.
     root.querySelectorAll('[data-item]').forEach((input) => {
-      if (input.dataset.talentFill) return;
+      if (input.dataset.talentFill || input.hasAttribute('data-archcell')) return;
       input.addEventListener('change', () => {
         const [list, index, field] = input.dataset.item.split('|');
         const value = readControl(input);

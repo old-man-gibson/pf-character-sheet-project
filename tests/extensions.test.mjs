@@ -2438,5 +2438,88 @@ console.log('runtime -- the active packs, their blocks and their menus are worke
   globalThis.localStorage = had;
 }
 
+console.log('archetypes cell -- a class row suggests its pack archetypes, and a name typed there is added as from Extension blocks');
+{
+  const { runtime } = await import('../app/js/extension-runtime.js');
+  const { datalistOptions } = await import('../app/js/ui/datalist.js');
+  const { renderOverviewPanel } = await import('../app/js/ui/panels/overview.js');
+  const { blankView } = await import('../app/js/ui/view-state.js');
+  const { undoLabel } = await import('../app/js/model/undo.js');
+  const { archetypesForClassRow, archetypeNamed, typeArchetypes } = await import('../app/js/extensions.js');
+  const arch = (name, cls, feature, text = 'This replaces bravery.') => ({ kind: 'archetype', name, class: cls, features: [{ level: 2, name: feature, text }] });
+  const packA = normalizeExtension({ id: 'zz-arch-a', name: 'Pack A', blocks: [
+    arch('Dragoon', 'Fighter', 'Leaping Charge'),
+    arch('Shield Wall', 'Fighter', 'Wall Stance'),
+    arch('Trailblazer', 'Ranger', 'Blaze', 'This replaces track.'),
+    arch('Twin Blade', 'Fighter (Unchained)', 'Paired Strikes A', 'This replaces weapon training.'),
+  ] });
+  const packB = normalizeExtension({ id: 'zz-arch-b', name: 'Pack B', blocks: [
+    arch('Dragoon', 'Fighter (Unchained)', 'Unchained Charge'),
+    arch('Twin Blade', 'Fighter (Unchained)', 'Paired Strikes B', 'This replaces weapon training.'),
+  ] });
+  const blocks = activeBlocks([packA, packB]);
+  const fighter = () => {
+    const c = new Character(blankDocument({ name: 'zz_arch', level: 5 }));
+    for (let l = 1; l <= 5; l++) c.setProgressionClass(l, 0, 'Fighter');
+    applyBlock(c, { kind: 'class', name: 'Fighter', hd: 10, bab: 1, skillRanks: 2,
+      features: [{ level: 1, name: 'Bonus feat' }, { level: 2, name: 'Bravery', text: 'Brave.' }, { level: 5, name: 'Weapon training', text: 'Trained.' }] });
+    return c;
+  };
+  const rowOf = (c) => c.data.classes.findIndex((x) => x.name === 'Fighter');
+  const row = (c) => c.data.classes[rowOf(c)];
+  const notes = (c) => c.classFeatureNotes('Fighter').map((n) => n.name);
+
+  const c = fighter();
+  const i = rowOf(c);
+  check('a row is offered the archetypes whose class is that row, in pack order',
+    archetypesForClassRow(c, blocks, i).map((b) => `${b.name}/${b.extName}`),
+    ['Dragoon/Pack A', 'Shield Wall/Pack A', 'Twin Blade/Pack A', 'Dragoon/Pack B', 'Twin Blade/Pack B']);
+  check('the exact class wins a shared name, then the pack loaded last',
+    [archetypeNamed(c, blocks, i, 'dragoon').features[0].name, archetypeNamed(c, blocks, i, 'Twin Blade').features[0].name,
+      archetypeNamed(c, blocks, i, 'Trailblazer'), archetypeNamed(c, blocks, i, '')],
+    ['Leaping Charge', 'Paired Strikes B', null, null]);
+
+  runtime.bundled = [packA, packB];
+  const opts = (query) => datalistOptions('archetypes', { classes: ['Fighter'], query, model: c });
+  check('the cell suggests them by name, labeled with the pack and any other class',
+    opts('').map((o) => `${o.value} | ${o.label}`),
+    ['Dragoon | Pack A', 'Dragoon | Fighter (Unchained) · Pack B', 'Shield Wall | Pack A',
+      'Twin Blade | Fighter (Unchained) · Pack A', 'Twin Blade | Fighter (Unchained) · Pack B']);
+  check('after a comma it matches what follows and keeps what is before',
+    [opts('Dragoon, sh').map((o) => o.value), opts('Dragoon, ').map((o) => o.value).includes('Dragoon, Dragoon')],
+    [['Dragoon, Shield Wall'], false]);
+  check('a class with no row, or no model, is offered nothing',
+    [datalistOptions('archetypes', { classes: ['Ranger'], model: c }), datalistOptions('archetypes', { classes: ['Fighter'] })], [[], []]);
+  const cell = () => renderOverviewPanel(c, blankView()).match(/<td data-label="Archetypes">[\s\S]*?<\/td>/)?.[0] || '';
+  check('the cell points at its own list, named for its class',
+    [cell().includes(`list="archetypes:classes|${i}"`), cell().includes('data-archcell'),
+      cell().includes(`<datalist id="archetypes:classes|${i}" data-fill="archetypes" data-classes="Fighter"></datalist>`)],
+    [true, true, true]);
+  runtime.bundled = [];
+  check('with no pack archetypes it is the plain box', [cell().includes('list='), cell().includes('data-archcell')], [false, false]);
+
+  // A picked name gives the sheet + Add gives, in one undo step under the same name.
+  const added = fighter();
+  applyArchetype(added, blocks.find((b) => b.name === 'Dragoon' && b.extId === 'zz-arch-a'));
+  const said = typeArchetypes(c, i, 'dragoon', blocks);
+  check('a typed name is added as from Extension blocks', [said, row(c).archetypes, row(c).archetypeStack.map((e) => e.name)],
+    [`Added Dragoon to Fighter, replacing Bravery.`, 'Dragoon', ['Dragoon']]);
+  check('the sheet is the one + Add gives', JSON.stringify(c.data), JSON.stringify(added.data));
+  check('in one undo step, named as + Add names it', [undoLabel(c), undoLabel(added)], ['Added Dragoon to Fighter', 'Added Dragoon to Fighter']);
+  c.undo();
+  check('one undo takes the text and the archetype back', [row(c).archetypes, row(c).archetypeStack?.length ?? 0, notes(c).includes('Bravery')], ['', 0, true]);
+
+  const t = fighter();
+  const ti = rowOf(t);
+  check('free text matching nothing stays a label', [typeArchetypes(t, ti, 'Homebrew Knight', blocks), row(t).archetypes, row(t).archetypeStack?.length ?? 0],
+    ['', 'Homebrew Knight', 0]);
+  check('a name already in the text is left as text', [typeArchetypes(t, ti, 'Homebrew Knight, Dragoon', blocks).startsWith('Added Dragoon'),
+    /^Shield Wall cannot be added: it and Dragoon both change /.test(typeArchetypes(t, ti, 'Homebrew Knight, Dragoon, Shield Wall', blocks)),
+    row(t).archetypes, row(t).archetypeStack.map((e) => e.name)],
+  [true, true, 'Homebrew Knight, Dragoon, Shield Wall', ['Dragoon']]);
+  check('the pack\'s spelling replaces the typed one', [typeArchetypes(t, ti, 'Homebrew Knight, Dragoon, Shield Wall, twin blade', blocks).startsWith('Added Twin Blade'),
+    row(t).archetypes, notes(t).includes('Paired Strikes B')], [true, 'Homebrew Knight, Dragoon, Shield Wall, Twin Blade', true]);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

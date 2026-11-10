@@ -2391,6 +2391,93 @@ export function archetypeStatus(model, block) {
   return { ok: true, className: row.name };
 }
 
+/*
+ * The archetype blocks in a list of blocks, by the class each names, with
+ * where each sits in the list. runtime.blocks() answers with the same array
+ * until a pack changes, so this is worked out once per change of packs and
+ * not once per keystroke in an Archetypes cell.
+ */
+const ARCHETYPES_BY_CLASS = new WeakMap();
+function archetypesByClass(blocks) {
+  let held = ARCHETYPES_BY_CLASS.get(blocks);
+  if (!held) {
+    held = new Map();
+    arr(blocks).forEach((b, at) => {
+      if (b?.kind !== 'archetype' || !str(b.name).trim()) return;
+      const k = lower(b.class);
+      if (!held.has(k)) held.set(k, { className: str(b.class).trim(), list: [] });
+      held.get(k).list.push({ b, at });
+    });
+    ARCHETYPES_BY_CLASS.set(blocks, held);
+  }
+  return held;
+}
+
+/**
+ * The archetypes these blocks offer for row `index` of the Classes table:
+ * each one whose class is that row, the row applyArchetype adds it to, less
+ * the ones already on it. In the blocks' order, so the pack loaded last
+ * comes last.
+ */
+export function archetypesForClassRow(model, blocks, index) {
+  const row = model.list('classes')?.[index];
+  if (!row || !str(row.name).trim()) return [];
+  const on = new Set(arr(row.archetypeStack).map((e) => lower(e.name)));
+  const out = [];
+  for (const { className, list } of archetypesByClass(blocks).values()) {
+    if (classRowFor(model, className)[0] !== index) continue;
+    for (const hit of list) if (!on.has(lower(hit.b.name))) out.push(hit);
+  }
+  return out.sort((a, z) => a.at - z.at).map((hit) => hit.b);
+}
+
+/**
+ * The archetype a name typed into row `index`'s Archetypes cell is, or null.
+ * When several for that row have the name, the one whose class is the row's
+ * own name wins, then the one from the pack loaded last.
+ */
+export function archetypeNamed(model, blocks, index, name) {
+  const want = lower(name);
+  if (!want) return null;
+  const hits = archetypesForClassRow(model, blocks, index).filter((b) => lower(b.name) === want);
+  if (hits.length < 2) return hits[0] || null;
+  const rowName = lower(model.list('classes')[index].name);
+  const exact = hits.filter((b) => lower(b.class) === rowName);
+  return (exact.length ? exact : hits).at(-1);
+}
+
+/**
+ * Write what was typed into row `index`'s Archetypes cell. Each name it adds
+ * that is an archetype the blocks offer for the class is added as from
+ * Extension blocks (applyArchetype), under the name its pack gives it; the
+ * rest stays text. The text and the archetypes are one undo step. Returns
+ * what applyArchetype said, or '' when the cell only changed as text.
+ */
+export function typeArchetypes(model, index, value, blocks) {
+  const row = model.list('classes')?.[index];
+  if (!row) return '';
+  const names = (s) => str(s).split(',').map((n) => n.trim()).filter(Boolean);
+  const had = new Set(names(row.archetypes).map(lower));
+  const typed = names(value);
+  const picks = new Map();
+  for (const n of typed) {
+    if (had.has(lower(n)) || picks.has(lower(n))) continue;
+    const b = archetypeNamed(model, blocks, index, n);
+    if (b) picks.set(lower(n), b);
+  }
+  const fits = [...picks.values()].filter((b) => archetypeStatus(model, b).ok);
+  if (!fits.length) {
+    // None can go on: the text is kept as typed, and the note says why.
+    model.setItem('classes', index, 'archetypes', value);
+    return [...picks.values()].map((b) => applyArchetype(model, b)).join(' ');
+  }
+  const text = typed.map((n) => picks.get(lower(n))?.name ?? n).join(', ');
+  return asOneUndo(model, `Added ${fits.map((b) => b.name).join(' and ')} to ${row.name}`, () => {
+    model.setItem('classes', index, 'archetypes', text);
+    return [...picks.values()].map((b) => applyArchetype(model, b)).join(' ');
+  });
+}
+
 /** The names in a Progression "Special" cell; null when the cell is a rule-group map this must not touch. */
 function cellNames(cell) {
   if (cell === undefined || cell === null || cell === '') return [];
