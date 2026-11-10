@@ -2504,7 +2504,9 @@ console.log('archetypes cell -- a class row suggests its pack archetypes, and a 
   const said = typeArchetypes(c, i, 'dragoon', blocks);
   check('a typed name is added as from Extension blocks', [said, row(c).archetypes, row(c).archetypeStack.map((e) => e.name)],
     [`Added Dragoon to Fighter, replacing Bravery.`, 'Dragoon', ['Dragoon']]);
-  check('the sheet is the one + Add gives', JSON.stringify(c.data), JSON.stringify(added.data));
+  // Each blank stamps the second it was made, so the stamp is left out.
+  const sheet = (m) => JSON.stringify({ ...m.data, source: { ...m.data.source, convertedAt: '' } });
+  check('the sheet is the one + Add gives', sheet(c), sheet(added));
   check('in one undo step, named as + Add names it', [undoLabel(c), undoLabel(added)], ['Added Dragoon to Fighter', 'Added Dragoon to Fighter']);
   c.undo();
   check('one undo takes the text and the archetype back', [row(c).archetypes, row(c).archetypeStack?.length ?? 0, notes(c).includes('Bravery')], ['', 0, true]);
