@@ -1855,6 +1855,53 @@ console.log('a catalogue pack\'s tables are menus too: class options, and powers
     check('so adding it over a class row keeps that row\'s numbers', [row.hd, row.bab, row.goodFort, row.goodWill, row.skillRanks], [12, 1, true, true, 6]);
   }
 
+  // What is inside a feature is set apart by how it looks: a label in more
+  // emphasis, a label over a list, a table's caption, a note. It stays in the
+  // feature above it, and the feature's level is read before it.
+  {
+    const page = (kind, entry) => normalizeExtension({ format: 'character-sheet-extension', formatVersion: 1, id: kind, name: kind,
+      provides: { catalogues: { catalogues: [{ kind, entries: [{ source: 'Book p. 8', fields: [], ...entry }] }] } } });
+    const striker = activeBlocks([page('class', { name: 'Striker', fields: [['Hit Die', 'd10']], text: [
+      'Qi (Su): Strikers gain qi. They regain it in the following ways.',
+      '*Killing Blow:* At 10th level, they regain 1 qi when they drop a foe.',
+      'Qi Techniques: A striker spends qi on these.',
+      '0 qi point(s):\n- *Near Miss (Ex):* At 10th level, a miss deals damage anyway.\nUnarmed Strike: At 1st level, a striker gains Improved Unarmed Strike.',
+      'Combo Strikes: At 3rd level, a striker can use combo strikes.',
+      'One Hit:\n- *Dual Strike (Ex):* At 8th level, it hits twice.',
+      'Table: Combo Strikes\nLevel\tHits\n3rd\t1',
+      'Note: The table counts hits.',
+      'At 7th level, the striker gains three hit combo strikes.',
+      'Two Hits:\n- *Leg Sweep (Ex):* The target falls prone.',
+      'Still Mind (Ex): At 4th level, a striker gains a +2 bonus on saves against enchantments.',
+    ].join('\n\n') })]).find((b) => b.kind === 'class');
+    check('emphasized labels, labels over a list, tables and notes are not features; a label right after a list item is',
+      striker.features.map((f) => [f.level, f.name]),
+      [[1, 'Qi (Su)'], [1, 'Qi Techniques'], [1, 'Unarmed Strike'], [3, 'Combo Strikes'], [4, 'Still Mind (Ex)']]);
+    const combo = striker.features.find((f) => f.name === 'Combo Strikes').text;
+    check('and they stay in the feature above them',
+      [striker.features[0].text.includes('Killing Blow'), ['Dual Strike', 'counts hits', 'three hit', 'Leg Sweep'].every((w) => combo.includes(w))], [true, true]);
+
+    const [shaman] = activeBlocks([page('archetype', { name: 'Dragon Caller', fields: [['Class', 'Marshal']], text: [
+      'Draconic Aura (Su): Instead of inspiring auras, the caller projects draconic power. This ability replaces inspiring auras.',
+      '*Power:* Allies gain a bonus to melee damage rolls.',
+      '*Greater Power:* At 10th level, this aura replaces power and doubles the bonus.',
+      'Natural Armor (Ex): At 7th level, the caller grows scales. This ability replaces inspiring voice.',
+    ].join('\n\n') })]).filter((b) => b.kind === 'archetype');
+    check('an archetype\'s options are not features, and what one option replaces of another is not a swap',
+      shaman.features.map((f) => [f.level, f.name, f.replaces]),
+      [[1, 'Draconic Aura', ['inspiring aura']], [7, 'Natural Armor', ['inspiring voice']]]);
+
+    // With no feature above it, such a label is a feature after all.
+    const [visions] = activeBlocks([page('archetype', { name: 'Seer', fields: [['Class', 'Thaumaturge']], text:
+      'The seer\'s eyes are black.\n\nAt 7th level, the seer gains the following invocation:\n- *Shared Vision:* Allies see too.\n\n*This ability replaces the channel punishment invocation.*' })])
+      .filter((b) => b.kind === 'archetype');
+    check('a page whose only label heads a list keeps it as its feature', visions.features.map((f) => f.replaces), [['channel punishment invocation']]);
+
+    const race = activeBlocks([page('race', { name: 'Ridgeling', text: 'Ridgeling Racial Traits\n\nRacial Points: 10\n\nDarkvision: Ridgelings see in the dark.' })])
+      .find((b) => b.kind === 'race');
+    check('a race\'s point cost is not a trait', race.traits.map((t) => t.name), ['Darkvision']);
+  }
+
   // An archetype entry is an archetype block for each class it names.
   {
     const arch = (entries, blocks = []) => normalizeExtension({ format: 'character-sheet-extension', formatVersion: 1, id: 'arch', name: 'arch', blocks,
