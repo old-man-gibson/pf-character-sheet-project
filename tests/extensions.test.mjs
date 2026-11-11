@@ -10,7 +10,7 @@ import {
   isPackKey, packsWorthMoving, mergeSphere, catalogueEntryKey, splitAbilityType, minLevelIn,
   swapKey, parseSwaps, parseStacksWith, archetypeStatus, removeArchetype,
   ruleForLevels, repeatColumns, optionCataloguesFrom, optionCataloguesFromTables, classFeatureTextFromTables, parseOptionReplaces, applyArchetype, swapsMeet,
-  castingTableFromText,
+  castingTableFromText, classTableRows, choiceLevels,
 } from '../app/js/extensions.js';
 import {
   parseClassFeatures, parseGroupFeatures, parseNamedLines, parseMenuOptions, menuOptionLines,
@@ -1296,8 +1296,8 @@ console.log('apply -- blocks land on a blank character through the model');
   check('re-applying merges tags with what the player marked', [...c.data.classes[0].systems].sort(), ['path-of-war', 'spheres-of-might']);
   check('features without text add no template group', (c.data.templates || []).length, 0);
   applyBlock(c, { ...barb, features: [{ level: 1, name: 'Rage', text: 'r' }, { level: 3, name: 'Trap sense +1', text: 't' }, { level: 6, name: 'Trap sense +2', text: '' }, { level: 9, name: 'Trap sense +3', text: 't' }] });
-  check('features with text go under the class once each, +N variants folded -- the Template tab is for templates',
-    [c.classFeatureNotes('Barbarian').map((f) => f.name), c.data.templates.length], [['Rage', 'Trap sense +1'], 0]);
+  check('features with text go under the class once each, +N variants folded under the column name -- the Template tab is for templates',
+    [c.classFeatureNotes('Barbarian').map((f) => f.name), c.data.templates.length], [['Rage', 'Trap sense'], 0]);
   c.data.templates.length = 0;
 
   const before = c.data.abilities.con.score;
@@ -1900,6 +1900,154 @@ console.log('a catalogue pack\'s tables are menus too: class options, and powers
     const race = activeBlocks([page('race', { name: 'Ridgeling', text: 'Ridgeling Racial Traits\n\nRacial Points: 10\n\nDarkvision: Ridgelings see in the dark.' })])
       .find((b) => b.kind === 'race');
     check('a race\'s point cost is not a trait', race.traits.map((t) => t.name), ['Darkvision']);
+  }
+
+  // A class page that carries its own table: the table says where each
+  // feature lands, so a pick the class makes again and again gets a column.
+  {
+    const page = [
+      'Hit Die: d8.',
+      '',
+      '| | Spells Per Day |',
+      '| Level | Base Attack Bonus | Fort Save | Ref Save | Will Save | Special | AC Bonus | Spells Per Day |',
+      '| 1st | +0 | +0 | +2 | +0 | Sneak attack +1d6, smite evil 1/day, *summon monster I*, 1st favored enemy | +0 | +1 level of arcane class/',
+      '+1 level of divine class |',
+      '| 2nd | +1 | +0 | +3 | +0 | Evasion, rogue talent | +0 | — |',
+      '| 3rd | +2 | +1 | +3 | +1 | Sneak attack +2d6, *summon monster II*, weapon training 1 | +1 | — |',
+      '| 4th | +3 | +1 | +4 | +1 | Rogue talent, smite evil 2/day | +1 | — |',
+      '| 5th | +3 | +1 | +4 | +1 | Weapon training 2, 2nd favored enemy | +1 | — |',
+      '| 6th | +4 | +2 | +5 | +2 | Rogue talent | +2 | — |',
+      '',
+      '**Weapon and Armor Proficiency**: Light armor.',
+      '',
+      '**Sneak Attack**: The rogue deals extra damage.',
+      '',
+      '**Opportune Dodge (Ex)**: At 2nd level she slips aside.',
+      '',
+      '**Legendary Rogue Talents**: Starting at 2nd level, a rogue gains one of the following talents:',
+      '',
+      '**Fast Stealth**: She moves at full speed.',
+      '',
+      '**Trap Spotter**: She notices traps.',
+      '',
+      '**AC Bonus**: She adds her Wisdom to her AC.',
+    ].join('\n');
+    check('the table\'s rows, each Special entry its own, a cell broken over two lines passed over',
+      classTableRows(page).map((r) => [r.level, r.special.join(', ')]),
+      [[1, 'Sneak attack +1d6, smite evil 1/day, summon monster I, 1st favored enemy'], [2, 'Evasion, rogue talent'],
+        [3, 'Sneak attack +2d6, summon monster II, weapon training 1'], [4, 'Rogue talent, smite evil 2/day'], [5, 'Weapon training 2, 2nd favored enemy'],
+        [6, 'Rogue talent']]);
+    check('a page with no Level and Special columns has no class table', classTableRows('| Level | 0 | 1st |\n| 1st | 3 | 1 |'), []);
+    const tabled = normalizeExtension({ format: 'character-sheet-extension', formatVersion: 1, id: 'tab', name: 'tab',
+      provides: { catalogues: { catalogues: [{ kind: 'class', entries: [{ name: 'Rogue', fields: [['Hit Die', 'd8']], source: 'Book p. 1', text: page }] }] } } });
+    const block = activeBlocks([tabled]).find((b) => b.kind === 'class');
+    check('the table\'s names are the features, at its levels; a paragraph it does not name stands where its text says',
+      block.features.map((f) => `${f.level} ${f.name}`),
+      ['1 Sneak attack +1d6', '1 smite evil 1/day', '1 summon monster I', '1 1st favored enemy', '2 Evasion', '2 rogue talent', '3 Sneak attack +2d6',
+        '3 summon monster II', '3 weapon training 1', '4 Rogue talent', '4 smite evil 2/day', '5 Weapon training 2', '5 2nd favored enemy', '6 Rogue talent',
+        '1 Weapon and Armor Proficiency', '2 Opportune Dodge (Ex)', '1 AC Bonus']);
+    const talents = block.features.find((f) => f.name === 'rogue talent').text;
+    check('a paragraph names the entry its name ends with; the ones a "following" list offers stay in it, and one a column is headed by stands',
+      [block.features.filter((f) => f.text).map((f) => f.name), talents.includes('Fast Stealth: She moves'), talents.includes('Trap Spotter: She notices')],
+      [['Sneak attack +1d6', 'rogue talent', 'Weapon and Armor Proficiency', 'Opportune Dodge (Ex)', 'AC Bonus'], true, true]);
+    check('repeats become columns: the counts, ranks and numerals that grow come off the title',
+      repeatColumns(block.features).map((c) => [c.name, c.rule, c.at.map((a) => a.text).join(' ')]),
+      [['Sneak attack', '1, 3', '+1d6 +2d6'], ['Smite evil', '1, 4', '1/day 2/day'], ['Summon monster', '1, 3', 'I II'], ['Favored enemy', '1, 5', '1st 2nd'],
+        ['Rogue talent', '2, 4, 6', '  '], ['Weapon training', '3, 5', '1 2']]);
+
+    setOptionCatalogues([{ name: 'Rogue Talent', class: 'Rogue', feature: 'Rogue Talent', options: [{ name: 'Fast Stealth' }] }]);
+    const s = new Character(blankDocument({ name: 'Rog', level: 6 }));
+    for (let l = 1; l <= 6; l++) s.setProgressionClass(l, 0, 'Rogue');
+    applyBlock(s, block);
+    const g = s.data.progression.classFeatures.Rogue;
+    check('added, the talents are a column of their own and Special keeps the one-offs',
+      [g.columns, g.byLevel[2], g.byLevel[1].Special],
+      [['Special', 'Sneak attack', 'Smite evil', 'Summon monster', 'Favored enemy', 'Rogue talent', 'Weapon training'],
+        { Special: 'Evasion, Opportune Dodge (Ex)', 'Rogue talent': '' }, 'Weapon and Armor Proficiency, AC Bonus']);
+    check('the text goes under the class, a column\'s under the column\'s name',
+      s.classFeatureNotes('Rogue').map((n) => n.name), ['Sneak attack', 'Rogue talent', 'Weapon and Armor Proficiency', 'Opportune Dodge (Ex)', 'AC Bonus']);
+    check('the talents owed are counted, and the column picks from the rogue\'s menu',
+      [s.classFeatureDue('Rogue')['Rogue talent'], optionCatalogueFor('Rogue', 'Rogue talent')?.name], [3, 'Rogue Talent']);
+    setOptionCatalogues([]);
+
+    // The offer can sit before a feature's asides, and an ability that says
+    // when it arrives is never part of another.
+    const qiPage = [
+      '| Level | Base Attack Bonus | Fort Save | Ref Save | Will Save | Special |',
+      '| 1st | +0 | +2 | +2 | +2 | Qi, hunter\'s focus |',
+      '',
+      'Qi (Su): A monk regains qi in the following ways:',
+      '',
+      '*Killing Blow:* She regains 1 qi when she drops a foe.',
+      '',
+      'Qi Techniques: She spends qi on these.',
+      '',
+      'Hunter\'s Focus: She chooses one of the following:',
+      '',
+      'Relentless (Ex): At 5th level, she keeps going.',
+    ].join('\n');
+    const qi = activeBlocks([normalizeExtension({ format: 'character-sheet-extension', formatVersion: 1, id: 'qi', name: 'qi',
+      provides: { catalogues: { catalogues: [{ kind: 'class', entries: [{ name: 'Striker', fields: [], text: qiPage }] }] } } })]).find((b) => b.kind === 'class');
+    check('a list offered before the asides takes what follows; a typed ability with its own level stands',
+      [qi.features.map((f) => `${f.level} ${f.name}`), qi.features[0].text.includes('Qi Techniques: She spends')],
+      [['1 Qi', '1 hunter\'s focus', '5 Relentless (Ex)'], true]);
+  }
+
+  // A page without a table: a choice its text says comes again is spread
+  // to each of those levels; a number that grows is not a choice.
+  {
+    check('the levels a sentence hands out a pick at', [
+      choiceLevels('At 2nd level and every 2 levels thereafter the blacksmith gains one smithing insight.'),
+      choiceLevels('Starting at 2nd level, a rogue gains one rogue talent. She gains an additional rogue talent for every 2 levels of rogue attained after 2nd level.'),
+      choiceLevels('At 4th, 12th, and 20th levels, a warmage gains a bonus feat for which they meet the prerequisites.'),
+      choiceLevels('He may choose one of the following virtues at 1st level and an additional virtue at 3rd level and every three levels thereafter until all seven are attained.'),
+      choiceLevels('The warmage gains another arcane strategy at 3rd level and every odd level thereafter.'),
+      choiceLevels('Starting at 2nd level, and then again every 2 levels thereafter (up to 18th level), a cryptic learns a unique ability.'),
+      choiceLevels('He gains an additional dance move for every two levels of breakdancer he attains.'),
+    ].map((l) => l.join(' ')), [
+      '2 4 6 8 10 12 14 16 18 20', '2 4 6 8 10 12 14 16 18 20', '4 12 20', '1 3 6 9 12 15 18', '3 5 7 9 11 13 15 17 19',
+      '2 4 6 8 10 12 14 16 18', '1 2 4 6 8 10 12 14 16 18 20',
+    ]);
+    check('a feature growing is not a pick', [
+      choiceLevels('This damage increases by 1d6 at 3rd level and every two levels thereafter.'),
+      choiceLevels('He gains an additional re-roll per day at 5th level and every 4 levels thereafter.'),
+      choiceLevels('At 1st level, a rogue gains a talent.'),
+    ], [[], [], []]);
+    const wiki = normalizeExtension({ format: 'character-sheet-extension', formatVersion: 1, id: 'wiki', name: 'wiki',
+      provides: { catalogues: { catalogues: [{ kind: 'class', entries: [{ name: 'Blacksmith', fields: [['Hit Die', 'd10']], text: [
+        'Thunderous Blows (Ex): At 1st level the blacksmith deals 1d6 extra damage. This damage increases by 1d6 at 3rd level and every two levels thereafter.',
+        'Smithing Insight (Ex): At 2nd level and every 2 levels thereafter the blacksmith gains one smithing insight.',
+      ].join('\n\n') }] }] } } });
+    const block = activeBlocks([wiki]).find((b) => b.kind === 'class');
+    check('the insight lands at each of its levels, with its text once; the growing blows stay where they start',
+      [block.features.map((f) => `${f.level} ${f.name}`).join(', '), block.features.filter((f) => f.text).length,
+        repeatColumns(block.features).map((c) => [c.name, c.rule])],
+      ['1 Thunderous Blows (Ex), 2 Smithing Insight (Ex), 4 Smithing Insight (Ex), 6 Smithing Insight (Ex), 8 Smithing Insight (Ex), 10 Smithing Insight (Ex), '
+        + '12 Smithing Insight (Ex), 14 Smithing Insight (Ex), 16 Smithing Insight (Ex), 18 Smithing Insight (Ex), 20 Smithing Insight (Ex)', 2,
+      [['Smithing Insight', '2, +2']]]);
+  }
+
+  // A menu of one type of a kind answers to a column named for the type.
+  {
+    setOptionCatalogues([
+      { name: 'Wild Talent: utility', feature: 'Wild Talent: utility', options: [{ name: 'Basic Kinesis' }] },
+      { name: 'Wild Talent: infusion', feature: 'Wild Talent: infusion', options: [{ name: 'Kinetic Blade' }] },
+    ]);
+    check('"Utility wild talent" and "Infusion" columns pick from their type\'s menu',
+      [optionCatalogueFor('Kineticist', 'Utility wild talent')?.name, optionCatalogueFor('Kineticist', 'Infusion')?.name, optionCatalogueFor('Kineticist', 'Burn')],
+      ['Wild Talent: utility', 'Wild Talent: infusion', null]);
+    setOptionCatalogues([]);
+  }
+
+  // One class option entry whose text lists its options as labelled paragraphs.
+  {
+    const listed = optionCataloguesFromTables({ catalogues: { catalogues: [{ kind: 'class option', entries: [{
+      name: 'Blacksmith Smithing Insight', fields: [['Class', 'Blacksmith'], ['Option', 'Smithing Insight']], source: 'Book p. 4',
+      text: 'Spheres of Might\n\nDurable: Armor lasts.\n\nPrerequisite: Blacksmith 4th level.\n\nKeen Edge (Ex): Blades cut.\n\nMasterwork Eye: He spots flaws.',
+    }] }] } })[0];
+    check('each labelled paragraph is an option, a Prerequisite staying with the one above it',
+      [listed.name, listed.options.map((o) => [o.name, o.type, o.minLevel])],
+      ['Blacksmith Smithing Insight', [['Durable', null, 4], ['Keen Edge', 'Ex', null], ['Masterwork Eye', null, null]]]);
   }
 
   // An archetype entry is an archetype block for each class it names.
