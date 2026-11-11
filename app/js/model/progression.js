@@ -93,10 +93,22 @@ export function setOptionCatalogues(list) {
   VISIBLE_MENUS = [...OPTION_CATALOGUES.values()].filter((c) => !c.hidden);
   MENUS_BY_FEATURE = new Map();
   MENUS_BY_CLASS = new Map();
+  const add = (index, key, c) => {
+    if (!index.has(key)) index.set(key, []);
+    index.get(key).push(c);
+  };
   for (const c of VISIBLE_MENUS) {
-    for (const [index, key] of [[MENUS_BY_FEATURE, c.featureKey], [MENUS_BY_CLASS, c.classKey]]) {
-      if (!index.has(key)) index.set(key, []);
-      index.get(key).push(c);
+    add(MENUS_BY_FEATURE, c.featureKey, c);
+    add(MENUS_BY_CLASS, c.classKey, c);
+  }
+  // A menu of one type of a kind ("Wild Talent: utility") is also what a
+  // column named for the type answers to: a class table writes "utility wild
+  // talent" or "infusion". After the menus named so outright, which win.
+  for (const c of VISIBLE_MENUS) {
+    const typed = !c.classKey && c.feature.match(/^([^:]+):\s*(.+)$/);
+    if (!typed) continue;
+    for (const key of new Set([menuKey(typed[2]), menuKey(`${typed[2]} ${typed[1]}`)])) {
+      if (key && key !== c.featureKey) add(MENUS_BY_FEATURE, key, c);
     }
   }
 }

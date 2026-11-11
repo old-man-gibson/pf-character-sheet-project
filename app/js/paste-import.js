@@ -23,7 +23,7 @@
  * Pure: text in, blocks and leftovers out. No DOM, no storage.
  */
 
-import { babFromText, minLevelIn, normalizeBlock, featureKey } from './extensions.js';
+import { babFromText, minLevelIn, normalizeBlock, featureKey, specialEntries, tableFeatures } from './extensions.js';
 import { isGuileSphere, sphereSide } from './rules.js';
 import { TEXT_STEPS, cleanText, classLevels } from './text.js';
 import { looksLikePackageList, readPackageList } from './package-text.js';
@@ -582,30 +582,10 @@ export function readClass(lines, pre = new Set()) {
   // Feature prose, from the table down.
   const tableKeys = new Set(table.rows.flatMap((r) => r.special.map(featureKey)));
   const prose = readFeatureProse(lines, { skipLabels: CLASS_LABELS, startAt: tableEnd + 1, tableKeys, mark, pre });
-  const proseByKey = new Map();
-  for (const p of prose) if (!proseByKey.has(featureKey(p.name))) proseByKey.set(featureKey(p.name), p);
-  const matched = new Set();
-
-  // A page's table and prose do not always agree on a name ("opportune
-  // strike" on the table, "Opportune Slash (Ex): At 8th level…" below): a
-  // prose entry that names the same level and starts with the same word is
-  // the same feature.
-  const usedProse = new Set();
-  const findProse = (special, level) => {
-    const exact = proseByKey.get(featureKey(special));
-    if (exact) return exact;
-    const first = featureKey(special).split(' ')[0];
-    return prose.find((p) => !usedProse.has(p) && p.level === level && !tableKeys.has(featureKey(p.name)) && featureKey(p.name).split(' ')[0] === first) || null;
-  };
-  const features = [];
-  for (const row of table.rows) {
-    for (const special of row.special) {
-      const p = findProse(special, row.level);
-      if (p) { matched.add(featureKey(p.name)); matched.add(featureKey(special)); usedProse.add(p); }
-      features.push({ level: row.level, name: special, text: p ? p.text : '' });
-    }
-    if (row.extra.length) features.push({ level: row.level, name: row.extra.map(([h, v]) => `${h} ${v}`).join(' / '), text: '' });
-  }
+  // The table's names are the features, each with its paragraph's text.
+  const paired = tableFeatures(table.rows, prose);
+  const matched = new Set(paired.features.filter((f) => f.prose).flatMap((f) => [featureKey(f.prose.name), featureKey(f.name)]));
+  const features = paired.features.map(({ level, name: n, text }) => ({ level, name: n, text }));
   const capstones = [];
   for (const p of prose) {
     if (matched.has(featureKey(p.name))) { markRange(p.from, p.to); continue; }
@@ -847,7 +827,7 @@ export function readClassTable(lines) {
     for (let k = span[0]; k <= span[1]; k++) used.add(k);
     const babText = cells[idx.bab >= 0 ? idx.bab : 1] || '';
     const specialText = cells[idx.special >= 0 ? idx.special : 5] || '';
-    const special = specialText.split(/,\s*(?![^()]*\))/).map((s) => s.trim()).filter((s) => s && s !== '—' && s !== '-');
+    const special = specialEntries(specialText);
     const extra = extraCols.map(([h, ci]) => [h, cells[ci]]).filter(([, v]) => v !== undefined && v !== '' && v !== '—');
     rows.push({
       level, bab: babText, fort: cells[idx.fort >= 0 ? idx.fort : 2], ref: cells[idx.ref >= 0 ? idx.ref : 3],
