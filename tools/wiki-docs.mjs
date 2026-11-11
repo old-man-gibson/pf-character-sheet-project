@@ -20,6 +20,9 @@
  *                     for the run that does everything else
  *     --source <s>    only source books whose name contains this
  *     --max <n>       split a group larger than n entries into parts
+ *     --templates <f> the wiki's own templates, from `wiki-dump.mjs --ns 10`;
+ *                     the ones in `EXPANDED` are written out from their
+ *                     source instead of being guessed at
  *     --dry           report what it would write, write nothing
  *
  * Grouping is the whole point of the JSONL being a separate step. `--by kind`
@@ -55,7 +58,7 @@ import { createReadStream, writeFileSync, mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import {
-  unwrapTemplates, delist, stripMarkers, emphasis, delink, collapseFamilies,
+  unwrapTemplates, delist, stripMarkers, emphasis, delink, collapseFamilies, useTemplateSources,
 } from './wikitext.mjs';
 import { systemClassifier, GENERAL } from './wiki-systems.mjs';
 import { slugId } from '../app/js/extensions.js';
@@ -63,7 +66,7 @@ import { readArgs } from './lib/cli.mjs';
 
 /* ---------------- arguments ---------------- */
 
-const { opt, flag, inputs } = readArgs(['out', 'by', 'kind', 'skip', 'source', 'max', 'min']);
+const { opt, flag, inputs } = readArgs(['out', 'by', 'kind', 'skip', 'source', 'max', 'min', 'templates']);
 
 const out = opt('out');
 const by = String(opt('by', 'kind'));
@@ -82,7 +85,7 @@ const min = Number(opt('min', 20)) || 0;
 const dry = flag('dry');
 
 if (inputs.length !== 1 || (!out && !dry)) {
-  console.error('usage: node tools/wiki-docs.mjs <pages.jsonl> --out <dir> [--by kind|source|kind-source|system|book|field:sphere] [--min 20] [--kind veil] [--source "Ultimate Psionics"] [--max 1500] [--dry]');
+  console.error('usage: node tools/wiki-docs.mjs <pages.jsonl> --out <dir> [--by kind|source|kind-source|system|book|field:sphere] [--min 20] [--kind veil] [--source "Ultimate Psionics"] [--max 1500] [--templates templates.jsonl] [--dry]');
   process.exit(2);
 }
 /**
@@ -640,6 +643,26 @@ const records = [];
 const rl = createInterface({ input: createReadStream(inputs[0], { encoding: 'utf8' }), crlfDelay: Infinity });
 for await (const line of rl) {
   if (line.trim()) records.push(JSON.parse(line));
+}
+
+/*
+ * Templates written out from the wiki's own source. A class page's table is
+ * `{{Class Table|sp1=…}}`, every argument named, so the default rule leaves
+ * nothing of it -- and the table is what says which of the page's labelled
+ * paragraphs are the class's features and at what levels they come.
+ */
+const EXPANDED = ['Class Table'];
+if (opt('templates')) {
+  const sources = [];
+  const trl = createInterface({ input: createReadStream(opt('templates'), { encoding: 'utf8' }), crlfDelay: Infinity });
+  for await (const line of trl) {
+    if (!line.trim()) continue;
+    const rec = JSON.parse(line);
+    const name = String(rec.title || '').replace(/^Template:/i, '');
+    if (EXPANDED.some((n) => n.toLowerCase() === name.toLowerCase())) sources.push([name, rec.body]);
+  }
+  useTemplateSources(sources);
+  console.log(`templates expanded from source: ${sources.map(([n]) => n).join(', ') || 'none found'}`);
 }
 
 const systems = by === 'system' ? systemClassifier(records) : null;
