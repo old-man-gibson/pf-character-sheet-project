@@ -9,13 +9,13 @@
  * Bodies keep the indentation they had as methods, because the markup they
  * return is whitespace-sensitive; see ui/panels/gear.js for the reasoning.
  */
-import { esc, ABILITY_LABELS_LIST, nameDatalist, catalogueFace, catFoldKey } from '../html.js';
-import { foldingNote } from '../talents.js';
+import { esc, ABILITY_LABELS_LIST, nameDatalist } from '../html.js';
+import { fillNotesButton, foldingNote, markedName, noteFillAttrs } from '../talents.js';
 import * as fields from '../fields.js';
 import * as rows from '../rows.js';
 import * as prose from '../prose.js';
 import { pickSelect, mythicPickAt } from './stats.js';
-import { featDetails, featCatalogue } from '../../model.js';
+import { featCatalogue } from '../../model.js';
 import { featLevel, isAhead, rowLevel } from '../../model/feats.js';
 import { fromLevelField, fromLevelHead, plannedRow } from '../from-level.js';
 import {
@@ -33,17 +33,22 @@ export const MYTHIC_PATHS_LIST_ID = 'mythic-paths';
 export const FEAT_LIST_ID = 'cat-feats';
 
 /**
- * A feat's Notes cell: the player's note, folding the way a talent's does, and
- * the pack's entry for the feat under it, folding with it. `at` is the row
- * (`list|i`, or a plain path for the two fixed granted feats); the pack's
- * Read all box and the fold it had before it shared the caret are kept on it.
+ * A feat's Notes cell, a talent's: the note, folding to its first line. The
+ * pack's text for the feat is copied into an empty note when the feat is
+ * named, or by the list's Fill button. `at` is the row (`list|i`, or a plain
+ * path for the fixed granted feats).
  */
-function featNote(model, ctx, binding, f, at) {
-  const details = featDetails(f);
-  return foldingNote(model, binding, f.note, at.includes('|') ? `${at}|note` : `${at}.note`, {
-    name: f.name, below: catalogueFace(details, { ctx, key: at }), belowText: details?.text, was: catFoldKey(at),
-  });
+function featNote(model, binding, f, at) {
+  return foldingNote(model, binding, f.note, at.includes('|') ? `${at}|note` : `${at}.note`, { name: f.name });
 }
+
+/** A feat's name box, with the ✦ of the pack's entry for it. `scope` and `row` are its place in a Fill list. */
+function featName(model, box, at, scope, row) {
+  return markedName(model, box({ list: FEAT_LIST_ID, attrs: noteFillAttrs(scope, row) }), { k: 'feat', p: at });
+}
+
+/** The granted feats as a Fill list (model/note-fill.js). */
+const GRANTED_SCOPE = 'feats|grantedFeats|note';
 
 /**
  * Feats something hands you, rather than ones picked at a level.
@@ -76,9 +81,10 @@ function grantedFeatsSection(model, ctx) {
            below, which can. */''}
       <td class="grip"></td>
       <td data-stack="head"><span class="fsource">${esc(label)}</span>${hint ? `<div class="hint">${esc(hint)}</div>` : ''}</td>
-      <td data-stack="name">${fields.text(`grantedFeats.${key}.name`, g[key]?.name, 'Which feat?', { list: FEAT_LIST_ID })}</td>
+      <td data-stack="name">${featName(model, (o) => fields.text(`grantedFeats.${key}.name`, g[key]?.name, 'Which feat?', o),
+    `grantedFeats.${key}`, GRANTED_SCOPE, key)}</td>
       <td></td>
-      <td class="fnote" data-label="Notes">${featNote(model, ctx, `data-set="grantedFeats.${key}.note"`, g[key] || {}, `grantedFeats.${key}`)}</td>
+      <td class="fnote" data-label="Notes">${featNote(model, `data-set="grantedFeats.${key}.note"`, g[key] || {}, `grantedFeats.${key}`)}</td>
     </tr>`;
 
     return `<h4 class="subhead">Granted feats
@@ -95,15 +101,17 @@ function grantedFeatsSection(model, ctx) {
           ${(g.others || []).map((f, i) => `<tr ${rows.rowDrop('grantedFeats.others', i)}${plannedRow(isAhead(rowLevel(f), level), rowLevel(f))}>
             ${rows.rowGrip()}
             <td data-stack="head">${rows.itemText('grantedFeats.others', i, 'source', f.source, 'Oath 2, Attunement…')}</td>
-            <td data-stack="name">${rows.itemText('grantedFeats.others', i, 'name', f.name, 'Which feat?', { list: FEAT_LIST_ID })}</td>
+            <td data-stack="name">${featName(model, (o) => rows.itemText('grantedFeats.others', i, 'name', f.name, 'Which feat?', o),
+    `grantedFeats.others|${i}`, GRANTED_SCOPE, i)}</td>
             <td class="num" data-label="From lvl">${fromLevelField('grantedFeats.others', i, f)}</td>
-            <td class="fnote" data-label="Notes">${featNote(model, ctx, `data-item="grantedFeats.others|${i}|note"`, f, `grantedFeats.others|${i}`)}</td>
+            <td class="fnote" data-label="Notes">${featNote(model, `data-item="grantedFeats.others|${i}|note"`, f, `grantedFeats.others|${i}`)}</td>
             ${rows.rowToolsDragged('grantedFeats.others', i)}
           </tr>`).join('')}
         </tbody>
       </table></div>
       <div style="margin-top:8px">
         ${rows.addButton('grantedFeats.others', 'Add granted feat', { source: '', name: '', note: '' })}
+        ${fillNotesButton(model, GRANTED_SCOPE, 'feat')}
       </div>
       <p class="hint">
         ${hasMajor
@@ -187,6 +195,8 @@ function featGroupTable(model, ctx, group, g) {
     // slot, and a row can be moved among them but not added or removed.
     const fixed = group.levelUp === true;
     const list = `featGroups.${g}.entries`;
+    const scope = `feats|${list}|note`;
+    const fill = fillNotesButton(model, scope, 'feat');
     const level = Number(model.data.identity?.level) || 0;
     // Any other feat can wait for a level (From lvl), the way a slot does.
     const ahead = (f) => isAhead(featLevel(group, f), level);
@@ -203,7 +213,7 @@ function featGroupTable(model, ctx, group, g) {
           <td data-stack="name">${vmcAt(f)
     ? `<span class="vmcslot" title="Variant multiclass feature, set on Progression">VMC ${esc(vmcClass(model.data))}: ${
       esc(String(feature(vmcAt(f)).name ?? '').trim() || 'not set')}</span>`
-    : rows.itemText(`featGroups.${g}.entries`, i, 'name', f.name, '', { list: FEAT_LIST_ID })}</td>
+    : featName(model, (o) => rows.itemText(list, i, 'name', f.name, '', o), `${list}|${i}`, scope, i)}</td>
           <td data-label="${fixed ? 'Source / level' : 'Source'}">${fixed
     ? `<span class="dim" title="Set by the slot; move the feat to change its level">Level ${esc(f.detail)}</span>`
     : rows.itemText(list, i, 'detail', f.detail)}</td>
@@ -211,7 +221,7 @@ function featGroupTable(model, ctx, group, g) {
           <td class="fnote" data-label="Notes">${vmcAt(f)
     ? foldingNote(model, `data-set="vmc.features.${vmcAt(f)}.note"`, feature(vmcAt(f)).note,
       `vmc.features.${vmcAt(f)}.note`, { name: feature(vmcAt(f)).name })
-    : featNote(model, ctx, `data-item="${list}|${i}|note"`, f, `${list}|${i}`)}</td>
+    : featNote(model, `data-item="${list}|${i}|note"`, f, `${list}|${i}`)}</td>
           ${/* The arrows move a feat within its group only: taking one to
                another group stays a drag, on a desktop. The granted feats
                above are the same bargain and write the same cell. */''}
@@ -221,8 +231,9 @@ function featGroupTable(model, ctx, group, g) {
           <td colspan="${fixed ? 5 : 6}" class="empty">No feats here yet. Add one, or drag one here.</td>
         </tr>`}</tbody>
       </table></div>
-      ${fixed ? '' : `<div style="margin-top:8px">
-        ${rows.addButton(list, 'Add feat', { name: '', detail: '', note: '' })}
+      ${fixed && !fill ? '' : `<div style="margin-top:8px">
+        ${fixed ? '' : rows.addButton(list, 'Add feat', { name: '', detail: '', note: '' })}
+        ${fill}
       </div>`}`;
 }
 

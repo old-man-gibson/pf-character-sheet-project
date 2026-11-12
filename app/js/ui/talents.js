@@ -15,27 +15,32 @@ import { richText } from './links.js';
 import { hasTokens, plainTokens } from '../inline.js';
 import {
   catalogueEntry, sphereCatalogue, sphereTalent, talentPackage,
-  manipulationEntry, MANIPULATION_NEEDS,
+  manipulationEntry, MANIPULATION_NEEDS, featDetails, companionAbilityShared,
 } from '../model.js';
 
 /**
- * The button that fills every blank note the catalogue can answer, on one
- * side of the sheet.
+ * The button that fills every blank note the packs can answer, in one list:
+ * a side's talents, a feat group, a companion's feats or abilities. `scope`
+ * names the list (model/note-fill.js) and `what` is what its rows are, for
+ * the tooltip.
  *
- * A note is filled as its talent is typed, so a sheet written before its packs
+ * A note is filled as its name is typed, so a sheet written before its packs
  * were added has the marks and none of the text. The button is there only
  * while that is true -- it counts what it would fill, and is gone once there
  * is nothing left, so it is never a control that does nothing. What it fills
  * is what typing would have: empty notes only, and never over a word the
- * player wrote.
+ * player wrote. Each list has its own, and it fills that list alone.
  */
-export function fillNotesButton(model, sideKey) {
-  const n = model.blankTalentNotes(sideKey);
+export function fillNotesButton(model, scope, what = 'talent') {
+  const n = model.blankNotes(scope);
   if (!n) return '';
-  return `<button data-action="fill-talent-notes" data-side="${esc(sideKey)}"
-    title="Copy each talent's text from your packs into its empty Notes cell. Notes you have written are left alone."
+  return `<button data-action="fill-notes" data-scope="${esc(scope)}"
+    title="Copy each ${esc(what)}'s text from your packs into its empty Notes cell. Notes you have written are left alone."
     >✦ Fill ${n} blank note${n === 1 ? '' : 's'} from packs</button>`;
 }
+
+/** The attributes a name box carries so that typing a name fills its row's empty note. */
+export const noteFillAttrs = (scope, row) => `data-notefill="${esc(scope)}" data-noterow="${esc(row)}"`;
 
 /**
  * What each colour of ✦ means, under the talent tables.
@@ -60,6 +65,9 @@ export function talentLegend() {
 /** Past this a note is a talent's rules text rather than a remark, and starts folded. */
 const LONG_NOTE = 160;
 
+/** How much of a note a shut line carries: more than the widest column shows. */
+const PEEK_LENGTH = 500;
+
 /**
  * The box a note is written in -- with its tables drawn, while it is only
  * being read.
@@ -83,14 +91,16 @@ export function noteField(model, binding, text) {
 }
 
 /**
- * A Notes cell that folds: a talent's, a trait's, a feat's, a mythic ability's.
+ * A Notes cell that folds: a talent's, a trait's, a feat's, a mythic
+ * ability's, a companion ability's.
  *
  * A note used to be a remark -- "taken at 5th", "via the feat" -- and one line
  * was all it needed. Filled from a pack it is the talent's whole rules text,
  * and a level table of twenty of those is a page per class. So a note with
  * something to fold gets a caret: open, it is the prose box it always was;
- * shut, it is the first line of what the box says (formulas worked out), with
- * the whole of it on the tooltip, and clicking either opens it.
+ * shut, it is one line of what the box says (formulas worked out), as much
+ * as the column has room for, with the whole of it on the tooltip, and
+ * clicking either opens it.
  *
  * Which way it starts depends on what is in it. A short note opens, because
  * hiding half a line saves nothing; a long one starts shut, so that filling
@@ -98,42 +108,74 @@ export function noteField(model, binding, text) {
  * choice is the player's and is kept per row -- keyed on the row's path for
  * the reason `catFoldKey` gives.
  *
- * `below` is what a feat's cell carries under its note: the pack's entry for
- * the feat. It folds with the note under the one caret, and when the note is
- * empty the shut line is the start of `belowText`. `was` is the key that
- * entry folded under before it shared the caret, read while the player has
- * not chosen again. `startShut` overrides the length rule for a cell that
- * has never been folded or opened.
+ * `name` is what the row is called, for the head of the panel a shut note
+ * opens where the row is not a talent's.
  */
-export function foldingNote(model, binding, value, path, {
-  name = '', below = '', belowText = '', was = '', startShut = null,
-} = {}) {
+export function foldingNote(model, binding, value, path, { name = '' } = {}) {
   const text = String(value ?? '');
   const field = noteField(model, binding, text);
-  const foldable = !!below || text.length > 60 || text.includes('\n');
+  const foldable = text.length > 60 || text.includes('\n');
   if (!foldable) return field;
   const key = `tnote:${path}`;
-  const folds = model.data?.uiPrefs?.collapsed || {};
-  const said = folds[key] ?? (was ? folds[was] : undefined);
-  const shut = said === undefined ? (startShut ?? text.length > LONG_NOTE) : !!said;
-  const what = below ? 'the note and what the pack says' : 'the whole note';
+  const said = (model.data?.uiPrefs?.collapsed || {})[key];
+  const shut = said === undefined ? text.length > LONG_NOTE : !!said;
   const caret = foldButton(model, key, {
-    open: !shut, cls: 'disclose catfold', title: shut ? `Show ${what}` : 'Collapse it to one line',
+    open: !shut, cls: 'disclose catfold', title: shut ? 'Show the whole note' : 'Collapse it to one line',
   });
   if (!shut) {
-    return `<div class="notecell"><div class="noteline"><div class="notebox">${field}</div>${caret}</div>${below}</div>`;
+    return `<div class="notecell"><div class="noteline"><div class="notebox">${field}</div>${caret}</div></div>`;
   }
-  const shown = (hasTokens(text) ? plainTokens(model.renderProse(text)) : text).trim() || String(belowText ?? '').trim();
-  const first = shown.split('\n')[0];
+  const shown = (hasTokens(text) ? plainTokens(model.renderProse(text)) : text).trim();
+  // The line is cut by the cell, not here (`.notepeek` ends in an ellipsis
+  // where it meets the caret), so it runs as wide as the column is. Enough of
+  // the note to fill the widest column, its lines run together.
+  const line = shown.split(/\s*\n\s*/).filter(Boolean).join(' ').slice(0, PEEK_LENGTH);
   return `<div class="notecell"><div class="noteline">
       ${foldButton(model, key, {
     open: false,
     cls: 'notepeek',
     attrs: `type="button" data-tpop="${esc(JSON.stringify({ k: 'note', p: path, ...(name ? { n: name } : {}) }))}"`,
     title: shown,
-    text: esc(first.length > 90 ? `${first.slice(0, 90).replace(/\s+\S*$/, '')}…` : first || 'What the pack says'),
+    text: esc(line),
   })}
       ${caret}</div></div>`;
+}
+
+/**
+ * A name box with the ✦ of what a pack says about the name, for a row that is
+ * not a sphere talent's: a feat, or a companion's ability. `spec` is what the
+ * panel is opened with (`talentPopHtml`): `{ k: 'feat', p }` with the row's
+ * place (`list|i`, or a plain path), or `{ k: 'ability', p, n }` with the
+ * companion's path and the ability's name (`a: 1` for one added by hand).
+ * The box alone when no pack knows the name.
+ */
+export function markedName(model, field, spec) {
+  const info = packInfo(model, spec);
+  if (!info) return field;
+  const title = [info.head, ...info.lines, info.text ? `\n${info.text}` : '', info.source ? `\n${info.source}` : '']
+    .filter(Boolean).join('\n');
+  return `<span class="tcell">${field}<i class="tmark"
+      data-tpop="${esc(JSON.stringify(spec))}"
+      title="${esc(title)}" aria-label="${esc(`${info.head}: in a pack`)}">✦</i></span>`;
+}
+
+/** What the packs say about a feat row or a companion's ability, or null. */
+function packInfo(model, spec) {
+  const where = String(spec?.p ?? '');
+  if (spec?.k === 'feat') {
+    const [list, index] = where.split('|');
+    const row = where.includes('|') ? model.list(list)?.[Number(index)]
+      : where.split('.').reduce((o, k) => o?.[k], model.data);
+    const d = row && String(row.name ?? '').trim() ? featDetails(row) : null;
+    if (!d?.known) return null;
+    return { head: d.entry?.name || d.name, lines: d.fields.map(([k, v]) => `${k}: ${v}`), text: d.text, source: d.source };
+  }
+  if (spec?.k === 'ability') {
+    const b = where.split('.').reduce((o, k) => o?.[k], model.data);
+    const said = companionAbilityShared(spec.a ? { citedAbilities: b?.citedAbilities } : b, spec.n);
+    return said ? { head: String(spec.n), lines: [], text: said.text, source: said.source } : null;
+  }
+  return null;
 }
 
 /**
@@ -319,6 +361,10 @@ export function talentPopHtml(model, spec) {
     return panel(entry?.name || name, [row?.group, needs && `needs ${needs}`].filter(Boolean).join(' · '),
       [note ? 'Your note. Open the row with ▸ to edit it.' : ''],
       note || entry?.text || '', note ? '' : (entry ? '' : 'Not in the catalog'));
+  }
+  if (s?.k === 'feat' || s?.k === 'ability') {
+    const info = packInfo(model, s);
+    return info ? panel(info.head, '', info.lines, info.text, info.source) : '';
   }
   if (s?.k === 'note') {
     const where = String(s.p ?? '');

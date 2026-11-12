@@ -134,7 +134,7 @@ import * as techniques from './ui/panels/techniques.js';
 import * as manager from './ui/panels/manager.js';
 import { renderSkillsPanel, skillRowIndices } from './ui/panels/skills.js';
 import { readColumnWidths, writeColumnWidths, applyColumnWidths, bindColumnResize } from './ui/column-widths.js';
-import { fmt, SIZE_MODIFIERS, conditionInfo } from './rules.js';
+import { fmt, SIZE_MODIFIERS, conditionInfo, savedBefore } from './rules.js';
 import { analyse } from './formula.js';
 import { pretty } from './formula-format.js';
 import {
@@ -1408,6 +1408,10 @@ export class CharacterSheetElement extends HTMLElement {
     // Dragged box heights belong to this character's boxes, not the next one's.
     if (doc?.id !== this.#model?.data?.id) this.#boxHeights.clear();
     this.#model = new Character(structuredClone(doc));
+    // A sheet saved while pack text was shown under an empty note keeps that
+    // text, in the note. Here and not in the model's own corrections, because
+    // it reads the companions' worked-out abilities.
+    if (savedBefore(doc, 'pack-notes')) this.#model.fillShownNotes();
     // A new model starts with empty stacks, and what was kept for the old one
     // must not come back over this document on the next reload.
     this.#keepUndoSoon();
@@ -3127,6 +3131,16 @@ export class CharacterSheetElement extends HTMLElement {
    * the number's `title` still on it, which is the whole of the fallback: the
    * plain working, drawn by the operating system, exactly as before.
    */
+  /**
+   * A name box whose row has a note the packs can fill (`data-notefill`, the
+   * list's scope, and `data-noterow`, the row): once the name is written, an
+   * empty note takes the pack's text, as a talent's does. Says whether it did.
+   */
+  #fillNoteFor(input) {
+    const scope = input.dataset.notefill;
+    return scope ? this.#model.fillNotes(scope, input.dataset.noterow) > 0 : false;
+  }
+
   #openBreakdown(el) {
     clearTimeout(this.#bdTimer);
     if (el === this.#bdAnchor) return;
@@ -5851,9 +5865,10 @@ export class CharacterSheetElement extends HTMLElement {
         if (play) this.#model.play(play, () => this.#model.set(path, value));
         else this.#model.set(path, value);
         if (/^campaign(\.|$)/.test(path)) this.#shareCampaignEdit();
+        const filled = this.#fillNoteFor(input);
         // A catalogue cell has something to show the moment it holds a name
         // the catalogue knows, and that showing happens at render.
-        if (AFFECTS_DERIVED.test(path) || input.hasAttribute('list')) this.#rerender(input);
+        if (AFFECTS_DERIVED.test(path) || input.hasAttribute('list') || filled) this.#rerender(input);
       });
     });
 
@@ -5930,6 +5945,7 @@ export class CharacterSheetElement extends HTMLElement {
         const play = this.#fieldPlayLabel(`${list}.${index}.${field}`, value);
         if (play) this.#model.play(play, () => this.#model.setItem(list, Number(index), field, value));
         else this.#model.setItem(list, Number(index), field, value);
+        const filled = this.#fillNoteFor(input);
         /*
          * A catalogue cell re-renders on the way out of it.
          *
@@ -5944,7 +5960,8 @@ export class CharacterSheetElement extends HTMLElement {
         // and what it counts toward moves. And a grid cell that now holds a
         // formula or a web address: it is drawn as a prose field from here on
         // (rows.gridCell), which shows the value or the link.
-        if (AFFECTS_DERIVED.test(list) || input.hasAttribute('list') || field === 'level'
+        if (AFFECTS_DERIVED.test(list) || input.hasAttribute('list') || field === 'level' || filled
+          || input.hasAttribute('data-notefill')
           || (input.hasAttribute('data-gridcell') && prose.hasView(value))) this.#rerender(input);
       });
     });
@@ -7746,10 +7763,10 @@ export class CharacterSheetElement extends HTMLElement {
         this.#model.addGuileClass();
         this.#render();
         break;
-      case 'fill-talent-notes':
+      case 'fill-notes':
         // The button only exists while there is something to fill, so the
         // render that follows is also what takes it away.
-        this.#model.fillTalentNotes(button?.dataset.side);
+        this.#model.fillNotes(button?.dataset.scope);
         this.#render();
         break;
       case 'add-guile-sphere':

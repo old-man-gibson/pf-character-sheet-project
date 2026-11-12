@@ -13,7 +13,7 @@
  */
 import { esc, val } from '../html.js';
 import { itemArea, prose, renderedProse } from '../prose.js';
-import { fillNotesButton, talentLegend, talentMark, foldingNote } from '../talents.js';
+import { fillNotesButton, talentLegend, talentMark, foldingNote, markedName, noteFillAttrs } from '../talents.js';
 import { forwardedBadge } from '../badges.js';
 import { D20_ICON, rollButton } from '../roll.js';
 import { DEFAULT_ROLL_FORMAT, rollText } from '../../roll20.js';
@@ -57,7 +57,7 @@ import {
   spellCatalogue, spellDetails, powerCatalogue, powerDetails, veilsAvailable, veilDetails, veilOwn,
   slug, manifesterForwardKey, vancianForwardKey, poolTracker, essenceCellBlank,
 } from '../../model.js';
-import { ABILITY_LABELS_LIST, catalogueFace, nameDatalist, noteCell, packText, portraitHtml } from '../html.js';
+import { ABILITY_LABELS_LIST, nameDatalist, noteCell, packText, portraitHtml } from '../html.js';
 import {
   CARD_CASTING_TIMES, CARD_DAMAGE_TYPES, CARD_DURATIONS, CARD_RANGES, CARD_SAVES, CARD_STAT_FIELDS, CARD_TARGETS,
   TERRAIN_CHOICES, stepCastingTime,
@@ -72,7 +72,7 @@ import {
 import {
   BODY_TYPES, COMPANION_LABELS, COMPANION_LEVEL_SOURCES, CONJURED_ARCHETYPES,
   CONJURED_BASE_FORMS, CONJURED_LEVEL_SOURCES, NATURAL_ATTACKS,
-  abilityTextKey, addedAbilitiesOf, companionAbilityText, companionArchetypeNames, namesProtector, takesArchetypes,
+  abilityTextKey, addedAbilitiesOf, companionArchetypeNames, namesProtector, takesArchetypes,
   companionAttackKey, companionScopeName, companionSkillKey, emptyCompanionFeat, hasArmorSlot, isOtherConjurationTalent,
   wearsBarding,
 } from '../../companions.js';
@@ -2054,7 +2054,7 @@ function eidolonEvolutionsPanel(model, cc) {
  */
 function companionListPanel(model, {
   list, rows, heading, badge, what, sourcePlaceholder, hint, slots = null, extra = '',
-  only = null, template = emptyCompanionFeat(),
+  only = null, template = emptyCompanionFeat(), feats = false,
 }) {
     // With `slots` (one label per place the list is owed a row), the list is
     // drawn slot by slot whether or not a row is stored for each -- writing
@@ -2066,6 +2066,14 @@ function companionListPanel(model, {
     // to another panel over the same list (a conjured companion's two groups
     // of talents). Each row keeps its place in the list, which is what its
     // fields and its × are bound to, and Add adds `template`.
+    //
+    // With `feats`, the rows are feats: a name a pack knows carries its ✦,
+    // fills its row's empty note when typed, and the list has a Fill button.
+    const scope = `feats|${list}|notes`;
+    const fill = feats ? fillNotesButton(model, scope, 'feat') : '';
+    const nameBox = (r, i) => (feats
+      ? markedName(model, itemText(list, i, 'name', r.name, what, { attrs: noteFillAttrs(scope, i) }), { k: 'feat', p: `${list}|${i}` })
+      : itemText(list, i, 'name', r.name, what));
     const count = slots ? Math.max(rows.length, slots.length) : rows.length;
     const shown = Array.from({ length: count }, (_, i) => [rows[i] || {}, i])
       .filter(([r]) => !only || only(r));
@@ -2079,12 +2087,13 @@ function companionListPanel(model, {
         ${shown.map(([r, i]) => `<tr${over(i) ? ' class="over"' : ''}>
           <td data-stack="head">${itemText(list, i, 'source', r.source,
     slots ? (slots[i] ?? 'Over the allowance') : sourcePlaceholder)}</td>
-          <td data-stack="name">${itemText(list, i, 'name', r.name, what)}</td>
-          <td data-label="Notes">${itemArea(model, list, i, 'notes', r.notes, 1)}</td>
+          <td data-stack="name">${nameBox(r, i)}</td>
+          <td data-label="Notes">${foldingNote(model, `data-item="${list}|${i}|notes"`, r.notes, `${list}|${i}|notes`, { name: r.name })}</td>
           ${!slots || over(i) ? rowRemove(list, i) : '<td class="tools"></td>'}
         </tr>`).join('')}
       </tbody></table></div>` : `<p class="empty">No ${what.toLowerCase()}s yet.</p>`}
-      ${slots ? '' : `<div style="margin-top:6px">${addButton(list, `Add ${what.toLowerCase()}`, template)}</div>`}
+      ${slots && !fill ? '' : `<div style="margin-top:6px">${slots ? '' : addButton(list, `Add ${what.toLowerCase()}`, template)}
+        ${fill}</div>`}
       <p class="hint">${hint}</p>
     </section>`;
   }
@@ -2253,6 +2262,7 @@ function companionFeatsPanel(model, cc) {
         heading: 'Feats',
         badge: `<span class="badge${taken > slots.length ? ' err' : ''}">${taken} of ${slots.length}</span>`,
         what: 'Feat',
+        feats: true,
         slots,
         extra: `<div class="fieldgrid tight">${field('Bonus feats', formulaBox(cc, 'bonusFeats'))}</div>`,
         hint: `One feat at every odd Hit Die (${allowed} at ${k.hd ?? 0} HD), plus a slot for each bonus feat.
@@ -2267,6 +2277,7 @@ function companionFeatsPanel(model, cc) {
       heading: 'Feats',
       badge: `<span class="badge${over ? ' err' : ''}">${k.featsTaken ?? 0} of ${allowed}</span>`,
       what: 'Feat',
+      feats: true,
       // What the importer reads off the table beside each feat, and what a
       // player adding one by hand is being asked for.
       sourcePlaceholder: 'Level 5',
@@ -2467,10 +2478,10 @@ function companionItemsPanel(model, cc) {
 /**
  * One of the companion's abilities, as a row of its abilities table.
  *
- * Its Notes cell is a talent's: the player's own note, folding to its first
- * line, with the pack's text for the ability under it, and theirs wins when
- * shut -- a pack is reference, and this is their character. The box is always
- * there, so an ability no pack has reached is still one you can write down.
+ * Its Notes cell is a talent's: the note, folding to its first line. A name a
+ * pack describes carries its ✦, and the pack's text is copied into an empty
+ * note by the panel's Fill button. The box is always there, so an ability no
+ * pack has reached is still one you can write down.
  *
  * `r` is `{ level, name }`. `state` is '' for a row on the list, 'removed'
  * for one removed by hand, struck with its tick on so it can be put back, and
@@ -2493,8 +2504,6 @@ function companionAbilityRow(model, cc, r, state = '') {
     const from = !state && k.abilityInfo && Object.hasOwn(k.abilityInfo, key) ? k.abilityInfo[key] : null;
     const tableKey = from?.wasKey || key;
     const mine = String(b.abilityNotes?.[key] ?? '');
-    const shared = state ? null
-      : (from?.archetype && from.text.trim() ? from : null) || companionAbilityText(name) || b.citedAbilities?.[key] || null;
     const lower = (list) => andList(list.map((n) => n.toLowerCase()));
     const why = removed ? 'Removed.'
       : unlisted ? 'Not on the list.'
@@ -2503,11 +2512,12 @@ function companionAbilityRow(model, cc, r, state = '') {
             from.changes.length ? `Changes ${lower(from.changes)}.` : ''].filter(Boolean).join(' ')
           : from?.was ? `Replaces ${from.was.toLowerCase()}.` : '';
     const byHand = takesArchetypes(kind);
-    const nameCell = byHand && !state
+    const nameBox = byHand && !state
       ? text(`${p}.replacedAbilities.${esc(tableKey)}`, name, from?.was ?? name)
       : `<span class="aname">${esc(name)}</span>`;
+    const nameCell = state ? nameBox : markedName(model, nameBox, { k: 'ability', p, n: name });
     const notes = removed && !mine.trim() ? ''
-      : companionAbilityNote(model, `data-set="${p}.abilityNotes.${esc(key)}"`, mine, `${p}.abilityNotes.${key}`, name, shared);
+      : foldingNote(model, `data-set="${p}.abilityNotes.${esc(key)}"`, mine, `${p}.abilityNotes.${key}`, { name });
     const tick = byHand && !unlisted
       ? `<td class="mid" data-label="Removed">${check(`${p}.removedAbilities.${esc(tableKey)}`,
         b.removedAbilities?.[tableKey] === true, '', 'Removed', { tick: true })}</td>`
@@ -2535,24 +2545,13 @@ function companionAddedRow(model, cc, a, reached) {
     const at = `${list}|${a.index}`;
     return `<tr class="${reached ? '' : 'future'}">
       <td class="lvl" data-label="Level">${itemNum(list, a.index, 'level', a.level)}</td>
-      <td data-stack="name">${itemText(list, a.index, 'name', a.name, 'Ability')}</td>
+      <td data-stack="name">${markedName(model,
+    itemText(list, a.index, 'name', a.name, 'Ability', { attrs: noteFillAttrs(`abilities|${cc.p}`, `+${a.index}`) }),
+    { k: 'ability', p: cc.p, n: a.name, a: 1 })}</td>
       <td class="from" data-label="From">${reached ? 'Added by hand.' : 'Added by hand. Not reached yet.'}</td>
-      <td data-label="Notes">${companionAbilityNote(model, `data-item="${at}|notes"`, a.notes, `${at}|notes`, a.name,
-    a.name ? companionAbilityText(a.name) || cc.b.citedAbilities?.[abilityTextKey(a.name)] || null : null)}</td>
+      <td data-label="Notes">${foldingNote(model, `data-item="${at}|notes"`, a.notes, `${at}|notes`, { name: a.name })}</td>
       ${rowRemove(list, a.index, { what: 'ability' })}
     </tr>`;
-  }
-
-
-/**
- * An ability's Notes cell: the note, folding, with the pack's text under it.
- * Pack text alone starts shut, so the table is a line per ability until one
- * is opened.
- */
-function companionAbilityNote(model, binding, note, path, name, shared) {
-    const said = String(shared?.text ?? '').trim();
-    const below = said ? catalogueFace({ known: true, text: said, source: shared.source || shared.pack || '' }, { compact: false }) : '';
-    return foldingNote(model, binding, note, path, { name, below, belowText: said, startShut: !String(note ?? '').trim() });
   }
 
 
@@ -2564,6 +2563,7 @@ function companionGainsPanel(model, cc) {
     const { kind, p, b, k, label } = cc;
     const gains = k.gains || [];
     const byHand = takesArchetypes(kind);
+    const fill = fillNotesButton(model, `abilities|${p}`, 'ability');
     // Every row but those added by hand, which are drawn from the list itself.
     const listed = Array.isArray(k.abilitiesListed) ? k.abilitiesListed
       : gains.flatMap((g) => (g.abilities || [g.text]).map((name) => ({ level: g.level, name })));
@@ -2595,7 +2595,8 @@ function companionGainsPanel(model, cc) {
         ${esc(andList(c.abilities.map((n) => n.toLowerCase())))}, so they cannot be taken together.</p>`).join('')}
       ${k.archetypesMissing?.length ? `<p class="hint">${esc(andList(k.archetypesMissing))}
         ${k.archetypesMissing.length > 1 ? 'were' : 'was'} not found in any pack. Type over an ability's name to replace it, tick it to remove it, or add one below.</p>` : ''}
-      ${byHand ? `<div style="margin-top:6px">${addButton(`${p}.addedAbilities`, 'Add an ability', { name: '', level: 1 })}</div>` : ''}
+      ${byHand || fill ? `<div style="margin-top:6px">${byHand ? addButton(`${p}.addedAbilities`, 'Add an ability', { name: '', level: 1 }) : ''}
+        ${fill}</div>` : ''}
       <div class="fieldgrid" style="margin-top:8px">
         ${kind === 'familiar' ? `<label class="fld" style="grid-column:1/-1"><span>Familiar abilities</span>
           ${prose(model, `data-set="${p}.abilities"`, b.abilities, 3)}</label>` : ''}

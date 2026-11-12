@@ -89,10 +89,12 @@ export const EXPR_HINT = 'Formulas work here: write an expression (level * 100, 
 /**
  * What a catalogue knows about the thing a row just named.
  *
- * Three tables pick out of a catalogue now -- feats on Feats & Mythic, spells
+ * Two tables show a catalogue's entry under the row that names it -- spells
  * on Vancian, powers on Psionics -- and each wants the same two things said
  * in the same order: the stat line the book prints above a rule, and the rule.
- * One renderer, so the three cannot drift into three house styles.
+ * One renderer, so they cannot drift into two house styles. (Feats and a
+ * companion's abilities take the pack's text into their note instead, as a
+ * sphere talent does: model/note-fill.js.)
  *
  * It shows the *catalogue's* text and never the player's, and it shows it
  * **beside** their note rather than instead of it. It used to give way the
@@ -105,9 +107,8 @@ export const EXPR_HINT = 'Formulas work here: write an expression (level * 100, 
  * Nothing here is ever copied onto the character. The player's own writing
  * has its own editable cell and is the only thing the sheet saves; this is
  * read where it stands, so that a corrected pack corrects every sheet and an
- * exported character stays a list of names. (Two exceptions, each on purpose:
- * a published sheet carries the text as `cited` for a reader with no pack,
- * and a sphere talent's Fill copies it into the note -- see fillTalentNotes.)
+ * exported character stays a list of names. (A published sheet carries the
+ * text as `cited` for a reader with no pack.)
  */
 export function catalogueFace(details, { compact = true, ctx = null, key = '' } = {}) {
   if (!details?.known) return '';

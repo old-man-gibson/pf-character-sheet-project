@@ -1993,9 +1993,17 @@ export function ladderDice(ladder, level) {
  * figure saved the old way is put right once, on load, and never again
  * (model/corrections.js). The monster importer writes the whole list, because
  * what it writes is current.
+ *
+ * `pack-notes` changes no figure: a document saved before it was shown its
+ * packs' text under the empty notes of its feats and its companions'
+ * abilities, and takes that text into those notes when it is opened
+ * (model/note-fill.js, `fillShownNotes`).
  */
 export const RULE_CORRECTIONS = ['attack-size-sign', 'poor-save-thirds', 'monster-crit-range', 'hp-meter-fill', 'load-penalties',
-  'nonproficiency-penalty', 'weapon-crit-shift'];
+  'nonproficiency-penalty', 'weapon-crit-shift', 'pack-notes'];
+
+/** Whether a document, as saved, predates a correction. */
+export const savedBefore = (doc, correction) => !(Array.isArray(doc?.corrections) && doc.corrections.includes(correction));
 
 /** Size -> AC/attack modifier and its opposite for CMB/CMD. */
 export const SIZE_MODIFIERS = {

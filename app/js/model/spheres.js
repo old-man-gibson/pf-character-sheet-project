@@ -951,13 +951,11 @@ export function blankTalentNotes(model, sideKey) {
  * note that is empty, only from a name the catalogue knows, and a sphere the
  * row already chose still decides which talent that is.
  *
- * This is the one place a pack's text is copied onto the character. Feats,
- * spells, powers, veils and maneuvers show the pack's words beside the
- * player's and never store them (ui/html.js, `catalogueFace`); a sphere talent
- * takes them into its note, because the player asks for it here, row by row
- * or with one button, and the note is theirs to cut down afterwards. Kept as
- * the exception on purpose (2026-09-29): a pack corrected later does not
- * correct a note already filled.
+ * A pack's text is copied onto the character here, and for feats and a
+ * companion's abilities by the same rule (model/note-fill.js). Spells, powers,
+ * veils and maneuvers show the pack's words beside the player's and never
+ * store them (ui/html.js, `catalogueFace`). A filled note is the player's to
+ * cut down afterwards, and a pack corrected later does not correct it.
  */
 export function fillTalentNotes(model, sideKey) {
   // Worked out first and written after, so the undo step is taken only when

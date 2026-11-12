@@ -6072,7 +6072,8 @@
   "hp-meter-fill",
   "load-penalties",
   "nonproficiency-penalty",
-  "weapon-crit-shift"
+  "weapon-crit-shift",
+  "pack-notes"
  ],
  "log": [
   {
