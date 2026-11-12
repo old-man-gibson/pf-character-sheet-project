@@ -9,7 +9,7 @@
  * being copied or reached for across panels.
  */
 import { esc, nameDatalist } from './html.js';
-import { hasView, prose } from './prose.js';
+import { hasView, prose, readProse } from './prose.js';
 import { foldButton } from './folds.js';
 import { richText } from './links.js';
 import { hasTokens, plainTokens } from '../inline.js';
@@ -125,7 +125,7 @@ export function foldingNote(model, binding, value, path, { name = '' } = {}) {
   if (!shut) {
     return `<div class="notecell"><div class="noteline"><div class="notebox">${field}</div>${caret}</div></div>`;
   }
-  const shown = (hasTokens(text) ? plainTokens(model.renderProse(text)) : text).trim();
+  const shown = readProse(model, text).trim();
   // The line is cut by the cell, not here (`.notepeek` ends in an ellipsis
   // where it meets the caret), so it runs as wide as the column is. Enough of
   // the note to fill the widest column, its lines run together.
@@ -332,7 +332,7 @@ export function talentPopHtml(model, spec) {
     const sphere = String(row?.sphere ?? '').trim();
     const raw = String(row?.notes ?? '').trim();
     // As the note reads: its formulas worked out.
-    const note = hasTokens(raw) ? plainTokens(model.renderProse(raw)) : raw;
+    const note = readProse(model, raw);
     const info = note ? null : talentInfo(model, sphere, typed);
     // What the cell's own marks mean, said here because this card stands in
     // for the cell's tooltip while it is up.
@@ -355,7 +355,7 @@ export function talentPopHtml(model, spec) {
     const name = String(row?.name ?? '').trim();
     if (!name) return '';
     const raw = String(row?.note ?? '').trim();
-    const note = hasTokens(raw) ? plainTokens(model.renderProse(raw)) : raw;
+    const note = readProse(model, raw);
     const entry = manipulationEntry(row);
     const needs = entry ? [...entry.requires.map((r) => MANIPULATION_NEEDS[r] || r), entry.needs].filter(Boolean).join(', ') : '';
     return panel(entry?.name || name, [row?.group, needs && `needs ${needs}`].filter(Boolean).join(' · '),
@@ -373,7 +373,7 @@ export function talentPopHtml(model, spec) {
     // The Alternate Training ladder keeps its notes by level under a plain
     // path, and says what the row is called itself.
     // As the note reads: its formulas worked out.
-    const read = (raw) => (hasTokens(raw) ? plainTokens(model.renderProse(raw)) : raw).trim();
+    const read = (raw) => readProse(model, raw).trim();
     if (!where.includes('|')) {
       const text = read(String(where.split('.').reduce((o, k) => o?.[k], model.data) ?? ''));
       return text ? panel(String(s.n ?? '').trim() || 'Note', hint, [], text) : '';

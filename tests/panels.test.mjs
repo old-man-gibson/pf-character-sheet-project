@@ -954,6 +954,10 @@ console.log('\nno character text reaches the page as markup');
     [shutNote.includes('class="notepeek"'), shutNote.includes('>2 hits. More of the rules text.'), shutNote.includes('<textarea')], [true, true, false]);
   check('the line carries the note past its first line, for the cell to cut where it ends',
     [shutNote.includes('…'), /class="notepeek"[^>]*>[^<]{200,500}</.test(shutNote.replace(/title="[^"]*"/g, ''))], [false, true]);
+  // A bonus written in a note shows in the shut line as it does in the open
+  // box, with its sign.
+  const bonusNote = foldingNote(noteModel, 'data-item="x|0|notes"', `Grows a size. (Str {str.score += 4}, Dex {dex.score += -4})\n${'More of the rules text. '.repeat(10)}`, 'x|0|notes');
+  check('a shut line shows the bonuses in it', bonusNote.includes('>Grows a size. (Str +4, Dex -4) More of'), true);
   check('a short note has nothing to fold', foldingNote(noteModel, 'data-item="x|0|notes"', 'Taken at 5th.', 'x|0|notes').includes('data-collapse'), false);
   check('an empty note is the plain box, with no caret', foldingNote(noteModel, 'data-item="x|0|note"', '', 'x|0|note').includes('data-collapse'), false);
 

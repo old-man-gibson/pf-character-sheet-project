@@ -210,6 +210,28 @@ export function tokenScope(model, local, target = null) {
  *                  link can go: `prose()` asks for it, while text drawn
  *                  inside a button or a summary does not.
  */
+/**
+ * What a worked-out token shows in a sentence. A bonus always shows its
+ * sign: it is a change to a number somewhere else, and a bare "2" in the
+ * middle of a sentence does not say whether the sentence is helping or
+ * hurting.
+ */
+const tokenShown = (seg) => (seg.kind !== 'push' ? formatValue(seg.value)
+  : seg.values ? eachShown(seg) : fmt(seg.value));
+
+/**
+ * A prose field's text as its read view says it, in plain characters: every
+ * {…} token replaced by what the view shows for it, a bonus with its sign.
+ * For a line or a tooltip that stands in for the view. (The model's own
+ * reading of a field, `proseText`, leaves bonuses out; this is for the eye.)
+ */
+export function readProse(model, text, local = null) {
+  const src = String(text ?? '');
+  if (!hasTokens(src)) return src;
+  return model.renderProse(src, local)
+    .map((seg) => (seg.kind === 'text' ? seg.text : seg.error ? seg.raw : tokenShown(seg))).join('');
+}
+
 export function renderedProse(model, text, local = null, { inactive = false, inactiveTitle = '', links = false } = {}) {
   // Built once for the whole field rather than per token: scope() walks
   // every tracker, skill and companion, and a field may hold dozens of them.
@@ -226,11 +248,7 @@ export function renderedProse(model, text, local = null, { inactive = false, ina
         : seg.kind === 'ref' ? `{${seg.name}}` : `{= ${seg.expr}}`;
       return `<span class="tok err" title="${esc(label)}: ${esc(seg.error)}">${esc(seg.raw)}</span>`;
     }
-    // A bonus always shows its sign. It is a change to a number somewhere
-    // else, and a bare "2" in the middle of a sentence does not say whether
-    // the sentence is helping or hurting.
-    const shown = seg.kind !== 'push' ? formatValue(seg.value)
-      : seg.values ? eachShown(seg) : fmt(seg.value);
+    const shown = tokenShown(seg);
     const dormant = inactive && seg.kind === 'push';
     const title = tokenTitle(model, seg, scopeOnce(), local)
       + (dormant ? `\n\n${inactiveTitle || 'Not applying: this is written down but switched off.'}` : '');
