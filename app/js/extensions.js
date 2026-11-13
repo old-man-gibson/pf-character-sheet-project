@@ -312,10 +312,20 @@ export function normalizeBlock(block) {
 
 /* ---------------- repeat features as their own column ---------------- */
 
+/**
+ * A rank written after a name in words alone ("Weapon training 2",
+ * "Infusion specialization 3", "Summon monster IV"). Words only, so a row of
+ * counts ("Known 5 / Readied 3") keeps its numbers.
+ */
+const BARE_RANK = /^([A-Za-z][A-Za-z' -]*?)\s+(?:\d{1,2}|[IVX]{1,4})$/;
+/** A count after a name: "Smite evil 3/day", "Damage reduction 5/-". */
+const PER_COUNT = /\s+\d+\/(?:day|[-–—])\s*$/i;
+/** An ordinal before a name: "2nd favored enemy". */
+const FIRST_RANK = /^\d{1,2}(?:st|nd|rd|th)\s+(?=[A-Za-z])/i;
 /** Two rows name the same feature when only the number it scales by differs. */
-const columnKey = (s) => featureKey(String(s ?? '').replace(/\s*[+\-–]?\s*\d+d\d+\s*$/i, ''));
+const columnKey = (s) => featureKey(String(s ?? '').trim().replace(FIRST_RANK, '').replace(/\s*[+\-–]?\s*\d+d\d+\s*$/i, '').replace(BARE_RANK, '$1'));
 /** The column's title: the feature's name with that number taken off. */
-const columnName = (s) => str(s).replace(/\s*[+\-–]?\s*\d+d\d+\s*$/i, '')
+const columnName = (s) => str(s).trim().replace(FIRST_RANK, '').replace(/\s*[+\-–]?\s*\d+d\d+\s*$/i, '').replace(PER_COUNT, '').replace(BARE_RANK, '$1')
   .replace(/\s*[+\-–]\s*\d+\s*$/, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
 
 /**
@@ -361,7 +371,10 @@ export function repeatColumns(features) {
     // A table writes the first entry of a cell capitalised and the rest not,
     // so the best-cased spelling names the column.
     const titled = list.find((f) => /^[A-Z]/.test(str(f.name).trim())) || list[0];
-    const name = columnName(titled.name) || str(titled.name);
+    const bare = columnName(titled.name) || str(titled.name).trim();
+    // A column is a heading, so it starts with a capital even when every
+    // cell spelled the feature in lower case.
+    const name = bare.charAt(0).toUpperCase() + bare.slice(1);
     const ladder = new Set(list.map((f) => lower(f.name))).size > 1;
     out.push({
       name,
@@ -370,7 +383,8 @@ export function repeatColumns(features) {
         feature: f,
         // the part the name added to the column's own title, else nothing
         text: ladder
-          ? (lower(f.name).startsWith(lower(name)) ? str(f.name).slice(name.length).trim() : str(f.name)) || str(f.name)
+          ? (lower(f.name).startsWith(lower(name)) ? str(f.name).slice(name.length).trim()
+            : lower(f.name).endsWith(lower(name)) ? str(f.name).slice(0, -name.length).trim() : str(f.name)) || str(f.name)
           : '',
       })),
     });
@@ -1519,7 +1533,10 @@ export function applyBlock(model, rawBlock) {
       }
       // The features' rules text goes under the class itself, beneath its
       // ladder -- one entry per distinct feature, so the prose is on the sheet
-      // and not only in the pack. Names alone are the ladder above.
+      // and not only in the pack. Names alone are the ladder above. A feature
+      // with a column of its own is written up under the column's name
+      // ("Sneak attack"), not its first step's ("Sneak attack +1d6").
+      const columnOf = new Map(columns.flatMap((c) => c.at.map((a) => [a.feature, c.name])));
       const withText = [];
       const seen = new Set();
       for (const f of block.features) {
@@ -1528,7 +1545,7 @@ export function applyBlock(model, rawBlock) {
         seen.add(key);
         withText.push(f);
       }
-      for (const f of withText) model.addClassFeatureNote(block.name, { name: f.name, text: f.text });
+      for (const f of withText) model.addClassFeatureNote(block.name, { name: columnOf.get(f) || f.name, text: f.text });
       return `${existing === -1 ? 'Added' : 'Updated'} class ${block.name}`
         + `${block.features.length ? `, ${block.features.length} feature(s) on the Progression tab` : ''}`
         + `${withText.length ? `, ${withText.length} with their text under the class` : ''}`
@@ -1789,14 +1806,21 @@ export function minLevelIn(text) {
 }
 const optionMinLevel = minLevelIn;
 
+/** Labels inside one option's text, not the start of the next: "Prerequisite: …". */
+const OPTION_PARTS = /^(?:prerequisites?|benefits?|special|normal|notes?|requirements?|cost|effect)$/i;
+/** No label is front matter: every labelled paragraph of an option list is an option. */
+const NO_FRONT_MATTER = /(?!)/;
+
 /**
- * A page that is a list -- "Advancing Flurry (Ex)" on a line, its text under
- * it, then the next -- as the entries it lists.
+ * A page that is a list, as the entries it lists: "Advancing Flurry (Ex)" on
+ * a line with its text under it, then the next; or, failing that, one
+ * labelled paragraph per entry ("Durable: The blacksmith…"), a label such as
+ * "Prerequisite:" staying with the entry above it.
  *
- * Only a line ending in its (Ex)/(Su)/(Sp) counts as a name: a short line on
- * its own is as often "2 qi points" as it is a heading, and a list cut in the
- * wrong places is worse than one not cut at all. Fewer than three and it was
- * not a list.
+ * On a line of its own, only a name ending in its (Ex)/(Su)/(Sp) counts: a
+ * short line is as often "2 qi points" as it is a heading, and a list cut in
+ * the wrong places is worse than one not cut at all. Fewer than three and it
+ * was not a list.
  */
 function listedOptions(text, source) {
   const out = [];
@@ -1805,11 +1829,10 @@ function listedOptions(text, source) {
     const m = line.trim().match(/^\*{0,2}([A-Z][^.:;!?]{1,70}?)\*{0,2}\s*\((Ex|Su|Sp)\)\*{0,2}:?$/);
     if (m) { open = { name: m[1].trim(), type: m[2], lines: [] }; out.push(open); } else if (open) open.lines.push(line);
   }
-  if (out.length < 3) return [];
-  return out.map((o) => {
-    const body = o.lines.join('\n').trim();
-    return { name: o.name, type: o.type, category: '', text: body, source, minLevel: optionMinLevel(body) };
-  });
+  const option = (name, type, body) => ({ name, type, category: '', text: body, source, minLevel: optionMinLevel(body) });
+  if (out.length >= 3) return out.map((o) => option(o.name, o.type, o.lines.join('\n').trim()));
+  const labelled = pageFeatures(text, NO_FRONT_MATTER, OPTION_PARTS);
+  return labelled.length >= 3 ? labelled.map((f) => option(f.name, f.type, f.text)) : [];
 }
 
 /**
@@ -1908,45 +1931,277 @@ export function optionCataloguesFromTables(tables) {
 const CLASS_FRONT_MATTER = /^(?:role|alignment|hit dic?e|starting wealth|class skills|skill (?:ranks|points)(?: (?:per|at each) level)?|legendary class|table|parent class(?:es)?|requirements?)\b/i;
 
 /**
- * A page's labelled paragraphs as features: `{name, type, text}`, front matter
- * left out. `front` says which labels are front matter: a class's by default.
+ * A paragraph that opens with a label: its leading emphasis marks, name,
+ * (Ex)/(Su)/(Sp), the space after the colon, and the text.
  */
-function pageFeatures(text, front = CLASS_FRONT_MATTER) {
+const PAGE_LABEL = /^(\*{0,2})([A-Z][^.:*\n]{1,60}?)(?:\s*\((Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?\))?\*{0,2}:\*{0,2}(\s+)(\S[\s\S]*)$/;
+
+/** A line of a list, or a paragraph that holds one. */
+const LIST_LINE = /^[ \t]*[-•][ \t]/m;
+
+/** Labels that are never a feature: a table's caption, a note, an example. */
+const PAGE_ASIDE = /^(?:table|(?:(?:editor|designer|author|librarian|gm)(?:'?s)?\s+|design\s+)?notes?|sidebar|example)\b/i;
+
+/**
+ * A page's paragraphs. A feature's label on the line right after a list item
+ * starts a paragraph of its own, as if a blank line came before it.
+ */
+function pageParagraphs(text) {
   const out = [];
-  let open = null;
   for (const para of str(text).split(/\n{2,}/)) {
-    // A label ends in a colon, so a paragraph without one is not a label.
-    const m = para.includes(':') && para.match(/^\*{0,2}([A-Z][^.:*\n]{1,60}?)(?:\s*\((Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?\))?\*{0,2}:\*{0,2}\s+(\S[\s\S]*)$/);
-    if (m && !front.test(m[1])) {
-      open = { name: m[1].trim(), type: m[2] || '', text: m[3].trim() };
-      out.push(open);
-    } else if (m) open = null;
-    else if (open) open.text += `\n\n${para.trim()}`;
+    let lines = [];
+    for (const line of para.split('\n')) {
+      const after = lines.length && LIST_LINE.test(lines[lines.length - 1]);
+      if (after && /^[A-Z][^.:*\n]{1,60}?(?:\s*\((?:Ex|Su|Sp)\))?:[ \t]+\S/.test(line) && !PAGE_ASIDE.test(line)) {
+        out.push(lines.join('\n'));
+        lines = [];
+      }
+      lines.push(line);
+    }
+    out.push(lines.join('\n'));
   }
   return out;
+}
+
+/**
+ * A page's labelled paragraphs as features: `{name, type, text, lead}`, front
+ * matter left out. `front` says which labels are front matter: a class's by
+ * default.
+ *
+ * Some labels head something inside a feature rather than a feature: the ways
+ * qi comes back under Qi, the options under a choice, the steps of a list.
+ * The page sets them apart by how they look, and they stay in the feature
+ * above them:
+ *  - a label in more emphasis than the feature's own ("*Killing Blow:*" under
+ *    "Qi (Su):");
+ *  - a label with nothing after it but a list or such a label ("One Hit:" over
+ *    its list of strikes);
+ *  - a table's caption, a note or an example.
+ * With no feature above it, such a label is a feature after all.
+ *
+ * `lead` is the feature's text before the first of those, or before a list:
+ * the part that says when the feature itself arrives. A label `part` matches
+ * ("Prerequisite:") stays inside the feature above it too.
+ */
+function pageFeatures(text, front = CLASS_FRONT_MATTER, part = null) {
+  const heading = (m) => m[4].includes('\n') && /^(?:[-•][ \t]|\*{1,2}[^*\n]+:)/.test(m[5]);
+  const out = [];
+  let open = null;
+  for (const para of pageParagraphs(text)) {
+    // A label ends in a colon, so a paragraph without one is not a label.
+    const m = para.includes(':') && para.match(PAGE_LABEL);
+    const inside = m && open && (PAGE_ASIDE.test(m[2]) || part?.test(m[2].trim()) || m[1].length > open.weight || heading(m));
+    if (m && !inside && front.test(m[2])) { open = null; continue; }
+    if (m && !inside) {
+      open = { name: m[2].trim(), type: m[3] || '', text: m[5].trim(), lead: m[5].trim(), weight: m[1].length, aside: LIST_LINE.test(m[5]) };
+      out.push(open);
+      continue;
+    }
+    if (!open) continue;
+    open.text += `\n\n${para.trim()}`;
+    if (m || LIST_LINE.test(para)) open.aside = true;
+    else if (!open.aside) open.lead += `\n\n${para.trim()}`;
+  }
+  return out.map(({ weight, aside, ...f }) => f);
+}
+
+/**
+ * A page's pipe tables: each run of `| a | b |` lines as rows of cells, with
+ * the line it starts on, and the page's lines to look above a table in.
+ *
+ * A cell with a line break in it leaves the rest of the cell on a line of its
+ * own, ending in the row's closing pipe ("+1 level of existing divine
+ * spellcasting class |"). That line is passed over rather than read as the
+ * end of the table.
+ */
+function pipeTables(text) {
+  const lines = str(text).split('\n');
+  const isRow = (l) => /^\s*\|/.test(l);
+  const isRest = (l) => /\S\s*\|\s*$/.test(l);
+  const cells = (l) => l.trim().replace(/^\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+  const tables = [];
+  for (let i = 0; i < lines.length;) {
+    if (!isRow(lines[i])) { i++; continue; }
+    const start = i;
+    const rows = [];
+    while (i < lines.length && (isRow(lines[i]) || isRest(lines[i]))) {
+      if (isRow(lines[i])) rows.push(cells(lines[i]));
+      i++;
+    }
+    tables.push({ start, rows });
+  }
+  return { lines, tables };
+}
+
+/**
+ * A class table's Special cell as the features it lists. A comma inside a
+ * bracket is part of its entry ("bonus feat (Dodge, Mobility)").
+ */
+export const specialEntries = (cell) => str(cell).split(/,\s*(?![^()]*\))/)
+  .map((s) => s.replace(/\*+/g, '').trim()).filter((s) => s && s !== '—' && s !== '-');
+
+/**
+ * A class page's own table: its `{level, special}` rows and its column
+ * headers, from the first pipe table with a Level column and a Special
+ * column. No rows when the page has none.
+ */
+function classTable(text) {
+  for (const { rows } of pipeTables(text).tables) {
+    const head = rows.findIndex((r) => /^(?:class )?level$/i.test(r[0]) && r.some((c) => /^special$/i.test(c)));
+    if (head < 0) continue;
+    const special = rows[head].findIndex((c) => /^special$/i.test(c));
+    const out = [];
+    for (const r of rows.slice(head + 1)) {
+      const level = Number(str(r[0]).match(/^(\d{1,2})(?:st|nd|rd|th)?$/i)?.[1]);
+      if (level >= 1 && level <= 20) out.push({ level, special: specialEntries(r[special]) });
+    }
+    if (out.length) return { rows: out, headers: rows[head].filter(Boolean) };
+  }
+  return { rows: [], headers: [] };
+}
+
+/** A class page's own table as `{level, special}` rows (see classTable). */
+export const classTableRows = (text) => classTable(text).rows;
+
+/** A feature's last paragraph offering what comes after it: "select one of the following paths:". */
+const OPENS_A_LIST = /\bthe following\b|:\s*$/i;
+
+/**
+ * A class table's Special entries as features, each at its row's level with
+ * the text of the paragraph that describes it (`prose`: `{name, text,
+ * level}`, the level its text names). A paragraph pairs with an entry by name,
+ * the number the feature has grown to left off ("Sneak attack +2d6" is "Sneak
+ * Attack"), or by a name the paragraph's ends with ("Monk art" is "Legendary
+ * Monk Arts"); failing that, a table and its prose that name a feature
+ * differently ("opportune strike" / "Opportune Slash") pair on the same level
+ * and the same first word. Text goes with the first entry a paragraph pairs
+ * with -- the rest are the same feature grown -- and a row's extra columns
+ * (`extra`: [header, value] pairs) are a feature of their own.
+ * Returns the features and the paragraphs used.
+ */
+export function tableFeatures(rows, prose) {
+  const tableKeys = new Set(rows.flatMap((r) => r.special.map(columnKey)));
+  const byKey = new Map();
+  for (const p of prose) if (!byKey.has(columnKey(p.name))) byKey.set(columnKey(p.name), p);
+  const used = new Set();
+  const features = [];
+  for (const row of rows) {
+    for (const name of row.special) {
+      const key = columnKey(name);
+      const first = key.split(' ')[0];
+      // Two words at least: "art" alone ends far too many names.
+      const tail = key.includes(' ') && prose.find((q) => !tableKeys.has(columnKey(q.name)) && columnKey(q.name).endsWith(` ${key}`));
+      const p = byKey.get(key) || tail
+        || prose.find((q) => !used.has(q) && q.level === row.level && !tableKeys.has(columnKey(q.name)) && columnKey(q.name).split(' ')[0] === first)
+        || null;
+      features.push({ level: row.level, name, text: p && !used.has(p) ? p.text : '', prose: p });
+      if (p) used.add(p);
+    }
+    if (arr(row.extra).length) features.push({ level: row.level, name: row.extra.map(([h, v]) => `${h} ${v}`).join(' / '), text: '', prose: null });
+  }
+  return { features, used };
+}
+
+const COUNT_WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, other: 2, odd: 2, even: 2 };
+/** A sentence in which the class gains something new: a pick, not a number growing. */
+const GAINS_ONE = /\b(?:gains?|learns?|receives?|selects?|chooses?|picks?(?: up)?|unlocks?|acquires?)\b[^.]*?\b(?:a|an|one|another|additional|new|bonus)\b/i;
+const GROWS = /\b(?:increase[sd]?|improve[sd]?|bonus (?:on|to)|per (?:day|round|turn|encounter)|rounds?|damage|uses?|times?)\b/i;
+const ORDINALS = /\b(\d{1,2})(?:st|nd|rd|th)\b/g;
+
+/**
+ * The levels a feature with no class table hands out another pick at, read
+ * off its own sentence: "At 2nd level and every 2 levels thereafter the
+ * blacksmith gains one smithing insight", "She gains an additional rogue
+ * talent for every 2 levels of rogue attained after 2nd level", "gains a
+ * bonus feat at 5th, 10th, 15th, and 20th level". Only a sentence in which the
+ * class gains something new counts: "This damage increases by 1d6 every two
+ * levels" is a feature growing, not a choice. `first` is where the feature
+ * starts when the sentence does not say. Empty when no sentence says so.
+ */
+export function choiceLevels(text, first = 1) {
+  for (const s of str(text).split(/(?<=[.!?])\s+/)) {
+    if (!GAINS_ONE.test(s) || GROWS.test(s)) continue;
+    const list = s.match(/\bat\s+((?:\d{1,2}(?:st|nd|rd|th)(?:\s*,\s*(?:and\s+)?|\s*,?\s+and\s+))+\d{1,2}(?:st|nd|rd|th))\s+(?:class\s+)?levels?\b/i);
+    if (list) return [...list[1].matchAll(ORDINALS)].map((m) => Number(m[1]));
+    const every = s.match(/\bevery\s+(?:(\d{1,2})|(one|two|three|four|five|six|seven|eight|nine|ten|other|odd|even))?\s*(?:class\s+)?levels?\b/i);
+    if (!every) continue;
+    const step = Number(every[1]) || COUNT_WORDS[lower(every[2])] || 1;
+    const parity = /^(odd|even)$/i.test(every[2] || '') ? (lower(every[2]) === 'odd' ? 1 : 0) : null;
+    const before = [...s.slice(0, every.index).matchAll(ORDINALS)].map((m) => Number(m[1]));
+    const after = s.slice(every.index + every[0].length);
+    const from = Number(after.match(/\b(?:after|beyond|past)\s+(\d{1,2})(?:st|nd|rd|th)\b/i)?.[1]);
+    const top = Number(after.match(/\b(?:up to|until|through)\s+(\d{1,2})(?:st|nd|rd|th)\b/i)?.[1]) || 20;
+    // "An additional dance move for every two levels of breakdancer", with
+    // nothing to start from, is one where the feature starts and one more
+    // at every second level.
+    const counted = !from && !before.length && parity === null && step > 1 && /\bfor\s+$/i.test(s.slice(0, every.index));
+    const start = from || before[before.length - 1] || (counted ? step : first);
+    const levels = new Set([...before, start, ...(counted ? [first] : [])]);
+    for (let l = start + 1; l <= top; l++) {
+      if (parity === null ? (l - start) % step === 0 : l % 2 === parity) levels.add(l);
+    }
+    const out = [...levels].filter((l) => l >= 1 && l <= top && (!counted || l >= first)).sort((a, b) => a - b);
+    if (out.length > 1) return out;
+  }
+  return [];
 }
 
 /**
  * A class a catalogue pack carries as a reference entry, as the building
  * block a player adds.
  *
- * The entry has what the block needs: the infobox's hit die, attack bonus,
- * saves (2 is the good progression) and skill ranks as fields, the class
- * skills as a sentence, and every feature as a labelled paragraph. What it
- * does not have is the class table -- the wiki draws that from a template, so
- * a dump holds no rows -- and the level a feature arrives at is read off its
- * own text instead: the first "Nth level" it mentions, or 1st. A feature that
- * repeats lands once, where it starts; the player spreads it from there.
+ * The entry has what the block needs: the hit die, attack bonus, saves (2 is
+ * the good progression) and skill ranks as fields, the class skills as a
+ * sentence, and every feature as a labelled paragraph. A page with its class
+ * table says at which levels each feature arrives, and the table's names are
+ * the features, each with its paragraph's text; a feature the table names at
+ * several levels gets a column of its own on the Progression tab. A page
+ * without one -- the wiki draws its table from a template, so a dump holds no
+ * rows -- gives each feature the first "Nth level" its text mentions, or 1st,
+ * and a choice the text says comes again ("every 2 levels thereafter")
+ * lands at each of those levels.
  */
 export function classBlockFromEntry(entry) {
   const name = classNameOf(entry);
   if (!name) return null;
   const fields = fieldMap(entry);
   const hd = Number((fields.get('hit die') || '').replace(/^d/i, ''));
-  const features = pageFeatures(entry.text).map((f) => {
-    const at = f.text.match(/\b(\d{1,2})(?:st|nd|rd|th)[ -]level\b/i);
-    return { level: at ? Number(at[1]) : 1, name: f.type ? `${f.name} (${f.type})` : f.name, text: f.text };
+  const prose = pageFeatures(entry.text).map((f) => {
+    const at = f.lead.match(/\b(\d{1,2})(?:st|nd|rd|th)[ -]level\b/i);
+    return { level: at ? Number(at[1]) : 1, name: f.type ? `${f.name} (${f.type})` : f.name, text: f.text, lead: f.lead };
   });
+  const table = classTable(entry.text);
+  let features;
+  if (table.rows.length) {
+    // A paragraph the table does not name is part of the feature above it
+    // when that feature offers a list ("select one of the following paths")
+    // and the table names it: the paths are what it offers. It stays part of
+    // it until the next feature the table names. Any other paragraph the
+    // table does not name (the proficiencies, the spells, one a column of the
+    // table is headed by, "AC Bonus") is a feature of its own, at the level
+    // its text names. The offer is the last paragraph of the feature's own
+    // text or of its lead, the part before any aside ("Qi: … regains qi in
+    // the following ways", then "*Killing Blow:* …").
+    const named = tableFeatures(table.rows, prose).used;
+    const headed = new Set(table.headers.map(columnKey));
+    const last = (t) => str(t).split(/\n{2,}/).pop();
+    // An ability with its type that says when it arrives ("Relentless (Ex): At
+    // 5th level …") is a feature of its own, whatever comes before it.
+    const ownFeature = (p) => /\((?:Ex|Su|Sp)\)$/.test(p.name) && /\b\d{1,2}(?:st|nd|rd|th)[ -]level\b/i.test(p.lead);
+    const merged = [];
+    for (const p of prose) {
+      const above = merged[merged.length - 1];
+      if (above?.opens && !named.has(p) && !headed.has(columnKey(p.name)) && !ownFeature(p)) above.text += `\n\n${p.name}: ${p.text}`;
+      else merged.push({ ...p, opens: named.has(p) && (OPENS_A_LIST.test(last(p.text)) || OPENS_A_LIST.test(last(p.lead))) });
+    }
+    const read = tableFeatures(table.rows, merged);
+    features = [...read.features, ...merged.filter((p) => !read.used.has(p))];
+  } else {
+    features = prose.flatMap((f) => {
+      const levels = choiceLevels(f.text, f.level);
+      return levels.length > 1 ? levels.map((level, i) => ({ level, name: f.name, text: i ? '' : f.text })) : [f];
+    });
+  }
   if (!hd && !features.length) return null;
   const skills = fields.get('class skills') || str(entry.text).match(/^Class Skills:\s*(?:[^\n]*?\bare\s+)?([^\n]+)$/mi)?.[1] || '';
   // The numbers the entry does not state. Adding the class to a sheet that
@@ -2010,7 +2265,8 @@ export function archetypeBlocksFromEntry(entry) {
   const name = inner && classes.some((c) => lower(c) === lower(inner)) ? bare : full;
   const text = str(entry.text);
   const all = pageFeatures(text);
-  const features = all.filter((f) => !ARCHETYPE_ADVICE.test(f.text)).map((f) => ({ name: f.name, type: f.type, text: f.text }));
+  const features = all.filter((f) => !ARCHETYPE_ADVICE.test(f.text))
+    .map((f) => ({ name: f.name, type: f.type, text: f.text, level: levelInText(f.lead) }));
   if (!features.length) return [];
   // What the page says before its first feature is the archetype's own description.
   const first = text.split(/\n{2,}/).findIndex((p) => p.replace(/^\*+/, '').startsWith(all[0].name));
@@ -2021,7 +2277,7 @@ export function archetypeBlocksFromEntry(entry) {
 }
 
 /** Labels on a race's page that are its numbers or its description, not traits. */
-const RACE_FRONT_MATTER = /^(?:[+\-–−]\s*\d|ability score|(?:normal |slow |fast )?speed$|size$|type$|subtypes?$|languages?$|(?:fine|diminutive|tiny|small|medium|large|huge|gargantuan|colossal)$|physical description|society|relations|alignment(?: and religion)?$|religion$|adventurers$|(?:[\w ]+ )?names$)/i;
+const RACE_FRONT_MATTER = /^(?:[+\-–−]\s*\d|ability score|racial points$|(?:normal |slow |fast )?speed$|size$|type$|subtypes?$|languages?$|(?:fine|diminutive|tiny|small|medium|large|huge|gargantuan|colossal)$|physical description|society|relations|alignment(?: and religion)?$|religion$|adventurers$|(?:[\w ]+ )?names$)/i;
 
 const ABILITY_KEYS = { str: 'str', dex: 'dex', con: 'con', int: 'int', wis: 'wis', cha: 'cha' };
 
@@ -2137,16 +2393,10 @@ const SPELL_LEVEL_COLUMN = /^(?:0|0th|[1-9](?:st|nd|rd|th))$/i;
  * page has no spell columns.
  */
 export function castingTableFromText(name, text) {
-  const lines = str(text).split('\n');
-  const isRow = (l) => /^\s*\|/.test(l);
-  const cells = (l) => l.trim().replace(/^\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+  const { lines, tables } = pipeTables(text);
   const blank = () => Array(10).fill(null);
   const grids = {};
-  for (let i = 0; i < lines.length;) {
-    if (!isRow(lines[i])) { i++; continue; }
-    const start = i;
-    while (i < lines.length && isRow(lines[i])) i++;
-    const rows = lines.slice(start, i).map(cells);
+  for (const { start, rows } of tables) {
     const head = rows.findIndex((r) => /^level$/i.test(r[0]) && r.some((c) => SPELL_LEVEL_COLUMN.test(c)));
     if (head < 0) continue;
     // What the table counts: its own heading rows say, or else the lines above it.
@@ -2265,7 +2515,7 @@ export function companionArchetypesFrom(tables, blocks) {
       if (!of) continue;
       add(of.kind, {
         kind: 'archetype', name: name.replace(of.suffix, '').trim(), class: of.className, source: e.source,
-        features: pageFeatures(e.text).map((f) => ({ name: f.name, type: f.type, text: f.text })),
+        features: pageFeatures(e.text).map((f) => ({ name: f.name, type: f.type, text: f.text, level: levelInText(f.lead) })),
       }, '');
     }
   }
