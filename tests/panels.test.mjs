@@ -951,18 +951,15 @@ console.log('\nno character text reaches the page as markup');
   const long = `{= 1 + 1} hits.\n${'More of the rules text. '.repeat(10)}`;
   const shutNote = foldingNote(noteModel, 'data-item="x|0|notes"', long, 'x|0|notes');
   check('a long note starts shut on its first line, worked out',
-    [shutNote.includes('class="notepeek"'), shutNote.includes('>2 hits.'), shutNote.includes('<textarea')], [true, true, false]);
+    [shutNote.includes('class="notepeek"'), shutNote.includes('>2 hits. More of the rules text.'), shutNote.includes('<textarea')], [true, true, false]);
+  check('the line carries the note past its first line, for the cell to cut where it ends',
+    [shutNote.includes('…'), /class="notepeek"[^>]*>[^<]{200,500}</.test(shutNote.replace(/title="[^"]*"/g, ''))], [false, true]);
+  // A bonus written in a note shows in the shut line as it does in the open
+  // box, with its sign.
+  const bonusNote = foldingNote(noteModel, 'data-item="x|0|notes"', `Grows a size. (Str {str.score += 4}, Dex {dex.score += -4})\n${'More of the rules text. '.repeat(10)}`, 'x|0|notes');
+  check('a shut line shows the bonuses in it', bonusNote.includes('>Grows a size. (Str +4, Dex -4) More of'), true);
   check('a short note has nothing to fold', foldingNote(noteModel, 'data-item="x|0|notes"', 'Taken at 5th.', 'x|0|notes').includes('data-collapse'), false);
-  // A feat's pack entry folds under the note's caret: open while the note is
-  // short, and shut under the key it folded by before, until chosen again.
-  const pack = { below: '<div class="catface">Pack</div>', belowText: 'What the pack says.', was: 'catref:x|0' };
-  const openPack = foldingNote(noteModel, 'data-item="x|0|note"', '', 'x|0|note', pack);
-  check('a pack entry under an empty note shows, with a caret for both',
-    [openPack.includes('catface'), (openPack.match(/data-collapse=/g) || []).length], [true, 1]);
-  noteModel.data.uiPrefs = { ...(noteModel.data.uiPrefs || {}), collapsed: { 'catref:x|0': true } };
-  const shutPack = foldingNote(noteModel, 'data-item="x|0|note"', '', 'x|0|note', pack);
-  check('folded before, it stays folded, and its line is the pack\'s',
-    [shutPack.includes('catface'), shutPack.includes('>What the pack says.')], [false, true]);
+  check('an empty note is the plain box, with no caret', foldingNote(noteModel, 'data-item="x|0|note"', '', 'x|0|note').includes('data-collapse'), false);
 
   // The cells that fold this way: traits, race traits, feats and mythic effects.
   const folding = new Character(blankDocument({ name: 'Folder', level: 3 }));
@@ -978,6 +975,89 @@ console.log('\nno character text reaches the page as markup');
       tab.includes('data-collapse="tnote:featGroups.0.entries|0|note"'),
       tab.includes('data-collapse="tnote:mythic.abilities|0|effect"')],
     [true, true, true, true]);
+}
+
+console.log('feats and companion lists fill their notes from packs, one list at a time');
+{
+  const { setFeatCatalogue } = await import('../app/js/model.js');
+  const { setCompanionAbilityText } = await import('../app/js/companions.js');
+  setFeatCatalogue({ feats: [
+    { name: 'Dodge', text: 'You gain a +1 dodge bonus to your AC.', type: 'Combat', source: 'Core' },
+    { name: 'Toughness', text: 'You gain +3 hit points.', source: 'Core' },
+  ] });
+  setCompanionAbilityText([{ name: 'Alertness', text: 'The master gains the Alertness feat.', source: 'Core' }]);
+  try {
+    const c = new Character(blankDocument({ name: 'Filler', level: 5 }));
+    c.setItem('featGroups.0.entries', 0, 'name', 'Dodge');
+    c.setItem('featGroups.0.entries', 1, 'name', 'Toughness');
+    c.setItem('featGroups.0.entries', 1, 'note', 'Mine.');
+    c.setItem('featGroups.0.entries', 2, 'name', 'Nobody Published This');
+    c.listAdd('featGroups', { name: 'Class', entries: [{ name: 'Dodge', detail: '', note: '' }] });
+    const g = c.data.featGroups.length - 1;
+    c.listAdd('grantedFeats.others', { source: 'Oath', name: 'Toughness', note: '' });
+    c.listAdd('animalCompanion.0.feats', { source: '', name: 'Dodge', notes: '' });
+    c.listAdd('animalCompanion.0.tricks', { source: '', name: 'Dodge', notes: '' });
+    const scopes = ['feats|featGroups.0.entries|note', `feats|featGroups.${g}.entries|note`, 'feats|grantedFeats|note',
+      'feats|animalCompanion.0.feats|notes', 'abilities|familiar.0'];
+    check('each list counts its own blank notes a pack can fill', scopes.map((x) => c.blankNotes(x)), [1, 1, 1, 1, 1]);
+
+    const tab = feats.renderFeaturesPanel(c, CTX);
+    const fam = subsystems.companionPanel(c, 'familiar');
+    const pet = subsystems.companionPanel(c, 'animalCompanion');
+    check('each has its own Fill button',
+      scopes.map((x) => (x.includes('familiar') ? fam : x.includes('animal') ? pet : tab).split(`data-action="fill-notes" data-scope="${x}"`).length - 1), [1, 1, 1, 1, 1]);
+    ok('a feat a pack knows carries its mark, and the pack text is not drawn under the note',
+      tab.includes('data-tpop="{&quot;k&quot;:&quot;feat&quot;,&quot;p&quot;:&quot;featGroups.0.entries|0&quot;}"') && !tab.includes('catface'));
+    ok('one no pack knows has none', !tab.includes('featGroups.0.entries|2&quot;}'));
+    ok('a familiar ability a pack knows carries its mark',
+      fam.includes('{&quot;k&quot;:&quot;ability&quot;,&quot;p&quot;:&quot;familiar.0&quot;,&quot;n&quot;:&quot;Alertness&quot;}') && !fam.includes('catface'));
+    ok('tricks and companion feats use the folding notes cell',
+      pet.includes('<textarea data-item="animalCompanion.0.tricks|0|notes"') && !pet.includes('data-scope="feats|animalCompanion.0.tricks'));
+
+    check('filling one list fills it alone', [c.fillNotes(scopes[0]), c.data.featGroups[0].entries[0].note, c.data.featGroups[0].entries[1].note,
+      ...scopes.map((x) => c.blankNotes(x))], [1, 'You gain a +1 dodge bonus to your AC.', 'Mine.', 0, 1, 1, 1, 1]);
+    c.undo();
+    check('and is one step back', [c.data.featGroups[0].entries[0].note, c.blankNotes(scopes[0])], ['', 1]);
+    check('the others fill the same way', scopes.slice(1).map((x) => c.fillNotes(x)), [1, 1, 1, 1]);
+    check('into the notes each list keeps', [c.data.featGroups[g].entries[0].note, c.data.grantedFeats.others[0].note,
+      c.data.animalCompanion[0].feats[0].notes, c.data.familiar[0].abilityNotes.alertness],
+    ['You gain a +1 dodge bonus to your AC.', 'You gain +3 hit points.', 'You gain a +1 dodge bonus to your AC.', 'The master gains the Alertness feat.']);
+    const after = feats.renderFeaturesPanel(c, CTX);
+    check('a filled list has no button left', after.split(`data-scope="${scopes[1]}"`).length - 1, 0);
+
+    c.setItem('featGroups.0.entries', 3, 'name', 'Toughness');
+    check('a typed name fills its own row only', [c.fillNotes(scopes[0], 3), c.data.featGroups[0].entries[3].note, c.data.featGroups[0].entries[0].note],
+      [1, 'You gain +3 hit points.', '']);
+
+    // A sheet saved before notes were filled showed the pack text under its
+    // empty notes; opened now, that text is in the notes.
+    const { savedBefore } = await import('../app/js/rules.js');
+    const old = new Character(blankDocument({ name: 'Saved Earlier', level: 5 }));
+    old.setItem('featGroups.0.entries', 0, 'name', 'Dodge');
+    old.setItem('featGroups.0.entries', 1, 'name', 'Toughness');
+    old.setItem('featGroups.0.entries', 1, 'note', 'Mine.');
+    old.listAdd('animalCompanion.0.feats', { source: '', name: 'Dodge', notes: '' });
+    const saved = old.toJSON();
+    check('a document saved now is not one saved before', savedBefore(saved, 'pack-notes'), false);
+    saved.corrections = saved.corrections.filter((n) => n !== 'pack-notes');
+    check('one without the mark is', [savedBefore(saved, 'pack-notes'), savedBefore({}, 'pack-notes')], [true, true]);
+    const opened = new Character(structuredClone(saved));
+    check('its feat and ability notes take the text that was shown, and nothing else',
+      [opened.fillShownNotes(), opened.data.featGroups[0].entries[0].note, opened.data.featGroups[0].entries[1].note,
+        opened.data.familiar[0].abilityNotes.alertness, opened.data.animalCompanion[0].feats[0].notes],
+      [2, 'You gain a +1 dodge bonus to your AC.', 'Mine.', 'The master gains the Alertness feat.', '']);
+    opened.setItem('featGroups.0.entries', 0, 'note', '');
+    const again = new Character(structuredClone(opened.toJSON()));
+    check('a note emptied afterwards stays empty on the next open',
+      [savedBefore(again.toJSON(), 'pack-notes'), again.data.featGroups[0].entries[0].note], [false, '']);
+
+    const { talentPopHtml } = await import('../app/js/ui/talents.js');
+    const pop = talentPopHtml(c, JSON.stringify({ k: 'feat', p: 'featGroups.0.entries|0' }));
+    ok('the mark opens the pack entry', pop.includes('Dodge') && pop.includes('Type: Combat') && pop.includes('+1 dodge bonus') && pop.includes('Core'));
+  } finally {
+    setFeatCatalogue({ feats: [] });
+    setCompanionAbilityText([]);
+  }
 }
 
 console.log('skill rows stay put while the player is on the tab');

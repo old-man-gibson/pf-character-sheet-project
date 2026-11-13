@@ -140,10 +140,11 @@ function publishManeuvers(doc, report) {
  * Fill in every feat, spell and power the character lists, and no others.
  *
  * These keep the player's own writing (`detail`, `note`) apart from the
- * pack's text, and the sheet shows the pack's beside the player's rather than
- * instead of it (ui/html.js, `catalogueFace`). So the pack's words travel as
- * `cited` on the row -- never into the player's fields -- and the sheet reads
- * `cited` only where no pack answers for the name. The rows are the ones the
+ * pack's text: a spell's or a power's is shown beside the note (ui/html.js,
+ * `catalogueFace`), and a feat's is behind its mark unless the player filled
+ * the note from it. So the pack's words travel as `cited` on the row -- never
+ * into the player's fields -- and the sheet reads `cited` only where no pack
+ * answers for the name. The rows are the ones the
  * sheet displays: the feat groups, the granted feats, the prepared spells and
  * each manifesting class's powers.
  */

@@ -22,7 +22,8 @@ import { isPinned, numOrNull } from '../model/util.js';
  */
 export function text(path, value, placeholder = '', opts = {}) {
   return `<input type="text" value="${esc(value ?? '')}" data-set="${path}"
-      data-kind="text" placeholder="${esc(placeholder)}"${opts.list ? ` list="${esc(opts.list)}"` : ''}>`;
+      data-kind="text" placeholder="${esc(placeholder)}"${opts.list ? ` list="${esc(opts.list)}"` : ''}${
+  opts.attrs ? ` ${opts.attrs}` : ''}>`;
 }
 
 export function num(path, value, extra = '') {

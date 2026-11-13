@@ -86,6 +86,7 @@ import {
   removeCustomization, setBlended, setBlendedSkill, setCustomizationActive, setGuileBlend, setPoolReach, setCustomizationRule, setSphereBonus,
   setCustomizationSpec, sphereRanksBySkill, sphereTalentKnowledge, sphereTally,
 } from './spheres.js';
+import { blankNotes, fillNotes, fillShownNotes } from './note-fill.js';
 import {
   addGuileClass, addGuileSphere, guileRanksBySkill, recomputeGuile, recomputeGuileSpheres,
 } from './subsystems/guile.js';
@@ -693,6 +694,9 @@ export class Character {
   setTalentEntry(...a) { return setTalentEntry(this, ...a); }
   blankTalentNotes(...a) { return blankTalentNotes(this, ...a); }
   fillTalentNotes(...a) { return fillTalentNotes(this, ...a); }
+  blankNotes(...a) { return blankNotes(this, ...a); }
+  fillNotes(...a) { return fillNotes(this, ...a); }
+  fillShownNotes(...a) { return fillShownNotes(this, ...a); }
   setAltTrainingPick(...a) { return setAltTrainingPick(this, ...a); }
   altTrainingLookup(...a) { return altTrainingLookup(this, ...a); }
   blendedClasses(...a) { return blendedClasses(this, ...a); }
