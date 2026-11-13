@@ -1908,22 +1908,77 @@ export function optionCataloguesFromTables(tables) {
 const CLASS_FRONT_MATTER = /^(?:role|alignment|hit dic?e|starting wealth|class skills|skill (?:ranks|points)(?: (?:per|at each) level)?|legendary class|table|parent class(?:es)?|requirements?)\b/i;
 
 /**
- * A page's labelled paragraphs as features: `{name, type, text}`, front matter
- * left out. `front` says which labels are front matter: a class's by default.
+ * A paragraph that opens with a label: its leading emphasis marks, name,
+ * (Ex)/(Su)/(Sp), the space after the colon, and the text.
  */
-function pageFeatures(text, front = CLASS_FRONT_MATTER) {
+const PAGE_LABEL = /^(\*{0,2})([A-Z][^.:*\n]{1,60}?)(?:\s*\((Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?\))?\*{0,2}:\*{0,2}(\s+)(\S[\s\S]*)$/;
+
+/** A line of a list, or a paragraph that holds one. */
+const LIST_LINE = /^[ \t]*[-•][ \t]/m;
+
+/** Labels that are never a feature: a table's caption, a note, an example. */
+const PAGE_ASIDE = /^(?:table|(?:(?:editor|designer|author|librarian|gm)(?:'?s)?\s+|design\s+)?notes?|sidebar|example)\b/i;
+
+/**
+ * A page's paragraphs. A feature's label on the line right after a list item
+ * starts a paragraph of its own, as if a blank line came before it.
+ */
+function pageParagraphs(text) {
   const out = [];
-  let open = null;
   for (const para of str(text).split(/\n{2,}/)) {
-    // A label ends in a colon, so a paragraph without one is not a label.
-    const m = para.includes(':') && para.match(/^\*{0,2}([A-Z][^.:*\n]{1,60}?)(?:\s*\((Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?\))?\*{0,2}:\*{0,2}\s+(\S[\s\S]*)$/);
-    if (m && !front.test(m[1])) {
-      open = { name: m[1].trim(), type: m[2] || '', text: m[3].trim() };
-      out.push(open);
-    } else if (m) open = null;
-    else if (open) open.text += `\n\n${para.trim()}`;
+    let lines = [];
+    for (const line of para.split('\n')) {
+      const after = lines.length && LIST_LINE.test(lines[lines.length - 1]);
+      if (after && /^[A-Z][^.:*\n]{1,60}?(?:\s*\((?:Ex|Su|Sp)\))?:[ \t]+\S/.test(line) && !PAGE_ASIDE.test(line)) {
+        out.push(lines.join('\n'));
+        lines = [];
+      }
+      lines.push(line);
+    }
+    out.push(lines.join('\n'));
   }
   return out;
+}
+
+/**
+ * A page's labelled paragraphs as features: `{name, type, text, lead}`, front
+ * matter left out. `front` says which labels are front matter: a class's by
+ * default.
+ *
+ * Some labels head something inside a feature rather than a feature: the ways
+ * qi comes back under Qi, the options under a choice, the steps of a list.
+ * The page sets them apart by how they look, and they stay in the feature
+ * above them:
+ *  - a label in more emphasis than the feature's own ("*Killing Blow:*" under
+ *    "Qi (Su):");
+ *  - a label with nothing after it but a list or such a label ("One Hit:" over
+ *    its list of strikes);
+ *  - a table's caption, a note or an example.
+ * With no feature above it, such a label is a feature after all.
+ *
+ * `lead` is the feature's text before the first of those, or before a list:
+ * the part that says when the feature itself arrives.
+ */
+function pageFeatures(text, front = CLASS_FRONT_MATTER) {
+  const heading = (m) => m[4].includes('\n') && /^(?:[-•][ \t]|\*{1,2}[^*\n]+:)/.test(m[5]);
+  const out = [];
+  let open = null;
+  for (const para of pageParagraphs(text)) {
+    // A label ends in a colon, so a paragraph without one is not a label.
+    const m = para.includes(':') && para.match(PAGE_LABEL);
+    const inside = m && open && (PAGE_ASIDE.test(m[2]) || m[1].length > open.weight || heading(m));
+    if (m && !inside && front.test(m[2])) { open = null; continue; }
+    if (m && !inside) {
+      open = { name: m[2].trim(), type: m[3] || '', text: m[5].trim(), lead: m[5].trim(), weight: m[1].length, aside: LIST_LINE.test(m[5]) };
+      out.push(open);
+      continue;
+    }
+    if (!open) continue;
+    open.text += `\n\n${para.trim()}`;
+    if (m || LIST_LINE.test(para)) open.aside = true;
+    else if (!open.aside) open.lead += `\n\n${para.trim()}`;
+  }
+  return out.map(({ weight, aside, ...f }) => f);
 }
 
 /**
@@ -1944,7 +1999,7 @@ export function classBlockFromEntry(entry) {
   const fields = fieldMap(entry);
   const hd = Number((fields.get('hit die') || '').replace(/^d/i, ''));
   const features = pageFeatures(entry.text).map((f) => {
-    const at = f.text.match(/\b(\d{1,2})(?:st|nd|rd|th)[ -]level\b/i);
+    const at = f.lead.match(/\b(\d{1,2})(?:st|nd|rd|th)[ -]level\b/i);
     return { level: at ? Number(at[1]) : 1, name: f.type ? `${f.name} (${f.type})` : f.name, text: f.text };
   });
   if (!hd && !features.length) return null;
@@ -2010,7 +2065,8 @@ export function archetypeBlocksFromEntry(entry) {
   const name = inner && classes.some((c) => lower(c) === lower(inner)) ? bare : full;
   const text = str(entry.text);
   const all = pageFeatures(text);
-  const features = all.filter((f) => !ARCHETYPE_ADVICE.test(f.text)).map((f) => ({ name: f.name, type: f.type, text: f.text }));
+  const features = all.filter((f) => !ARCHETYPE_ADVICE.test(f.text))
+    .map((f) => ({ name: f.name, type: f.type, text: f.text, level: levelInText(f.lead) }));
   if (!features.length) return [];
   // What the page says before its first feature is the archetype's own description.
   const first = text.split(/\n{2,}/).findIndex((p) => p.replace(/^\*+/, '').startsWith(all[0].name));
@@ -2021,7 +2077,7 @@ export function archetypeBlocksFromEntry(entry) {
 }
 
 /** Labels on a race's page that are its numbers or its description, not traits. */
-const RACE_FRONT_MATTER = /^(?:[+\-–−]\s*\d|ability score|(?:normal |slow |fast )?speed$|size$|type$|subtypes?$|languages?$|(?:fine|diminutive|tiny|small|medium|large|huge|gargantuan|colossal)$|physical description|society|relations|alignment(?: and religion)?$|religion$|adventurers$|(?:[\w ]+ )?names$)/i;
+const RACE_FRONT_MATTER = /^(?:[+\-–−]\s*\d|ability score|racial points$|(?:normal |slow |fast )?speed$|size$|type$|subtypes?$|languages?$|(?:fine|diminutive|tiny|small|medium|large|huge|gargantuan|colossal)$|physical description|society|relations|alignment(?: and religion)?$|religion$|adventurers$|(?:[\w ]+ )?names$)/i;
 
 const ABILITY_KEYS = { str: 'str', dex: 'dex', con: 'con', int: 'int', wis: 'wis', cha: 'cha' };
 
@@ -2265,7 +2321,7 @@ export function companionArchetypesFrom(tables, blocks) {
       if (!of) continue;
       add(of.kind, {
         kind: 'archetype', name: name.replace(of.suffix, '').trim(), class: of.className, source: e.source,
-        features: pageFeatures(e.text).map((f) => ({ name: f.name, type: f.type, text: f.text })),
+        features: pageFeatures(e.text).map((f) => ({ name: f.name, type: f.type, text: f.text, level: levelInText(f.lead) })),
       }, '');
     }
   }
