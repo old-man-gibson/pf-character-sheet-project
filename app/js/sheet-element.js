@@ -1548,6 +1548,11 @@ export class CharacterSheetElement extends HTMLElement {
    * publish moves the same link to a new revision instead of minting another
    * -- and a link this browser has lost the token for, or the store no longer
    * has, simply gets a fresh one. The link itself carries nothing but the id.
+   *
+   * A signed-in author also owns the link by account (functions/api/auth.js),
+   * so a browser that knows the link's id and has no token -- another device,
+   * where the id came with the character's server save -- publishes to it on
+   * the session cookie. `character-publish` tells the page a publish landed.
    */
   async #publish() {
     const { doc, report } = publishDocument(this.#model.toJSON());
@@ -1558,14 +1563,14 @@ export class CharacterSheetElement extends HTMLElement {
     let kept = null;
     try { kept = JSON.parse(localStorage.getItem(linkKey) || 'null'); } catch { kept = null; }
     const send = (method, url, extra = {}) => fetch(url, {
-      method, body, credentials: 'omit', headers: { 'content-type': 'application/json', ...extra },
+      method, body, credentials: 'same-origin', headers: { 'content-type': 'application/json', ...extra },
     });
 
     this.#historyNote = 'Publishing…';
     this.#renderHeader();
     try {
-      let res = kept?.id && kept?.token
-        ? await send('PUT', `${api.href}/${kept.id}`, { authorization: `Bearer ${kept.token}` })
+      let res = kept?.id
+        ? await send('PUT', `${api.href}/${kept.id}`, this.#linkAuth(kept))
         : null;
       // The link is gone, or was made by another browser: start a new one.
       if (res && (res.status === 403 || res.status === 404)) res = null;
@@ -1575,6 +1580,11 @@ export class CharacterSheetElement extends HTMLElement {
       if (!res.ok) throw new Error(answer?.error || `the server answered ${res.status}`);
       const link = { id: answer.id, token: answer.token || kept?.token || '', rev: answer.rev };
       try { localStorage.setItem(linkKey, JSON.stringify(link)); } catch { /* private window: the link still works; the next publish makes a new one */ }
+      this.dispatchEvent(new CustomEvent('character-publish', {
+        detail: { id: doc?.id ?? null, link: { id: link.id, rev: link.rev } },
+        bubbles: true,
+        composed: true,
+      }));
       const url = new URL('../published.html', import.meta.url);
       url.searchParams.set('s', link.id);
       this.#publishedLink = { url: url.href, rev: answer.rev, summary, copied: null };
@@ -1643,6 +1653,8 @@ export class CharacterSheetElement extends HTMLElement {
   #publishLinkKey() { return `published-link:${this.#model?.data?.id || 'character'}`; }
   #readPublishLink() { try { return JSON.parse(localStorage.getItem(this.#publishLinkKey()) || 'null'); } catch { return null; } }
   #writePublishLink(link) { try { localStorage.setItem(this.#publishLinkKey(), JSON.stringify(link)); } catch { /* private window */ } }
+  /** The header that proves a link is this browser's: its publish token. Without one, the session cookie has to. */
+  #linkAuth(kept) { return kept?.token ? { authorization: `Bearer ${kept.token}` } : {}; }
 
   /** The relay's address for one call: `/api/c/<id>/<what>` (this file is app/js/). */
   #relayApi(id, what) { return new URL(`../../api/c/${id}/${what}`, import.meta.url); }
@@ -1677,16 +1689,16 @@ export class CharacterSheetElement extends HTMLElement {
     const m = (this.#model?.data?.cardcasting?.calc?.squad || []).find((x) => x.id === member);
     if (!m) return;
     let kept = this.#readPublishLink();
-    if (!kept?.id || !kept?.token) {
+    if (!kept?.id) {
       await this.#publish();
       kept = this.#readPublishLink();
-      if (!kept?.id || !kept?.token) return;   // #publish said why
+      if (!kept?.id) return;   // #publish said why
     }
     this.#historyNote = `Handing ${m.name} over…`;
     this.#renderHeader();
     try {
       const res = await fetch(this.#relayApi(kept.id, 'grant'), {
-        method: 'POST', credentials: 'omit', headers: { 'content-type': 'application/json', authorization: `Bearer ${kept.token}` },
+        method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', ...this.#linkAuth(kept) },
         body: JSON.stringify({ member, name: m.name }),
       });
       if (res.status === 404 || res.status === 405) throw new Error('this copy of the app has no relay');
@@ -1710,9 +1722,9 @@ export class CharacterSheetElement extends HTMLElement {
     delete this.#relay.members[member];
     delete this.#relay.viewers[member];
     this.#writePublishLink({ ...(kept || {}), grants: this.#relay.members });
-    if (kept?.id && kept?.token) {
+    if (kept?.id) {
       try {
-        await fetch(this.#relayApi(kept.id, `grant/${encodeURIComponent(member)}`), { method: 'DELETE', credentials: 'omit', headers: { authorization: `Bearer ${kept.token}` } });
+        await fetch(this.#relayApi(kept.id, `grant/${encodeURIComponent(member)}`), { method: 'DELETE', credentials: 'same-origin', headers: this.#linkAuth(kept) });
       } catch { /* the link is gone from this sheet either way */ }
     }
     this.#historyNote = `You control ${g.name || 'the companion'} again.`;
@@ -1734,10 +1746,10 @@ export class CharacterSheetElement extends HTMLElement {
     const r = this.#relay;
     if (r.socket || r.closing || typeof WebSocket === 'undefined') return;
     const kept = this.#readPublishLink();
-    if (!kept?.id || !kept?.token || !Object.keys(r.members).length) return;
+    if (!kept?.id || !Object.keys(r.members).length) return;
     let ticket;
     try {
-      const res = await fetch(this.#relayApi(kept.id, 'ticket'), { method: 'POST', credentials: 'omit', headers: { authorization: `Bearer ${kept.token}` } });
+      const res = await fetch(this.#relayApi(kept.id, 'ticket'), { method: 'POST', credentials: 'same-origin', headers: this.#linkAuth(kept) });
       ticket = (await res.json().catch(() => null))?.ticket;
       if (!res.ok || !ticket) throw new Error('no ticket');
     } catch {
@@ -2201,7 +2213,14 @@ export class CharacterSheetElement extends HTMLElement {
     // the baseline of the version that actually reached the database.
     const doc = structuredClone(model.toJSON());
     try {
-      await history.save(doc);
+      const saved = await history.save(doc);
+      // Said before anything else can return: the version is in the database
+      // whether or not this character is still the one on screen.
+      this.dispatchEvent(new CustomEvent('character-save', {
+        detail: { id: doc.id ?? null, character: doc, savedAt: saved?.savedAt ?? null },
+        bubbles: true,
+        composed: true,
+      }));
       if (this.#model !== model) return;
       // Cloned for the same reason as in `#adoptDocument`: what `toJSON()`
       // returns still points into the live model.

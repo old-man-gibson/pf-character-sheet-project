@@ -53,7 +53,10 @@ print.
 **Events:** `character-change` (`detail: {character, diff}`) and `tracker-change`
 (`detail: {tracker}`), both composed so they cross the shadow boundary. `tracker-change`
 fires once for each tracker whose value, range or name moved, however it moved: its own
-controls, a rest, a card or session spend, the Psionics pips, an undo.
+controls, a rest, a card or session spend, the Psionics pips, an undo. `character-save`
+(`detail: {id, character, savedAt}`) fires after **Save** has written the saved version,
+and `character-publish` (`detail: {id, link: {id, rev}}`) after a publish. Both are
+composed.
 
 A host page that saves server-side can ignore all of the local machinery and listen to
 `character-change`. One that wants the saved-version and history behaviour gets it for

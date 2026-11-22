@@ -289,8 +289,9 @@ export async function relayRequest({ request, env, id, parts, verify }) {
   if (what !== 'relay') {
     const auth = request.headers.get('authorization') || '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
-    // `verify` answers null for a character the store does not have, false for a wrong token.
-    const opens = token ? await verify(token) : false;
+    // `verify` answers null for a character the store does not have, false for
+    // a wrong token. With no token it goes by the signed-in account that owns the link.
+    const opens = await verify(token);
     if (opens === null) return json({ error: 'No such published character.' }, 404);
     if (!opens) return json({ error: 'That publish token does not open this link.' }, 403);
   }

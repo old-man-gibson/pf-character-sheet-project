@@ -3,10 +3,11 @@
  *
  * A player presses Publish, the sheet sends the document here, and gets back a
  * link anyone can open. That is the whole service, and it is deliberately a
- * key-value read: no accounts, no sessions, no write path for readers. The
- * only secret is the publish token the author is handed once, which lets them
- * publish again to the same link; everything else is public to whoever has
- * the id, and the id is the only thing a share link carries.
+ * key-value read with no write path for readers. The author is handed a
+ * publish token once, which lets that browser publish again to the same link.
+ * An author who is signed in (auth.js) also owns the link by account, so any
+ * of their devices can publish to it. Everything else is public to whoever
+ * has the id, and the id is the only thing a share link carries.
  *
  *   POST /api/c              { doc, summary }      -> { id, rev, token, published }
  *   PUT  /api/c/<id>         same body, header Authorization: Bearer <token>
@@ -17,7 +18,7 @@
  * Every revision stays addressable, so the list in `history` is the published
  * history and the latest view is a pointer that moves. Layout in KV:
  *
- *   c:<id>        { rev, published, tokenHash, history: [{ rev, published, summary }] }
+ *   c:<id>        { rev, published, tokenHash, owner?, history: [{ rev, published, summary }] }
  *   c:<id>:<rev>  { id, rev, published, summary, doc }
  *
  * Bind the namespace to the Pages project as SHEETS (Settings > Bindings > KV
@@ -98,11 +99,21 @@ async function storeRevision(env, id, meta, doc, summary) {
   return { rev, published };
 }
 
+/**
+ * How a request may publish to a link: 'token' for its publish token, 'owner'
+ * for the signed-in account the link belongs to, '' for neither.
+ */
+export async function opensLink(meta, token, session) {
+  if (token && (await hash(token)) === meta.tokenHash) return 'token';
+  if (session?.id && meta.owner === session.id) return 'owner';
+  return '';
+}
+
 export async function onRequestOptions() {
   return new Response(null, { status: 204, headers: CORS });
 }
 
-export async function onRequestPost({ request, env, params }) {
+export async function onRequestPost({ request, env, params, session = null }) {
   const { id: given } = route(params);
   if (given) return fail(405, 'Publish a new character with POST /api/c; publish again with PUT /api/c/<id>.');
   if (!env?.SHEETS) return fail(503, 'This copy of the app has no publishing store.');
@@ -114,11 +125,12 @@ export async function onRequestPost({ request, env, params }) {
   let id = newId();
   // A collision is a one in ten-quadrillion event; one retry is courtesy.
   if (await env.SHEETS.get(`c:${id}`)) id = newId();
-  const { rev, published } = await storeRevision(env, id, { tokenHash, history: [] }, read.doc, read.summary);
+  const meta = { tokenHash, ...(session?.id ? { owner: session.id } : {}), history: [] };
+  const { rev, published } = await storeRevision(env, id, meta, read.doc, read.summary);
   return json({ id, rev, published, token }, 201, { 'cache-control': 'no-store' });
 }
 
-export async function onRequestPut({ request, env, params }) {
+export async function onRequestPut({ request, env, params, session = null }) {
   const { id, rev: extra } = route(params);
   if (!validId(id) || extra) return fail(404, 'No such published character.');
   if (!env?.SHEETS) return fail(503, 'This copy of the app has no publishing store.');
@@ -127,11 +139,14 @@ export async function onRequestPut({ request, env, params }) {
 
   const auth = request.headers.get('authorization') || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
-  if (!token || (await hash(token)) !== meta.tokenHash) return fail(403, 'That publish token does not open this link.');
+  const how = await opensLink(meta, token, session);
+  if (!how) return fail(403, 'That publish token does not open this link.');
 
   const read = await readPublish(request);
   if (read.error) return read.error;
-  const { rev, published } = await storeRevision(env, id, meta, read.doc, read.summary);
+  // A link published before its author signed in joins their account here.
+  const kept = how === 'token' && session?.id && !meta.owner ? { ...meta, owner: session.id } : meta;
+  const { rev, published } = await storeRevision(env, id, kept, read.doc, read.summary);
   return json({ id, rev, published }, 200, { 'cache-control': 'no-store' });
 }
 

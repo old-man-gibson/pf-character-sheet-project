@@ -99,6 +99,23 @@ runs the site locally with a store of its own; the state has to live outside the
 repository, because the repository is the watched asset folder and a store inside it
 reloads the server on its own writes.
 
+**Sign in with Discord** lets a player save characters to the server and open them on
+another device. A signed-in player's character is sent to the server on each **Save**
+(see [Saving to the server](docs/importing-and-saving.md#saving-to-the-server)). To turn
+it on for a deployment:
+
+1. Create an application in the Discord Developer Portal. Under OAuth2, add the redirect
+   `https://<your site>/api/auth/discord/callback`.
+2. Set the Worker's secrets (Settings → Variables and Secrets, type Secret, or
+   `wrangler secret put`): `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` and
+   `SESSION_SECRET` (any long random text). Add `DISCORD_GUILD_ID` to limit server saves
+   to the members of one Discord server.
+3. Deploy. `wrangler.jsonc` already binds `ACCOUNTS`, the Durable Object that stores the
+   characters, one object per account.
+
+Without the secrets the app shows no sign-in and works as before. A link published while
+signed in belongs to the account, so any of the player's devices can publish to it.
+
 To pre-load a roster on a deployment of your own, drop each character's JSON into
 `data/characters/` and list it in `data/characters/index.json` — `tools/convert.mjs`
 does both when it converts a workbook (below). Anything listed there is public to
@@ -156,8 +173,12 @@ app/js/publish.js       a character as a third party receives it: only the pack 
                         actually carries, never the catalogues they came from
 app/published.html      what a published character looks like to someone who is not you
 functions/api/c/        the publishing store: request handlers over one KV namespace
-worker.js               the Cloudflare Worker: static files, plus /api/c through those handlers
-wrangler.jsonc          the Cloudflare deployment (assets, Worker, KV binding); .assetsignore lists what stays home
+functions/api/auth.js   sign-in with Discord and the session cookie
+functions/api/saves.js  server saves: a signed-in account's characters, one Durable Object per account
+app/js/account.js       the app's calls for sign-in and server saves, and the rule for send, load or ask
+app/js/server-saves.js  keeps the picker's characters and their server copies the same
+worker.js               the Cloudflare Worker: static files, plus /api/c, /api/auth and /api/saves
+wrangler.jsonc          the Cloudflare deployment (assets, Worker, KV and Durable Object bindings); .assetsignore lists what stays home
 404.html                the not-found page a deployment serves
 app/cards.html          the card table, or the hand, in a window of its own (js/card-window.js):
                         drawn by the sheet that opened it, for a streamed game

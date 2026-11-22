@@ -333,6 +333,46 @@ A file is vetted before it loads, and a refusal says what to do about it: wrong
 the parse error, and anything that is not a character document says so. `Reset` on an
 imported character restores the document as imported, since there is no URL to re-fetch.
 
+### Saving to the server
+
+A deployment can turn on sign-in with Discord (the [README](../README.md) lists the
+steps). The header then has **Sign in with Discord**. For a signed-in player, each
+character in the picker also has a copy on the server:
+
+- **Save** sends the saved version to the server. Edits made after a Save stay in the
+  browser until the next Save.
+- A character that was never sent is sent when the page loads. What is sent is the
+  version that opening the character would show.
+- On another device, the picker lists the server's characters with the tag *server
+  only*. Pressing one loads it into that browser.
+- When the page loads, and when it is shown again after a minute away, each character is
+  compared with the server's copy. A newer server copy is loaded if nothing was saved in
+  this browser since the last send. Unsaved edits are filed as a snapshot first.
+- If both copies changed, a banner asks which to keep. **Load it** takes the server's
+  copy and files this browser's as a checkpoint named *before the server copy*.
+  **Keep this one** sends this browser's copy over the server's.
+- The tag *synced* on a character means its copy here is the server's.
+- × on a character removes it from the browser only. × on a *server only* character
+  deletes the server copy. A device that still has the character sends it again.
+
+Extension packs, snapshots, checkpoints, the undo lists and unsaved edits stay in each
+browser.
+
+The browser gzips the document and the Worker stores the bytes without reading them, in
+a Durable Object for the account (`functions/api/saves.js`, bound as `ACCOUNTS`). Each
+save has a revision number. A send names the revision it started from, and the server
+answers 409 when another device has saved since. The browser keeps one record per
+character, `character-sheet:server:<id>` (`{ owner, rev, savedAt }`), and `syncPlan` in
+`app/js/account.js` reads it against the server's revision to choose send, load or ask.
+
+The session is a signed cookie (`functions/api/auth.js`). The server keeps no session
+records and does not keep the Discord access token. Server membership is checked at
+sign-in and a session lasts 30 days. An account keeps at most 200 characters on the
+server, each at most 1 MB compressed.
+
+`tests/account-api.test.mjs` runs the sign-in against a stand-in for Discord, the saves
+against a Map, and the app's own calls through the Worker.
+
 ### Both paths, and the schema
 
 Local edits are unaffected by re-conversion until you press **Reset** on a character.
