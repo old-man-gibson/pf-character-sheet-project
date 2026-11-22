@@ -1,5 +1,6 @@
 // The Cloudflare deployment: the repository served as static assets, with
-// worker.js answering /api/c (the publishing store) and the 404 page.
+// worker.js answering /api/c (the publishing store), /api/auth (sign-in with
+// Discord), /api/saves (a signed-in account's characters) and the 404 page.
 //
 //   npx wrangler deploy              what the connected-repository build runs
 //   node tools/deploy-site.mjs       the same from a clean export of a commit
@@ -11,6 +12,10 @@
 // here (Storage & Databases > KV). On a deployment of your own, replace the
 // id with your namespace's; without one the app works and Publish reports
 // that this copy has no store.
+//
+// Sign-in is off until the deployment has its secrets (functions/api/auth.js
+// lists them). They are set in the dashboard or with `wrangler secret put`,
+// never in this file, and a deploy keeps them.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "pf-character-sheet-project",
@@ -27,10 +32,18 @@
   // The relay that hands a squad member to the GM: one Durable Object per
   // published character, holding the WebSockets and the grants (see
   // functions/api/c/relay.js). SQLite-backed, which is the free-plan kind.
+  // Server saves: one Durable Object per signed-in account, holding that
+  // account's characters (see functions/api/saves.js). Also SQLite-backed.
   "durable_objects": {
-    "bindings": [{ "name": "RELAY", "class_name": "Relay" }]
+    "bindings": [
+      { "name": "RELAY", "class_name": "Relay" },
+      { "name": "ACCOUNTS", "class_name": "Account" }
+    ]
   },
-  "migrations": [{ "tag": "relay-v1", "new_sqlite_classes": ["Relay"] }],
+  "migrations": [
+    { "tag": "relay-v1", "new_sqlite_classes": ["Relay"] },
+    { "tag": "account-v1", "new_sqlite_classes": ["Account"] }
+  ],
   // Every other branch builds as a Preview, which takes its settings from here
   // and inherits none of the above. Empty on purpose: a preview is for looking
   // at the sheet, and gets no store, so Publish there says so instead of

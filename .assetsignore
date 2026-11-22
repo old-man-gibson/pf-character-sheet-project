@@ -7,6 +7,8 @@
 .github
 .claude
 .wrangler
+.dev.vars*
+wrangler.dev.jsonc
 node_modules
 private
 functions
