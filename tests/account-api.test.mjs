@@ -303,6 +303,15 @@ check('worker: a path under an id is 404', (await wfetch('GET', '/api/saves/vesn
 check('worker: delete removes it', await (await wfetch('DELETE', '/api/saves/vesna', { session: alice })).json(), { id: 'vesna' });
 check('worker: a deleted save is 404', (await wfetch('GET', '/api/saves/vesna', { session: alice })).status, 404);
 
+// Sign-in is a page navigation: the browser goes to /api/auth/discord and
+// Discord sends it back to the callback. With a 404 page configured, Cloudflare
+// answers a navigation to anything that is not a file with that page and never
+// runs the Worker, unless the path is listed to run the Worker first.
+const { readFileSync } = await import('node:fs');
+const config = JSON.parse(readFileSync(resolve('wrangler.jsonc'), 'utf8').split('\n').filter((line) => !line.trim().startsWith('//')).join('\n'));
+check('config: a missing page still gets the 404 page', config.assets.not_found_handling, '404-page');
+check('config: everything under /api/ runs the Worker first', config.assets.run_worker_first, ['/api/*']);
+
 // A published link follows its author's account.
 const doc = { id: 'vesna', identity: { name: 'Vesna' } };
 res = await wfetch('POST', '/api/c', { session: alice, body: { doc } });
