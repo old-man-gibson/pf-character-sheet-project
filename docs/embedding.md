@@ -55,8 +55,10 @@ print.
 fires once for each tracker whose value, range or name moved, however it moved: its own
 controls, a rest, a card or session spend, the Psionics pips, an undo. `character-save`
 (`detail: {id, character, savedAt}`) fires after **Save** has written the saved version,
-and `character-publish` (`detail: {id, link: {id, rev}}`) after a publish. Both are
-composed.
+`character-publish` (`detail: {id, link: {id, rev}}`) after a publish, and
+`character-checkpoint` (`detail: {id}`) after a checkpoint is made, renamed or deleted.
+All three are composed. `refreshHistory()` reads the stored history again and redraws
+its list, for a host page that changed it.
 
 A host page that saves server-side can ignore all of the local machinery and listen to
 `character-change`. One that wants the saved-version and history behaviour gets it for

@@ -342,7 +342,7 @@ character in the picker also has a copy on the server:
 - **Save** sends the saved version to the server. Edits made after a Save stay in the
   browser until the next Save.
 - A character that was never sent is sent when the page loads. What is sent is the
-  version that opening the character would show.
+  version that opening the character would show, as the sheet would save it.
 - On another device, the picker lists the server's characters with the tag *server
   only*. Pressing one loads it into that browser.
 - When the page loads, and when it is shown again after a minute away, each character is
@@ -353,22 +353,45 @@ character in the picker also has a copy on the server:
   **Keep this one** sends this browser's copy over the server's.
 - The tag *synced* on a character means its copy here is the server's.
 - × on a character removes it from the browser only. × on a *server only* character
-  deletes the server copy. A device that still has the character sends it again.
+  deletes the server copy and its checkpoints. A device that still has the character
+  sends both again.
 
-Extension packs, snapshots, checkpoints, the undo lists and unsaved edits stay in each
+A character's named checkpoints are saved to the server too:
+
+- A checkpoint is sent when it is made.
+- On another device, History lists the character's checkpoints marked *on the server*.
+  **Open** downloads one and keeps it in that browser.
+- A checkpoint renamed or deleted on one device is renamed or deleted on the others the
+  next time they compare with the server.
+
+Extension packs, automatic snapshots, the undo lists and unsaved edits stay in each
 browser.
 
 The browser gzips the document and the Worker stores the bytes without reading them, in
 a Durable Object for the account (`functions/api/saves.js`, bound as `ACCOUNTS`). Each
 save has a revision number. A send names the revision it started from, and the server
 answers 409 when another device has saved since. The browser keeps one record per
-character, `character-sheet:server:<id>` (`{ owner, rev, savedAt }`), and `syncPlan` in
-`app/js/account.js` reads it against the server's revision to choose send, load or ask.
+character, `character-sheet:server:<id>` (`{ owner, rev, savedAt, cps, cpsRev }`), and
+`syncPlan` in `app/js/account.js` reads it against the server's revision to choose send,
+load or ask.
+
+Each checkpoint has an id its browser gives it (`uid` on the history record), and the
+server keeps it under that id beside the character. The record's `cps` is the checkpoint
+ids and names this browser last saw on the server, which is how `checkpointPlan` tells a
+checkpoint made here from one deleted on another device. The server counts every change
+to a character's checkpoints, and a browser that saw the same count last time
+(`cpsRev`) and has changed none of its own asks nothing. A checkpoint from another
+device is a history record with no document until it is opened; `setCheckpointSource`
+in `app/js/history.js` is where the download comes from.
 
 The session is a signed cookie (`functions/api/auth.js`). The server keeps no session
 records and does not keep the Discord access token. Server membership is checked at
-sign-in and a session lasts 30 days. An account keeps at most 200 characters on the
-server, each at most 1 MB compressed.
+sign-in and a session lasts 30 days.
+
+An account keeps at most 200 characters on the server, 100 checkpoints of each, and
+25 MB in all. A character or a checkpoint is at most 1 MB compressed, and a typical one
+is about 20 KB, so a character with a checkpoint at each of 20 levels takes about half
+a megabyte. The account menu shows how much is used.
 
 `tests/account-api.test.mjs` runs the sign-in against a stand-in for Discord, the saves
 against a Map, and the app's own calls through the Worker.

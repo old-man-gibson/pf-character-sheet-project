@@ -10,20 +10,38 @@
  * both copies changed. A character the server has and this browser does not
  * is listed for the picker and loaded when it is pressed.
  *
+ * A character's named checkpoints go with it. One made here is sent; one made
+ * on another device is listed here without its document, which is downloaded
+ * when the checkpoint is opened; one deleted or renamed on either side is
+ * deleted or renamed on the other (account.js `checkpointPlan`). Automatic
+ * snapshots stay in the browser that took them.
+ *
  * The page owns the roster and the stored documents, so it hands in what this
  * needs (`host`) and gets back what its picker and its dialogs call.
  */
 
-import { SCHEMA_VERSION } from './model.js';
-import { historyFor } from './history.js';
+import { Character, SCHEMA_VERSION } from './model.js';
+import { historyFor, setCheckpointSource } from './history.js';
 import { esc } from './html-escape.js';
 import {
-  clearSync, deleteSave, listSaves, readSave, readSync, signInUrl, signOut, syncPlan, whoAmI, writeSave, writeSync,
+  checkpointPlan, clearSync, deleteCheckpoint, deleteSave, listCheckpoints, readAccount, readCheckpointBytes, readSave,
+  readSync, signInUrl, signOut, syncPlan, whoAmI, writeCheckpoint, writeSave, writeSync,
 } from './account.js';
 
 const RECHECK_MS = 60 * 1000;
 
-const NOT_MEMBER = 'This Discord account is not a member of the server. Characters are not saved to the server.';
+/** A document as the sheet would save it: through the model, with the play state settled first, as the sheet does on opening one. */
+function asSaved(doc) {
+  try {
+    const model = new Character(structuredClone(doc));
+    void model.hpState;
+    return model.toJSON();
+  } catch {
+    return doc;
+  }
+}
+
+const NOT_MEMBER ='This Discord account is not a member of the server. Characters are not saved to the server.';
 
 /**
  * @param {object} host
@@ -34,6 +52,8 @@ const NOT_MEMBER = 'This Discord account is not a member of the server. Characte
  * @param {Function} host.currentDocument    (entry) -> the version opening it would show
  * @param {Function} host.putDocument        (id, doc, options) -> store a document under an id; null if refused
  * @param {Function} host.redraw             draw the picker again
+ * @param {Function} host.openId             the id of the character on screen
+ * @param {Function} host.historyChanged     the open character's stored history changed: list it again
  */
 export function mountServerSaves(host) {
   const { root, say } = host;
@@ -44,6 +64,8 @@ export function mountServerSaves(host) {
   const same = new Set();
   /** Characters waiting for the player to pick a copy. */
   let asks = [];
+  /** The compressed bytes the account holds on the server and may hold, as last listed. */
+  let space = null;
   let queue = Promise.resolve();
   let checked = 0;
 
@@ -57,6 +79,8 @@ export function mountServerSaves(host) {
     return Number.isNaN(d.getTime()) ? 'earlier' : d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
   };
   const why = (err) => (err?.status ? String(err.message).replace(/\.$/, '') : 'the server could not be reached');
+  /** Write what this browser knows of a character's server copy, keeping the fields not named. */
+  const keepSync = (id, fields) => writeSync(id, { ...(readSync(id, me.id) || {}), owner: me.id, ...fields });
 
   /** The published link's id for a character, which rides with the save so another device can publish to it. */
   function publishedId(id) {
@@ -91,9 +115,14 @@ export function mountServerSaves(host) {
 
   /** Send the version of a character that opening it would show. True when the server took it. */
   async function push(entry, { force = false } = {}) {
-    const doc = await host.currentDocument(entry);
-    if (!doc) return false;
+    const stored = await host.currentDocument(entry);
+    if (!stored) return false;
     const savedAt = await savedAtOf(entry.id);
+    // A character never saved here is still as it was created or imported, and
+    // the sheet fills in a great deal the first time it opens one. It is sent
+    // as the sheet would save it, so another device opens it with no changes
+    // to report.
+    const doc = savedAt ? stored : asSaved(stored);
     const summary = summaryFor(entry, doc);
     let out;
     try {
@@ -110,9 +139,62 @@ export function mountServerSaves(host) {
       asks = [...asks.filter((a) => a.id !== entry.id), { id: entry.id, name: summary.name, saved: out.conflict.saved }];
       return false;
     }
-    writeSync(entry.id, { owner: me.id, rev: out.rev, savedAt });
-    rows.set(entry.id, { id: entry.id, rev: out.rev, saved: out.saved, summary });
+    // A copy the server did not have before has no checkpoints: forget the ones seen on the old copy, so they are sent again.
+    keepSync(entry.id, { rev: out.rev, savedAt, ...(out.created ? { cps: {}, cpsRev: -1 } : {}) });
+    rows.set(entry.id, { ...(out.created ? {} : rows.get(entry.id)), id: entry.id, rev: out.rev, saved: out.saved, summary });
     same.add(entry.id);
+    return true;
+  }
+
+  /**
+   * Make a character's checkpoints here and on the server the same. True when
+   * the server was asked.
+   */
+  async function syncCheckpoints(id, name) {
+    const row = rows.get(id);
+    if (!active() || !row || !same.has(id)) return false;
+    const history = historyFor(id);
+    const local = await history.checkpoints();
+    const sync = readSync(id, me.id) || {};
+    const known = sync.cps || {};
+    // The server's count of changes is the one last seen, and the checkpoints here are the ones last matched: nothing to ask.
+    if (sync.cpsRev === (row.cps || 0) && local.length === Object.keys(known).length
+      && local.every((cp) => known[cp.uid] === cp.label)) return false;
+    let listed;
+    try {
+      listed = await listCheckpoints(id);
+    } catch (err) {
+      if (err.status === 401) ended();
+      return false;
+    }
+    const { steps, known: next } = checkpointPlan({ local, server: listed.checkpoints, known });
+    let { cps } = listed;
+    const refused = [];
+    for (const cp of steps.send) {
+      try {
+        const bytes = await history.bytesOf(cp.key);
+        if (!bytes) throw new Error('not held here');
+        cps = (await writeCheckpoint(id, cp.uid, { label: cp.label, savedAt: cp.savedAt, changes: cp.changes, schema: cp.schemaVersion, bytes })).cps;
+      } catch (err) {
+        delete next[cp.uid];          // not there yet: sent again next time
+        if (err.status) refused.push(err);
+      }
+    }
+    for (const cp of steps.rename) {
+      try { cps = (await writeCheckpoint(id, cp.uid, { label: cp.label })).cps; } catch { next[cp.uid] = known[cp.uid]; }
+    }
+    for (const cp of steps.delete) {
+      try { cps = (await deleteCheckpoint(id, cp.uid)).cps; } catch (err) { if (err.status !== 404) next[cp.uid] = cp.label; }
+    }
+    for (const cp of steps.take) await history.rename(cp.key, cp.label);
+    for (const cp of steps.drop) await history.remove(cp.key);
+    await history.adoptCheckpoints(steps.adopt);
+    keepSync(id, { cps: next, cpsRev: cps });
+    rows.set(id, { ...rows.get(id), cps });
+    if ((steps.take.length || steps.drop.length || steps.adopt.length) && host.openId() === id) host.historyChanged();
+    if (refused.length) {
+      say('err', `Could not save ${refused.length} checkpoint${refused.length === 1 ? '' : 's'} of ${name} to the server: ${why(refused[0])}.`);
+    }
     return true;
   }
 
@@ -132,10 +214,11 @@ export function mountServerSaves(host) {
     }
     const put = await host.putDocument(id, row.doc, { label, keepEdits: true, origin: local(id)?.origin || row.summary?.origin || 'import', open });
     if (!put) return null;
-    writeSync(id, { owner: me.id, rev: row.rev, savedAt: put.savedAt });
-    rows.set(id, { id, rev: row.rev, saved: row.saved, summary: row.summary });
+    keepSync(id, { rev: row.rev, savedAt: put.savedAt });
+    rows.set(id, { ...rows.get(id), id, rev: row.rev, saved: row.saved, summary: row.summary });
     same.add(id);
     adoptLink(id, row.summary?.published);
+    await syncCheckpoints(id, name);
     return put;
   }
 
@@ -161,7 +244,10 @@ export function mountServerSaves(host) {
         label: 'Keep this one',
         run: settle(async () => {
           const entry = local(next.id);
-          if (entry && await push(entry, { force: true })) say('ok', `Saved ${next.name} to the server.`);
+          if (entry && await push(entry, { force: true })) {
+            say('ok', `Saved ${next.name} to the server.`);
+            await syncCheckpoints(next.id, next.name);
+          }
         }),
       },
     ]);
@@ -171,14 +257,15 @@ export function mountServerSaves(host) {
   async function check() {
     if (!active()) return;
     checked = Date.now();
-    let list;
+    let account;
     try {
-      list = await listSaves();
+      account = await readAccount();
     } catch (err) {
       if (err.status === 401) ended();
       return;
     }
-    rows = new Map(list.map((s) => [s.id, s]));
+    rows = new Map(account.saves.map((s) => [s.id, s]));
+    space = { used: account.used, total: account.limits?.total || 0 };
     same.clear();
     asks = [];
     const loaded = [];
@@ -193,7 +280,9 @@ export function mountServerSaves(host) {
         const put = await pull(entry.id, entry.name);
         if (put) loaded.push({ name: put.summary.name, edits: put.edits });
       } else asks.push({ id: entry.id, name: entry.name, saved: server.saved });
+      await syncCheckpoints(entry.id, entry.name);
     }
+    drawButton();
     host.redraw();
     if (asks.length) ask();
     else if (loaded.length) {
@@ -214,9 +303,11 @@ export function mountServerSaves(host) {
         title="Sign in to save characters to the server and open them on other devices.">Sign in with Discord</a>`;
       return;
     }
+    const MB = 1024 * 1024;
+    const size = (bytes) => (bytes < MB ? `${Math.round(bytes / 1024)} KB` : `${(bytes / MB).toFixed(1)} MB`);
     const note = !me.saves ? 'This copy of the app has no server saves.'
       : !me.member ? NOT_MEMBER
-        : 'Characters are saved to the server when you press Save.';
+        : `Characters are saved to the server when you press Save.${space?.total ? ` ${size(space.used)} of ${Math.round(space.total / MB)} MB used.` : ''}`;
     root.innerHTML = `<button type="button" class="btn" id="accountBtn" aria-haspopup="true" aria-expanded="false"
         aria-controls="accountDrop" title="${esc(note)}">${esc(me.name)} ▾</button>
       <div class="drop" id="accountDrop">
@@ -243,6 +334,9 @@ export function mountServerSaves(host) {
       say('ok', 'Signed out. Your characters are still in this browser.');
     });
   }
+  // A checkpoint listed here without its document is downloaded when it is opened.
+  setCheckpointSource((id, uid) => (active() ? readCheckpointBytes(id, uid) : null));
+
   const doc = root.ownerDocument;
   doc.addEventListener('click', (e) => { if (!e.target.closest?.(`#${root.id}`)) root.classList.remove('open'); });
   doc.addEventListener('keydown', (e) => {
@@ -296,8 +390,17 @@ export function mountServerSaves(host) {
         const entry = local(id);
         if (!entry) return;
         await push(entry);
+        await syncCheckpoints(id, entry.name);
         host.redraw();
         ask();
+      });
+    },
+    /** A checkpoint of a character here was made, renamed or deleted: do the same on the server. */
+    checkpoints(id) {
+      if (!active()) return;
+      run(async () => {
+        const entry = local(id);
+        if (entry) await syncCheckpoints(id, entry.name);
       });
     },
     /** A character here was published: send it again if its link is not with the save yet. */
