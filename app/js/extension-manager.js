@@ -26,6 +26,7 @@ import { downloadFile } from './download.js';
 import { runtime } from './extension-runtime.js';
 import { campaignPreset, changedRuleTitles, presetCampaign } from './model/campaign.js';
 import { readShared, sharedRules, writeShared } from './shared-rules.js';
+import { campaignLink } from './campaign-link.js';
 import {
   BLOCK_KINDS, TABLE_KINDS, inspectExtension, normalizeExtension, normalizeBlock, blankExtension,
   describeSummary, summarize, slugId, looksLikeExtension, looksLikeLibrary, buildLibrary, planLibrary,
@@ -400,6 +401,8 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
    * them, and saved or loaded as a file. A character set to its own rules
    * keeps them.
    */
+  // True after Copy link, so the link stays on show to be copied by hand.
+  let rulesLink = false;
   function rulesHtml() {
     const shared = readShared();
     const on = !!shared?.on;
@@ -415,9 +418,11 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
         <div class="actions">
           <button data-action="rules-save" ${on ? '' : 'disabled'} title="Download the shared rules as campaign-rules.json">Save as a file</button>
           <button data-action="rules-load" title="Load shared rules from a file.">Load from a file…</button>
+          <button data-action="rules-link" ${on ? '' : 'disabled'} title="Copy a link that opens the app with the shared rules">Copy link</button>
           ${on && changed.length ? '<button data-action="rules-reset" title="Reset the shared rules to defaults">Reset to defaults</button>' : ''}
           <input type="file" accept="application/json,.json" data-rules-file hidden>
         </div>
+        ${rulesLink && on ? `<label>Campaign link <input type="text" readonly data-rules-link value="${esc(campaignLink(shared.rules))}"></label>` : ''}
       </div>`;
   }
 
@@ -1572,6 +1577,18 @@ Hit Die: d12.
         downloadFile('campaign-rules.json', JSON.stringify(campaignPreset({ campaign: shared.rules }), null, 1));
       });
       q('[data-action="rules-load"]')?.addEventListener('click', () => q('[data-rules-file]')?.click());
+      q('[data-action="rules-link"]')?.addEventListener('click', async () => {
+        const shared = readShared();
+        if (!shared) return;
+        let copied = true;
+        try { await navigator.clipboard.writeText(campaignLink(shared.rules)); } catch { copied = false; }
+        rulesLink = true;
+        notice = copied ? 'Campaign link copied. It opens the app with the shared rules.'
+          : 'Select the campaign link below and copy it. It opens the app with the shared rules.';
+        error = null;
+        render();
+        if (!copied) q('[data-rules-link]')?.select();
+      });
       q('[data-rules-file]')?.addEventListener('change', async (e) => {
         const file = e.target.files?.[0];
         e.target.value = '';

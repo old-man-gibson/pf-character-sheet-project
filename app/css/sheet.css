@@ -1535,6 +1535,13 @@ select.jumpto[hidden] { display: none; }
   padding: 6px 8px; border-radius: 6px; border-left: 3px solid transparent;
 }
 .camprow.changed { border-left-color: var(--cs-accent); background: var(--cs-accent-soft); }
+/* The campaign link, shown after Copy link so it can be copied by hand too. */
+.campaign .camplink { flex-wrap: wrap; margin: 0 0 8px; }
+.campaign .camplink input { flex: 1 1 18ch; min-width: 0; font-size: 0.8rem; }
+.campaign .camplink .campnote { margin: 0; font-size: 0.72rem; color: var(--cs-muted); }
+/* The rows come in groups by what they change, each under a heading. */
+.campgroup { display: grid; gap: 4px; }
+.campgroup > .subhead { margin: 10px 0 0; padding: 0 8px 3px; border-bottom: 1px solid var(--cs-line); }
 /* Variant multiclassing on Progression: level, feature name, and the notes
    taking the rest. */
 table.vmc col.lvl { width: 4.5rem; }

@@ -60,7 +60,7 @@ for (const id of fixtureIds()) {
   for (const [key, value] of [['abp', false], ['mythic', false], ['heroPoints', false], ['pointBuy', 20], ['mythicTier', 'awarded'],
     ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false], ['antiheroes', true],
     ['maxLevel', 6], ['maxLevel', 25], ['maxTier', 5], ['maxTier', 12], ['gestalt', false], ['hitPoints', 'average'], ['hitPoints', 'rolled'],
-    ['abpLadder', 'core'], ['mythicLadder', 'core'], ['pastColossal', true], ['minLevel', 1], ['minLevel', 8], ['maxLevel', 60],
+    ['abpLadder', 'core'], ['mythicLadder', 'core'], ['mythicFeats', 'even'], ['mythicFeats', 'every'], ['mythicFeatEvery', 3], ['pastColossal', true], ['minLevel', 1], ['minLevel', 8], ['maxLevel', 60],
     ['skillSystem', 'background'], ['backgroundUse', 'floating'], ['backgroundRanks', 3], ['agingEffects', true], ['vmc', true], ['archetypePackages', true]]) {
     const m = new Character(loadCharacter(id));
     const before = numbers(m);
@@ -438,6 +438,76 @@ console.log('\nthe core mythic ladder: no feat on an even tier');
   check('core: it waits', c.data.saves.fortitude.total, fort);
   const html = renderFeaturesPanel(c, { draft: {} });
   check('the table says so', [html.includes('Mythic feat 1'), html.includes('The core ladder grants no feat at this tier')], [true, true]);
+}
+
+console.log('\nmythic feats: odd tiers, even tiers, or every so many');
+{
+  const { mythicFeatTiers, mythicFeatWhen, mythicTierGrantOf } = await import('../app/js/model/campaign.js');
+  const { renderFeaturesPanel } = await import('../app/js/ui/panels/feats.js');
+  const { campaignPanel } = await import('../app/js/ui/panels/campaign.js');
+  const c = new Character(blankDocument({ name: 'Feat tiers', level: 1 }));
+  c.set('identity.level', 12);
+  const grants = () => [1, 2, 3, 4, 5, 6].map((t) => mythicTierGrantOf(c.data, t));
+  check('default: odd tiers', [mythicFeatTiers(c.data), mythicFeatWhen(c.data)], [[1, 3, 5, 7, 9], 'odd tiers']);
+  check('default: the table\'s labels', grants(), ['Feat 1', 'RP Power 1', 'Feat 2', 'RP Power 2', 'Feat 3', 'RP Power 3']);
+  const fort = c.data.saves.fortitude.total;
+  c.data.mythic.abilities[0].featEffect = '{fort += 1}';
+  c.data.mythic.abilities[1].featEffect = '{fort += 2}';
+  c.recompute();
+  check('the table\'s ladder: every slot counts', c.data.saves.fortitude.total, fort + 3);
+
+  c.set('campaign.mythicFeats', 'even');
+  check('even tiers', [mythicFeatTiers(c.data), mythicFeatWhen(c.data)], [[2, 4, 6, 8, 10], 'even tiers']);
+  check('even: feats and powers trade places', grants(), ['RP Power 1', 'Feat 1', 'RP Power 2', 'Feat 2', 'RP Power 3', 'Feat 3']);
+  check('even, the table\'s ladder: still every slot', c.data.saves.fortitude.total, fort + 3);
+  c.set('campaign.mythicLadder', 'core');
+  check('even, core: only the even slot counts', c.data.saves.fortitude.total, fort + 2);
+  check('even, core: labels', grants(), [null, 'Mythic feat 1', null, 'Mythic feat 2', null, 'Mythic feat 3']);
+
+  c.set('campaign.mythicFeats', 'every');
+  check('every tier', [mythicFeatTiers(c.data), mythicFeatWhen(c.data)], [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 'every tier']);
+  check('every tier, core: both slots count', c.data.saves.fortitude.total, fort + 3);
+  c.set('campaign.mythicFeatEvery', 3);
+  check('every 3rd tier', [mythicFeatTiers(c.data), mythicFeatWhen(c.data)], [[3, 6, 9], 'every 3rd tier']);
+  check('every 3rd, core: neither slot counts', c.data.saves.fortitude.total, fort);
+  check('every 3rd, core: labels', grants(), [null, null, 'Mythic feat 1', null, null, 'Mythic feat 2']);
+  c.set('campaign.mythicLadder', 'table');
+  check('every 3rd, table: labels', grants(), ['RP Power 1', 'RP Power 2', 'Feat 1', 'RP Power 3', 'RP Power 4', 'Feat 2']);
+  c.set('campaign.mythicFeatEvery', 0);
+  check('a rate of 0 reads as 1', mythicFeatTiers(c.data).length, 10);
+  c.set('campaign.mythicFeatEvery', 3);
+  check('the feats table says when', renderFeaturesPanel(c, { draft: {} }).includes('A mythic feat comes on every 3rd tier.'), true);
+  const panel = campaignPanel(c, {});
+  check('the rules panel lists the tiers', panel.includes('A mythic feat at tiers 3, 6 and 9.'), true);
+  check('the rules panel is grouped, and a group counts its changed rows',
+    [(panel.match(/class="campgroup"/g) || []).length, /Mythic <span class="badge player">1 changed<\/span>/.test(panel)], [6, true]);
+  c.set('campaign.mythicFeatEvery', 12);
+  check('past the highest tier: none', campaignPanel(c, {}).includes('No tier grants a mythic feat.'), true);
+}
+
+console.log('\ncampaign rules in a link');
+{
+  const { campaignLink, linkRules } = await import('../app/js/campaign-link.js');
+  const { campaignPanel } = await import('../app/js/ui/panels/campaign.js');
+  const { changedRuleTitles } = await import('../app/js/model/campaign.js');
+  const base = 'https://sheets.example/app/index.html?x=1#old';
+  const rules = { gestalt: false, mythicFeats: 'every', mythicFeatEvery: 3, currency: 'Écus ✦', xpSteps: { 9: 60000 } };
+  const link = campaignLink(rules, base);
+  check('the link is the app\'s address with the rules after #', /^https:\/\/sheets\.example\/app\/index\.html#rules=[A-Za-z0-9_-]+$/.test(link), true);
+  check('the rules come back as they went in', linkRules(new URL(link).hash), rules);
+  check('no rules changed is still a link', linkRules(new URL(campaignLink({}, base)).hash), {});
+  check('a key the rules do not know is dropped',
+    linkRules(new URL(campaignLink({ gestalt: false }, base)).hash.replace(/=.*/, `=${btoa('{"gestalt":false,"identity":{"level":99},"__proto__":{"x":1}}').replace(/=+$/, '')}`)),
+    { gestalt: false });
+  check('anything else is no link', ['', '#', '#rules=', '#rules=%%%', '#rules=bm90IGpzb24', `#rules=${btoa('[1]').replace(/=+$/, '')}`,
+    `#rules=${btoa('"x"').replace(/=+$/, '')}`, '#other=e30', `#rules=${'A'.repeat(20001)}`].map(linkRules), Array(9).fill(null));
+  check('every changed rule has a name', changedRuleTitles({
+    skillSystem: 'background', backgroundRanks: 3, backgroundUse: 'floating', agingEffects: true, vmc: true, archetypePackages: true,
+    mythicFeats: 'even', mythicFeatEvery: 2,
+  }).every((t) => /^[A-Z]/.test(t) && / |^[A-Z][a-z]+$/.test(t)), true);
+  const c = new Character(blankDocument({ name: 'Linker', level: 3 }));
+  check('the panel offers the link', campaignPanel(c, {}).includes('data-action="campaign-link"'), true);
+  check('and shows it once copied', campaignPanel(c, { campaignLink: { url: link, copied: true } }).includes(`value="${link}"`), true);
 }
 
 console.log('\none set of rules for the party, as a file');

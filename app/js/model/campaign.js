@@ -78,6 +78,13 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
    * ones) or `core` (the feat on odd tiers, the +2 alone on even ones).
    */
   mythicLadder: 'table',
+  /**
+   * The tiers a mythic feat comes at: `odd` ones, `even` ones, or `every`
+   * so many tiers (`mythicFeatEvery`: 1 is every tier, 3 is tiers 3, 6, 9).
+   */
+  mythicFeats: 'odd',
+  /** Tiers from one mythic feat to the next, under `every`. */
+  mythicFeatEvery: 1,
   /** Alternate Training techniques are offered: their tab, and what they grant. */
   altTraining: true,
   /**
@@ -159,6 +166,8 @@ export const ADVANCEMENT_MODES = Object.freeze(['typed', 'xp', 'milestones']);
 export const HIT_POINT_MODES = Object.freeze(['max', 'average', 'rolled']);
 /** The two ladders ABP and the mythic tiers may follow. */
 export const LADDERS = Object.freeze(['table', 'core']);
+/** The values a select offers for `mythicFeats`. */
+export const MYTHIC_FEAT_TIERS = Object.freeze(['odd', 'even', 'every']);
 
 /**
  * The experience a level takes in all, from the core rules' three tables:
@@ -226,6 +235,8 @@ export function campaignRules(d) {
     abpLadder: LADDERS.includes(c.abpLadder) ? c.abpLadder : CAMPAIGN_DEFAULTS.abpLadder,
     optionalArray: bool('optionalArray'),
     mythicLadder: LADDERS.includes(c.mythicLadder) ? c.mythicLadder : CAMPAIGN_DEFAULTS.mythicLadder,
+    mythicFeats: MYTHIC_FEAT_TIERS.includes(c.mythicFeats) ? c.mythicFeats : CAMPAIGN_DEFAULTS.mythicFeats,
+    mythicFeatEvery: Math.max(1, count(c.mythicFeatEvery, CAMPAIGN_DEFAULTS.mythicFeatEvery)),
     altTraining: bool('altTraining'),
     pastColossal: bool('pastColossal'),
     advancement: ADVANCEMENT_MODES.includes(c.advancement) ? c.advancement : CAMPAIGN_DEFAULTS.advancement,
@@ -382,12 +393,20 @@ export const RULE_TITLES = Object.freeze({
   mythicTrialRate: 'Trials a tier',
   maxTier: 'Highest mythic tier',
   mythicLadder: 'What a tier grants',
+  mythicFeats: 'Mythic feats',
+  mythicFeatEvery: 'Tiers per mythic feat',
   abp: 'Automatic Bonus Progression',
   abpLadder: 'Which ABP',
   optionalArray: 'Optional array',
   altTraining: 'Alternate Training',
   pastColossal: 'Past Colossal',
   currency: 'Currency',
+  skillSystem: 'Background',
+  backgroundRanks: 'Background ranks',
+  backgroundUse: 'Background rank use',
+  agingEffects: 'Age effects',
+  vmc: 'Variant multiclassing',
+  archetypePackages: 'Archetype packages',
 });
 
 /** The rules a campaign block changes from the table's, by name. */
@@ -447,14 +466,48 @@ export function prowessPicks(d) {
   };
 }
 
+/** Whether a mythic feat comes at `tier` under these rules. */
+export function mythicFeatAt(d, tier) {
+  const rules = campaignRules(d);
+  if (tier < 1) return false;
+  if (rules.mythicFeats === 'every') return tier % rules.mythicFeatEvery === 0;
+  return rules.mythicFeats === 'even' ? tier % 2 === 0 : tier % 2 === 1;
+}
+
+/** The tiers a mythic feat comes at, to the campaign's highest. */
+export function mythicFeatTiers(d) {
+  return Array.from({ length: campaignRules(d).maxTier }, (_, i) => i + 1).filter((t) => mythicFeatAt(d, t));
+}
+
+/** The tiers a mythic feat comes at, in words: "odd tiers", "every 3rd tier". */
+export function mythicFeatWhen(d) {
+  const { mythicFeats, mythicFeatEvery: n } = campaignRules(d);
+  if (mythicFeats !== 'every') return `${mythicFeats} tiers`;
+  if (n === 1) return 'every tier';
+  const tens = n % 100;
+  const nth = tens > 10 && tens < 14 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th';
+  return `every ${n}${nth} tier`;
+}
+
 /**
  * What a mythic tier hands over beside its path ability, as the Mythic Feats
- * table labels it: the sheet's own label where it kept one, else the
- * ladder's. Null where the core ladder gives nothing (an even tier).
+ * table labels it: a feat on a feat tier; on any other an RP power, or under
+ * the core ladder nothing (null). On the table's own odd tiers the sheet's
+ * label is kept where it has one.
  */
 export function mythicTierGrantOf(d, tier, label = '') {
-  if (campaignRules(d).mythicLadder === 'core') return tier % 2 ? `Mythic feat ${Math.ceil(tier / 2)}` : null;
-  return label || mythicTierGrant(tier);
+  const rules = campaignRules(d);
+  const core = rules.mythicLadder === 'core';
+  if (rules.mythicFeats === 'odd') {
+    if (core) return tier % 2 ? `Mythic feat ${Math.ceil(tier / 2)}` : null;
+    return label || mythicTierGrant(tier);
+  }
+  const feat = mythicFeatAt(d, tier);
+  // The feat or power's number: how many like it have come by this tier.
+  let n = 0;
+  for (let t = 1; t <= tier; t++) if (mythicFeatAt(d, t) === feat) n += 1;
+  if (feat) return `${core ? 'Mythic feat' : 'Feat'} ${n}`;
+  return core ? null : `RP Power ${n}`;
 }
 
 /* ---------------- room for every level and tier ---------------- */

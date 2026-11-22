@@ -19,7 +19,7 @@ import { featCatalogue } from '../../model.js';
 import { featLevel, isAhead, rowLevel } from '../../model/feats.js';
 import { fromLevelField, fromLevelHead, plannedRow } from '../from-level.js';
 import {
-  campaignRules, isAntihero, mythicTierGrantOf, mythicTierReached, trialProgress, specialtyInPlay, vmcTakesSlot, vmcClass,
+  campaignRules, isAntihero, mythicFeatWhen, mythicTierGrantOf, mythicTierReached, trialProgress, specialtyInPlay, vmcTakesSlot, vmcClass,
 } from '../../model/campaign.js';
 import {
   MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS,
@@ -247,6 +247,8 @@ export function renderFeaturesPanel(model, ctx) {
     // What each tier is reached at: a level, or trials in all (a campaign rule).
     const reached = (t) => mythicTierReached(c, t);
     const reachedHead = reached(1).head;
+    // The tiers a mythic feat comes at (a campaign rule), in words.
+    const featWhen = mythicFeatWhen(c);
     // One row per tier, to the campaign's highest (the table's is 10).
     const tiers = Array.from({ length: rules.maxTier }, (_, i) => i + 1);
     // Trials completed, when the tier comes from them (a campaign rule).
@@ -417,8 +419,8 @@ export function renderFeaturesPanel(model, ctx) {
             <thead><tr>
               <th class="num">Tier</th>
               <th class="num" title="${esc(reachedHead === 'Trials' ? 'Total trials completed when this tier is reached' : 'The character level this tier is reached at')}">${reachedHead}</th>
-              <th title="${esc(rules.mythicLadder === 'core' ? 'What the tier grants: a mythic feat on odd tiers, nothing on even tiers.'
-    : 'What the tier grants: a feat on odd tiers, an RP power on even tiers.')}">Grants</th>
+              <th title="${esc(rules.mythicLadder === 'core' ? `What the tier grants: a mythic feat on ${featWhen}, nothing on other tiers.`
+    : `What the tier grants: a feat on ${featWhen}, an RP power on other tiers.`)}">Grants</th>
               <th>Name</th>
               <th title="What the granted feat does. Formulas work here.">Effect</th>
             </tr></thead>
@@ -439,9 +441,8 @@ export function renderFeaturesPanel(model, ctx) {
             }).join('')}</tbody>
           </table></div>
           <p class="hint">
-            ${rules.mythicLadder === 'core' ? `Odd tiers grant a mythic feat. On the core ladder, even tiers grant
-            no feat; their +2 ability increase is in the ladder above, and anything written in an even row
-            is not used.` : 'Odd tiers grant a mythic feat. Even tiers grant an RP power.'}
+            ${rules.mythicLadder === 'core' ? `A mythic feat comes on ${featWhen}. On the core ladder, other tiers grant
+            no feat, and anything written in their rows is not used.` : `A mythic feat comes on ${featWhen}. Other tiers grant an RP power.`}
             <strong>Grants</strong> is what the tier gives, <strong>Name</strong> is what you
             took, and <strong>Effect</strong> is what it does. A long effect is folded to one line;
             ▸ opens it. Formulas work here and in the path abilities above: write “{= tier * 2}”

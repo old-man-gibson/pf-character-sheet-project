@@ -28,7 +28,7 @@ import {
 } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
-import { campaignRules, coreAbp, isAntihero, specialtyInPlay, vmcTakesSlot, vmcClass, VMC_LEVELS } from './campaign.js';
+import { campaignRules, coreAbp, isAntihero, mythicTierGrantOf, specialtyInPlay, vmcTakesSlot, vmcClass, VMC_LEVELS } from './campaign.js';
 import { sphereTableNames, talentsIn } from './spheres.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
 import { tempHpGrant } from './stats/defenses.js';
@@ -1625,12 +1625,11 @@ export function proseSources(model) {
   // A tier above the one the character has reached is a plan: its text still
   // resolves and still shows, but a bonus written there has not been earned.
   const mythicTier = Number(d.identity?.mythicTier) || 0;
-  // The core ladder (a campaign rule) grants no feat on an even tier, so
-  // whatever is written in that slot waits, as a tier not reached does.
-  const coreLadder = campaignRules(d).mythicLadder === 'core';
+  // The core ladder (a campaign rule) grants nothing on a tier with no feat,
+  // so whatever is written in that slot waits, as a tier not reached does.
   (d.mythic?.abilities || []).forEach((a, i) => {
     const ahead = i + 1 > mythicTier ? { future: true } : null;
-    const noFeat = coreLadder && (i + 1) % 2 === 0 ? { future: true } : ahead;
+    const noFeat = mythicTierGrantOf(d, i + 1, a.feat) ? ahead : { future: true };
     push(`mythic:${i}`, a.name, null, ahead);
     push(`mythic:${i}:effect`, a.effect, null, ahead);
     push(`mythic:${i}:featChoice`, a.featChoice, null, noFeat);

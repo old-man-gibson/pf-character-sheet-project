@@ -7,6 +7,9 @@
  * model/campaign.js), so the ordinary change handler saves it and recomputes
  * the sheet.
  *
+ * The rows are grouped by what they change (abilities, levels, classes, hero
+ * points, mythic, gear), each group under its own heading.
+ *
  * Two rules carry a ladder (how a level or a tier is earned), folded under
  * the row: a box per step, blank uses the default, a number overrides it.
  *
@@ -17,7 +20,7 @@
 import { esc } from '../html.js';
 import { collapsible, collapsibleSub, stepGrid } from '../rows.js';
 import {
-  MAX_TIER, TIER_CEILING, XP_TRACKS, campaignChanges, campaignRules, followsShared,
+  MAX_TIER, TIER_CEILING, XP_TRACKS, campaignChanges, campaignRules, followsShared, mythicFeatTiers,
 } from '../../model/campaign.js';
 import { MAX_LEVEL, MYTHIC_TIER_LEVEL } from '../../rules.js';
 
@@ -97,6 +100,14 @@ export function campaignPanel(model, ctx = {}) {
   // step marks it the same way and has its own Next in place of Continue.
   const first = d.uiPrefs?.rulesFirst === true;
   const required = (k) => (first || ctx.wizardRules === true) && k === 'minLevel';
+  // A group of rows under a heading that counts its changed rows.
+  const group = (title, ...rows) => {
+    const n = rows.filter((r) => r.includes('class="camprow changed')).length;
+    return `<div class="campgroup">
+      <h4 class="subhead">${esc(title)}${n ? ` <span class="badge player">${n} changed</span>` : ''}</h4>
+      ${rows.join('')}
+    </div>`;
+  };
   const row = (k, title, control, hint, below = '') => `<div class="camprow${differs(k) ? ' changed' : ''}${required(k) ? ' required' : ''}">
       <div class="campname">${esc(title)} ${mark(k)}${required(k) ? ' <span class="badge need">required</span>' : ''}</div>
       <div class="campctl">${control}</div>
@@ -149,46 +160,71 @@ export function campaignPanel(model, ctx = {}) {
         <p class="campnote">Blank uses the rate.</p>`, '', true)}`
         : '';
 
+  /* The tiers a mythic feat comes at. */
+  const featTiers = mythicFeatTiers(d);
+  const featList = featTiers.length > 1
+    ? `${featTiers.slice(0, -1).join(', ')} and ${featTiers[featTiers.length - 1]}` : String(featTiers[0] ?? '');
+  const featControl = `${ruleSelect('mythicFeats', rules.mythicFeats, [
+    ['odd', 'Odd tiers'], ['even', 'Even tiers'], ['every', 'Every N tiers'],
+  ], 'Tiers that grant a mythic feat', !rules.mythic)}${rules.mythicFeats === 'every'
+    ? ` <span class="pair">N <input type="number" min="1" max="${TIER_CEILING}" value="${esc(rules.mythicFeatEvery)}"
+      data-set="campaign.mythicFeatEvery" data-kind="number" aria-label="Tiers per mythic feat" style="width:4.2rem"${rules.mythic ? '' : ' disabled'}></span>` : ''}`;
+  const featHint = !featTiers.length ? 'No tier grants a mythic feat.'
+    : `A mythic feat at tier${featTiers.length > 1 ? 's' : ''} ${featList}.`;
+
   return collapsible(model, CAMPAIGN_PANEL_ID, `<section class="panel span2 campaign" id="${CAMPAIGN_PANEL_ID}">
       <h3>Campaign rules
         <span class="badge${changed.size ? ' player' : ' ok'}">${changed.size ? `${changed.size} changed` : 'defaults'}</span>
         <span class="pair" style="margin-left:auto">
           <button data-action="campaign-save" title="Download these rules as campaign-rules.json">Save as a file</button>
           <button data-action="campaign-load" title="Load rules from a campaign rules file or a character file">Load from a file…</button>
+          <button data-action="campaign-link" title="Copy a link that opens the app with these rules">Copy link</button>
           ${changed.size ? '<button data-action="campaign-reset" title="Reset every rule to its default">Reset to defaults</button>' : ''}
         </span>
         <input type="file" accept="application/json,.json" data-campaignfile hidden>
       </h3>
       <p class="hint">Rules for this character. Changes apply immediately.</p>
+      ${ctx.campaignLink ? `<div class="pair camplink">
+        <input type="text" readonly value="${esc(ctx.campaignLink.url)}" aria-label="Campaign link" data-camplink>
+        <span class="campnote">${ctx.campaignLink.copied ? 'Link copied. It opens the app with these rules.'
+    : 'Select the link and copy it. It opens the app with these rules.'}</span>
+      </div>` : ''}
       ${first ? `<div class="rulesfirst" role="note">
         <p><strong>New character:</strong> set the campaign rules. Lowest level is required; the rest are optional.</p>
         <button class="btn primary" data-action="rules-first-done">Continue</button>
       </div>` : ''}
       <div class="camprows">
         ${scopeRow(d, ctx)}
-        ${row('pointBuy', 'Point buy',
+        ${group('Abilities and size',
+          row('pointBuy', 'Point buy',
     `<input type="number" min="0" max="99" value="${esc(rules.pointBuy)}" data-set="campaign.pointBuy" data-kind="number"
           aria-label="Point-buy budget" style="width:4.5rem"> points`,
-    'Point budget for ability scores.')}
-        ${row('agingEffects', 'Age effects', check('agingEffects', 'Age effects'),
-    'Age categories change ability scores. Cumulative: Middle-Aged −1 Str/Dex/Con, +1 Int/Wis/Cha; Old −2/+1; Venerable −3/+1.')}
-        ${row('advancement', 'Levels', levels, levelsHint, levelsMore)}
-        ${row('minLevel', 'Lowest level', mostBox('minLevel', rules.minLevel, rules.maxLevel, 'Lowest level'),
-    'This is the minimum legal level for a character. New characters start here.')}
-        ${row('maxLevel', 'Highest level', mostBox('maxLevel', rules.maxLevel, null, 'Highest level'),
+    'Point budget for ability scores.'),
+          row('agingEffects', 'Age effects', check('agingEffects', 'Age effects'),
+    'Age categories change ability scores. Cumulative: Middle-Aged −1 Str/Dex/Con, +1 Int/Wis/Cha; Old −2/+1; Venerable −3/+1.'),
+          row('optionalArray', 'Optional array', check('optionalArray', 'Optional array'),
+    'Enables the optional array\'s +2 ability picks at 8th, 12th and 16th.'),
+          row('pastColossal', 'Past Colossal', check('pastColossal', 'Past Colossal'),
+    'Allows sizes beyond Colossal. Each step adds 1d6 weapon damage.'))}
+        ${group('Levels',
+          row('advancement', 'Levels', levels, levelsHint, levelsMore),
+          row('minLevel', 'Lowest level', mostBox('minLevel', rules.minLevel, rules.maxLevel, 'Lowest level'),
+    'This is the minimum legal level for a character. New characters start here.'),
+          row('maxLevel', 'Highest level', mostBox('maxLevel', rules.maxLevel, null, 'Highest level'),
     `This is the maximum legal level for a character and ends its progression there.${rules.maxLevel > MAX_LEVEL
-      ? ' Tables that stop at 20 use their 20th-level row.' : ''}`)}
-        ${row('gestalt', 'Gestalt', check('gestalt', 'Gestalt'),
-    'Each level advances two classes; base saves and BAB use the better of the two. Off: one class per level.')}
-        ${row('hitPoints', 'Hit points', ruleSelect('hitPoints', rules.hitPoints, [
+      ? ' Tables that stop at 20 use their 20th-level row.' : ''}`),
+          row('hitPoints', 'Hit points', ruleSelect('hitPoints', rules.hitPoints, [
     ['max', 'Maximum per level'], ['average', 'Average after 1st'], ['rolled', 'Rolled after 1st'],
   ], 'Hit points per level'),
     {
       max: 'The character gains HP equal to their die size.',
       average: 'Full die at 1st level, then half the die +1 per level.',
       rolled: 'Full die at 1st level, then rolled per level on the <strong>Hit points</strong> panel. Unrolled levels use the average.',
-    }[rules.hitPoints])}
-        ${row(['skillSystem', 'backgroundRanks', 'backgroundUse'], 'Background', ruleSelect('skillSystem', rules.skillSystem, [
+    }[rules.hitPoints]))}
+        ${group('Classes and skills',
+          row('gestalt', 'Gestalt', check('gestalt', 'Gestalt'),
+    'Each level advances two classes; base saves and BAB use the better of the two. Off: one class per level.'),
+          row(['skillSystem', 'backgroundRanks', 'backgroundUse'], 'Background', ruleSelect('skillSystem', rules.skillSystem, [
     ['specialty', 'Specialty'], ['background', 'Background skills'],
   ], 'Specialty or background skills'),
     rules.skillSystem === 'specialty'
@@ -200,39 +236,39 @@ export function campaignPanel(model, ctx = {}) {
         <p class="campnote">${rules.backgroundUse === 'allocated'
     ? 'Each background rank per level gives one picked skill full ranks (picked on <strong>Skills</strong>).'
     : 'Background ranks form a pool for background skills only.'}</p>`
-      : '')}
-        ${row('vmc', 'Variant multiclassing', check('vmc', 'Variant multiclassing'),
-    'Characters may pick a secondary class on <strong>Progression</strong>. Its features replace the feats at 3rd, 7th, 11th, 15th and 19th.')}
-        ${row('archetypePackages', 'Archetype packages', check('archetypePackages', 'Archetype packages'),
-    'A class may give up one of its archetype packages for another on <strong>Progression</strong>.')}
-        ${row('heroPoints', 'Hero points', check('heroPoints', 'Hero points'),
-    'Hero points are tracked on <strong>Details</strong> and as a <strong>Trackers</strong> pool.')}
-        ${row('antiheroes', 'Antiheroes', check('antiheroes', 'Antiheroes', !rules.heroPoints),
-    'Characters may give up hero points for a bonus feat.')}
-        ${row('mythic', 'Mythic', check('mythic', 'Mythic'),
-    'Enables mythic tiers. Off sets the tier to 0.')}
-        ${row('mythicTier', 'Mythic tier', tierSelect, tierHint, tierMore)}
-        ${row('maxTier', 'Highest mythic tier', mostBox('maxTier', rules.maxTier, TIER_CEILING, 'Highest mythic tier', !rules.mythic),
-    'This is the maximum mythic tier.')}
-        ${row('mythicLadder', 'What a tier grants', ruleSelect('mythicLadder', rules.mythicLadder,
+      : ''),
+          row('vmc', 'Variant multiclassing', check('vmc', 'Variant multiclassing'),
+    'Characters may pick a secondary class on <strong>Progression</strong>. Its features replace the feats at 3rd, 7th, 11th, 15th and 19th.'),
+          row('archetypePackages', 'Archetype packages', check('archetypePackages', 'Archetype packages'),
+    'A class may give up one of its archetype packages for another on <strong>Progression</strong>.'),
+          row('altTraining', 'Alternate Training', check('altTraining', 'Alternate Training'),
+    'Enables Alternate Training techniques.'))}
+        ${group('Hero points',
+          row('heroPoints', 'Hero points', check('heroPoints', 'Hero points'),
+    'Hero points are tracked on <strong>Details</strong> and as a <strong>Trackers</strong> pool.'),
+          row('antiheroes', 'Antiheroes', check('antiheroes', 'Antiheroes', !rules.heroPoints),
+    'Characters may give up hero points for a bonus feat.'))}
+        ${group('Mythic',
+          row('mythic', 'Mythic', check('mythic', 'Mythic'),
+    'Enables mythic tiers. Off sets the tier to 0.'),
+          row('mythicTier', 'Mythic tier', tierSelect, tierHint, tierMore),
+          row('maxTier', 'Highest mythic tier', mostBox('maxTier', rules.maxTier, TIER_CEILING, 'Highest mythic tier', !rules.mythic),
+    'This is the maximum mythic tier.'),
+          row(['mythicFeats', 'mythicFeatEvery'], 'Mythic feats', featControl, featHint),
+          row('mythicLadder', 'What a tier grants', ruleSelect('mythicLadder', rules.mythicLadder,
     [['table', 'Table'], ['core', 'Core (Mythic Adventures)']], 'What a mythic tier grants', !rules.mythic),
     rules.mythicLadder === 'core'
-      ? 'Path ability every tier; mythic feat on odd tiers; +2 ability on even tiers.'
-      : 'Path ability every tier; mythic feat on odd tiers; path power and +2 ability on even tiers.')}
-        ${row(['abp', 'abpLadder'], 'Automatic Bonus Progression', `${check('abp', 'ABP')} ${ruleSelect('abpLadder', rules.abpLadder,
+      ? 'Path ability every tier; +2 ability on even tiers; no path power.'
+      : 'Path ability every tier; +2 ability on even tiers; a path power on tiers with no mythic feat.'))}
+        ${group('Gear and money',
+          row(['abp', 'abpLadder'], 'Automatic Bonus Progression', `${check('abp', 'ABP')} ${ruleSelect('abpLadder', rules.abpLadder,
     [['table', 'Table'], ['core', 'Core (Unchained)']], 'Which ABP', !rules.abp)}`,
     `Enables Automatic Bonus Progression (saves, AC, prowess).${rules.abpLadder === 'core'
-      ? ' Core adds armor and weapon attunement and legendary gifts; prowess stops at 18th.' : ''}`)}
-        ${row('optionalArray', 'Optional array', check('optionalArray', 'Optional array'),
-    'Enables the optional array\'s +2 ability picks at 8th, 12th and 16th.')}
-        ${row('altTraining', 'Alternate Training', check('altTraining', 'Alternate Training'),
-    'Enables Alternate Training techniques.')}
-        ${row('pastColossal', 'Past Colossal', check('pastColossal', 'Past Colossal'),
-    'Allows sizes beyond Colossal. Each step adds 1d6 weapon damage.')}
-        ${row('currency', 'Currency',
+      ? ' Core adds armor and weapon attunement and legendary gifts; prowess stops at 18th.' : ''}`),
+          row('currency', 'Currency',
     `<input type="text" value="${esc(d.campaign?.currency ?? '')}" placeholder="${esc(rules.currency)}" data-set="campaign.currency"
           data-kind="text" aria-label="Currency name" style="width:9rem">`,
-    'Name of the campaign currency.')}
+    'Name of the campaign currency.'))}
       </div>
     </section>`);
 }
