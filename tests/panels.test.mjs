@@ -41,6 +41,7 @@ import * as trackers from '../app/js/ui/panels/trackers.js';
 import * as feats from '../app/js/ui/panels/feats.js';
 import * as techniques from '../app/js/ui/panels/techniques.js';
 import * as manager from '../app/js/ui/panels/manager.js';
+import * as wizard from '../app/js/ui/panels/wizard.js';
 import { renderStatsPanel } from '../app/js/ui/panels/stats.js';
 import { renderSkillsPanel, skillRowIndices } from '../app/js/ui/panels/skills.js';
 import { prose, renderedProse } from '../app/js/ui/prose.js';
@@ -157,6 +158,7 @@ const panelsWith = (CTX) => [
   ['AutoTechnique', (m) => techniques.renderAutoTechniquePanel(m, CTX)],
   ['Auto-Cooking', (m) => techniques.renderCookingPanel(m, CTX)],
   ['⚙ manager', (m) => manager.renderSystemManagerPanel(m, CTX)],
+  ['Setup guide systems', (m) => wizard.renderWizardSystemsPanel(m, CTX)],
   ['Stat Block', (m) => statBlock.renderStatBlockPanel(m, CTX)],
   // A workbook tab the sheet does not model: the element's tab around this
   // grid, one per worksheet.

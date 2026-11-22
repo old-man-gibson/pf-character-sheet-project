@@ -545,6 +545,48 @@ run.addEventListener('click', async () => {
         root.getElementById('tab-overview')?.click();
       }
     });
+    await test('The setup guide shows a step\'s panels alone and puts a picked system on the bar', async () => {
+      const root = sheet.shadowRoot;
+      const press = (selector) => {
+        const el = root.querySelector(selector);
+        assert(el, `Missing ${selector}`);
+        el.click();
+      };
+      // The panels on screen, by their headings' own words.
+      const shown = () => [...root.querySelectorAll('#sheet-panel section.panel')]
+        .filter((p) => p.getClientRects().length)
+        .map((p) => [...p.querySelector('h3').childNodes].filter((n) => n.nodeType === 3)
+          .map((n) => n.textContent).join(' ').replace(/\s+/g, ' ').trim());
+      try {
+        press('[data-action="chrome-menu"]');
+        press('[data-action="wizard-start"]');
+        assert(root.querySelector('.wizard'), 'The guide\'s strip is missing');
+        assert(root.getElementById('tab-systabs').getAttribute('aria-selected') === 'true', 'The guide did not open on the campaign rules');
+        assert(shown().join() === 'Campaign rules', `The first step shows ${shown().join(', ')}`);
+        press('.wznav [data-step="details"]');
+        assert(root.getElementById('tab-overview').getAttribute('aria-selected') === 'true', 'Next did not open the Overview');
+        assert(shown().join() === 'Details,Languages', `The Details step shows ${shown().join(', ')}`);
+        press('[data-action="wizard-all"]');
+        assert(shown().length > 10, 'Whole tab did not bring the other panels back');
+        press('.wzsteps [data-step="systems"]');
+        assert(root.querySelectorAll('[data-wizard-system]').length > 10, 'The Systems step is missing its boxes');
+        assert(!root.getElementById('tab-akashic'), 'Akashic is on the bar before it is picked');
+        const box = root.querySelector('[data-wizard-system="akashic"]');
+        box.checked = true;
+        box.dispatchEvent(new Event('change', { bubbles: true }));
+        await until(() => root.getElementById('tab-akashic'));
+        assert(root.querySelector('.wzsteps [data-step="system:akashic"]'), 'The picked system has no step');
+        press('.wznav [data-step="system:akashic"]');
+        assert(root.getElementById('tab-akashic').getAttribute('aria-selected') === 'true', 'The system\'s step did not open its tab');
+        assert(root.querySelectorAll('.wizard a.weblink').length === 2, 'The system\'s step is missing its two links');
+        press('[data-action="wizard-close"]');
+        assert(!root.querySelector('.wizard'), 'The strip is still up after Close guide');
+      } finally {
+        if (sheet.model.wizardSystems().includes('akashic')) sheet.model.toggleWizardSystem('akashic');
+        sheet.model.closeWizard();
+        root.getElementById('tab-overview')?.click();
+      }
+    });
   } finally {
     sheet.remove();
     await forget(id);

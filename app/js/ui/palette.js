@@ -1114,6 +1114,10 @@ function commands(model, add) {
   if (tp?.ready) cmd(`Tier up to ${tp.next}`, 'tier-up', 'The next mythic tier is earned', 'tier up mythic trials');
   cmd('Campaign rules', 'campaign-rules', 'Open this character’s campaign rules.',
     'settings options campaign rules house table vmc variant multiclass multiclassing archetype packages package swap point buy age aging middle-aged old venerable background skills specialty adventuring hero points antihero mythic tier trials rate thresholds abp automatic bonus progression core unchained attunement legendary gifts xp experience milestones levelling highest maximum level gestalt multiclass hit points hp rolled average alternate training currency gold mana colossal size party file');
+  if (!model.data.monster) {
+    cmd('Setup guide', 'wizard-start', 'Set up this character one step at a time.',
+      'setup guide wizard new character steps walkthrough systems start');
+  }
   cmd('Show, hide and rearrange tabs', 'palette-tabs', 'Open the ⚙ tab.', 'tabs manage hide show arrange settings');
   cmd('Reset to the character as imported', 'reset', 'Named checkpoints are kept.', 'reset revert discard');
 }

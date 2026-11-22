@@ -93,9 +93,10 @@ export function campaignPanel(model, ctx = {}) {
       <input type="checkbox" ${rules[k] ? 'checked' : ''} data-set="campaign.${k}" data-kind="bool"${disabled ? ' disabled' : ''}>
       <span>${esc(label)}</span></label>`;
   // A character just made opens here first (`uiPrefs.rulesFirst`), with the
-  // lowest level marked as the one rule it must set.
+  // lowest level marked as the one rule it must set. The setup guide's first
+  // step marks it the same way and has its own Next in place of Continue.
   const first = d.uiPrefs?.rulesFirst === true;
-  const required = (k) => first && k === 'minLevel';
+  const required = (k) => (first || ctx.wizardRules === true) && k === 'minLevel';
   const row = (k, title, control, hint, below = '') => `<div class="camprow${differs(k) ? ' changed' : ''}${required(k) ? ' required' : ''}">
       <div class="campname">${esc(title)} ${mark(k)}${required(k) ? ' <span class="badge need">required</span>' : ''}</div>
       <div class="campctl">${control}</div>

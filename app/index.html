@@ -332,6 +332,8 @@
     </fieldset>
     <label>Level <input name="level" type="number" min="1" value="3"></label>
     <p class="belowlow" id="newBelow" hidden></p>
+    <label class="radio"><input name="guide" type="checkbox" checked>
+      <span>Open the setup guide. It goes through the character one step at a time.</span></label>
     <div class="actions">
       <button type="button" id="newCancel" class="btn">Cancel</button>
       <button type="submit" class="btn primary">Create</button>
@@ -400,6 +402,8 @@
    */
   const newFirst = document.getElementById('newFirst');
   const newBelow = document.getElementById('newBelow');
+  // Whether the last character was made with the setup guide ticked.
+  const GUIDE_PREF = 'character-sheet:new-guide';
   const standardLowest = () => {
     const shared = readShared();
     return shared?.on ? campaignRules({ campaign: shared.rules }).minLevel : CAMPAIGN_DEFAULTS.minLevel;
@@ -423,6 +427,10 @@
     newForm.elements.lowest.value = lowest;
     newForm.elements.lowest.dataset.was = lowest;
     newForm.elements.level.value = lowest;
+    // The setup guide is offered ticked, until a character is made without it.
+    let guide = true;
+    try { guide = localStorage.getItem(GUIDE_PREF) !== '0'; } catch { /* no storage: ticked */ }
+    newForm.elements.guide.checked = guide;
     noteBelow();
     newDialog.showModal();
   }
@@ -772,8 +780,12 @@
     if (!newFirst.hidden) setCampaignLowest(newForm.elements.lowest.value);
     // Every new character opens on its campaign rules first (the sheet's ⚙
     // tab), to be confirmed or changed before anything else; Continue there
-    // takes the flag off.
-    doc.uiPrefs = { ...(doc.uiPrefs || {}), rulesFirst: true };
+    // takes the flag off. With the setup guide ticked it opens in the guide
+    // instead, whose first step is those rules (js/model/wizard.js).
+    const guide = newForm.elements.guide.checked;
+    doc.uiPrefs = { ...(doc.uiPrefs || {}), ...(guide ? { wizard: { on: true, step: 'rules' } } : { rulesFirst: true }) };
+    // The next New character dialog offers the guide as this one left it.
+    try { localStorage.setItem(GUIDE_PREF, guide ? '1' : '0'); } catch { /* not fatal */ }
     newDialog.close();
     newForm.reset();
     add(doc, [], 'blank');

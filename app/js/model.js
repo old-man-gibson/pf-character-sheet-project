@@ -33,6 +33,7 @@ export * from './model/scope.js';
 export * from './model/trackers.js';
 export * from './model/pools.js';
 export * from './model/transparency.js';
+export * from './model/wizard.js';
 export * from './model/rest.js';
 export * from './model/templates.js';
 export * from './model/traits.js';
