@@ -10,12 +10,17 @@
  * What a browser knows about a character's server copy is one small record
  * per character in localStorage:
  *
- *   character-sheet:server:<id>   { owner, rev, savedAt }
+ *   character-sheet:server:<id>   { owner, rev, savedAt, cps, cpsRev }
  *
  * `rev` is the server revision this browser last sent or loaded, and
  * `savedAt` is the time on this browser's saved version when it did. A saved
  * version with another time has not been sent yet. `syncPlan` reads the two
  * against the server's revision and says what to do.
+ *
+ * `cps` is the character's checkpoints as this browser last saw them on the
+ * server (their ids and names), and `cpsRev` the server's count of changes to
+ * them at that time. `checkpointPlan` reads `cps` against the checkpoints
+ * here and there and says what to send, list, rename and delete.
  */
 
 import { pack, unpack } from './history.js';
@@ -68,9 +73,19 @@ export async function signOut() {
   await answer(await call('auth/signout', { method: 'POST' }));
 }
 
-/** Every character the account has on the server, without the documents: `[{ id, rev, saved, summary }]`. */
+/**
+ * What the account has on the server, without the documents:
+ * `{ saves: [{ id, rev, saved, size, cps, summary }], used, limits }`.
+ * `used` and `limits.total` are compressed bytes.
+ */
+export async function readAccount() {
+  const body = await answer(await call('saves'));
+  return { saves: body?.saves || [], used: body?.used || 0, limits: body?.limits || {} };
+}
+
+/** Every character the account has on the server: `[{ id, rev, saved, size, cps, summary }]`. */
 export async function listSaves() {
-  return (await answer(await call('saves')))?.saves || [];
+  return (await readAccount()).saves;
 }
 
 /** One character from the server: `{ id, rev, saved, summary, doc }`. */
@@ -97,6 +112,77 @@ export async function writeSave(id, doc, { base = 0, summary = {}, force = false
 
 export async function deleteSave(id) {
   await answer(await call(`saves/${encodeURIComponent(id)}`, { method: 'DELETE' }));
+}
+
+const checkpointPath = (id, uid = '') => `saves/${encodeURIComponent(id)}/checkpoints${uid ? `/${encodeURIComponent(uid)}` : ''}`;
+
+/** A character's checkpoints on the server: `{ cps, checkpoints: [{ uid, label, savedAt, changes, schema, size }] }`. */
+export async function listCheckpoints(id) {
+  const body = await answer(await call(checkpointPath(id)));
+  return { cps: body?.cps || 0, checkpoints: body?.checkpoints || [] };
+}
+
+/** One checkpoint's document from the server, as the gzipped bytes history.js keeps. */
+export async function readCheckpointBytes(id, uid) {
+  return fromBase64((await answer(await call(checkpointPath(id, uid)))).gz);
+}
+
+/**
+ * Send a checkpoint: its name, when it was saved, and its gzipped `bytes`.
+ * Without `bytes`, the name alone, for one the server already has. Answers `{ uid, cps }`.
+ */
+export async function writeCheckpoint(id, uid, { label = '', savedAt = '', changes = 0, schema = 0, bytes = null } = {}) {
+  return answer(await call(checkpointPath(id, uid), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ label, savedAt, changes, schema, ...(bytes ? { gz: toBase64(bytes) } : {}) }),
+  }));
+}
+
+/** Delete a checkpoint from the server. Answers `{ uid, cps }`. */
+export async function deleteCheckpoint(id, uid) {
+  return answer(await call(checkpointPath(id, uid), { method: 'DELETE' }));
+}
+
+/**
+ * What to do about a character's checkpoints, given the ones here, the ones
+ * on the server, and the names this browser last saw there (`known`: uid to
+ * label).
+ *
+ *   local    `[{ key, uid, label, onServer }]`   onServer: listed here without its document
+ *   server   `[{ uid, label, ... }]`
+ *
+ * Answers the steps, and `known` as it will be once they are done:
+ *
+ *   send      here and new: upload it
+ *   rename    its name changed here: send the name
+ *   take      its name changed there: use that name here
+ *   adopt     there and new: list it here, without its document
+ *   drop      deleted on another device: delete it here
+ *   delete    deleted here: delete it there
+ */
+export function checkpointPlan({ local = [], server = [], known = {} } = {}) {
+  const there = new Map(server.map((cp) => [cp.uid, cp]));
+  const steps = { send: [], rename: [], take: [], adopt: [], drop: [], delete: [] };
+  const next = {};
+  for (const cp of local) {
+    const other = there.get(cp.uid);
+    there.delete(cp.uid);
+    if (!other) {
+      // Seen on the server before and gone now, or never held here at all: another device deleted it.
+      if (cp.uid in known || cp.onServer) steps.drop.push(cp);
+      else { steps.send.push(cp); next[cp.uid] = cp.label; }
+      continue;
+    }
+    if (cp.label === other.label) next[cp.uid] = cp.label;
+    else if (cp.uid in known && cp.label !== known[cp.uid]) { steps.rename.push(cp); next[cp.uid] = cp.label; }
+    else { steps.take.push({ ...cp, label: other.label }); next[cp.uid] = other.label; }
+  }
+  for (const other of there.values()) {
+    if (other.uid in known) steps.delete.push(other);
+    else { steps.adopt.push(other); next[other.uid] = other.label; }
+  }
+  return { steps, known: next };
 }
 
 const syncKey = (id) => `character-sheet:server:${id}`;

@@ -12,6 +12,9 @@
  *   snapshots  automatic ones, taken every `SNAPSHOT_EVERY` changes away from
  *              the saved version and kept `AUTO_KEEP` deep, plus checkpoints
  *              the player names, which are never evicted. IndexedDB, gzipped.
+ *              A checkpoint that came from the signed-in account's server
+ *              copies is listed without its document until it is opened
+ *              (see `setCheckpointSource`).
  *
  * Why the split, when one store would be tidier: the working state's whole job
  * is to still be there after a browser crash or a closed tab, and only
@@ -51,6 +54,22 @@ const BY_CHARACTER = 'by-character';
 
 /** The key the app has used for edits since before any of this existed. */
 export const workingKey = (id) => `character-sheet:${id}`;
+
+/*
+ * Where the document of a checkpoint that is listed without one comes from:
+ * `(characterId, uid) -> gzipped bytes`, set by the page that keeps server
+ * copies (server-saves.js). Null where nothing does, and opening such a
+ * checkpoint then says it could not be downloaded.
+ */
+let checkpointSource = null;
+export function setCheckpointSource(source) { checkpointSource = source; }
+
+/** An id for a checkpoint that no other browser will choose: what a server knows it by. */
+function newUid() {
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_');
+}
 
 /* ---------------------------------------------------------------------- *
  * keeping it
@@ -326,7 +345,16 @@ export function historyFor(id, { storageKey = null } = {}) {
     return rows.sort((a, b) => (b.seq || 0) - (a.seq || 0));
   }
 
-  const meta = ({ bytes, ...rest }) => ({ ...rest, size: bytes?.length ?? 0, stale: rest.schemaVersion !== SCHEMA_VERSION });
+  // A record with no bytes is a checkpoint on the server: its size is the one the server gave.
+  const meta = ({ bytes, ...rest }) => ({
+    ...rest,
+    size: bytes ? bytes.length : (rest.size || 0),
+    onServer: !bytes,
+    stale: rest.schemaVersion !== SCHEMA_VERSION,
+  });
+  // Newest first by when each state was saved, which is the order they were
+  // made in except for checkpoints that arrived from another device.
+  const newestFirst = (a, b) => (a.savedAt < b.savedAt ? 1 : a.savedAt > b.savedAt ? -1 : (b.seq || 0) - (a.seq || 0));
 
   /**
    * The canonical version, or null.
@@ -415,13 +443,13 @@ export function historyFor(id, { storageKey = null } = {}) {
     /** Snapshots and checkpoints, newest first, payloads left in the database. */
     async list() {
       try {
-        return (await all()).filter((r) => r.kind !== 'saved').map(meta);
+        return (await all()).filter((r) => r.kind !== 'saved').map(meta).sort(newestFirst);
       } catch {
         return [];
       }
     },
 
-    /** One stored document, by record key. */
+    /** One stored document, by record key. A checkpoint listed without its document is downloaded and kept. */
     async load(key, { includeStale = false } = {}) {
       const db = await openDb();
       const store = db.transaction(STORE, 'readonly').objectStore(STORE);
@@ -431,7 +459,76 @@ export function historyFor(id, { storageKey = null } = {}) {
         throw new Error(`that snapshot was written for schema ${row.schemaVersion},`
           + ` and this app reads schema ${SCHEMA_VERSION}`);
       }
-      return unpack(row.bytes);
+      if (row.bytes) return unpack(row.bytes);
+      let bytes = null;
+      try { bytes = row.uid && checkpointSource ? await checkpointSource(id, row.uid) : null; } catch { /* said below */ }
+      if (!bytes) throw new Error('that checkpoint is on the server and could not be downloaded');
+      const doc = await unpack(bytes);
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put({ ...row, bytes });
+      await finished(tx);
+      return doc;
+    },
+
+    /**
+     * The named checkpoints, each with the id a server knows it by (`uid`),
+     * given here to any that has none yet. Payloads stay in the database.
+     */
+    async checkpoints() {
+      try {
+        const db = await openDb();
+        const tx = db.transaction(STORE, 'readwrite');
+        const store = tx.objectStore(STORE);
+        const rows = (await result(store.index(BY_CHARACTER).getAll(id))).filter((r) => r.kind === 'checkpoint');
+        for (const row of rows) {
+          if (row.uid) continue;
+          row.uid = newUid();
+          store.put(row);
+        }
+        await finished(tx);
+        return rows.map(meta);
+      } catch {
+        return [];
+      }
+    },
+
+    /** A stored document as the gzipped bytes it is kept as, or null where it is not held here. */
+    async bytesOf(key) {
+      const db = await openDb();
+      const row = await result(db.transaction(STORE, 'readonly').objectStore(STORE).get(key));
+      return row?.bytes || null;
+    },
+
+    /**
+     * List checkpoints that another device made, without their documents:
+     * `[{ uid, label, savedAt, changes, schema, size }]`. One already listed
+     * under its `uid` is left as it is.
+     */
+    async adoptCheckpoints(list) {
+      if (!list.length) return;
+      const db = await openDb();
+      const tx = db.transaction(STORE, 'readwrite');
+      const store = tx.objectStore(STORE);
+      const mine = await result(store.index(BY_CHARACTER).getAll(id));
+      let seq = Math.max(0, ...mine.map((r) => r.seq || 0));
+      for (const cp of list) {
+        if (mine.some((r) => r.uid === cp.uid)) continue;
+        seq += 1;
+        store.put({
+          key: recordKey('checkpoint', seq),
+          id,
+          kind: 'checkpoint',
+          seq,
+          uid: cp.uid,
+          label: cp.label || '',
+          changes: cp.changes || 0,
+          savedAt: cp.savedAt,
+          schemaVersion: cp.schema || SCHEMA_VERSION,
+          size: cp.size || 0,
+          bytes: null,
+        });
+      }
+      await finished(tx);
     },
 
     /** Rename a checkpoint. */
