@@ -309,24 +309,93 @@ export function enhancementCapNote(r) {
  * tabs each one lights up. Marking a class says "this character plays with
  * that machinery" before any of its data is typed in: the ⚙ manager badges
  * the tabs and the session view puts them on its bar.
+ *
+ * The setup guide (model/wizard.js) lists the same rows for a player to pick
+ * from, so each also says what the system consists of and where its rules
+ * are: `parts` is one sentence, `wiki` a page title on the campaign wiki (see
+ * `wikiUrl`) and `store` the product number of the book it comes from on
+ * DriveThruRPG (see `storeUrl`). A row with no book has no `store`.
  */
 export const GAME_SYSTEMS = [
-  { id: 'spheres-of-power', label: 'Spheres of Power', tabs: ['magic'] },
-  { id: 'spheres-of-might', label: 'Spheres of Might', tabs: ['martial'] },
-  { id: 'champion-of-the-spheres', label: 'Champion of the Spheres', tabs: ['martial', 'magic'] },
-  { id: 'spheres-of-guile', label: 'Spheres of Guile', tabs: ['guile'] },
-  { id: 'vancian', label: 'Vancian magic', tabs: ['vancian'] },
-  { id: 'path-of-war', label: 'Path of War', tabs: ['maneuvers'] },
-  { id: 'psionics', label: 'Psionics', tabs: ['psionics'] },
-  { id: 'akashic', label: 'Akashic', tabs: ['akashic'] },
-  { id: 'cardcasting', label: 'Cardcasting', tabs: ['cardcasting'] },
-  { id: 'animal-companion', label: 'Animal companion', tabs: ['animalCompanion'] },
-  { id: 'familiar', label: 'Familiar', tabs: ['familiar'] },
-  { id: 'eidolon', label: 'Eidolon', tabs: ['eidolon'] },
-  { id: 'conjured-companion', label: 'Conjured companion', tabs: ['conjured'] },
-  { id: 'techniques', label: 'Techniques', tabs: ['techniques', 'autoTechnique'] },
-  { id: 'cooking', label: 'Cooking', tabs: ['cooking'] },
-  { id: 'crafting', label: 'Item crafting', tabs: ['crafting'] },
+  {
+    id: 'spheres-of-power', label: 'Spheres of Power', tabs: ['magic'],
+    parts: 'Casting classes, a casting tradition, caster level, spell points and magic talents.',
+    wiki: 'Spheres of Power (system)', store: 300249,
+  },
+  {
+    id: 'spheres-of-might', label: 'Spheres of Might', tabs: ['martial'],
+    parts: 'Practitioner classes, a martial tradition and combat talents.',
+    wiki: 'Spheres of Might (system)', store: 223758,
+  },
+  {
+    id: 'champion-of-the-spheres', label: 'Champion of the Spheres', tabs: ['martial', 'magic'],
+    parts: 'Classes that gain both combat talents and magic talents.',
+    wiki: 'Champions of the Spheres (system)', store: 227710,
+  },
+  {
+    id: 'spheres-of-guile', label: 'Spheres of Guile', tabs: ['guile'],
+    parts: 'Operative classes, a trade tradition, skill spheres and skill talents.',
+    wiki: 'Spheres of Guile (system)', store: 431419,
+  },
+  {
+    id: 'vancian', label: 'Vancian magic', tabs: ['vancian'],
+    parts: 'Casting classes, spell slots per day and a spell list.',
+    wiki: 'Spells', store: 438184,
+  },
+  {
+    id: 'path-of-war', label: 'Path of War', tabs: ['maneuvers'],
+    parts: 'Martial disciplines, maneuvers and stances.',
+    wiki: 'Maneuver (system)', store: 135308,
+  },
+  {
+    id: 'psionics', label: 'Psionics', tabs: ['psionics'],
+    parts: 'Manifesting classes, power points and powers.',
+    wiki: 'Psionic (system)', store: 124281,
+  },
+  {
+    id: 'akashic', label: 'Akashic', tabs: ['akashic'],
+    parts: 'Veilweaving classes, essence and veils.',
+    wiki: 'Akashic (system)', store: 190611,
+  },
+  {
+    id: 'cardcasting', label: 'Cardcasting', tabs: ['cardcasting'],
+    parts: 'A deck of cards for a caster with the Card Casting drawback.',
+    wiki: 'Card Casting (system)', store: 408995,
+  },
+  {
+    id: 'animal-companion', label: 'Animal companion', tabs: ['animalCompanion'],
+    parts: 'An animal companion with its own statistics, tricks and feats.',
+    wiki: 'Animal Companion', store: 438184,
+  },
+  {
+    id: 'familiar', label: 'Familiar', tabs: ['familiar'],
+    parts: 'A familiar with its own statistics and abilities.',
+    wiki: 'Familiar', store: 438184,
+  },
+  {
+    id: 'eidolon', label: 'Eidolon', tabs: ['eidolon'],
+    parts: 'An eidolon with its own statistics and evolutions.',
+    wiki: 'Eidolon', store: 438188,
+  },
+  {
+    id: 'conjured-companion', label: 'Conjured companion', tabs: ['conjured'],
+    parts: 'A Conjuration sphere companion with its own statistics and talents.',
+    wiki: 'Spheres of Power (system)', store: 300249,
+  },
+  {
+    id: 'techniques', label: 'Techniques', tabs: ['techniques', 'autoTechnique'],
+    parts: 'Techniques built from spheres and talents.',
+    wiki: 'Technique',
+  },
+  {
+    id: 'cooking', label: 'Cooking', tabs: ['cooking'],
+    parts: 'Dishes whose ingredients grant effects to those who eat them.',
+    wiki: 'Iron Chef', store: 223758,
+  },
+  {
+    id: 'crafting', label: 'Item crafting', tabs: ['crafting'],
+    parts: 'Crafting speed, crafting cost and a list of projects.',
+  },
 ];
 
 export const CASTING_TYPES = ['Low', 'Mid', 'High'];
@@ -2493,6 +2562,15 @@ export function wikiUrl(name) {
   // encodeURIComponent leaves the apostrophe alone; the wiki's own links
   // percent-encode it, so match that.
   return WIKI_BASE + encodeURIComponent(title).replace(/'/g, '%27');
+}
+
+/** Where the rule books are sold. */
+export const STORE_BASE = 'https://www.drivethrurpg.com/en/product/';
+
+/** The store page for a product number, or null without one. */
+export function storeUrl(product) {
+  const id = Math.floor(Number(product));
+  return id > 0 ? `${STORE_BASE}${id}` : null;
 }
 
 /* ------------------------------------------------------------------ *

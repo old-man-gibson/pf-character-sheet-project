@@ -132,6 +132,8 @@ import { renderStatsPanel } from './ui/panels/stats.js';
 import * as feats from './ui/panels/feats.js';
 import * as techniques from './ui/panels/techniques.js';
 import * as manager from './ui/panels/manager.js';
+import * as wizardUi from './ui/panels/wizard.js';
+import { WIZARD_TAB } from './model/wizard.js';
 import { renderSkillsPanel, skillRowIndices } from './ui/panels/skills.js';
 import { readColumnWidths, writeColumnWidths, applyColumnWidths, bindColumnResize } from './ui/column-widths.js';
 import { fmt, SIZE_MODIFIERS, conditionInfo, savedBefore } from './rules.js';
@@ -2711,6 +2713,8 @@ export class CharacterSheetElement extends HTMLElement {
     bar.push({ key: 'formulas', id: 'formulas', label: 'ƒx Formulas', kind: 'core' });
     if (this.isAdmin) bar.push({ key: 'audit', id: 'audit', label: 'Formula Audit', kind: 'core' });
     const allIds = [...bar.map((e) => e.id), 'systabs'];
+    // The setup guide's Systems step is a page of its own, on no bar.
+    if (this.#wizardOn()) allIds.push(WIZARD_TAB);
     if (!allIds.includes(this.#tab)) this.#tab = bar[0]?.id ?? 'systabs';
     if (this.#tab !== 'skills') this.#skillRowsKept = null;
 
@@ -2776,6 +2780,7 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.#tabColorMenuHtml()}
         <div class="main">
         ${this.#notices()}
+        ${this.#wizardBar()}
         <div class="body" id="sheet-panel" role="tabpanel" aria-labelledby="tab-${this.#tab}"
           tabindex="0">${this.#panel()}</div>
         </div>
@@ -2783,6 +2788,7 @@ export class CharacterSheetElement extends HTMLElement {
     this.#rememberTab();
     this.#applyCharacterColor();
     this.#bind();
+    this.#wizardFocus();
     this.#showActiveTab();
     this.#fillJumpTo();
     this.#markLongText();
@@ -3353,6 +3359,9 @@ export class CharacterSheetElement extends HTMLElement {
         ${monster.menuButton(this.#model, this.isAdmin)}
         <button data-view data-action="campaign-rules" aria-pressed="${this.#tab === 'systabs'}"
           title="Open this character's campaign rules.">Campaign rules…</button>
+        ${this.isPublished || this.#model.data.monster ? '' : `
+        <button data-action="wizard-start" aria-pressed="${this.#wizardOn()}"
+          title="Set up this character one step at a time.">Setup guide…</button>`}
         <button data-view data-action="theme" aria-pressed="${this.#themeMenu}"
           title="Change the colors and tab position.">Theme &amp; layout…</button>
         <button data-view data-action="print-menu" aria-pressed="${this.#printMenu}"
@@ -3776,6 +3785,7 @@ export class CharacterSheetElement extends HTMLElement {
   /** What the tab bar calls the tab that is up, for a message about it. */
   #tabLabel() {
     if (this.#tab === 'systabs') return 'tab manager';
+    if (this.#tab === WIZARD_TAB) return 'setup guide';
     return this.#tabEntries().find((t) => t.id === this.#tab)?.label
       || TABS.find(([id]) => id === this.#tab)?.[1] || this.#tab;
   }
@@ -3790,6 +3800,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'guile': return this.#guilePanel();
       case 'template': return this.#templatePanel();
       case 'systabs': return this.#systemManagerPanel();
+      case WIZARD_TAB: return wizardUi.renderWizardSystemsPanel(this.#model, this.#ctx({ tabLabels: this.#tabLabels() }));
       case 'features': return this.#featuresPanel();
       case 'altTraining': return this.#altTrainingPanel();
       case 'gear': return this.#gearPanel();
@@ -4098,7 +4109,70 @@ export class CharacterSheetElement extends HTMLElement {
       // Whom the campaign rules are for: the rules the browser shares.
       sharedRules: this.isPublished ? null : readShared(),
       campaignShareArmed: this.#campaignShareArmed,
+      // The guide's first step is this panel: it marks the one rule to set.
+      wizardRules: this.#wizardOn() && this.#model.wizardState().step.id === 'rules',
     }));
+  }
+
+  /* ---------------- setup guide ----------------
+   * The guide (model/wizard.js, ui/panels/wizard.js) walks a new character
+   * through its tabs in order. It is drawn in the build view only, since its
+   * steps are the build view's panels, and never on a published sheet.
+   */
+
+  /** Whether the guide's strip is up. */
+  #wizardOn() {
+    return !!this.#model && !this.isPublished && this.#model.viewMode() === 'build'
+      && this.#model.wizardState().on;
+  }
+
+  /** What every tab is called, by id, for a step that opens one. */
+  #tabLabels() {
+    return { ...Object.fromEntries(this.#tabEntries().map((e) => [e.id, e.label])), systabs: 'Settings' };
+  }
+
+  #wizardBar() {
+    if (!this.#wizardOn()) return '';
+    return wizardUi.wizardBar(this.#model, this.#ctx({ tabLabels: this.#tabLabels() }));
+  }
+
+  /**
+   * Put the guide's step on screen: its tab, as a guest where the bar does
+   * not carry it, with the folds its panels sit behind opened. No render.
+   */
+  #wizardShow() {
+    const { step } = this.#model.wizardState();
+    const known = this.#tabEntries().find((t) => t.id === step.tab);
+    const fixed = step.tab === WIZARD_TAB || step.tab === 'systabs';
+    // A tab this character does not have (a campaign rule took it away)
+    // leaves the sheet where it is; the strip still names the step.
+    if (!known && !fixed) return;
+    const onBar = fixed || this.#barEntries().some((t) => t.id === step.tab);
+    this.#visitTab = onBar ? null : { ...known };
+    this.#tab = step.tab;
+    const collapsed = this.#model.data.uiPrefs?.collapsed;
+    for (const key of step.folds || []) {
+      if (collapsed && !isOpen(this.#model, key)) collapsed[key] = foldValue(key, true);
+    }
+  }
+
+  /**
+   * After a render with the guide open: on the step's own tab, show only that
+   * step's panels; and where the steps are one row that scrolls (a phone),
+   * bring the current one to the middle of it.
+   */
+  #wizardFocus() {
+    if (!this.#wizardOn()) return;
+    const list = this.shadowRoot.querySelector('.wzsteps');
+    const chip = list?.querySelector('[aria-current="step"]');
+    if (chip && list.scrollWidth > list.clientWidth) {
+      const at = chip.getBoundingClientRect();
+      const row = list.getBoundingClientRect();
+      list.scrollLeft += at.left - row.left - (row.width - at.width) / 2;
+    }
+    const { step } = this.#model.wizardState();
+    if (step.tab !== this.#tab || this.#view.wizardAll) return;
+    wizardUi.focusPanels(this.shadowRoot.getElementById('sheet-panel'), step.panels);
   }
 
 
@@ -5390,6 +5464,8 @@ export class CharacterSheetElement extends HTMLElement {
       const collapsed = this.#model.data.uiPrefs.collapsed;
       if (collapsed && !isOpen(this.#model, 'campaign-rules')) collapsed['campaign-rules'] = foldValue('campaign-rules', true);
     }
+    // A character with the setup guide open comes back on the guide's step.
+    if (this.#wizardOn()) this.#wizardShow();
   }
 
   /**
@@ -5458,7 +5534,9 @@ export class CharacterSheetElement extends HTMLElement {
     const box = this.shadowRoot.querySelector('select.jumpto');
     const body = this.shadowRoot.querySelector('.body');
     if (!box || !body) return;
-    const heads = [...body.querySelectorAll('section.panel > h3, .supergroup > .supergroup-title')];
+    // Less the panels the setup guide has hidden for its step.
+    const heads = [...body.querySelectorAll('section.panel > h3, .supergroup > .supergroup-title')]
+      .filter((h) => !h.closest('.wz-off'));
     box.hidden = heads.length < 3;
     box.disabled = box.hidden;
     if (box.hidden) { box.innerHTML = '<option value="">Jump to…</option>'; return; }
@@ -5829,6 +5907,15 @@ export class CharacterSheetElement extends HTMLElement {
     });
 
     this.#bindActions(root);
+
+    // The setup guide's Systems step: a tick picks a system, and its tabs
+    // join the bar.
+    root.querySelectorAll('[data-wizard-system]').forEach((input) => {
+      input.addEventListener('change', () => {
+        this.#model.toggleWizardSystem(input.dataset.wizardSystem);
+        this.#rerender(input);
+      });
+    });
 
     // Generic field -> model path. data-kind decides the coercion.
     /*
@@ -7884,6 +7971,34 @@ export class CharacterSheetElement extends HTMLElement {
         this.#tab = this.#barEntries().find((e) => e.id !== 'systabs')?.id ?? 'overview';
         this.#render();
         break;
+      // The setup guide: open it, go to one of its steps, close it.
+      case 'wizard-start':
+        this.#chromeMenu = false;
+        this.#model.startWizard();
+        this.#wizardShow();
+        this.#render();
+        this.#showPanelTop();
+        break;
+      case 'wizard-step':
+        if (!button?.dataset.step) break;
+        this.#model.setWizardStep(button.dataset.step);
+        this.#view.wizardAll = false;
+        this.#wizardShow();
+        this.#render();
+        this.#showPanelTop();
+        break;
+      // The step's panels alone, or everything on its tab.
+      case 'wizard-all':
+        this.#view.wizardAll = !this.#view.wizardAll;
+        this.#render();
+        break;
+      case 'wizard-close': {
+        this.#model.closeWizard();
+        // The Systems step goes with the guide; any other tab stays up.
+        if (this.#tab === WIZARD_TAB) this.#tab = this.#barEntries()[0]?.id ?? 'overview';
+        this.#render();
+        break;
+      }
       case 'campaign-reset':
         this.#model.markUndo('Put the campaign rules back to the table\'s');
         this.#model.set('campaign', {});

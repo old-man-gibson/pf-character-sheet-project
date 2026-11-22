@@ -146,6 +146,9 @@ import { featCount, recomputeLanguages, recomputeSpeeds } from './traits.js';
 import { applyCarry } from './stats/carry.js';
 import { logPlay, playLog } from './play-log.js';
 import { casterLevelSources, toggleCountsToward } from './transparency.js';
+import {
+  closeWizard, setWizardStep, startWizard, toggleWizardSystem, wizardState, wizardSteps, wizardSystems,
+} from './wizard.js';
 import { evaluateAmount, getPath, isFormulaText, safe, setPath, skillForwardKey, skillKey } from './util.js';
 
 /** A number of hit points as an action takes it: whole, and never below none. */
@@ -559,6 +562,15 @@ export class Character {
   setTabColor(...a) { return setTabColor(this, ...a); }
   tabName(...a) { return tabName(this, ...a); }
   setTabName(...a) { return setTabName(this, ...a); }
+
+  // wizard.js
+  wizardState(...a) { return wizardState(this, ...a); }
+  wizardSteps(...a) { return wizardSteps(this, ...a); }
+  wizardSystems(...a) { return wizardSystems(this, ...a); }
+  startWizard(...a) { return startWizard(this, ...a); }
+  closeWizard(...a) { return closeWizard(this, ...a); }
+  setWizardStep(...a) { return setWizardStep(this, ...a); }
+  toggleWizardSystem(...a) { return toggleWizardSystem(this, ...a); }
 
   // abilities.js
   #applyMythic(...a) { return applyMythic(this, ...a); }

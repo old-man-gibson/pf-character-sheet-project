@@ -5626,8 +5626,45 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
 .printstack { position: absolute; left: -100000px; top: 0; width: 1100px; visibility: hidden; pointer-events: none; }
 .printpicks { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 
+/* ---------- setup guide ----------
+   The strip the guide draws above the open tab, and its Systems step
+   (ui/panels/wizard.js). Edged in the edit color, as the new character's
+   rules note is: it is the thing to follow. */
+.wizard {
+  margin: 8px 0 12px; padding: 10px 12px; border-radius: var(--cs-radius);
+  border: 1px solid var(--cs-edit); background: color-mix(in srgb, var(--cs-edit) 8%, var(--cs-panel));
+}
+.wzhead { display: flex; align-items: center; gap: 8px; }
+.wzhead button { margin-left: auto; }
+.wzsteps { list-style: none; display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 10px; padding: 0; }
+.wzsteps button { padding: 2px 8px; font-size: 0.76rem; white-space: nowrap; }
+.wzsteps button[aria-current="step"] {
+  background: var(--cs-edit); border-color: var(--cs-edit); color: var(--cs-bg); font-weight: 650;
+}
+.wznum { opacity: 0.7; font-variant-numeric: tabular-nums; }
+.wztitle { margin: 0 0 4px; font-family: var(--cs-display); font-size: 1rem; color: var(--cs-text); }
+.wzbody p { margin: 0 0 6px; font-size: 0.86rem; }
+.wzguide { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--cs-line); }
+.wzlinks { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.wznav { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+/* A panel that is not part of the guide's step, and a group left empty by
+   that. On screen only: paper gets the whole tab. */
+@media screen { .wz-off { display: none !important; } }
+.wzlist { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); }
+.wzsys { padding: 8px 10px; border: 1px solid var(--cs-line); border-radius: 6px; background: var(--cs-panel-2); }
+.wzsys.on { border-color: var(--cs-edit); }
+.wzsys label.chk { font-weight: 650; }
+.wzsys .badge { margin-left: 6px; }
+.wzsys p { margin: 4px 0 0; font-size: 0.82rem; }
+.wzsys .wztabs { color: var(--cs-muted); }
+/* On a phone the steps are one row that scrolls sideways, not six rows. */
+@container (max-width: 620px) {
+  .wzsteps { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+}
+
 @media print {
   .fxdrawer { display: none; }
+  .wizard { display: none !important; }
   /* Printing several tabs: the stack replaces the open tab, one tab a page. */
   :host([printing]) #sheet-panel { display: none !important; }
   .printstack { position: static; left: auto; width: auto; visibility: visible; pointer-events: auto; }

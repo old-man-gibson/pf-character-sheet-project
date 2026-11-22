@@ -60,6 +60,8 @@ apart from the characters. See [gm-module/README.md](gm-module/README.md).
 
 The picker starts empty: press **+ New** for a blank sheet, or **+ Import** (or drop a
 file on the page) for a workbook exported from Google Sheets or a JSON this app wrote.
+A new sheet can open in the setup guide, which goes through the character one step at a
+time (see [Using the sheet](docs/using-the-sheet.md#the-setup-guide)).
 Tick **GM / inspector view** to reveal the Formula Audit tab. `app/embed-example.html`
 shows the same sheet embedded in a hostile-looking host page.
 

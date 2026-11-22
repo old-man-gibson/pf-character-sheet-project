@@ -403,7 +403,8 @@ how many a level or tier takes from the one before. XP is entered as the running
 XP tables are.
 
 **New characters open on this panel.** Lowest level is required; the rest are optional.
-**Continue** goes to the character.
+**Continue** goes to the character. A character made with the setup guide opens in the
+guide instead, and this panel is its first step.
 
 **Levelling.** The level never moves on its own: XP or milestones reaching the next mark
 offers **Level up to N**, which takes it as one step, undone like a play action and written
@@ -411,6 +412,29 @@ in the play log. Levelling by milestones spends what the level took, and the res
 over. **Add** beside the XP box adds an award at the table the same way. A mythic tier from
 trials is taken the same way, with **Tier up to N**; typing fewer trials does not take a
 tier back. Both are offered in the search as well when one is earned.
+
+### The setup guide
+
+The guide goes through a character one step at a time. **+ New** offers it with a
+checkbox, and **⋯ → Setup guide…** opens it on any character. It works in the build view.
+
+A strip above the open tab lists the steps, says what to do on the current one, and has
+**Back** and **Next**. Each step opens one of the sheet's own tabs, so what is typed in
+the guide is typed on the sheet. Where a tab holds more than the step is about, only the
+step's panels are shown; **Whole tab** shows the rest. The tab bar keeps working while the
+guide is open, and **Show this step** returns to the step.
+
+The steps, in order: Campaign rules, Details, Ability scores, Race and traits, Classes,
+Class features, Systems, one step per selected system, Skills, Feats, Equipment.
+
+**Systems** lists every rules system the sheet has a tab for. Each has a checkbox, one
+sentence on what the system consists of, the tab it uses, a link to its page on the wiki
+and a link to its book on DriveThruRPG. Ticking a system puts its tab on the bar and adds
+its step. Unticking it takes the tab off the bar unless the tab holds data. The list and
+its links are the `GAME_SYSTEMS` table in `app/js/rules.js`.
+
+**Close guide** closes it. The step and the selected systems are saved with the character,
+so the guide reopens where it was closed.
 
 ### Themes and layout
 

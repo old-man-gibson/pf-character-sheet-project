@@ -107,5 +107,9 @@ export function blankView() {
     extFilter: '',
     /** What is typed into the block shelf's search box. */
     extSearch: '',
+
+    /* Setup guide */
+    /** Whether the step's tab shows all its panels rather than the step's own. */
+    wizardAll: false,
   };
 }
