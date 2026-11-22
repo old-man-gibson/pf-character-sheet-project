@@ -1504,6 +1504,19 @@ console.log('option menus -- a pack provides them, a column points at one');
   const row = c.classFeatureRows('Blacksmith').find((r) => r.level === 2);
   check('the cell that picks from it knows its entries',
     row.cells['Smithing insight'].fields.map((f) => f.menu?.options.map((o) => o.name)), [['Durable', 'Gunsmith']]);
+  // Two packs with a menu of one name make one menu, each option once.
+  const talents = (options, extra = {}) => ({ name: 'Stancer Trick', class: '', feature: 'Trick', text: '', options, ...extra });
+  setOptionCatalogues([
+    talents([{ name: 'Low Sweep (Ex)', text: 'old' }, { name: 'High Guard', text: 'guard' }, { name: 'low sweep', text: 'twice' }],
+      { class: 'Stancer', text: 'A stancer learns one trick at every level.' }),
+    talents([{ name: 'Iron Root', text: 'root' }, { name: 'Low Sweep', text: 'new' }]),
+  ]);
+  const merged = optionCatalogue('stancer trick');
+  check('two packs\' menus of one name are one menu with the options of both, each once',
+    [optionCatalogues().length, merged.options.map((o) => [o.name, o.text])],
+    [1, [['Low Sweep', 'new'], ['High Guard', 'guard'], ['Iron Root', 'root']]]);
+  check('what the later menu leaves blank the earlier one fills',
+    [merged.class, merged.text, optionCatalogueFor('Stancer', 'Trick')?.options.length], ['Stancer', 'A stancer learns one trick at every level.', 3]);
   setOptionCatalogues([]);
   const off = c.classFeatureRows('Blacksmith').find((r) => r.level === 2);
   check('with its pack switched off the cell is a box to type in again, and the name is still on the sheet',
