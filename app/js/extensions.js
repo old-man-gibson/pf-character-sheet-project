@@ -2077,7 +2077,7 @@ export function archetypeBlocksFromEntry(entry) {
 }
 
 /** Labels on a race's page that are its numbers or its description, not traits. */
-const RACE_FRONT_MATTER = /^(?:[+\-–−]\s*\d|ability score|racial points$|(?:normal |slow |fast )?speed$|size$|type$|subtypes?$|languages?$|(?:fine|diminutive|tiny|small|medium|large|huge|gargantuan|colossal)$|physical description|society|relations|alignment(?: and religion)?$|religion$|adventurers$|(?:[\w ]+ )?names$)/i;
+const RACE_FRONT_MATTER = /^(?:[+\-–−]\s*\d|ability score|racial points$|(?:normal |slow |fast |base )?speed$|size$|type$|subtypes?$|languages?$|(?:fine|diminutive|tiny|small|medium|large|huge|gargantuan|colossal)$|physical description|society|relations|alignment(?: and religion)?$|religion$|adventurers$|(?:[\w ]+ )?names$)/i;
 
 const ABILITY_KEYS = { str: 'str', dex: 'dex', con: 'con', int: 'int', wis: 'wis', cha: 'cha' };
 
