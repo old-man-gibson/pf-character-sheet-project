@@ -15542,6 +15542,12 @@ console.log('maneuvers -- known and readied are two ticks, and the counts allowe
   c.set('maneuvers.possibleManeuvers', 2);
   c.set('maneuvers.possibleReadied', 1);
   check('with the tab\u2019s own boxes as the rest', [k().possibleManeuvers, k().possibleReadied, k().legal], [9, 5, true]);
+  c.set('maneuvers.possibleManeuvers', 'level - 4');
+  check('the last row takes a formula too', [k().possibleManeuvers, k().other.known], [9, { value: 2, error: null }]);
+  c.set('maneuvers.possibleStances', 'no.such.name +');
+  check('one that does not work out counts for nothing and says so', [k().possibleStances, typeof k().other.stances.error], [2, 'string']);
+  c.set('maneuvers.possibleStances', 0);
+  c.set('maneuvers.possibleManeuvers', 2);
   c.set('maneuvers.possibleReadied', 0);
   c.setItem('maneuvers.sources', 0, 'readied', 1);
   check('more readied than allowed is over the limit', [k().readied, k().possibleReadied, k().over.readied, k().legal], [2, 1, true, false]);

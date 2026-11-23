@@ -586,6 +586,26 @@ export const FORMULA_FIELDS = [
     },
   },
   {
+    // How many maneuvers may be known and readied, and stances known: each
+    // source row's counts, and the last row's.
+    key: 'maneuverCounts', source: 'player', where: 'the Maneuvers tab',
+    collect: (model) => {
+      const m = model.data.maneuvers;
+      const label = { known: 'maneuvers known', readied: 'maneuvers readied', stances: 'stances known' };
+      const rows = (m?.sources || []).flatMap((s, i) => Object.keys(label).filter((f) => stringFormula(s[f])).map((f) => ({
+        id: `maneuver-source-${i}-${f}`, place: `maneuverCount:${i}:${f}`,
+        name: `${String(s.name || 'A source').trim()}: ${label[f]}`,
+        formula: s[f], value: s[`${f}Num`], error: s[`${f}Error`],
+      })));
+      const other = Object.entries({ known: 'possibleManeuvers', readied: 'possibleReadied', stances: 'possibleStances' })
+        .filter(([, path]) => stringFormula(m?.[path])).map(([f, path]) => ({
+          id: `maneuver-other-${f}`, place: `maneuverCount:other:${path}`, name: `Other ${label[f]}`,
+          formula: m[path], value: m.calc?.other?.[f]?.value, error: m.calc?.other?.[f]?.error,
+        }));
+      return [...rows, ...other];
+    },
+  },
+  {
     key: 'deckManipulations', source: 'player',
     collect: (model) => {
       const cc = model.data.cardcasting;
