@@ -280,7 +280,8 @@ export function recomputeAltTraining(model) {
     // Cite links, and whether the document's own copy answered (no pack did).
     links: rules.links,
     cited: rules.cited,
-    prereq: technique ? { text: technique.prereq?.text || '', ...altTrainingPrereq(model, technique) } : null,
+    // A technique with no prerequisite has nothing to check or to say.
+    prereq: technique?.prereq ? { text: technique.prereq.text || '', ...altTrainingPrereq(model, technique) } : null,
     talents: altTrainingTalents(model),
     counts,
     rows,
