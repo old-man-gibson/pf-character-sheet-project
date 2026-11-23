@@ -1906,6 +1906,12 @@ console.log('a catalogue pack\'s tables are menus too: class options, and powers
     parseSwaps('She can rework a poison. If successful, the poison\'s type changes to contact or inhaled.'), { replaces: [], alters: [] });
   check('parseSwaps: grants named by the levels they are gained at',
     parseSwaps('This ability replaces the rogue talents gained at 2nd and 8th levels.'), { replaces: ['rogue talent@2', 'rogue talent@8'], alters: [] });
+  check('parseSwaps: "normally gained at" is the same grant',
+    parseSwaps('This replaces the bonus feat normally gained at 2nd level.'), { replaces: ['bonus feat@2'], alters: [] });
+  check('parseSwaps: features named before the one gained at a level go whole',
+    [parseSwaps('This ability replaces poison use and the ninja trick gained at 4th level.'),
+      parseSwaps('This alters armor training, uncanny dodge, and the arsenal trick usually gained at 4th and 8th levels.')],
+    [{ replaces: ['poison use', 'ninja trick@4'], alters: [] }, { replaces: [], alters: ['armor training', 'uncanny dodge', 'arsenal trick@4', 'arsenal trick@8'] }]);
 
   setOptionCatalogues(pageText);
   check('none of it is a menu a column picks from', optionCatalogues().length, 0);
