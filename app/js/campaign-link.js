@@ -11,6 +11,7 @@
  * What comes out of a link goes through `campaignPreset` again: only keys the
  * rules know are kept, as with a rules file.
  */
+import { fromBase64, toBase64 } from './base64.js';
 import { campaignPreset } from './model/campaign.js';
 
 /** The longest rules text a link may carry; anything longer is not read. */
@@ -19,11 +20,9 @@ const MAX_LENGTH = 20000;
 /** A link to the app at `base` that carries the campaign block `rules`. */
 export function campaignLink(rules, base = new URL('../', import.meta.url)) {
   const json = JSON.stringify(campaignPreset({ campaign: rules }).campaign);
-  let binary = '';
-  for (const byte of new TextEncoder().encode(json)) binary += String.fromCharCode(byte);
   const url = new URL(base);
   url.search = '';
-  url.hash = `rules=${btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
+  url.hash = `rules=${toBase64(new TextEncoder().encode(json)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
   return url.href;
 }
 
@@ -32,8 +31,7 @@ export function linkRules(hash) {
   const found = /^#?rules=([A-Za-z0-9_-]+)$/.exec(String(hash ?? ''));
   if (!found || found[1].length > MAX_LENGTH) return null;
   try {
-    const binary = atob(found[1].replace(/-/g, '+').replace(/_/g, '/'));
-    const json = new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(binary, (ch) => ch.charCodeAt(0)));
+    const json = new TextDecoder('utf-8', { fatal: true }).decode(fromBase64(found[1].replace(/-/g, '+').replace(/_/g, '/')));
     const block = JSON.parse(json);
     if (!block || typeof block !== 'object' || Array.isArray(block)) return null;
     return campaignPreset({ campaign: block }).campaign;

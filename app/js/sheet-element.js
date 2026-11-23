@@ -60,6 +60,7 @@ import {
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
 import { packageBlocks, packageId, swapPackage } from './packages.js';
+import { chooseOccupation, occupationBlocks } from './occupations.js';
 import { COMPANION_KINDS, COMPANION_LABELS } from './companions.js';
 import { applyBlock, looksLikeExtension, looksLikeLibrary, removeArchetype, typeArchetypes } from './extensions.js';
 import { describePublish, publishDocument } from './publish.js';
@@ -384,7 +385,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(campaign|vmc|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|backgroundSkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|ageCategory|xp|milestones|size|heroPoints|antihero|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(campaign|vmc|occupation|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|backgroundSkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|ageCategory|xp|milestones|size|heroPoints|antihero|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /**
  * The input types a caret can be put back into after a re-render.
@@ -6091,6 +6092,14 @@ export class CharacterSheetElement extends HTMLElement {
     // today sits under a path AFFECTS_DERIVED matches, and so comes back as
     // fresh markup anyway; this is what keeps one that does not -- a slot an
     // extension adds, a new top-level key -- from wearing the old colour.
+    // The occupation (a campaign rule): a pack's, the player's own, or none.
+    root.querySelectorAll('select[data-occupation]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        const block = occupationBlocks(extensionRuntime.blocks()).find((b) => b.name === sel.value);
+        chooseOccupation(this.#model, block || sel.value);
+        this.#render();
+      });
+    });
     root.querySelectorAll('select[data-ab]').forEach((sel) => {
       sel.addEventListener('change', () => {
         // The option knows best: a picker whose choices are not ability names

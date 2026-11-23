@@ -61,7 +61,7 @@ for (const id of fixtureIds()) {
     ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false], ['antiheroes', true],
     ['maxLevel', 6], ['maxLevel', 25], ['maxTier', 5], ['maxTier', 12], ['gestalt', false], ['hitPoints', 'average'], ['hitPoints', 'rolled'],
     ['abpLadder', 'core'], ['mythicLadder', 'core'], ['mythicFeats', 'even'], ['mythicFeats', 'every'], ['mythicFeatEvery', 3], ['pastColossal', true], ['minLevel', 1], ['minLevel', 8], ['maxLevel', 60],
-    ['skillSystem', 'background'], ['backgroundUse', 'floating'], ['backgroundRanks', 3], ['agingEffects', true], ['vmc', true], ['archetypePackages', true]]) {
+    ['skillSystem', 'background'], ['backgroundUse', 'floating'], ['backgroundRanks', 3], ['agingEffects', true], ['vmc', true], ['archetypePackages', true], ['occupations', true]]) {
     const m = new Character(loadCharacter(id));
     const before = numbers(m);
     m.set(`campaign.${key}`, value);
@@ -774,6 +774,74 @@ console.log('\nvariant multiclassing');
   check('the Level Up slot edits the feature notes', [feats.includes('data-set="vmc.features.3.note"'), feats.includes('Toughened')], [true, true]);
   c.set('campaign.vmc', false);
   check('rule off again: the feat is back, the feature gone', [featNames(c.data).includes('Power Attack'), fort()], [true, base]);
+}
+
+console.log('\noccupations: picked skills are class skills');
+{
+  const { occupationOf, occupationOffers, occupationFeatInPlay } = await import('../app/js/model/campaign.js');
+  const { chooseOccupation, occupationBlocks, OWN_OCCUPATION } = await import('../app/js/occupations.js');
+  const { normalizeBlock } = await import('../app/js/extensions.js');
+  const { renderSkillsPanel } = await import('../app/js/ui/panels/skills.js');
+  const { renderFeaturesPanel } = await import('../app/js/ui/panels/feats.js');
+  const { featNames } = await import('../app/js/model/feats.js');
+  const c = new Character(blankDocument({ name: 'Occupation', level: 4 }));
+  const skill = (name) => c.data.skills.find((s) => s.name === name);
+  const key = (s) => `${s.name}|${s.spec || ''}`;
+  const at = (name) => c.data.skills.indexOf(skill(name));
+  c.setItem('skills', at('Swim'), 'rankSources.bought', 1);
+  c.setItem('skills', at('Climb'), 'rankSources.bought', 1);
+  c.setItem('skills', at('Climb'), 'classSkill', true);
+  c.setItem('skills', at('Stealth'), 'rankSources.bought', 1);
+  const totals = () => ['Swim', 'Climb', 'Stealth'].map((n) => skill(n).bonus);
+  const plain = totals();
+  const sailor = normalizeBlock({
+    kind: 'occupation', name: 'Sailor', picks: 2, skills: ['Climb', 'Knowledge (the planes)', 'Profession (sailor)', 'Swim'],
+    feats: ['Dodge', 'Athletic'], money: '3d4 x 10 gp',
+  });
+  check('a block keeps what it offers', [sailor.picks, sailor.skills.length, sailor.feats, sailor.money], [2, 4, ['Dodge', 'Athletic'], '3d4 x 10 gp']);
+  check('packs list their occupations by name', occupationBlocks([sailor, { kind: 'note', name: 'x' }]).map((b) => b.name), ['Sailor']);
+  check('an offer reaches its rows', [
+    occupationOffers('Knowledge (the planes)', { name: 'Kn. (planes)' }), occupationOffers('Knowledge (any)', { name: 'Kn. (arcana)' }),
+    occupationOffers('Profession (sailor)', { name: 'Profession', spec: '' }), occupationOffers('Profession (sailor)', { name: 'Profession', spec: 'Cook' }),
+    occupationOffers('Profession', { name: 'Profession', spec: 'Cook' }), occupationOffers('Climb', { name: 'Swim' }),
+  ], [true, true, true, false, true, false]);
+
+  chooseOccupation(c, sailor);
+  c.set('occupation.skills.0', key(skill('Swim')));
+  c.set('occupation.skills.1', key(skill('Climb')));
+  check('rule off: an occupation on the sheet does nothing', [occupationOf(c.data), totals(), skill('Swim').occupationSkill], [null, plain, undefined]);
+
+  c.set('campaign.occupations', true);
+  check('a picked skill is a class skill', [skill('Swim').occupationSkill, skill('Swim').bonus - plain[0]], [true, 3]);
+  check('one already a class skill gets +1 competence', [skill('Climb').occupationBonus, skill('Climb').bonus - plain[1]], [1, 1]);
+  check('the tick is still the player\'s', [skill('Swim').classSkill, skill('Climb').classSkill], [false, true]);
+  c.set('occupation.skills.1', key(skill('Stealth')));
+  check('a skill the occupation does not offer gives nothing', [skill('Stealth').occupationSkill, skill('Stealth').bonus], [undefined, plain[2]]);
+  c.set('occupation.skills.2', key(skill('Climb')));
+  check('a pick past the count gives nothing', [...occupationOf(c.data).skills], [key(skill('Swim'))]);
+  c.set('occupation.skills.1', key(skill('Climb')));
+
+  c.set('grantedFeats.occupation', { name: 'Dodge', note: '' });
+  check('its feat counts', [occupationFeatInPlay(c.data), featNames(c.data).includes('Dodge')], [true, true]);
+  const skillsHtml = renderSkillsPanel(c, { showAllSkills: true });
+  check('the panel shows the occupation, its offers and the marks',
+    [skillsHtml.includes('data-set="occupation.skills.1"'), skillsHtml.includes('Pick 2 of: Climb'), skillsHtml.includes('occ +1'), skillsHtml.includes('Starting money: 3d4')],
+    [true, true, true, true]);
+  check('Granted feats names the choices', renderFeaturesPanel(c, { openText: new Set() }).includes('Sailor: Dodge or Athletic'), true);
+  const again = reopen(c);
+  check('nothing drifts on reopen', numbers(again), numbers(c));
+
+  chooseOccupation(c, OWN_OCCUPATION);
+  c.set('occupation.name', 'Ratcatcher');
+  c.set('occupation.picks', 1);
+  c.set('occupation.skills.0', key(skill('Stealth')));
+  check('an own occupation offers any skill', [...occupationOf(c.data).skills], [key(skill('Stealth'))]);
+  check('and may have a feat', occupationFeatInPlay(c.data), true);
+  chooseOccupation(c, normalizeBlock({ kind: 'occupation', name: 'Miner', picks: 2, skills: ['Climb'] }));
+  check('one from a pack with no feat has no feat row', [occupationFeatInPlay(c.data), featNames(c.data).includes('Dodge')], [false, false]);
+
+  c.set('campaign.occupations', false);
+  check('rule off again: the totals are back, the picks kept', [totals(), c.data.occupation.name, skill('Climb').occupationSkill], [plain, 'Miner', undefined]);
 }
 
 console.log('\na new character opens on its rules first');

@@ -19,7 +19,7 @@ import { featCatalogue } from '../../model.js';
 import { featLevel, isAhead, rowLevel } from '../../model/feats.js';
 import { fromLevelField, fromLevelHead, plannedRow } from '../from-level.js';
 import {
-  campaignRules, isAntihero, mythicFeatWhen, mythicTierGrantOf, mythicTierReached, trialProgress, specialtyInPlay, vmcTakesSlot, vmcClass,
+  campaignRules, isAntihero, mythicFeatWhen, mythicTierGrantOf, occupationFeatInPlay, occupationOf, mythicTierReached, trialProgress, specialtyInPlay, vmcTakesSlot, vmcClass,
 } from '../../model/campaign.js';
 import {
   MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS,
@@ -71,6 +71,8 @@ function grantedFeatsSection(model, ctx) {
     const majorName = String(major.name || major.category || major.text || '').trim();
     // An antihero's feat, bought with the hero points it gave up (a campaign rule).
     const antihero = isAntihero(c);
+    // An occupation's feat (a campaign rule), with the feats it offers.
+    const occupation = occupationFeatInPlay(c) ? occupationOf(c) : null;
     // The specialty's feat, while the Specialty is in play (background skills,
     // a campaign rule, replace it).
     const specialty = specialtyInPlay(c);
@@ -88,7 +90,7 @@ function grantedFeatsSection(model, ctx) {
     </tr>`;
 
     return `<h4 class="subhead">Granted feats
-        <span class="badge">${(hasMajor ? 1 : 0) + (specialty ? 1 : 0) + (antihero ? 1 : 0) + (g.others || []).length}</span>
+        <span class="badge">${(hasMajor ? 1 : 0) + (specialty ? 1 : 0) + (antihero ? 1 : 0) + (occupation ? 1 : 0) + (g.others || []).length}</span>
       </h4>
       <div class="tablewrap"><table class="granted stacked${(g.others || []).length ? '' : ' notools'}">
         <thead><tr><th class="grip"></th><th class="src">Source</th><th class="fname">Feat</th>
@@ -98,6 +100,7 @@ function grantedFeatsSection(model, ctx) {
           ${hasMajor ? fixed('drawback', 'Drawback', majorName.slice(0, 60)) : ''}
           ${specialty ? fixed('specialty', 'Specialty') : ''}
           ${antihero ? fixed('antihero', 'Antihero', 'In place of hero points') : ''}
+          ${occupation ? fixed('occupation', 'Occupation', [occupation.name, occupation.feats.join(' or ')].filter(Boolean).join(': ')) : ''}
           ${(g.others || []).map((f, i) => `<tr ${rows.rowDrop('grantedFeats.others', i)}${plannedRow(isAhead(rowLevel(f), level), rowLevel(f))}>
             ${rows.rowGrip()}
             <td data-stack="head">${rows.itemText('grantedFeats.others', i, 'source', f.source, 'Oath 2, Attunement…')}</td>

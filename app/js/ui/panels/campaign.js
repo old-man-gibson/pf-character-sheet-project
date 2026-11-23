@@ -237,6 +237,8 @@ export function campaignPanel(model, ctx = {}) {
     ? 'Each background rank per level gives one picked skill full ranks (picked on <strong>Skills</strong>).'
     : 'Background ranks form a pool for background skills only.'}</p>`
       : ''),
+          row('occupations', 'Occupations', check('occupations', 'Occupations'),
+    'Each character picks an occupation on <strong>Skills</strong>. Its picked skills are class skills.'),
           row('vmc', 'Variant multiclassing', check('vmc', 'Variant multiclassing'),
     'Characters may pick a secondary class on <strong>Progression</strong>. Its features replace the feats at 3rd, 7th, 11th, 15th and 19th.'),
           row('archetypePackages', 'Archetype packages', check('archetypePackages', 'Archetype packages'),

@@ -149,6 +149,12 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
    * classes, and the pill on the class row still removes them.
    */
   archetypePackages: false,
+  /**
+   * Occupations: what the character did before adventuring, picked on Skills
+   * (`d.occupation`). Its picked skills are class skills, +1 competence on
+   * one that already was, and some come with a bonus feat.
+   */
+  occupations: false,
 });
 
 /** The levels a variant multiclass grants a secondary class feature at, in place of a feat. */
@@ -255,6 +261,7 @@ export function campaignRules(d) {
     agingEffects: bool('agingEffects'),
     vmc: bool('vmc'),
     archetypePackages: bool('archetypePackages'),
+    occupations: bool('occupations'),
   };
 }
 
@@ -317,6 +324,66 @@ export function freeBackgroundSkills(d) {
 export function isAntihero(d) {
   const rules = campaignRules(d);
   return rules.heroPoints && rules.antiheroes && d?.identity?.antihero === true;
+}
+
+/** Skills an occupation picks when it does not say how many. */
+export const OCCUPATION_PICKS = 2;
+
+/** A skill name as an occupation's list and a skill row both spell it: base and variant. */
+function skillParts(label) {
+  const m = /^([^(]*?)\s*(?:\(([^)]*)\))?\s*$/.exec(String(label ?? '').toLowerCase().trim()) || [];
+  return {
+    base: String(m[1] ?? '').trim().replace(/^knowledge$/, 'kn.'),
+    variant: String(m[2] ?? '').trim().replace(/^the\s+/, ''),
+  };
+}
+
+/**
+ * Whether a skill row is one an occupation offers. "Profession" offers every
+ * Profession row and "Knowledge (any)" every Knowledge; "Profession (sailor)"
+ * offers that row and a Profession row not named yet.
+ */
+export function occupationOffers(offer, skill) {
+  const want = skillParts(offer);
+  const variant = String(skill?.spec ?? '').trim();
+  const have = skillParts(variant ? `${skill?.name} (${variant})` : skill?.name);
+  if (!want.base || want.base !== have.base) return false;
+  return !want.variant || want.variant === 'any' || !have.variant || want.variant === have.variant;
+}
+
+/**
+ * The character's occupation while the campaign uses them, else null:
+ * its name, how many skills it picks, the skills and feats it offers (empty
+ * lists offer any), and the picked skill rows' keys. A pick past the count,
+ * or of a skill the occupation does not offer, gives nothing.
+ */
+export function occupationOf(d) {
+  if (!campaignRules(d).occupations) return null;
+  const o = d?.occupation && typeof d.occupation === 'object' ? d.occupation : {};
+  const list = (v) => (Array.isArray(v) ? v.map((x) => String(x ?? '').trim()).filter(Boolean) : []);
+  const name = String(o.name ?? '').trim();
+  const offers = list(o.offers);
+  const picks = Math.min(12, count(o.picks, OCCUPATION_PICKS));
+  const rows = new Map((d?.skills || []).map((s) => [skillKey(s), s]));
+  const map = o.skills && typeof o.skills === 'object' ? o.skills : {};
+  const skills = new Set(Array.from({ length: picks }, (_, i) => map[i])
+    .filter((k) => rows.has(k) && (!offers.length || offers.some((x) => occupationOffers(x, rows.get(k))))));
+  return {
+    name, picks, offers, skills, listed: o.listed === true,
+    feats: list(o.feats), money: String(o.money ?? '').trim(), alignment: String(o.alignment ?? '').trim(),
+  };
+}
+
+/** The picked occupation skills' keys: empty with the rule off. */
+export const occupationSkills = (d) => occupationOf(d)?.skills ?? new Set();
+
+/**
+ * Whether the occupation's bonus feat is in play: an occupation is named,
+ * and it is not one from a pack that grants no feat.
+ */
+export function occupationFeatInPlay(d) {
+  const o = occupationOf(d);
+  return !!o && !!o.name && !(o.listed && !o.feats.length);
 }
 
 /** Whether this character has hero points to spend. */
@@ -407,6 +474,7 @@ export const RULE_TITLES = Object.freeze({
   agingEffects: 'Age effects',
   vmc: 'Variant multiclassing',
   archetypePackages: 'Archetype packages',
+  occupations: 'Occupations',
 });
 
 /** The rules a campaign block changes from the table's, by name. */

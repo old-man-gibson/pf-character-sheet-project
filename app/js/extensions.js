@@ -96,6 +96,7 @@ export const BLOCK_KINDS = {
   archetype: { label: 'Archetype', lands: 'Its class. Replaced features are removed from the Progression tab and Template group, and the new ones are added. The pill on the class row removes the archetype' },
   options: { label: 'Option menu', lands: 'The class feature it names on the Progression tab, as a menu of choices, and its own Template group' },
   package: { label: 'Archetype package', lands: 'Swapped for one of a class\'s own packages on the Progression tab, when the campaign allows archetype packages' },
+  occupation: { label: 'Occupation', lands: 'Picked on the Skills tab, when the campaign uses occupations' },
   note: { label: 'Note', lands: 'Extras & Notes' },
 };
 
@@ -233,6 +234,19 @@ export function normalizeBlock(block) {
       };
     case 'veil':
       return { ...base, slot: str(b.slot ?? b.chakra).trim(), descriptor: str(b.descriptor).trim() };
+    case 'occupation': {
+      // What a character did before adventuring: skills to pick some of
+      // (class skills from then on), and for some a bonus feat.
+      const list = (v) => arr(v).map((s) => str(s).trim()).filter(Boolean);
+      return {
+        ...base,
+        picks: Math.max(0, Math.min(12, num(b.picks, 2))),
+        skills: list(b.skills),
+        feats: list(b.feats),
+        money: str(b.money).trim(),
+        alignment: str(b.alignment).trim(),
+      };
+    }
     case 'package': {
       // A named set of a class's features (`includes`, a single grant as
       // "name@level"), or, with no class, a set of features of its own; and
@@ -1625,6 +1639,8 @@ export function applyBlock(model, rawBlock) {
       // A package is never added alone: it takes the place of one of a
       // class's own (packages.js, from the Progression tab).
       return `${block.name || 'An archetype package'} is swapped in on the Progression tab. Turn on Archetype packages under Campaign rules to use it.`;
+    case 'occupation':
+      return `${block.name || 'An occupation'} is picked on the Skills tab. Turn on Occupations under Campaign rules to use it.`;
     case 'options':
       return applyOptions(model, block);
     case 'note':

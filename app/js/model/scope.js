@@ -11,7 +11,7 @@
 import {
   ABILITIES, AC_BONUS_TYPES, DEFENCE_PART_FAMILIES, FORWARD_FAMILIES, FORWARD_LATE,
   FORWARD_STATS, MANEUVER_FIELDS, SAVE_BONUS_TYPES, SHEET_ALIASES, armorParts, gearBonusToken, skillLabel,
-  ABP_DEFENCE_CAP, ENHANCEMENT_CAP, abpPair, abpPairReason, columnTypes, statMod,
+  ABP_DEFENCE_CAP, ENHANCEMENT_CAP, abpPair, abpPairReason, columnTypes, isClassSkill, statMod,
 } from '../rules.js';
 import { deathThreshold, effectiveMythicTier, fmt, mythicPowerUses, surgeDie } from '../rules.js';
 import {
@@ -28,7 +28,7 @@ import {
 } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
-import { campaignRules, coreAbp, isAntihero, mythicTierGrantOf, specialtyInPlay, vmcTakesSlot, vmcClass, VMC_LEVELS } from './campaign.js';
+import { campaignRules, coreAbp, isAntihero, mythicTierGrantOf, occupationFeatInPlay, specialtyInPlay, vmcTakesSlot, vmcClass, VMC_LEVELS } from './campaign.js';
 import { sphereTableNames, talentsIn } from './spheres.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
 import { tempHpGrant } from './stats/defenses.js';
@@ -141,7 +141,7 @@ export function systemsInUse(model) {
 function skillScope(sk) {
   return {
     ranks: Number(sk.totalRanks) || 0,
-    classSkill: sk.classSkill ? 1 : 0,
+    classSkill: isClassSkill(sk) ? 1 : 0,
     total: Number(sk.bonus) || 0,
   };
 }
@@ -1663,6 +1663,8 @@ export function proseSources(model) {
   push('grantedFeat:specialty', d.grantedFeats?.specialty?.note, null, specialtyInPlay(d) ? null : { future: true });
   // An antihero's feat waits while the bargain does not stand (a campaign rule).
   push('grantedFeat:antihero', d.grantedFeats?.antihero?.note, null, isAntihero(d) ? null : { future: true });
+  // An occupation's feat waits while the campaign has no occupations.
+  push('grantedFeat:occupation', d.grantedFeats?.occupation?.note, null, occupationFeatInPlay(d) ? null : { future: true });
   (d.grantedFeats?.others || []).forEach((f, i) => push(`grantedFeat:${i}`, f?.note, null, planned(rowLevel(f))));
   // Alternate Training is picked level by level, so a pick for a later one
   // waits -- and every one does with Alternate Training off (a campaign rule).

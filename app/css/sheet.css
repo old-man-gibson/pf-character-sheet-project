@@ -1593,6 +1593,7 @@ table.featgrid tr.aligned td.num { color: var(--cs-accent); font-style: italic; 
 .camprow.required .badge.need { color: var(--cs-edit); border-color: var(--cs-edit); }
 /* Under background skills (a campaign rule), a background skill's name says so. */
 .skillcell .badge.bgskill { margin-left: 4px; font-size: 0.6rem; text-transform: none; }
+.badge.occskill { margin-left: 4px; font-size: 0.6rem; text-transform: none; white-space: nowrap; }
 /* Whom the rules are for: every character, or this one. Set apart from the
    switches under it, since it decides where they are kept. */
 .camprow.campscope { border: 1px solid var(--cs-line); margin-bottom: 4px; }

@@ -678,6 +678,7 @@ Hit Die: d12.
         case 'template': return `${b.features.length} feature(s): ${b.features.map((f) => f.name).join(', ')}`;
         case 'options': return [b.class && `for ${b.class}'s ${b.feature || '?'}`, `${b.options.length} entr${b.options.length === 1 ? 'y' : 'ies'}`,
           [...new Set(b.options.map((o) => o.category).filter(Boolean))].join(', ')].filter(Boolean).join(' · ');
+        case 'occupation': return [`pick ${b.picks} of ${b.skills.join(', ')}`, b.feats.length ? `feat: ${b.feats.join(' or ')}` : '', b.money].filter(Boolean).join(' · ');
         case 'package': return [b.class ? `for ${b.class}` : 'any class', b.includes.length ? `includes ${b.includes.join(', ')}` : '',
           b.grants.length ? `grants ${b.grants.join(', ')}` : '', b.features.length ? `${b.features.length} feature(s)` : ''].filter(Boolean).join(' · ');
         default: return '';
@@ -1404,6 +1405,17 @@ Hit Die: d12.
           ${F(i, 'name', 'Title', b.name)}
           ${A(i, 'text', 'Body', b.text, 6)}
         </div>`;
+      case 'occupation':
+        return `<div class="fields">
+          ${F(i, 'name', 'Occupation', b.name)}
+          ${F(i, 'picks', 'Skills to pick', b.picks)}
+          ${F(i, 'skills', 'Skills offered', b.skills.join(', '), { wide: true, ph: 'Acrobatics, Climb, Profession (sailor), Knowledge (any)' })}
+          ${F(i, 'feats', 'Bonus feats to choose from', b.feats.join(', '), { wide: true, ph: 'blank: no bonus feat' })}
+          ${F(i, 'money', 'Starting money', b.money, { ph: '3d4 × 10 gp' })}
+          ${F(i, 'alignment', 'Alignment', b.alignment, { ph: 'Any' })}
+          ${A(i, 'text', 'Text', b.text, 3)}
+          ${F(i, 'source', 'Source', b.source, { wide: true })}
+        </div>`;
       case 'package':
         return `<div class="fields">
           ${F(i, 'name', 'Package name', b.name)}
@@ -1834,13 +1846,13 @@ Hit Die: d12.
       return;
     }
     switch (key) {
-      case 'hd': case 'skillRanks': b[key] = Number(value) || 0; return;
+      case 'hd': case 'skillRanks': case 'picks': b[key] = Number(value) || 0; return;
       case 'bab': b.bab = Number(value) || 0.75; return;
       case 'speed': b.speed = value === '' ? null : Number(value) || 0; return;
       case 'goodFort': case 'goodRef': case 'goodWill': b[key] = !!value; return;
       case 'type': b.type = value || null; return;
       case 'minFormula': b.minFormula = value === '' ? null : value; return;
-      case 'classSkills': case 'languages': case 'replaces': case 'stacksWith': case 'includes': b[key] = String(value).split(',').map((s) => s.trim()).filter(Boolean); return;
+      case 'classSkills': case 'languages': case 'skills': case 'feats': case 'replaces': case 'stacksWith': case 'includes': b[key] = String(value).split(',').map((s) => s.trim()).filter(Boolean); return;
       case 'grants': b.grants = normalizeBlock({ ...b, grants: String(value).split(',') }).grants; return;
       case 'features':
         if (b.kind === 'package') { b.features = parseClassFeatures(value); return; }

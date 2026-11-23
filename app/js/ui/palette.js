@@ -42,7 +42,7 @@
 import { esc } from './html.js';
 import { trackerReading } from './panels/trackers.js';
 import { COMPANION_KINDS, COMPANION_LABELS, companionBoxValue, companionInUse } from '../companions.js';
-import { fmt, ABILITIES, ABILITY_LABELS, critMultOf, threatText } from '../rules.js';
+import { fmt, ABILITIES, ABILITY_LABELS, critMultOf, isClassSkill, threatText } from '../rules.js';
 import { rollSpec } from '../roll20.js';
 import { campaignRules, levelProgress, mythicTierGrantOf, specialtyInPlay, trialProgress } from '../model/campaign.js';
 
@@ -371,7 +371,7 @@ function skills(model, add) {
       kind: 'skill', title, tab: 'skills', value: fmt(s.bonus),
       sub: bits((s.abilities || []).filter(Boolean).join('/'),
         `${s.totalRanks || 0} rank${s.totalRanks === 1 ? '' : 's'}`,
-        s.classSkill ? 'class skill' : '', s.requiresTraining ? 'trained only' : '',
+        isClassSkill(s) ? 'class skill' : '', s.requiresTraining ? 'trained only' : '',
         clip(s.situational, 60)),
       sel: `[data-item^="skills|${i}|"]`, roll: { kind: 'skill', ref: i, what: `a ${title} check` },
       keys: 'skill check',
@@ -1113,7 +1113,7 @@ function commands(model, add) {
   const tp = trialProgress(model.data);
   if (tp?.ready) cmd(`Tier up to ${tp.next}`, 'tier-up', 'The next mythic tier is earned', 'tier up mythic trials');
   cmd('Campaign rules', 'campaign-rules', 'Open this character’s campaign rules.',
-    'settings options campaign rules house table vmc variant multiclass multiclassing archetype packages package swap point buy mythic feats odd even every tiers age aging middle-aged old venerable background skills specialty adventuring hero points antihero mythic tier trials rate thresholds abp automatic bonus progression core unchained attunement legendary gifts xp experience milestones levelling highest maximum level gestalt multiclass hit points hp rolled average alternate training currency gold mana colossal size party file');
+    'settings options campaign rules house table vmc variant multiclass multiclassing archetype packages package swap point buy mythic feats odd even every tiers age aging middle-aged old venerable background skills specialty occupations occupation adventuring hero points antihero mythic tier trials rate thresholds abp automatic bonus progression core unchained attunement legendary gifts xp experience milestones levelling highest maximum level gestalt multiclass hit points hp rolled average alternate training currency gold mana colossal size party file');
   if (!model.data.monster) {
     cmd('Setup guide', 'wizard-start', 'Set up this character one step at a time.',
       'setup guide wizard new character steps walkthrough systems start');
