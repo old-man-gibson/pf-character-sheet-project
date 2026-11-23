@@ -743,7 +743,7 @@ export function resolveContributions(contributions, names, baseScope, targets, k
     const dropped = [];
     for (const t of c.targets) {
       const all = expand(t);
-      const into = all && targets?.reach ? targets.reach(t, all, c.type) : all;
+      const into = all && targets?.reach ? targets.reach(t, all, c.type, c.sign) : all;
       if (!into) {
         dropped.push(t);
         // Two different mistakes, told apart because the fixes differ: a

@@ -76,7 +76,7 @@ import {
   offsetSource, orphans, reconcile, resolveOffsets, setOffset,
 } from './reconcile.js';
 import {
-  characterScope, forwardTargets, forwarded, forwardedInto, forwardedSplit, forwardsEarly, gearItemBonuses,
+  characterScope, forwardTargets, forwarded, forwardedInto, forwardedLostFlatFooted, forwardedSplit, forwardsEarly, gearItemBonuses,
   proseSources, renderProse, resolveInlineNames, scopeNames, secondPass, trackerScope,
 } from './scope.js';
 import {
@@ -195,6 +195,9 @@ export class Character {
     // that way, so its offsets are measured that way and the sheet is worked
     // out again after, as for the bonus order above.
     this.oldAcReach = savedBefore(data, 'typed-ac-reach');
+    // The same for a penalty to every armour class, which now reaches CMD,
+    // and a typed bonus to a companion's armour classes.
+    this.oldAcPenalty = savedBefore(data, 'ac-penalty-cmd');
     // A character begun here above 7th level was written with a CMD of 10,
     // without the ABP deflection bonus its touch AC had, so the difference
     // has sat in the CMD's hidden adjustment ever since (see the end of this
@@ -243,6 +246,12 @@ export class Character {
     if (this.oldAcReach) {
       this.oldAcReach = false;
       if ((this.contributions?.entries || []).some((e) => e.type && e.targets.some((t) => String(t).toLowerCase() === 'ac'))) this.recompute();
+    }
+    if (this.oldAcPenalty) {
+      this.oldAcPenalty = false;
+      const moved = (e) => (e.sign < 0 && e.targets.some((t) => String(t).toLowerCase() === 'ac'))
+        || (e.type && e.targets.some((t) => /\.ac$/i.test(String(t))));
+      if ((this.contributions?.entries || []).some(moved)) this.recompute();
     }
     if (this.oldBonusOrder) {
       this.oldBonusOrder = false;
@@ -334,7 +343,10 @@ export class Character {
       if (d.key === 'initiative') c.hp.initiative = value;
       else setPath(c, d.key, value);
     }
-    c.defenses.ffCmd = flatFootedCmd(c, this.ffCmdExtra);
+    // A dodge bonus that reached CMD from a formula or a gear row is lost
+    // flat-footed like one in the Dodge column, unless uncanny dodge keeps it.
+    c.defenses.ffCmd = flatFootedCmd(c, this.ffCmdExtra
+      + (c.defenses.uncannyDodge ? 0 : forwardedLostFlatFooted(this, 'ac.cmd')));
 
     c.attack.iterative = iterativeAttacks(c.attack.bab);
 

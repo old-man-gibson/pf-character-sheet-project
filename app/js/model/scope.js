@@ -1267,12 +1267,25 @@ export function forwardTargets(model) {
     // own gets what is sent to it.
     // A sheet saved while every type reached all three is measured that way
     // first (`oldAcReach`, see Character's constructor).
-    reach: (name, into, type) => {
-      if (model.oldAcReach || canonical(name) !== 'ac') return into;
+    //
+    // A penalty to every armour class reaches CMD whatever its type ("any
+    // penalties to a creature's AC also apply to its CMD"), and a companion's
+    // armour classes follow the type the same way. Both came later, and a
+    // sheet saved before them is measured without them first
+    // (`oldAcPenalty`).
+    reach: (name, into, type, sign = 1) => {
       const flags = acReachOf(type);
-      const reached = into.filter((key) => !(key === 'ac.touch' && flags.touch === false)
-        && !(key === 'ac.flatFooted' && flags.flatFooted === false));
-      return acTypeReachesCmd(type) ? [...reached, 'ac.cmd'] : reached;
+      const typed = (list) => list.filter((key) => !(/(^|\.)ac\.touch$/.test(key) && flags.touch === false)
+        && !(/(^|\.)ac\.flatFooted$/.test(key) && flags.flatFooted === false));
+      if (canonical(name) !== 'ac') {
+        // `<companion>.ac`: its three armour classes.
+        const family = /\.ac$/i.test(String(name)) && into.length > 1 && into.every((key) => /\.ac\.\w+$/.test(key));
+        return family && !model.oldAcPenalty ? typed(into) : into;
+      }
+      if (model.oldAcReach) return into;
+      const reached = typed(into);
+      const toCmd = acTypeReachesCmd(type) || (sign < 0 && !model.oldAcPenalty);
+      return toCmd ? [...reached, 'ac.cmd'] : reached;
     },
   };
 }
@@ -1374,6 +1387,20 @@ export function typedColumns(model, key) {
 }
 
 /** What forwarded bonuses come to at one destination. */
+/**
+ * What flat-footed takes off a total, of the bonuses forwarded to it: the
+ * dodge bonuses that count there (a type an armour class loses flat-footed).
+ */
+export function forwardedLostFlatFooted(model, name) {
+  const counted = model.contributions?.countedAt?.[name];
+  let lost = 0;
+  for (const e of model.contributions?.by?.[name] || []) {
+    if (counted && !counted.has(e)) continue;
+    if (acReachOf(e.type).flatFooted === false) lost += Math.max(0, Number(e.value) || 0);
+  }
+  return lost;
+}
+
 export function forwarded(model, name) {
   return Number(model.contributions?.totals?.[name]) || 0;
 }
