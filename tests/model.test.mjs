@@ -2624,6 +2624,9 @@ console.log('negative levels take 5 from current and total hit points alike');
   // They used to cap current at the drained maximum, so a wounded character
   // lost nothing to them and a dying one was never nearer death.
   const c = new Character(blankDocument({ name: 'Drained', level: 5 }));
+  // A character begun here has no hit points until it has a class.
+  c.setOffset('hp.total', 30);
+  c.set('hp.current', c.hpState.max);
   const full = c.hpState.max;
   c.applyDamage(4);
   c.set('conditions.Energy Drain', 2);
@@ -3115,6 +3118,7 @@ console.log('one dice reader: d6 is a die, a spaced minus counts, a dice-valued 
 console.log('hit points and resource costs are whole points, rounded down');
 {
   const c = new Character(blankDocument({ name: 'Halves', level: 5 }));
+  c.setOffset('hp.total', 30);
   c.set('hp.current', 30);
   const before = c.hpState.current;
   c.damage(2.5);
@@ -15702,6 +15706,40 @@ console.log('AC penalties reach CMD, and flat-footed CMD loses a dodge bonus whe
     check('a blank character has an animal companion row to test with', !!b, true);
   }
   c.set('formulaNotes', '');
+}
+
+console.log('a character begun here starts with no hit points nothing granted');
+{
+  const c = new Character(blankDocument({ id: 'zz-hp', name: 'HP', level: 10 }));
+  check('none in Other, none in the total', [c.offsets['hp.total'], c.data.hp.total], [0, 0]);
+
+  // One begun before was given 6 a level, and still has them in Other.
+  const old = (other, kind = 'blank') => {
+    const doc = JSON.parse(JSON.stringify(c.toJSON()));
+    doc.corrections = doc.corrections.filter((x) => x !== 'blank-hp-other');
+    doc.source = { ...doc.source, kind };
+    doc.hp.total += other;
+    return new Character(doc);
+  };
+  const o = old(60);
+  check('an older one opens with them cleared', [o.offsets['hp.total'], o.data.hp.total], [0, 0]);
+  {
+    const doc = JSON.parse(JSON.stringify(c.toJSON()));
+    doc.corrections = doc.corrections.filter((x) => x !== 'blank-hp-other');
+    doc.hp.total += 60;
+    doc.hp.current = 52;
+    check('and current hit points come down with them: 8 down before, 8 down after', new Character(doc).data.hp.current, -8);
+  }
+  const again = new Character(JSON.parse(JSON.stringify(o.toJSON())));
+  check('and stays so', [again.offsets['hp.total'], again.data.hp.total], [0, 0]);
+  check('one made at a lower level and leveled since', old(12).offsets['hp.total'], 0);
+  check('an amount the player took off is theirs', old(-520).offsets['hp.total'], -520);
+  check('and so is one that is no number of sixes', old(25).offsets['hp.total'], 25);
+  check('a converted workbook keeps what its sheet added', old(60, 'workbook').offsets['hp.total'], 60);
+  const typed = new Character(JSON.parse(JSON.stringify(o.toJSON())));
+  typed.setOffset('hp.total', 18);
+  const kept = new Character(JSON.parse(JSON.stringify(typed.toJSON())));
+  check('an amount added after is kept, sixes or not', [typed.hpState.max, kept.offsets['hp.total'], kept.hpState.max], [18, 18, 18]);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

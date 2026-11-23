@@ -213,7 +213,7 @@ console.log('a blank character is the thinnest converted document there is');
   check('passes the import gate', [verdict.ok, verdict.summary?.name, verdict.summary?.level], [true, 'Kaito', 3]);
   check('a nameless one gets a name', blankDocument().identity.name, 'New Character');
   check('level is clamped to the campaign floor of 3, and to 20', [blankDocument({ level: 0 }).identity.level, blankDocument().identity.level, blankDocument({ level: 99 }).identity.level], [3, 3, 20]);
-  check('6 hit points a level to start, two perk slots, three race-trait slots', [doc.hp.total, doc.identity.specialtyPerks, doc.raceTraits.length], [18, ['', ''], 3]);
+  check('no hit points before a class, two perk slots, three race-trait slots', [doc.hp.total, doc.identity.specialtyPerks, doc.raceTraits.length], [0, ['', ''], 3]);
   // `warningsFor` is for workbooks; on a blank it lists exactly the three
   // things a template has that nothing has yet -- so the page does not ask it.
   check('the workbook warnings on it are the three expected absences',

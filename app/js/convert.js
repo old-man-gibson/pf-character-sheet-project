@@ -1490,7 +1490,6 @@ export async function convertWorkbook(bytes, options = {}) {
  * @param {string} [options.createdAt]  ISO timestamp; defaults to now
  */
 export const BLANK_MIN_LEVEL = CAMPAIGN_DEFAULTS.minLevel;
-export const BLANK_HP_PER_LEVEL = 6;
 
 export function blankDocument(options = {}) {
   const name = String(options.name || '').trim() || 'New Character';
@@ -1529,7 +1528,7 @@ export function blankDocument(options = {}) {
     doc.statsBuild[key] = { ...doc.statsBuild[key], pointBuy: 10, sheetTotal: 10 };
   }
   doc.pointBuyTable = { ...POINT_BUY_COST };
-  doc.hp = { ...doc.hp, ability: 'Con', initAbility: 'Dex', total: level * BLANK_HP_PER_LEVEL };
+  doc.hp = { ...doc.hp, ability: 'Con', initAbility: 'Dex', total: 0 };
   // Three race-trait slots to fill in.
   doc.raceTraits = [0, 1, 2].map(() => ({ name: '', text: '' }));
   doc.saves.fortitude.stat1 = 'Con';
