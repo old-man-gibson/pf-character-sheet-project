@@ -1034,6 +1034,10 @@ input:focus, select:focus, textarea:focus {
   outline: 2px solid var(--cs-edit); outline-offset: -1px; border-color: var(--cs-edit);
 }
 input[type="number"] { text-align: center; }
+/* No up and down buttons in a number cell. The arrow keys still step it. */
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 textarea { resize: vertical; min-height: 60px; font-family: inherit; }
 input.mono { font-family: var(--cs-mono); font-size: 0.8rem; text-align: left; }
 /* A value that is read, not typed: the same box as a field, in the derived colour. */
