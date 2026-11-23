@@ -236,7 +236,7 @@ export class Character {
     this.oldBoonCell = false;
     if (this.oldAcReach) {
       this.oldAcReach = false;
-      if ((this.contributions?.entries || []).some((e) => e.type && e.targets.includes('ac'))) this.recompute();
+      if ((this.contributions?.entries || []).some((e) => e.type && e.targets.some((t) => String(t).toLowerCase() === 'ac'))) this.recompute();
     }
     if (this.oldBonusOrder) {
       this.oldBonusOrder = false;

@@ -15444,7 +15444,19 @@ console.log('an AC bonus by its type: {ac.natural += 2} reaches the armour class
   check('shield', (note('{ac.shield += 2}'), moved()), [2, 0, 2, 0]);
   check('deflection reaches all four', (note('{ac.deflection += 1}'), moved()), [1, 1, 1, 1]);
   check('dodge is lost flat-footed', (note('{ac.dodge += 1}'), moved()), [1, 1, 0, 1]);
-  check('and so it is as a typed bonus to every armour class', (note('{ac += 1 as dodge}'), moved()), [1, 1, 0, 0]);
+  check('and so it is as a typed bonus to every armour class, which CMD counts too', (note('{ac += 1 as dodge}'), moved()), [1, 1, 0, 1]);
+  check('a deflection bonus to every armour class counts for CMD', (note('{ac += 2 as deflection}'), moved()), [2, 2, 2, 2]);
+  check('named beside it, CMD still takes it once', (note('{ac, ac.cmd += 2 as deflection}'), moved()), [2, 2, 2, 2]);
+  check('written in capitals, the same', (note('{AC += 2 as Deflection}'), moved()), [2, 2, 2, 2]);
+  {
+    // A gear row's bonus to AC is sent the same way: a ring of protection.
+    c.set('formulaNotes', '');
+    c.listAdd('equipment.gear', { name: 'Ring of Protection +2', bonuses: [{ target: 'ac', value: 2, type: 'Deflection' }] });
+    check('a ring of protection on a gear row raises CMD', moved(), [2, 2, 2, 2]);
+    c.set('equipment.gear', c.data.equipment.gear.slice(0, -1));
+    check('and goes with the ring', moved(), [0, 0, 0, 0]);
+  }
+  check('an armor bonus to every armour class still does not', (note('{ac += 4 as armor}'), moved()), [4, 0, 4, 0]);
   check('an untyped bonus to every armour class is as it was', (note('{ac += 1}'), moved()), [1, 1, 1, 0]);
   check('an armour class named on its own takes what it is sent', (note('{ac.touch += 2 as natural}'), moved()), [0, 2, 0, 0]);
 
@@ -15463,16 +15475,18 @@ console.log('an AC bonus by its type: {ac.natural += 2} reaches the armour class
 
   // A sheet saved while a natural armor bonus to "every armour class" reached
   // touch AC opens with touch put right, and nothing hidden to make up for it.
-  note('{ac += 2 as natural}');
+  note('{ac += 2 as natural} {ac += 1 as deflection}');
   const now = at();
   const old = JSON.parse(JSON.stringify(c.toJSON()));
   old.corrections = old.corrections.filter((x) => x !== 'typed-ac-reach');
   old.defenses.touch += 2;
+  old.defenses.cmd -= 1;
   const o = new Character(old);
-  check('an older sheet loses the bonus on touch AC',
+  check('an older sheet loses the natural armor on touch AC and gains the deflection on CMD',
     [[o.data.defenses.ac, o.data.defenses.touch, o.data.defenses.flatFooted, o.data.defenses.cmd], o.offsets['defenses.touch']], [now, 0]);
+  check('with nothing hidden in CMD either', o.offsets['defenses.cmd'], 0);
   const again = new Character(JSON.parse(JSON.stringify(o.toJSON())));
-  check('and stays so', [again.data.defenses.touch, again.offsets['defenses.touch']], [now[1], 0]);
+  check('and stays so', [again.data.defenses.touch, again.data.defenses.cmd, again.offsets['defenses.touch'], again.offsets['defenses.cmd']], [now[1], now[3], 0, 0]);
   c.set('formulaNotes', '');
 }
 

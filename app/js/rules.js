@@ -1344,6 +1344,14 @@ export function acReachOf(type) {
 }
 
 /**
+ * The AC bonus types CMD counts as well. The rule names them, and it is a
+ * closed list (see BONUS_TYPES): a bonus of one of these sent to "all armour
+ * classes" reaches CMD too, as a ring of protection's does.
+ */
+const CMD_AC_TYPES = new Set(['circumstance', 'deflection', 'dodge', 'insight', 'luck', 'morale', 'profane', 'sacred']);
+export const acTypeReachesCmd = (type) => CMD_AC_TYPES.has(String(type || '').toLowerCase().replace(/^temp./, ''));
+
+/**
  * The AC bonus types a formula can aim at by name: `{ac.natural += 2}` is a
  * natural armor bonus on every armour class that counts one. Untyped is plain
  * `ac`. An enhancement bonus to natural armor (an amulet of natural armor)

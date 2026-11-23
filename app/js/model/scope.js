@@ -12,7 +12,7 @@ import {
   ABILITIES, AC_BONUS_TYPES, DEFENCE_PART_FAMILIES, FORWARD_FAMILIES, FORWARD_LATE,
   FORWARD_STATS, MANEUVER_FIELDS, SAVE_BONUS_TYPES, SHEET_ALIASES, armorParts, gearBonusToken, skillLabel,
   ABP_DEFENCE_CAP, ENHANCEMENT_CAP, abpPair, abpPairReason, columnTypes, isClassSkill, statMod,
-  AC_PART_TYPES, acPartReach, acReachOf, bonusColumnName,
+  AC_PART_TYPES, acPartReach, acReachOf, acTypeReachesCmd, bonusColumnName,
 } from '../rules.js';
 import { deathThreshold, effectiveMythicTier, fmt, mythicPowerUses, surgeDie } from '../rules.js';
 import {
@@ -1226,14 +1226,17 @@ export function forwardTargets(model) {
     },
     // "All armour classes" is the ones a bonus of this type counts for: a
     // natural armor bonus does not reach touch AC, nor a dodge bonus
-    // flat-footed. An armour class named on its own gets what is sent to it.
+    // flat-footed, and a deflection bonus counts for CMD as well (a gear
+    // row's "AC, Deflection" is sent this way). An armour class named on its
+    // own gets what is sent to it.
     // A sheet saved while every type reached all three is measured that way
     // first (`oldAcReach`, see Character's constructor).
     reach: (name, into, type) => {
       if (model.oldAcReach || canonical(name) !== 'ac') return into;
       const flags = acReachOf(type);
-      return into.filter((key) => !(key === 'ac.touch' && flags.touch === false)
+      const reached = into.filter((key) => !(key === 'ac.touch' && flags.touch === false)
         && !(key === 'ac.flatFooted' && flags.flatFooted === false));
+      return acTypeReachesCmd(type) ? [...reached, 'ac.cmd'] : reached;
     },
   };
 }
