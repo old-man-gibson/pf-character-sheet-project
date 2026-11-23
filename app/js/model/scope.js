@@ -34,6 +34,7 @@ import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/a
 import { tempHpGrant } from './stats/defenses.js';
 import { wealthViewOf } from './stats/wealth.js';
 import { boundScope, essenceScope, veilScope } from './subsystems/akashic.js';
+import { readiedNames } from './subsystems/maneuvers.js';
 import { manipulationName } from './subsystems/cardcasting.js';
 import { trackerFacts, trackerShown } from './trackers.js';
 import { featLevel, featNames, isAhead, rowLevel } from './feats.js';
@@ -1773,7 +1774,7 @@ export function proseSources(model) {
   // A bonus written there waits for the maneuver to be readied, as a buff's
   // waits for its tick; a definition stands either way. Same `future` state.
   (d.maneuvers?.disciplines || []).forEach((disc, di) => {
-    const readied = new Set((disc.known || []).map((n) => String(n).trim().toLowerCase()));
+    const readied = new Set(readiedNames(disc).map((n) => String(n).trim().toLowerCase()));
     for (const [name, entry] of Object.entries(disc.notes || {})) {
       const off = readied.has(String(name).trim().toLowerCase()) ? null : { future: true };
       if (typeof entry === 'string') { push(`maneuverNote:${di}:${name}`, entry, null, off); continue; }

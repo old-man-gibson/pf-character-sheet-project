@@ -123,7 +123,7 @@ import {
 import { cookingView } from './subsystems/cooking.js';
 import { craftSkills, recomputeCrafting } from './subsystems/crafting.js';
 import {
-  recomputeManeuvers, setManeuverField, setManeuverNote, toggleManeuver,
+  readyManeuver, recomputeManeuvers, setManeuverField, setManeuverNote, toggleManeuver,
 } from './subsystems/maneuvers.js';
 import { altTrainingPrereq, altTrainingTalents, recomputeAltTraining } from './subsystems/alt-training.js';
 import { psionicsNewDay, recomputePsionics } from './subsystems/psionics.js';
@@ -870,7 +870,8 @@ export class Character {
 
   // subsystems/maneuvers.js
   #recomputeManeuvers(...a) { return recomputeManeuvers(this, ...a); }
-  toggleManeuver(path, name, ready) { return this.play(`${name} ${ready ? 'readied' : 'unreadied'}`, () => toggleManeuver(this, path, name, ready)); }
+  toggleManeuver(path, name, known) { return this.play(`${name} ${known ? 'known' : 'no longer known'}`, () => toggleManeuver(this, path, name, known)); }
+  readyManeuver(path, name, ready) { return this.play(`${name} ${ready ? 'readied' : 'unreadied'}`, () => readyManeuver(this, path, name, ready)); }
   setManeuverNote(...a) { return setManeuverNote(this, ...a); }
   setManeuverField(...a) { return setManeuverField(this, ...a); }
 

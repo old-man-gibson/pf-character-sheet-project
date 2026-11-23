@@ -3791,7 +3791,8 @@
   "possibleManeuvers": 0,
   "possibleStances": 0,
   "disciplines": [],
-  "sourceExtras": []
+  "sourceExtras": [],
+  "sources": []
  },
  "psionics": {
   "classes": [

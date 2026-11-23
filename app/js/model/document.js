@@ -781,6 +781,8 @@ export function normalise(model) {
   // disciplines grant. Reduce each one to the picks the character made.
   if (d.maneuvers) {
     d.maneuvers.disciplines = (d.maneuvers.disciplines || []).map(shrinkDiscipline);
+    // Where the maneuvers, readied maneuvers and stances allowed come from.
+    if (!Array.isArray(d.maneuvers.sources)) d.maneuvers.sources = [];
   }
 
   // A veil saved before the description had its own field keeps the effect

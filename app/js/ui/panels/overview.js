@@ -1029,7 +1029,7 @@ function dashVeilsCard(model) {
 function dashManeuversCard(model) {
     const m = model.data.maneuvers;
     const disciplines = (m?.disciplines || [])
-      .map((d) => ({ ...d, readied: (d.entries || []).filter((e) => e.known) }))
+      .map((d) => ({ ...d, readied: (d.entries || []).filter((e) => e.readied) }))
       .filter((d) => d.readied.length);
     const shown = (text) => (hasTokens(text) ? renderedProse(model, text) : esc(text));
     const row = (d, e) => {

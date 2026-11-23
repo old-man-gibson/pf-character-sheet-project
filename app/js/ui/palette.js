@@ -704,7 +704,7 @@ function maneuvers(model, add) {
       if (!text(e.name)) continue;
       add({
         kind: 'maneuver', title: text(e.name), tab: 'maneuvers',
-        value: e.known ? 'known' : '',
+        value: e.readied && e.kind !== 'stance' ? 'readied' : e.known ? 'known' : '',
         sub: bits(dname, text(e.type) || text(e.kind), e.level ? `level ${e.level}` : ''),
         keys: `maneuver stance ${e.known ? 'known readied' : ''}`,
       });
