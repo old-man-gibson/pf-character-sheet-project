@@ -312,8 +312,24 @@ console.log('\nmythic tiers from trials, and a ladder of the campaign\'s own');
     check('an older sheet keeps the tier its trials gave', [o.data.identity.mythicTier, o.data.mythic.trialTier], [3, 3]);
   }
   check('the tables say trials in all', mythicTierReached(c.data, 3), { head: 'Trials', value: 8, title: 'Tier 3 after 8 trials in total (4 for this tier)' });
-  check('a typed tier still overrides', (c.set('mythic.tierOverride', 5), c.data.identity.mythicTier), 5);
-  c.set('mythic.tierOverride', null);
+  // Under trials the Tier box writes the reached tier itself, so a tier can
+  // be taken back and Tier up carries on from it.
+  c.set('mythic.trialTier', 1);
+  check('a lower tier typed is the tier', [c.data.identity.mythicTier, trialProgress(c.data).next, trialProgress(c.data).ready], [1, 2, true]);
+  check('and Tier up goes on from it', [tierUp(c), c.data.identity.mythicTier], [true, 2]);
+  c.set('mythic.trialTier', null);
+  check('the box cleared is what the trials buy', [c.data.identity.mythicTier, c.data.mythic.trialTier], [2, 2]);
+  {
+    // An older sheet: a tier typed over the trials was the tier shown, and
+    // Tier up raised the reached tier underneath it.
+    const old = JSON.parse(JSON.stringify(c.toJSON()));
+    old.mythic.tierOverride = 1;
+    old.identity.mythicTier = 1;
+    const o = new Character(old);
+    check('a tier typed over the trials becomes the tier reached', [o.data.identity.mythicTier, o.data.mythic.trialTier], [1, 1]);
+    check('so Tier up shows', [tierUp(o), o.data.identity.mythicTier], [true, 2]);
+    check('and stays on reopen', reopen(o).data.identity.mythicTier, 2);
+  }
 
   c.set('campaign.mythicTier', 'level');
   check('back to the level ladder, the trial tier dropped', [c.data.identity.mythicTier, 'trialTier' in c.data.mythic], [6, false]);

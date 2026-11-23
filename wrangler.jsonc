@@ -21,10 +21,15 @@
   "name": "pf-character-sheet-project",
   "main": "worker.js",
   "compatibility_date": "2025-10-01",
+  // `run_worker_first` sends everything under /api/ to worker.js. Without it a
+  // page navigation to an address that is not a file is answered with the 404
+  // page and never reaches the Worker, which is what sign-in is: the browser
+  // goes to /api/auth/discord and Discord sends it back to the callback.
   "assets": {
     "directory": ".",
     "binding": "ASSETS",
-    "not_found_handling": "404-page"
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/*"]
   },
   "kv_namespaces": [
     { "binding": "SHEETS", "id": "4e52b930d33f4b449da628387c48b08c" }

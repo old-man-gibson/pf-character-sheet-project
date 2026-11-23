@@ -690,11 +690,31 @@ function trialTierNow(d) {
  * Tier up raises it. Under any other rule it goes, so switching back to
  * trials starts from the count again, and a sheet that never used trials
  * carries nothing.
+ *
+ * Under trials there is one tier, not a reached tier with a typed one over
+ * it: the Tier box writes this figure, so a tier typed there (to go back
+ * one, say) is where Tier up carries on from. A tier typed under another
+ * rule (`tierOverride`) is where the trials start, and is left in the
+ * document for that rule to come back to.
  */
 export function settleTrialTier(d) {
   const m = d.mythic || (d.mythic = {});
   if (campaignRules(d).mythicTier !== 'trials') delete m.trialTier;
-  else if (count(m.trialTier, null) === null) m.trialTier = trialTierNow(d);
+  else if (count(m.trialTier, null) === null) m.trialTier = count(m.tierOverride, null) ?? trialTierNow(d);
+}
+
+/**
+ * A sheet saved while a tier typed over the trials was the tier shown: that
+ * tier becomes the tier reached, once, on load. Tier up raised the reached
+ * tier underneath it, where nobody saw it move. The saved tier tells the two
+ * apart: from here on it is the reached tier, never the typed one.
+ */
+export function adoptTypedTrialTier(d) {
+  const m = d?.mythic;
+  if (!m || campaignRules(d).mythicTier !== 'trials') return;
+  const typed = count(m.tierOverride, null);
+  if (typed === null || count(m.trialTier, null) === null) return;
+  if (count(d.identity?.mythicTier, 0) === typed) m.trialTier = typed;
 }
 
 /**
@@ -716,11 +736,14 @@ export function mythicComputedTier(d) {
 /**
  * The mythic tier as it stands: 0 with mythic off; otherwise the tier typed on
  * Feats & Mythic (an override, or the GM's award), or what the rules give.
- * Every reader of the tier goes through this, so the tier the numbers use,
- * the tracker's and the one seeded on load cannot disagree.
+ * Under trials the tier reached is the one figure, typed or pressed. Every
+ * reader of the tier goes through this, so the tier the numbers use, the
+ * tracker's and the one seeded on load cannot disagree.
  */
 export function mythicTierOf(d) {
-  if (!campaignRules(d).mythic) return 0;
+  const rules = campaignRules(d);
+  if (!rules.mythic) return 0;
+  if (rules.mythicTier === 'trials') return mythicComputedTier(d);
   return d?.mythic?.tierOverride ?? mythicComputedTier(d);
 }
 

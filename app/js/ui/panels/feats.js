@@ -256,7 +256,7 @@ export function renderFeaturesPanel(model, ctx) {
     const tiers = Array.from({ length: rules.maxTier }, (_, i) => i + 1);
     // Trials completed, when the tier comes from them (a campaign rule).
     const trials = trialProgress(c);
-    const auto = trials ? `from trials: ${trials.tier}` : `auto: ${m.computedTier ?? 0}`;
+    const auto = `auto: ${m.computedTier ?? 0}`;
     /*
      * The feats stack, each panel the width of the page.
      *
@@ -314,13 +314,15 @@ export function renderFeaturesPanel(model, ctx) {
         <h3>Mythic <span class="badge">tier ${tier}</span></h3>
         <div class="fieldgrid">
           ${fields.field('Path', fields.text('mythic.path', m.path))}
-          ${fields.field(awarded ? 'Tier (awarded by the GM)' : `Tier (${esc(auto)})`, `<span class="pair">
-            ${fields.autoNum('data-set="mythic.tierOverride"', m.tierOverride, {
+          ${fields.field(awarded ? 'Tier (awarded by the GM)' : trials ? 'Tier (from trials)' : `Tier (${esc(auto)})`, `<span class="pair">
+            ${trials ? fields.autoNum('data-set="mythic.trialTier"', m.trialTier, {
+    width: '3.6rem', label: 'Mythic tier', extra: `min="0" max="${rules.maxTier}"`,
+    title: 'The tier reached through trials. Tier up raises it. Enter a number to change it.',
+  }) : fields.autoNum('data-set="mythic.tierOverride"', m.tierOverride, {
     placeholder: m.computedTier ?? 0, width: '3.6rem', auto: !awarded, label: 'Mythic tier',
     title: awarded
       ? 'The tier awarded by the GM. Blank is 0. The campaign rules on the ⚙ tab set where the tier comes from.'
-      : trials ? 'The tier reached through trials with Tier up. Enter a number to override it.'
-        : 'Automatic from level. Enter a number to override it.',
+      : 'Automatic from level. Enter a number to override it.',
   })}
             <span class="value">→ ${esc(c.identity.mythicTier ?? 0)}</span></span>`)}
           ${trials ? fields.field('Trials completed', `<span class="pair">

@@ -1278,6 +1278,12 @@ export class CharacterSheetElement extends HTMLElement {
   whenReady() { return this.#adopting ?? Promise.resolve(); }
 
   /**
+   * Read the stored history again and redraw its list. For a host page that
+   * changed it from outside: checkpoints that arrived from another device.
+   */
+  refreshHistory() { return this.#syncHistory(); }
+
+  /**
    * Open the colour panel for the character, at a point on the page.
    *
    * Public, for a host page's roster: a right-click on a character's row
@@ -2260,6 +2266,15 @@ export class CharacterSheetElement extends HTMLElement {
     this.#renderHeader();
   }
 
+  /** A checkpoint was made, renamed or deleted: say so, for a host page that keeps a copy of them elsewhere. */
+  #announceCheckpoints() {
+    this.dispatchEvent(new CustomEvent('character-checkpoint', {
+      detail: { id: this.#model?.data?.id ?? null },
+      bubbles: true,
+      composed: true,
+    }));
+  }
+
   /** Store the current state under a name, where nothing will evict it. */
   async #saveCheckpoint() {
     const label = this.#checkpointDraft.trim();
@@ -2270,6 +2285,7 @@ export class CharacterSheetElement extends HTMLElement {
       this.#historyNote = `Saved checkpoint “${label}”. It is kept until you delete it.`;
       await this.#refreshSnapshots();
       this.#markHistory();
+      this.#announceCheckpoints();
     } catch (err) {
       this.#historyNote = `Could not save the checkpoint: ${err.message}.`;
     }
@@ -3632,6 +3648,7 @@ export class CharacterSheetElement extends HTMLElement {
           : `<span class="histwhat">
                ${s.label ? `<strong>${esc(s.label)}</strong>` : `${s.changes} change${s.changes === 1 ? '' : 's'} in`}
                ${s.label ? '' : `<span class="histsize">${(s.size / 1024).toFixed(0)} KB</span>`}
+               ${s.onServer ? '<span class="histsize" title="Open downloads this checkpoint from the server.">on the server</span>' : ''}
              </span>
              ${s.stale
                ? `<span class="histsize">from another app version</span>
@@ -8165,7 +8182,7 @@ export class CharacterSheetElement extends HTMLElement {
         if (button?.dataset.key) {
           this.#history?.remove(button.dataset.key)
             .then(() => this.#refreshSnapshots())
-            .then(() => this.#renderHeader())
+            .then(() => { this.#renderHeader(); this.#announceCheckpoints(); })
             .catch(() => { /* already gone */ });
         }
         break;
@@ -8183,7 +8200,7 @@ export class CharacterSheetElement extends HTMLElement {
         if (draft?.label.trim()) {
           this.#history?.rename(draft.key, draft.label.trim())
             .then(() => this.#refreshSnapshots())
-            .then(() => this.#renderHeader())
+            .then(() => { this.#renderHeader(); this.#announceCheckpoints(); })
             .catch(() => { /* gone while being renamed */ });
         } else {
           this.#renderHeader();

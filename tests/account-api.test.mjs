@@ -1,4 +1,4 @@
-/** Tests sign-in with Discord, the session cookie and server saves, in Node.
+/** Tests sign-in with Discord, the session cookie, server saves and their checkpoints, in Node.
  *
  *  The sign-in handlers take their `fetcher` and clock as arguments, so a
  *  stand-in answers for Discord. SavesCore is the account Durable Object's
@@ -162,12 +162,68 @@ check('force writes over the server copy', out.rev, 3);
 clock += 1000;
 await core.write('omnia', { base: 0, summary: { name: 'Omnia' }, gz: gz({ id: 'omnia' }) });
 check('the list is newest first', (await core.list()).map((s) => s.id), ['omnia', 'vesna']);
-check('the list leaves the documents out', Object.keys((await core.list())[0]).sort(), ['id', 'rev', 'saved', 'size', 'summary']);
+check('the list leaves the documents out', Object.keys((await core.list())[0]).sort(), ['cps', 'id', 'rev', 'saved', 'size', 'summary']);
 check('remove answers with the id', await core.remove('vesna'), { id: 'vesna' });
 check('a removed save is gone', [await core.read('vesna'), (await core.list()).map((s) => s.id)], [null, ['omnia']]);
 check('removing it twice is null', await core.remove('vesna'), null);
 out = await core.write('vesna', { base: 3, summary: { name: 'Vesna' }, gz: gz(vesna) });
 check('saved again, it does not repeat a revision', out.rev, 4);
+// What one account may keep.
+const small = new saves.SavesCore(fakeStorage(), () => NOW, { saves: 3, checkpoints: 2, total: 1000 });
+const bytes = (n) => { const b = new Uint8Array(n); b[0] = 0x1f; b[1] = 0x8b; return b; };
+check('a save within the limits is stored', (await small.write('a', { gz: bytes(400) })).rev, 1);
+check('a second one within the total is stored', (await small.write('b', { gz: bytes(400) })).rev, 1);
+out = await small.write('c', { gz: bytes(400) });
+check('a save that takes the account past its total is refused', [out.status, out.error], [413, 'An account keeps at most 0 MB on the server.']);
+check('…and is not stored', await small.read('c'), null);
+check('a character may grow into the room the others leave', (await small.write('a', { base: 1, gz: bytes(600) })).rev, 2);
+out = await small.write('a', { base: 2, gz: bytes(601) });
+check('…and no further', [out.status, (await small.read('a')).rev], [413, 2]);
+check('a small third character fits', (await small.write('c', { gz: bytes(0) })).rev, 1);
+out = await small.write('d', { gz: bytes(0) });
+check('a fourth character is past the count', [out.status, out.error], [413, 'An account keeps at most 3 characters on the server.']);
+await small.remove('b');
+check('removing one makes room for another', (await small.write('d', { gz: bytes(300) })).rev, 1);
+check('the limits a deployment runs with', saves.LIMITS, { saves: 200, checkpoints: 100, total: 25 * 1024 * 1024 });
+
+// Checkpoints of a character.
+const cpStore = fakeStorage();
+const cp = new saves.SavesCore(cpStore, () => NOW, { saves: 3, checkpoints: 2, total: 1000 });
+check('a first save says the server had no copy', (await cp.write('a', { gz: bytes(100) })).created, true);
+check('a later save does not', 'created' in (await cp.write('a', { base: 1, gz: bytes(100) })), false);
+check('a character starts with no checkpoints', await cp.checkpoints('a'), { cps: 0, checkpoints: [] });
+out = await cp.writeCheckpoint('a', 'uid-level-2', { label: 'level 2', savedAt: '2026-11-02T10:00:00.000Z', changes: 4, schema: 9, gz: bytes(200) });
+check('a checkpoint is stored and counted as a change', out, { uid: 'uid-level-2', cps: 1 });
+await cp.writeCheckpoint('a', 'uid-level-1', { label: 'level 1', savedAt: '2026-11-01T10:00:00.000Z', gz: bytes(150) });
+check('checkpoints are listed oldest first, without their documents', await cp.checkpoints('a'), {
+  cps: 2,
+  checkpoints: [
+    { uid: 'uid-level-1', label: 'level 1', savedAt: '2026-11-01T10:00:00.000Z', changes: 0, schema: 0, size: 150 },
+    { uid: 'uid-level-2', label: 'level 2', savedAt: '2026-11-02T10:00:00.000Z', changes: 4, schema: 9, size: 200 },
+  ],
+});
+check('the character\'s row carries the count', (await cp.list())[0].cps, 2);
+check('a save keeps the count', [(await cp.write('a', { base: 2, gz: bytes(100) })).rev, (await cp.list())[0].cps], [3, 2]);
+check('a checkpoint is read back with its bytes', (await cp.readCheckpoint('a', 'uid-level-2')).gz.length, 200);
+check('checkpoints count toward the account\'s total', await cp.used(), 450);
+out = await cp.writeCheckpoint('a', 'uid-level-3', { label: 'level 3', gz: bytes(100) });
+check('a third checkpoint is past the count', [out.status, out.error], [413, 'A character keeps at most 2 checkpoints on the server.']);
+check('a checkpoint already stored can be sent again', (await cp.writeCheckpoint('a', 'uid-level-2', { label: 'level 2', gz: bytes(300) })).cps, 3);
+out = await cp.writeCheckpoint('a', 'uid-level-2', { label: 'level 2', gz: bytes(800) });
+check('a checkpoint that takes the account past its total is refused', [out.status, (await cp.readCheckpoint('a', 'uid-level-2')).gz.length], [413, 300]);
+check('a name alone renames one', [await cp.writeCheckpoint('a', 'uid-level-1', { label: 'first level' }), (await cp.checkpoints('a')).checkpoints[0].label, await cp.used()],
+  [{ uid: 'uid-level-1', cps: 4 }, 'first level', 550]);
+check('a name alone for one not stored is 404', (await cp.writeCheckpoint('a', 'uid-nothing', { label: 'x' })).status, 404);
+check('a checkpoint of a character not on the server is 404', (await cp.writeCheckpoint('zz', 'uid-level-1', { gz: bytes(10) })).status, 404);
+check('a time that is not one becomes now', (await (async () => { await cp.removeCheckpoint('a', 'uid-level-1'); await cp.writeCheckpoint('a', 'uid-bad-time', { savedAt: 'yesterday', gz: bytes(20) }); return cp.readCheckpoint('a', 'uid-bad-time'); })()).savedAt, new Date(NOW).toISOString());
+check('removing a checkpoint frees its room', [await cp.removeCheckpoint('a', 'uid-bad-time'), await cp.used()], [{ uid: 'uid-bad-time', cps: 7 }, 400]);
+check('removing it twice is 404', (await cp.removeCheckpoint('a', 'uid-bad-time')).status, 404);
+cpStore.m.delete('used');
+check('with no kept count, the total is counted from what is stored', await cp.used(), 400);
+check('removing the character removes its checkpoints', [await cp.remove('a'), [...cpStore.m.keys()].sort(), await cp.used()], [{ id: 'a' }, ['gone:a', 'used'], 0]);
+check('saved again, it has no checkpoints and says it is new', [(await cp.write('a', { base: 3, gz: bytes(50) })).created, await cp.checkpoints('a')], [true, { cps: 0, checkpoints: [] }]);
+check('checkpoint ids are short and plain', ['uid-level-1', 'AbC_123-xyz0', 'short', 'has/slash1', 'has space1', 'x'.repeat(41)].map(saves.validCheckpointId), [true, true, false, false, false, false]);
+
 check('ids are one line with no path separators', ['vesna', 'órla-2', 'a/b', 'a\\b', '', 'x\ny'].map(saves.validSaveId), [true, true, false, false, false, false]);
 const big = new Uint8Array(300000).map((_, i) => i % 251);
 check('base64 round-trips bytes past the argument limit', Buffer.from(fromBase64(toBase64(big))).equals(Buffer.from(big)), true);
@@ -207,14 +263,34 @@ check('worker: me reports server saves', (await (await wfetch('GET', '/api/auth/
 check('worker: saves need a sign-in', (await wfetch('GET', '/api/saves')).status, 401);
 check('worker: saves need server membership', (await wfetch('GET', '/api/saves', { session: outsider })).status, 403);
 check('worker: no binding is 503', (await wfetch('GET', '/api/saves', { session: alice, withEnv: { ...wenv, ACCOUNTS: undefined } })).status, 503);
-check('worker: an empty account lists nothing', await (await wfetch('GET', '/api/saves', { session: alice })).json(), { saves: [] });
+check('worker: an empty account lists nothing, with what it may hold', await (await wfetch('GET', '/api/saves', { session: alice })).json(), { saves: [], used: 0, limits: { saves: 200, checkpoints: 100, total: 25 * 1024 * 1024 } });
 res = await wfetch('PUT', '/api/saves/vesna', { session: alice, body: { base: 0, summary: { name: 'Vesna', level: 5 }, gz: b64(vesna) } });
 check('worker: a save is stored', [res.status, (await res.json()).rev], [200, 1]);
 res = await wfetch('GET', '/api/saves/vesna', { session: alice });
 const got = await res.json();
 check('worker: the document comes back byte for byte', [got.rev, got.gz], [1, b64(vesna)]);
 check('worker: the list shows it', (await (await wfetch('GET', '/api/saves', { session: alice })).json()).saves.map((s) => [s.id, s.rev, s.summary.name]), [['vesna', 1, 'Vesna']]);
-check('worker: another account does not see it', await (await wfetch('GET', '/api/saves', { session: bob })).json(), { saves: [] });
+check('worker: another account does not see it', (await (await wfetch('GET', '/api/saves', { session: bob })).json()).saves, []);
+
+// A character's checkpoints, through the Worker.
+const cpPath = '/api/saves/vesna/checkpoints';
+res = await wfetch('PUT', `${cpPath}/uid-before-respec`, { session: alice, body: { label: 'before respec', savedAt: '2026-11-03T09:00:00.000Z', changes: 2, schema: 9, gz: b64({ ...vesna, note: 'earlier' }) } });
+check('worker: a checkpoint is stored', [res.status, await res.json()], [200, { uid: 'uid-before-respec', cps: 1 }]);
+res = await wfetch('GET', cpPath, { session: alice });
+check('worker: it is listed', (await res.json()).checkpoints.map((c) => [c.uid, c.label, c.changes]), [['uid-before-respec', 'before respec', 2]]);
+res = await wfetch('GET', `${cpPath}/uid-before-respec`, { session: alice });
+check('worker: it comes back byte for byte', (await res.json()).gz, b64({ ...vesna, note: 'earlier' }));
+check('worker: another account cannot read it', (await wfetch('GET', `${cpPath}/uid-before-respec`, { session: bob })).status, 404);
+check('worker: another account cannot list them', (await wfetch('GET', cpPath, { session: bob })).status, 404);
+check('worker: a checkpoint needs a sign-in', (await wfetch('GET', cpPath)).status, 401);
+check('worker: a checkpoint write from another site is refused', (await wfetch('PUT', `${cpPath}/uid-from-elsewhere`, { session: alice, origin: 'https://evil.example', body: { gz: b64(vesna) } })).status, 401);
+check('worker: a checkpoint that is not gzip is 400', (await wfetch('PUT', `${cpPath}/uid-not-gzip-1`, { session: alice, body: { gz: Buffer.from('plain text, not a document').toString('base64') } })).status, 400);
+check('worker: an id that is not one is 404', (await wfetch('GET', `${cpPath}/no`, { session: alice })).status, 404);
+check('worker: a name alone renames it', await (await wfetch('PUT', `${cpPath}/uid-before-respec`, { session: alice, body: { label: 'before the respec' } })).json(), { uid: 'uid-before-respec', cps: 2 });
+check('worker: the save row carries the count', (await (await wfetch('GET', '/api/saves', { session: alice })).json()).saves[0].cps, 2);
+check('worker: delete removes it', await (await wfetch('DELETE', `${cpPath}/uid-before-respec`, { session: alice })).json(), { uid: 'uid-before-respec', cps: 3 });
+check('worker: a path under a checkpoint is 404', (await wfetch('GET', `${cpPath}/uid-before-respec/more`, { session: alice })).status, 404);
+check('worker: a path that is not checkpoints is 404', (await wfetch('GET', '/api/saves/vesna/other', { session: alice })).status, 404);
 check('worker: another account cannot read it', (await wfetch('GET', '/api/saves/vesna', { session: bob })).status, 404);
 res = await wfetch('PUT', '/api/saves/vesna', { session: alice, body: { base: 0, summary: { name: 'Vesna' }, gz: b64(vesna) } });
 check('worker: a stale save is 409 with the server\'s revision', [res.status, (await res.json()).rev], [409, 1]);
@@ -226,6 +302,15 @@ check('worker: an id with spaces and accents is kept as typed', (await res.json(
 check('worker: a path under an id is 404', (await wfetch('GET', '/api/saves/vesna/extra', { session: alice })).status, 404);
 check('worker: delete removes it', await (await wfetch('DELETE', '/api/saves/vesna', { session: alice })).json(), { id: 'vesna' });
 check('worker: a deleted save is 404', (await wfetch('GET', '/api/saves/vesna', { session: alice })).status, 404);
+
+// Sign-in is a page navigation: the browser goes to /api/auth/discord and
+// Discord sends it back to the callback. With a 404 page configured, Cloudflare
+// answers a navigation to anything that is not a file with that page and never
+// runs the Worker, unless the path is listed to run the Worker first.
+const { readFileSync } = await import('node:fs');
+const config = JSON.parse(readFileSync(resolve('wrangler.jsonc'), 'utf8').split('\n').filter((line) => !line.trim().startsWith('//')).join('\n'));
+check('config: a missing page still gets the 404 page', config.assets.not_found_handling, '404-page');
+check('config: everything under /api/ runs the Worker first', config.assets.run_worker_first, ['/api/*']);
 
 // A published link follows its author's account.
 const doc = { id: 'vesna', identity: { name: 'Vesna' } };
@@ -278,6 +363,19 @@ let refused = null;
 try { await account.readSave('tamsin'); } catch (err) { refused = [err.status, err.message]; }
 check('app: another account gets the server\'s refusal', refused, [404, 'No such character on the server.']);
 asWho = alice;
+
+// Checkpoints, as the app sends and reads them.
+const packed = gz({ ...sheet, notes: 'at level 3' });
+check('app: a checkpoint is sent', await account.writeCheckpoint('tamsin', 'uid-app-level-3', { label: 'level 3', savedAt: '2026-11-05T12:00:00.000Z', changes: 1, schema: 9, bytes: packed }), { uid: 'uid-app-level-3', cps: 1 });
+check('app: it is listed', (await account.listCheckpoints('tamsin')).checkpoints.map((c) => [c.uid, c.label, c.size]), [['uid-app-level-3', 'level 3', packed.length]]);
+check('app: its bytes come back as sent', Buffer.from(await account.readCheckpointBytes('tamsin', 'uid-app-level-3')).equals(Buffer.from(packed)), true);
+check('app: a name alone renames it', (await account.writeCheckpoint('tamsin', 'uid-app-level-3', { label: 'third level' })).cps, 2);
+const whole = await account.readAccount();
+check('app: the account says what it holds and may hold', [whole.saves.some((s) => s.id === 'tamsin' && s.cps === 2), whole.used > packed.length, whole.limits.total], [true, true, 25 * 1024 * 1024]);
+check('app: a checkpoint is deleted', (await account.deleteCheckpoint('tamsin', 'uid-app-level-3')).cps, 3);
+let gone = null;
+try { await account.readCheckpointBytes('tamsin', 'uid-app-level-3'); } catch (err) { gone = [err.status, err.message]; }
+check('app: reading a deleted one gets the server\'s refusal', gone, [404, 'No such checkpoint on the server.']);
 await account.deleteSave('tamsin');
 check('app: delete takes it off the list', (await account.listSaves()).some((s) => s.id === 'tamsin'), false);
 
@@ -298,6 +396,30 @@ check('plan: sent before any Save and saved since, is sent', plan({ rev: 1 }, { 
 check('plan: sent before any Save and still none, is left', plan({ rev: 1 }, { rev: 1, savedAt: null }, null), 'none');
 check('plan: the server moved on, nothing saved here since, is loaded', plan({ rev: 4 }, { rev: 3, savedAt: 't1' }, 't1'), 'pull');
 check('plan: the server moved on and so did this browser, asks', plan({ rev: 4 }, { rev: 3, savedAt: 't1' }, 't2'), 'ask');
+
+
+// What to do about a character's checkpoints here and on the server.
+const here = (uid, label, extra = {}) => ({ key: `k-${uid}`, uid, label, onServer: false, ...extra });
+const there = (uid, label) => ({ uid, label });
+const steps = (local, server, known) => {
+  const out = account.checkpointPlan({ local, server, known });
+  return { ...Object.fromEntries(Object.entries(out.steps).filter(([, list]) => list.length).map(([name, list]) => [name, list.map((c) => c.uid)])), known: out.known };
+};
+check('checkpoints: one made here is sent', steps([here('a', 'level 1')], [], {}), { send: ['a'], known: { a: 'level 1' } });
+check('checkpoints: one made on another device is listed here', steps([], [there('b', 'level 2')], {}), { adopt: ['b'], known: { b: 'level 2' } });
+check('checkpoints: the same on both sides is left', steps([here('a', 'level 1')], [there('a', 'level 1')], { a: 'level 1' }), { known: { a: 'level 1' } });
+check('checkpoints: one deleted here is deleted there', steps([], [there('a', 'level 1')], { a: 'level 1' }), { delete: ['a'], known: {} });
+check('checkpoints: one deleted there is deleted here', steps([here('a', 'level 1')], [], { a: 'level 1' }), { drop: ['a'], known: {} });
+check('checkpoints: one listed here without its document and gone there is dropped', steps([here('a', 'level 1', { onServer: true })], [], {}), { drop: ['a'], known: {} });
+check('checkpoints: a name changed here is sent', steps([here('a', 'first level')], [there('a', 'level 1')], { a: 'level 1' }), { rename: ['a'], known: { a: 'first level' } });
+check('checkpoints: a name changed there is used here', steps([here('a', 'level 1')], [there('a', 'first level')], { a: 'level 1' }), { take: ['a'], known: { a: 'first level' } });
+check('checkpoints: a name changed on both sides keeps this browser\'s', steps([here('a', 'mine')], [there('a', 'theirs')], { a: 'level 1' }), { rename: ['a'], known: { a: 'mine' } });
+check('checkpoints: a server copy made anew gets every checkpoint again', steps([here('a', 'level 1'), here('b', 'level 2')], [], {}), { send: ['a', 'b'], known: { a: 'level 1', b: 'level 2' } });
+check('checkpoints: a mix is sorted into its steps', steps(
+  [here('a', 'level 1'), here('b', 'level 2'), here('c', 'level 3')],
+  [there('a', 'level 1'), there('d', 'level 4'), there('e', 'level 5')],
+  { a: 'level 1', b: 'level 2', e: 'level 5' },
+), { send: ['c'], adopt: ['d'], drop: ['b'], delete: ['e'], known: { a: 'level 1', c: 'level 3', d: 'level 4' } });
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

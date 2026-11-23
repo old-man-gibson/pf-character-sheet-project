@@ -378,7 +378,8 @@
     uploaded.</p>
     <p>Characters are saved in this browser only. Clearing your browser data deletes them.</p>
     <p id="helpServer" hidden><strong>Sign in with Discord</strong> also saves each character to
-    the server when you press <strong>Save</strong>. You can then open it on another device.</p>
+    the server when you press <strong>Save</strong>, and its checkpoints when you make them. You
+    can then open them on another device.</p>
     <p>Edits are saved as you make them. <strong>Save</strong> sets the version the sheet
     opens on, and edits made after it are offered for restore when you reopen the sheet.
     A snapshot is taken every 20 changes and the last 5 are kept. A named
@@ -1399,9 +1400,12 @@
     currentDocument,
     putDocument,
     redraw: draw,
+    openId: () => (sheet.hidden ? null : current),
+    historyChanged: () => sheet.refreshHistory(),
   });
   sheet.addEventListener('character-save', (e) => serverSaves.saved(e.detail?.id));
   sheet.addEventListener('character-publish', (e) => serverSaves.published(e.detail?.id));
+  sheet.addEventListener('character-checkpoint', (e) => serverSaves.checkpoints(e.detail?.id));
 
   draw();
   select();
