@@ -15648,5 +15648,61 @@ console.log('a character begun here has the ABP deflection bonus in its CMD');
   check('nor is a difference the ladder never gives', new Character(odd).offsets['defenses.cmd'], -7);
 }
 
+console.log('AC penalties reach CMD, and flat-footed CMD loses a dodge bonus wherever it came from');
+{
+  const c = new Character(blankDocument({ id: 'zz-acpen', name: 'Pen', level: 3 }));
+  const d = () => c.data.defenses;
+  const at = () => [d().ac, d().touch, d().flatFooted, d().cmd, d().ffCmd];
+  const base = at();
+  const note = (text) => { c.set('formulaNotes', text); return c.contributions.entries.at(-1); };
+  const moved = () => at().map((v, i) => v - base[i]);
+
+  check('a penalty to every armour class reaches CMD too', (note('{ac -= 2}'), moved()), [-2, -2, -2, -2, -2]);
+  check('whatever its type', (note('{ac -= 1 as natural}'), moved()), [-1, 0, -1, -1, -1]);
+  check('an untyped bonus still does not', (note('{ac += 2}'), moved()), [2, 2, 2, 0, 0]);
+  check('a penalty to one armour class stays there', (note('{ac.touch -= 2}'), moved()), [0, -2, 0, 0, 0]);
+
+  check('a dodge bonus from a formula is lost from flat-footed CMD', (note('{ac += 2 as dodge}'), moved()), [2, 2, 0, 2, 0]);
+  check('by its own name too', (note('{ac.dodge += 1}'), moved()), [1, 1, 0, 1, 0]);
+  check('a deflection bonus is kept', (note('{ac.deflection += 1}'), moved()), [1, 1, 1, 1, 1]);
+  note('{ac.dodge += 1}');
+  c.set('defenses.uncannyDodge', true);
+  check('uncanny dodge keeps the dodge bonus on flat-footed CMD', moved()[4], 1);
+  c.set('defenses.uncannyDodge', false);
+  {
+    c.set('formulaNotes', '');
+    c.listAdd('equipment.gear', { name: 'Ring of Evasion', bonuses: [{ target: 'ac', value: 1, type: 'Dodge' }] });
+    check('and so with a gear row\u2019s dodge bonus', moved(), [1, 1, 0, 1, 0]);
+    c.set('equipment.gear', c.data.equipment.gear.slice(0, -1));
+  }
+
+  // A sheet saved before a penalty reached CMD opens with CMD put right.
+  note('{ac -= 2}');
+  const now = at();
+  const old = JSON.parse(JSON.stringify(c.toJSON()));
+  old.corrections = old.corrections.filter((x) => x !== 'ac-penalty-cmd');
+  old.defenses.cmd += 2;
+  const o = new Character(old);
+  check('an older sheet takes the penalty on CMD, with nothing put in Other',
+    [o.data.defenses.cmd, o.data.defenses.ffCmd, o.offsets['defenses.cmd']], [now[3], now[4], 0]);
+  const again = new Character(JSON.parse(JSON.stringify(o.toJSON())));
+  check('and stays so', [again.data.defenses.cmd, again.offsets['defenses.cmd']], [now[3], 0]);
+
+  // A companion's "every armour class" follows the type as the character's does.
+  c.set('formulaNotes', '');
+  const b = c.data.animalCompanion?.[0];
+  if (b) {
+    b.name = 'Rex';
+    c.recompute();
+    const lands = (text) => note(text).lands.map((k) => k.split('.').pop()).sort();
+    check('a natural armor bonus to a companion\u2019s armour classes skips touch', lands('{animalCompanion.ac += 2 as natural}'), ['flatFooted', 'total']);
+    check('a dodge bonus skips flat-footed', lands('{animalCompanion.ac += 1 as dodge}'), ['total', 'touch']);
+    check('an untyped one reaches all three', lands('{animalCompanion.ac += 1}'), ['flatFooted', 'total', 'touch']);
+  } else {
+    check('a blank character has an animal companion row to test with', !!b, true);
+  }
+  c.set('formulaNotes', '');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
