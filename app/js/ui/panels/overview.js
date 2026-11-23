@@ -119,14 +119,14 @@ import { playLogPanel } from '../play-log.js';
 import {
   ABILITIES, ABILITY_LABELS, ALT_ATTACK_OF, ATTACK_MODES, ATTACK_MODE_KEY,
   ATTACK_MODE_LABELS, BONUS_TYPES, BUFF_MOD_KEYS, BUFF_TARGETS, CONDITIONS, CONDITION_CATS, GAME_SYSTEMS,
-  SIZE_MODIFIERS, TRAIT_SLOTS, WEAPON_GROUPS, WEAPON_FAMILIARITY, WEAPON_HANDEDNESS,
+  SIZE_MODIFIERS, WEAPON_GROUPS, WEAPON_FAMILIARITY, WEAPON_HANDEDNESS,
   ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES, attackModeTotal, castingNoun,
   conditionInfo, conditionTotals, fmt, prepStyle, skillConditionDelta, skillLabel, statModDelta,
 } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
 import { abilityCollapse, abilityHarm, blankClassRow, maneuverDetails } from '../../model.js';
 import { colorControl } from '../color-control.js';
-import { AGE_CATEGORIES, campaignRules, isAntihero, levelProgress, specialtyInPlay } from '../../model/campaign.js';
+import { AGE_CATEGORIES, campaignRules, isAntihero, levelProgress, specialtyInPlay, traitPlan } from '../../model/campaign.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, grip, itemCheck, itemExpr, itemNum, itemSelect,
@@ -2317,18 +2317,25 @@ function traitsPanel(model, ctx) {
     const categories = [...TRAIT_CATEGORIES, ...(c.traitCategories || [])];
     const filled = (key) => !!(slots[key]?.name || slots[key]?.text || slots[key]?.category);
 
-    const standard = ['trait1', 'trait2', 'trait3'];
+    // Which slots the campaign's rules give: so many picked freely, so many
+    // more for a drawback each. A slot past those shows only while it holds
+    // something, and so does a drawback that buys nothing.
+    const plan = traitPlan(c).filter((s) => !(s.closed || s.spare) || filled(s.key));
+    const labelOf = (key) => plan.find((s) => s.key === key)?.label || key;
+    const standard = plan.filter((s) => s.standard).map((s) => s.key);
     const picked = standard.filter(filled).length;
     const row = (def) => {
       const v = slots[def.key] || {};
-      const locked = def.requires && !filled(def.requires);
+      const locked = (def.requires && !filled(def.requires)) || def.closed;
       const isDrawback = def.kind !== 'trait';
-      // The three standard picks are owed; an empty one says so.
+      // The standard picks are owed; an empty one says so.
       const owed = standard.includes(def.key) && !filled(def.key);
-      const wants = locked ? `Take ${TRAIT_SLOTS.find((s) => s.key === def.requires)?.label} first`
+      const wants = def.closed ? '' : locked ? `Take ${labelOf(def.requires)} first`
         : owed ? 'Pick a trait' : '';
+      const under = def.requires ? `needs ${labelOf(def.requires)}`
+        : def.closed ? 'more than the campaign gives' : def.spare ? 'gives no trait' : '';
       return `<tr class="${locked ? 'lockedslot' : ''}${owed ? ' needsfill' : ''}"${owed ? ' title="Empty trait slot."' : ''}>
-        <td data-stack="head">${esc(def.label)}${def.requires ? `<div class="hint">needs ${esc(TRAIT_SLOTS.find((s) => s.key === def.requires)?.label)}</div>` : ''}</td>
+        <td data-stack="head">${esc(def.label)}${under ? `<div class="hint">${esc(under)}</div>` : ''}</td>
         <td data-label="Category">${isDrawback ? '<span class="hint">—</span>'
           : select(`traitSlots.${def.key}.category`, v.category, categories)}</td>
         <td data-stack="name">${text(`traitSlots.${def.key}.name`, v.name, wants || (isDrawback ? 'Drawback' : 'Trait'))}</td>
@@ -2348,7 +2355,7 @@ function traitsPanel(model, ctx) {
             <colgroup><col class="slot"><col class="cat"><col class="tname"><col class="effect"></colgroup>
             <thead><tr><th>Slot</th><th>Category</th><th>Name</th><th>Trait / effect</th></tr></thead>
             <tbody>
-              ${TRAIT_SLOTS.filter((s) => s.kind !== 'feat').map(row).join('')}
+              ${plan.map(row).join('')}
               ${(slots.additional || []).map((x, i) => `<tr>
                 <td data-stack="head">Additional</td>
                 <td data-label="Category">${itemSelect('traitSlots.additional', i, 'category', x.category, categories)}</td>
@@ -2368,8 +2375,8 @@ function traitsPanel(model, ctx) {
             <button data-action="add-trait-category">Add category</button>
           </div>
           <p class="hint">
-            Traits 1–3 are the standard picks. Drawback 1 unlocks Trait 4. Drawback 2 unlocks
-            Trait 5. A Major Drawback gives a Drawback Feat, listed under <strong>Granted feats</strong>
+            ${standard.length ? `${standard.length === 1 ? 'Trait 1 is the standard pick' : `Traits 1–${standard.length} are the standard picks`}. ` : ''}${
+  plan.filter((s) => s.unlocks).map((s) => `${esc(s.label)} unlocks ${esc(labelOf(s.unlocks))}. `).join('')}A Major Drawback gives a Drawback Feat, listed under <strong>Granted feats</strong>
             on the Feats &amp; Mythic tab. You can add categories to the standard list.
           </p>
     </section>`;

@@ -11,7 +11,7 @@ import { blankDocument } from '../app/js/convert.js';
 import { Character } from '../app/js/model.js';
 import {
   CAMPAIGN_DEFAULTS, XP_TRACKS, awardXp, campaignChanges, campaignRules, levelProgress, levelUp, mythicComputedTier,
-  isAntihero, milestoneSteps as milestoneStepsOf, mythicLevels, mythicTierReached, tierUp, trialProgress, xpThresholds,
+  isAntihero, milestoneSteps as milestoneStepsOf, mythicLevels, mythicTierReached, tierUp, trialProgress, xpThresholds, traitPlan, mythicTierFloor,
 } from '../app/js/model/campaign.js';
 import { HERO_POINTS_ID, MYTHIC_POWER_ID } from '../app/js/model/trackers.js';
 import { abpDefence, tierAtLevel } from '../app/js/rules.js';
@@ -61,7 +61,7 @@ for (const id of fixtureIds()) {
     ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false], ['antiheroes', true],
     ['maxLevel', 6], ['maxLevel', 25], ['maxTier', 5], ['maxTier', 12], ['gestalt', false], ['hitPoints', 'average'], ['hitPoints', 'rolled'],
     ['abpLadder', 'core'], ['mythicLadder', 'core'], ['mythicFeats', 'even'], ['mythicFeats', 'every'], ['mythicFeatEvery', 3], ['pastColossal', true], ['minLevel', 1], ['minLevel', 8], ['maxLevel', 60],
-    ['skillSystem', 'background'], ['backgroundUse', 'floating'], ['backgroundRanks', 3], ['agingEffects', true], ['vmc', true], ['archetypePackages', true], ['occupations', true]]) {
+    ['skillSystem', 'background'], ['backgroundUse', 'floating'], ['backgroundRanks', 3], ['agingEffects', true], ['vmc', true], ['archetypePackages', true], ['occupations', true], ['traits', 2], ['drawbackTraits', 1], ['mythicFloorLevels', 3]]) {
     const m = new Character(loadCharacter(id));
     const before = numbers(m);
     m.set(`campaign.${key}`, value);
@@ -892,6 +892,58 @@ console.log('\na new character opens on its rules first');
   c.set('uiPrefs.rulesFirst', undefined);
   check('and gone once continued', campaignPanel(c, {}).includes('rulesfirst'), false);
   check('the flag is not saved once continued', 'rulesFirst' in JSON.parse(JSON.stringify(c.toJSON())).uiPrefs, false);
+}
+
+console.log('\ntraits and drawbacks by the campaign\'s count');
+{
+  const c = new Character(blankDocument({ id: 'zz-traits', name: 'Traits', level: 10 }));
+  const shape = () => traitPlan(c.data).map((s) => `${s.key}${s.standard ? '*' : ''}${s.requires ? `<${s.requires}` : ''}${s.closed ? '!' : ''}${s.spare ? '~' : ''}`).join(' ');
+  check('the table\'s: three traits, a drawback each for two more',
+    shape(), 'trait1* trait2* trait3* drawback1 trait4<drawback1 drawback2 trait5<drawback2 majorDrawback');
+  c.set('campaign.traits', 2);
+  c.set('campaign.drawbackTraits', 1);
+  check('two traits and one drawback for a third',
+    shape(), 'trait1* trait2* drawback1 trait3<drawback1 drawback2~ trait4! trait5! majorDrawback');
+  check('both count as changes', campaignChanges(c.data).sort(), ['drawbackTraits', 'traits']);
+  c.set('campaign.traits', 9);
+  check('no more traits than the sheet has slots', [campaignRules(c.data).traits, shape()],
+    [5, 'trait1* trait2* trait3* trait4* trait5* drawback1~ drawback2~ majorDrawback']);
+  c.set('campaign.traits', 0);
+  c.set('campaign.drawbackTraits', 0);
+  check('none at all', shape(), 'drawback1~ drawback2~ trait1! trait2! trait3! trait4! trait5! majorDrawback');
+  c.set('campaign.traits', null);
+  c.set('campaign.drawbackTraits', null);
+  check('blank is the table\'s again', campaignChanges(c.data), []);
+}
+
+console.log('\na lowest mythic tier by level');
+{
+  const c = new Character(blankDocument({ id: 'zz-floor', name: 'Floor', level: 10 }));
+  c.set('campaign.mythicTier', 'trials');
+  check('trials alone: no trials, no tier', [c.data.identity.mythicTier, mythicTierFloor(c.data)], [0, 0]);
+  c.set('campaign.mythicFloorLevels', 3);
+  check('a tier for every three levels', [c.data.identity.mythicTier, mythicTierFloor(c.data)], [3, 3]);
+  const p = trialProgress(c.data);
+  check('the next tier still takes its trials', [p.tier, p.next, p.ready], [3, 4, false]);
+  c.set('mythic.trials', 4);
+  check('and Tier up goes on from the lowest tier', [trialProgress(c.data).ready, tierUp(c), c.data.identity.mythicTier], [true, true, 4]);
+  c.set('identity.level', 15);
+  check('the lowest tier rises with the level', c.data.identity.mythicTier, 5);
+  c.set('identity.level', 18);
+  check('and again', c.data.identity.mythicTier, 6);
+  c.set('campaign.maxTier', 4);
+  check('never above the highest tier', c.data.identity.mythicTier, 4);
+  c.set('campaign.maxTier', null);
+  c.set('campaign.mythicTier', 'awarded');
+  check('the GM\'s award has the same lowest tier', c.data.identity.mythicTier, 6);
+  c.set('mythic.tierOverride', 8);
+  check('and a higher award stands', c.data.identity.mythicTier, 8);
+  c.set('mythic.tierOverride', null);
+  c.set('campaign.mythicTier', 'level');
+  check('a ladder of levels has none', mythicTierFloor(c.data), 0);
+  c.set('campaign.mythicTier', 'trials');
+  c.set('campaign.mythic', false);
+  check('nor has a campaign without mythic', [mythicTierFloor(c.data), c.data.identity.mythicTier], [0, 0]);
 }
 
 console.log(`${pass} passed, ${fail} failed`);

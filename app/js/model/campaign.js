@@ -156,6 +156,18 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
    * one that already was, and some come with a bonus feat.
    */
   occupations: false,
+  /**
+   * Traits a character picks without a drawback, and how many drawbacks buy
+   * one more each. The sheet has five trait slots and two drawback slots; a
+   * trait past them goes in an Additional row.
+   */
+  traits: 3,
+  drawbackTraits: 2,
+  /**
+   * A lowest mythic tier by level: one tier for every so many levels, where
+   * the tier comes from trials or the GM. 0 is no lowest tier.
+   */
+  mythicFloorLevels: 0,
 });
 
 /** The levels a variant multiclass grants a secondary class feature at, in place of a feat. */
@@ -263,6 +275,9 @@ export function campaignRules(d) {
     vmc: bool('vmc'),
     archetypePackages: bool('archetypePackages'),
     occupations: bool('occupations'),
+    traits: Math.min(TRAIT_KEYS.length, count(c.traits, CAMPAIGN_DEFAULTS.traits)),
+    drawbackTraits: Math.min(DRAWBACK_KEYS.length, count(c.drawbackTraits, CAMPAIGN_DEFAULTS.drawbackTraits)),
+    mythicFloorLevels: count(c.mythicFloorLevels, CAMPAIGN_DEFAULTS.mythicFloorLevels),
   };
 }
 
@@ -444,6 +459,39 @@ export function followsShared(d, shared) {
   return !!shared?.on && d?.campaignOwn !== true;
 }
 
+/* ---------------- traits ---------------- */
+
+const TRAIT_KEYS = ['trait1', 'trait2', 'trait3', 'trait4', 'trait5'];
+const DRAWBACK_KEYS = ['drawback1', 'drawback2'];
+
+/**
+ * The trait and drawback slots in the order the Traits panel lists them, with
+ * what the rules make of each: the first so many traits are picked freely
+ * (`standard`), each of the next needs a drawback (`requires`), and a trait
+ * slot past those is `closed`. A drawback that buys a trait is listed right
+ * before it (`unlocks`); one that buys nothing comes after.
+ */
+export function traitPlan(d) {
+  const { traits, drawbackTraits } = campaignRules(d);
+  const label = (key) => `${/^trait/.test(key) ? 'Trait' : 'Drawback'} ${key.slice(-1)}`;
+  const plan = [];
+  const bought = [];
+  TRAIT_KEYS.forEach((key, i) => {
+    const slot = { key, kind: 'trait', label: label(key) };
+    if (i < traits) plan.push({ ...slot, standard: true });
+    else if (i - traits < drawbackTraits) {
+      const drawback = DRAWBACK_KEYS[i - traits];
+      bought.push(drawback);
+      plan.push({ key: drawback, kind: 'drawback', label: label(drawback), unlocks: key });
+      plan.push({ ...slot, requires: drawback });
+    }
+  });
+  for (const key of DRAWBACK_KEYS) if (!bought.includes(key)) plan.push({ key, kind: 'drawback', label: label(key), spare: true });
+  TRAIT_KEYS.slice(traits + drawbackTraits).forEach((key) => plan.push({ key, kind: 'trait', label: label(key), closed: true }));
+  plan.push({ key: 'majorDrawback', kind: 'drawback', label: 'Major Drawback' });
+  return plan;
+}
+
 /** What each switch is called, for a list of the rules that differ from the table's. */
 export const RULE_TITLES = Object.freeze({
   pointBuy: 'Point buy',
@@ -476,6 +524,9 @@ export const RULE_TITLES = Object.freeze({
   vmc: 'Variant multiclassing',
   archetypePackages: 'Archetype packages',
   occupations: 'Occupations',
+  traits: 'Traits',
+  drawbackTraits: 'Traits from drawbacks',
+  mythicFloorLevels: 'Lowest mythic tier',
 });
 
 /** The rules a campaign block changes from the table's, by name. */
@@ -679,8 +730,19 @@ function tierFromTrials(perTier, trials) {
  * the first press is stored, it is what the trials already buy.
  */
 function trialTierNow(d) {
-  return Math.min(campaignRules(d).maxTier,
-    count(d?.mythic?.trialTier, null) ?? tierFromTrials(mythicTrialSteps(d), count(d?.mythic?.trials, 0)));
+  return Math.max(mythicTierFloor(d), Math.min(campaignRules(d).maxTier,
+    count(d?.mythic?.trialTier, null) ?? tierFromTrials(mythicTrialSteps(d), count(d?.mythic?.trials, 0))));
+}
+
+/**
+ * The lowest tier the campaign gives at the character's level: one tier for
+ * every so many levels, where the tier comes from trials or the GM. A ladder
+ * of levels is its own floor, so it has none.
+ */
+export function mythicTierFloor(d) {
+  const rules = campaignRules(d);
+  if (!rules.mythic || !rules.mythicFloorLevels || rules.mythicTier === 'level') return 0;
+  return Math.min(rules.maxTier, Math.floor((Number(d?.identity?.level) || 0) / rules.mythicFloorLevels));
 }
 
 /**
@@ -727,7 +789,7 @@ export function mythicComputedTier(d) {
   const rules = campaignRules(d);
   if (!rules.mythic) return 0;
   if (rules.mythicTier === 'trials') return trialTierNow(d);
-  if (rules.mythicTier !== 'level') return 0;
+  if (rules.mythicTier !== 'level') return mythicTierFloor(d);
   // The table's own ladder goes on through the rules' function, so a sheet
   // that has not changed it works out exactly as it always did.
   if (!Object.keys(steps(d?.campaign?.mythicLevels)).length) return Math.min(rules.maxTier, tierAtLevel(d?.identity?.level));
@@ -745,7 +807,7 @@ export function mythicTierOf(d) {
   const rules = campaignRules(d);
   if (!rules.mythic) return 0;
   if (rules.mythicTier === 'trials') return mythicComputedTier(d);
-  return d?.mythic?.tierOverride ?? mythicComputedTier(d);
+  return Math.max(mythicTierFloor(d), d?.mythic?.tierOverride ?? mythicComputedTier(d));
 }
 
 /**
