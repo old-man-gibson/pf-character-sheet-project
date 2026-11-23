@@ -428,6 +428,7 @@ function placeOf(model, ref) {
     case 'vancianCasterLevel': return { tab: 'vancian', sel: [set(`vancian.classes.${a}.casterLevelOverride`)] };
     case 'deckManipulations': return deckPlace(set('cardcasting.manipulationsAvailable'), ['deck-manipulations']);
     case 'essence': return { tab: 'akashic', sel: [set(`akashic.essence.${a}`)] };
+    case 'maneuverCount': return { tab: 'maneuvers', sel: [a === 'other' ? set(`maneuvers.${b}`) : item('maneuvers.sources', a, b)] };
     // A companion's number-or-formula box or a movement row's bonus:
     // `companionCell:<kind>:<index>:<path>`, the index as the audit found it,
     // and a box on a list row as `<list>.<row>.<field>`: a movement row's

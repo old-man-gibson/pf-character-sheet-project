@@ -218,6 +218,9 @@ export function shrinkDiscipline({ name, entries = [], known, custom, notes, rea
 /** What a source of maneuvers gives a count of: known, readied, stances. */
 export const SOURCE_COUNTS = ['known', 'readied', 'stances'];
 
+/** The tab's own count of each, for whatever no source row covers: a number or a formula. */
+export const OTHER_COUNTS = { known: 'possibleManeuvers', readied: 'possibleReadied', stances: 'possibleStances' };
+
 export const MANEUVER_DERIVED = [
   'calc',
   // `entries` is the discipline's whole catalogue, rebuilt from the shared
@@ -309,9 +312,15 @@ export function recomputeManeuvers(model) {
       from[k] += worked.error ? 0 : Math.max(0, worked.value);
     }
   }
-  const possibleManeuvers = (Number(m.possibleManeuvers) || 0) + from.known;
-  const possibleStances = (Number(m.possibleStances) || 0) + from.stances;
-  const possibleReadied = (Number(m.possibleReadied) || 0) + from.readied;
+  // The last row, a number or a formula like the rest.
+  const other = {};
+  for (const k of SOURCE_COUNTS) {
+    other[k] = evaluateAmount(m[OTHER_COUNTS[k]], scope);
+    from[k] += other[k].error ? 0 : Math.max(0, other[k].value);
+  }
+  const possibleManeuvers = from.known;
+  const possibleStances = from.stances;
+  const possibleReadied = from.readied;
   const over = {
     known: maneuvers > possibleManeuvers,
     stances: stances > possibleStances,
@@ -325,6 +334,8 @@ export function recomputeManeuvers(model) {
     possibleManeuvers,
     possibleStances,
     possibleReadied,
+    // What each of the last row's boxes came to: { value, error }.
+    other,
     over,
     // The sheet's "Not Legal" flag: more picked than the class allows.
     legal: !over.known && !over.stances && !over.readied,

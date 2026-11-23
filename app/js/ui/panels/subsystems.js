@@ -727,9 +727,13 @@ export function maneuversPanel(model, ctx) {
             </tr>`).join('')}
             <tr>
               <th scope="row">${(m.sources || []).length ? 'Other' : 'Total'}</th>
-              <td>${num('maneuvers.possibleManeuvers', m.possibleManeuvers, 'style="width:4.2rem" aria-label="Maneuvers known allowed"')}</td>
-              <td>${num('maneuvers.possibleReadied', m.possibleReadied ?? 0, 'style="width:4.2rem" aria-label="Maneuvers readied allowed"')}</td>
-              <td>${num('maneuvers.possibleStances', m.possibleStances, 'style="width:4.2rem" aria-label="Stances allowed"')}</td>
+              ${[['known', 'possibleManeuvers'], ['readied', 'possibleReadied'], ['stances', 'possibleStances']].map(([count, f]) => `<td>${
+  exprField(`data-set="maneuvers.${f}"`, m[f] ?? 0, {
+    width: '4.2rem',
+    value: typeof m[f] === 'string' && m[f].trim() && !k.other?.[count]?.error ? k.other?.[count]?.value : null,
+    error: k.other?.[count]?.error || null,
+    title: 'A number or a formula, e.g. level + 2',
+  })}</td>`).join('')}
               <td></td>
             </tr>
             ${(m.sources || []).length ? `<tr><th scope="row">Total</th>
