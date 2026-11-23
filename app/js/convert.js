@@ -1545,8 +1545,9 @@ export function blankDocument(options = {}) {
     ac: 10 + abp.abpDeflection + abp.abpNatural,
     touch: 10 + abp.abpDeflection,
     flatFooted: 10 + abp.abpDeflection + abp.abpNatural,
-    cmd: 10,
-    ffCmd: 10,
+    // CMD takes the deflection bonus as touch AC does.
+    cmd: 10 + abp.abpDeflection,
+    ffCmd: 10 + abp.abpDeflection,
   };
   for (const key of ['fortitude', 'reflex', 'will']) doc.saves[key].total = abp.abpResistance;
   for (const [mode, stat] of [['melee', 'Str'], ['altMelee', 'Dex'], ['ranged', 'Dex'], ['altRanged', 'Str'], ['cmb', 'Str']]) {

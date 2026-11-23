@@ -2990,16 +2990,16 @@ console.log('conditions move CMD through Strength as well as Dexterity');
   // Flat-footed CMD is worked out, where it used to sit at the 10 a blank
   // sheet starts with.
   const d = () => c.data.defenses;
-  check('flat-footed CMD is the CMD less the Dex bonus', [d().cmd, d().ffCmd], [14, 12]);
+  check('flat-footed CMD is the CMD less the Dex bonus', [d().cmd, d().ffCmd], [15, 13]);
   c.set('defenses.acBonuses.dodge', 1);
-  check('and less a dodge bonus, which CMD keeps', [d().cmd, d().ffCmd], [15, 12]);
+  check('and less a dodge bonus, which CMD keeps', [d().cmd, d().ffCmd], [16, 13]);
   c.set('defenses.uncannyDodge', true);
-  check('uncanny dodge keeps both', d().ffCmd, 15);
+  check('uncanny dodge keeps both', d().ffCmd, 16);
   c.set('defenses.uncannyDodge', false);
   c.set('statsBuild.dex.pointBuy', 8);
-  check('a Dex penalty is not lost, only the dodge bonus', [d().cmd, d().ffCmd], [12, 11]);
+  check('a Dex penalty is not lost, only the dodge bonus', [d().cmd, d().ffCmd], [13, 12]);
   const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
-  check('and the figure survives a save and reload', again.data.defenses.ffCmd, 11);
+  check('and the figure survives a save and reload', again.data.defenses.ffCmd, 12);
 }
 
 console.log('caster-level bonuses wait for casting; spell points count classes the character has');
@@ -15475,6 +15475,39 @@ console.log('spells per day take bonuses: {vancian.<class>.slots.<level> += …}
   const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('and survive a save and reload', again.data.vancian.classes.at(-1).spells.find((s) => s.level === 1).slots, plain[1] + 4);
   c.set('formulaNotes', '');
+console.log('a character begun here has the ABP deflection bonus in its CMD');
+{
+  const made = (level) => new Character(blankDocument({ id: 'zz-cmd', name: 'CMD', level }));
+  const c = made(10);
+  check('CMD matches touch AC, with nothing hidden',
+    [c.data.defenses.cmd, c.data.defenses.touch, c.offsets['defenses.cmd']], [12, 12, 0]);
+  check('and at 20th', [made(20).data.defenses.cmd, made(20).offsets['defenses.cmd']], [15, 0]);
+  check('nothing to add below the first deflection bonus', [made(3).data.defenses.cmd, made(3).offsets['defenses.cmd']], [10, 0]);
+
+  // One begun before the fix was saved with a CMD of 10 and the difference hidden.
+  const old = JSON.parse(JSON.stringify(c.toJSON()));
+  old.corrections = old.corrections.filter((x) => x !== 'blank-cmd-deflection');
+  old.defenses.cmd -= 2;
+  old.defenses.ffCmd -= 2;
+  const o = new Character(old);
+  check('an older one opens with the bonus counted', [o.data.defenses.cmd, o.offsets['defenses.cmd']], [12, 0]);
+  const again = new Character(JSON.parse(JSON.stringify(o.toJSON())));
+  check('and stays there', [again.data.defenses.cmd, again.offsets['defenses.cmd']], [12, 0]);
+
+  // Leveled since: the missing bonus is the one from the level it was made at.
+  const grown = structuredClone(old);
+  grown.identity.level = 20;
+  const g = new Character(grown);
+  check('one made at 10th and now 20th', [g.data.defenses.cmd, g.offsets['defenses.cmd']], [15, 0]);
+
+  // A workbook's CMD keeps whatever its own sheet added or took off.
+  const book = structuredClone(old);
+  book.source = { ...book.source, kind: 'workbook' };
+  check('a converted workbook is left alone', new Character(book).offsets['defenses.cmd'], -2);
+  // And a difference that is no deflection bonus is not this.
+  const odd = structuredClone(old);
+  odd.defenses.cmd -= 5;
+  check('nor is a difference the ladder never gives', new Character(odd).offsets['defenses.cmd'], -7);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

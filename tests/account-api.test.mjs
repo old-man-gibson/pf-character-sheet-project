@@ -344,6 +344,11 @@ globalThis.fetch = (url, init = {}) => {
 const kept = new Map();
 globalThis.localStorage = { getItem: (k) => (kept.has(k) ? kept.get(k) : null), setItem: (k, v) => kept.set(k, String(v)), removeItem: (k) => kept.delete(k) };
 
+check("a new character's player is the account's name",
+  [account.playerNameOf({ signedIn: true, id: 'discord:1', name: ' Vesna P ' }), account.playerNameOf({ signedIn: false, name: 'Vesna' }),
+    account.playerNameOf({ signedIn: true, id: 'discord:1', name: 'discord:1' }), account.playerNameOf({ signedIn: true, id: 'discord:1', name: 'Discord user' }),
+    account.playerNameOf({ available: false }), account.playerNameOf(null)],
+  ['Vesna P', '', '', '', '', '']);
 check('app: who is signed in', await account.whoAmI(), { available: true, signedIn: true, id: 'discord:111', name: 'discord:111', member: true, saves: true });
 const sheet = { id: 'tamsin', schemaVersion: 9, identity: { name: 'Tamsín', level: 4 }, notes: 'x'.repeat(5000) };
 let sent = await account.writeSave('tamsin', sheet, { base: 0, summary: { name: 'Tamsín', level: 4 } });
