@@ -1157,7 +1157,7 @@ export function wealthPanel(model, ctx) {
         ${v.due ? `<span class="badge ${v.expected.total > 0 ? 'err' : ''}" title="The amount of the next offering as of today.">owed ${n(v.expected.total)}</span>` : ''}
       </h3>
       <div class="bigstats wealthstats">
-        ${bigStat('On hand', n(v.onHand), v.purse ? `wallet ${n(v.current)} · coins ${n(v.purse)}` : v.currency)}
+        ${bigStat('On hand', n(v.onHand), v.coin ? (v.short ? `coins ${n(v.purse)} · owing ${n(v.short)}` : 'coin purse') : v.currency)}
         ${v.due ? `${bigStat('Owed', n(v.expected.total), [
     v.oathOfOfferings ? `oath ${n(v.expected.oath)}` : '',
     v.materialCasting ? `casting ${n(v.expected.casting)}` : '',
@@ -1166,7 +1166,7 @@ export function wealthPanel(model, ctx) {
     v.lastOffering && !v.future ? `${plural(v.days, 'day')} since ${v.lastOffering}` : 'no offering counted')}` : ''}
       </div>
       <div class="fieldgrid wealthfields">
-        ${field(`Current ${money}`, num('wealth.current', v.current))}
+        ${field(`Current ${money}`, num('wealth.current', v.coin ? v.onHand : v.current, v.coin ? 'step="any" title="The coin purse on Equipment. A change here changes the coins."' : ''))}
         ${field(`${cur} / day`, num('wealth.manaPerDay', v.manaPerDay))}
       </div>
       <div class="wealthswitches">
@@ -1196,7 +1196,7 @@ export function wealthPanel(model, ctx) {
           </select>
           <input type="number" data-draft="wealthAmount" value="${esc(draft.amount)}" placeholder="amount" style="width:6.5rem" aria-label="Amount">
           <input type="text" data-draft="wealthLabel" value="${esc(draft.label)}" placeholder="label (e.g. Session 12 reward)" style="width:15rem" aria-label="Label">
-          <button class="primary" data-action="wealth-record" title="Add this line to the ledger and update the wallet.">Record</button>
+          <button class="primary" data-action="wealth-record" title="Add this line to the ledger and update ${v.coin ? 'the coin purse' : 'the wallet'}.">Record</button>
         </span>
         <span class="pair" style="margin-left:auto">
           <button data-action="wealth-offering" ${v.due && v.expected.total > 0 ? '' : 'disabled'}
@@ -1204,8 +1204,8 @@ export function wealthPanel(model, ctx) {
         </span>
       </div>
       <p class="hint">
-        A <em>session</em> line is income added to the wallet; under the oath, half of it is owed
-        at the next offering. A <em>spend</em> line is taken off the wallet.
+        A <em>session</em> line is income added to ${v.coin ? 'the coin purse' : 'the wallet'}; under the oath, half of it is owed
+        at the next offering. A <em>spend</em> line is taken off it.
         Formulas can read <code>mana.current</code>, <code>mana.expected</code> and
         <code>mana.after</code>.
       </p>

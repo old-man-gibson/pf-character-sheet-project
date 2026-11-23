@@ -79,6 +79,69 @@ export function normalizeWealth(w) {
   };
 }
 
+/** The coin a currency's name means ("Gold", "gp", "Silver pieces"), or null for money that is no coin. */
+export function coinOf(currency) {
+  const name = String(currency || '').trim().toLowerCase().replace(/\s+(pieces?|coins?)$/, '');
+  return COIN_KINDS.find(([k, label]) => name === k || name === label.toLowerCase()) || null;
+}
+
+/** The purse in whole copper. */
+const copperIn = (coins) => Math.round(coinValue(coins) * 100);
+
+/**
+ * When the campaign's money is a coin, the coin purse on Equipment is the one
+ * place it is kept. Whatever `wealth.current` holds is moved into the purse
+ * and left at 0: an amount typed there before the two were one, a ledger line,
+ * an offering paid. A spend the purse cannot cover empties it, and the rest
+ * stays in `wealth.current` as a debt the next coins pay off.
+ *
+ * Coins of the campaign's own kind move first and smaller ones take the
+ * change. Paying out of larger coins counts the purse again from the
+ * campaign's coin down.
+ */
+export function foldWalletIntoPurse(data) {
+  const kind = coinOf(currencyName(data));
+  const w = data?.wealth;
+  if (!kind || !w || !data.equipment) return false;
+  const unit = Math.round(kind[2] * 100);
+  const move = Math.round((Number(w.current) || 0) * unit);
+  if (!move) return false;
+  const coins = data.equipment.coins = { ...(data.equipment.coins || {}) };
+  const have = copperIn(coins);
+  if (move < 0 && !have) return false;
+  const moved = Math.max(move, -have);
+  const from = COIN_KINDS.indexOf(kind);
+  const spread = (copper, into) => {
+    let rest = copper;
+    for (const [k, , gp] of COIN_KINDS.slice(from)) {
+      const each = Math.round(gp * 100);
+      const n = Math.trunc(rest / each);
+      into[k] = (Number(into[k]) || 0) + n;
+      rest -= n * each;
+    }
+  };
+  const next = { ...coins };
+  spread(moved, next);
+  if (COIN_KINDS.some(([k]) => (Number(next[k]) || 0) < 0)) {
+    for (const [k] of COIN_KINDS) next[k] = 0;
+    spread(have + moved, next);
+  }
+  Object.assign(coins, next);
+  w.current = (move - moved) / unit;
+  return true;
+}
+
+/**
+ * What typing a figure in the Wealth panel's own box stores. With a coin for
+ * money the box shows the purse, so the figure typed is what the purse should
+ * come to, and the difference is what moves.
+ */
+export function walletEntry(data, value) {
+  const currency = currencyName(data);
+  if (!coinOf(currency)) return value;
+  return (Number(value) || 0) - purseIn(currency, data.equipment?.coins);
+}
+
 /**
  * The coin purse in the campaign's money, when that money is a coin: a
  * currency named "Gold" or "gp" is the purse's own gold, so the wallet counts
@@ -86,8 +149,7 @@ export function normalizeWealth(w) {
  * coin, and the purse is no part of it.
  */
 export function purseIn(currency, coins) {
-  const name = String(currency || '').trim().toLowerCase().replace(/\s+(pieces?|coins?)$/, '');
-  const kind = COIN_KINDS.find(([k, label]) => name === k || name === label.toLowerCase());
+  const kind = coinOf(currency);
   if (!kind) return 0;
   // Whole copper first: 0.1 + 0.07 is not 0.17 in floating point.
   return Math.round(coinValue(coins) * 100) / (kind[2] * 100);
@@ -148,6 +210,9 @@ export function wealthView(w, today = new Date(), casterLevel = 0, purse = 0) {
   return {
     ...v,
     purse: Number(purse) || 0, onHand,
+    // The wallet's own figure is on hand less the purse: nothing with a coin
+    // for money, unless a spend ran past the purse.
+    short: Math.max(0, -v.current),
     offeringPerDay, days, months, casterLevel: cl, castingPerMonth,
     // The date box's ceiling, and a last offering past it -- typed, not
     // picked -- which counts no days and no months rather than going negative.
@@ -169,7 +234,7 @@ export function wealthView(w, today = new Date(), casterLevel = 0, purse = 0) {
 export function wealthViewOf(model, today = new Date()) {
   const currency = currencyName(model.data);
   const purse = purseIn(currency, model.data.equipment?.coins);
-  return { ...wealthView(model.data.wealth, today, model.casterLevel, purse), currency };
+  return { ...wealthView(model.data.wealth, today, model.casterLevel, purse), currency, coin: !!coinOf(currency) };
 }
 
 /**
@@ -219,7 +284,7 @@ export function makeOffering(model, today = new Date()) {
   const w = model.data.wealth;
   const entry = { date: isoDay(today), label: 'Oath of Offerings' + (view.expected.casting ? ' & material casting' : ''), amount: -view.expected.total, kind: 'offering' };
   w.ledger.push(entry);
-  // The offering comes out of the wallet; coins in the purse stay where they are.
+  // The offering comes out of the wallet, or out of the purse when the money is coin.
   w.current = view.current - view.expected.total;
   w.baseline = view.after;
   w.lastOffering = isoDay(today);

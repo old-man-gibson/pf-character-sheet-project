@@ -16,6 +16,7 @@ import { lockedFeatList } from './feats.js';
 import { subsystems } from './subsystems/registry.js';
 import { guileInUse } from './subsystems/guile.js';
 import { markUndo, rowLabel } from './undo.js';
+import { walletEntry } from './stats/wealth.js';
 import { getPath, setPath, skillKey } from './util.js';
 
 /**
@@ -28,7 +29,7 @@ export function setValue(model, path, value) {
   // taken stays what it was -- and healing them gives the points back.
   const conHarm = /^abilities\.con\.(damage|drain)$/.test(path) && !!model.data.hp;
   const maxBefore = conHarm ? (void model.hpState, model.hpMax) : 0;
-  setPath(model.data, path, value);
+  setPath(model.data, path, path === 'wealth.current' ? walletEntry(model.data, value) : value);
   model.recompute();
   if (conHarm) {
     const moved = model.hpMax - maxBefore;

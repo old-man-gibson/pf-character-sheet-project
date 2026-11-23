@@ -103,7 +103,7 @@ import { rest } from './rest.js';
 import { addTrainingClass } from './training.js';
 import { resolveSaveBonuses } from './stats/saves.js';
 import {
-  addWealthEntry, makeOffering, removeWealthEntry, wealthView, wealthViewOf,
+  addWealthEntry, foldWalletIntoPurse, makeOffering, removeWealthEntry, wealthView, wealthViewOf,
 } from './stats/wealth.js';
 import { essenceScope, recomputeAkashic, veilScope } from './subsystems/akashic.js';
 import {
@@ -319,6 +319,8 @@ export class Character {
    */
   recompute() {
     this.contributions = null;
+    // With a coin for money the purse is where it is kept.
+    foldWalletIntoPurse(this.data);
     // A token for this recalculation. What a recalculation reads but never
     // writes -- the Planner's rows and the Classes table's names -- is checked
     // once per token by what caches it (plannerIndex in progression.js), not

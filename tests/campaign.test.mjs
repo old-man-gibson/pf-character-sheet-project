@@ -64,11 +64,20 @@ for (const id of fixtureIds()) {
     ['skillSystem', 'background'], ['backgroundUse', 'floating'], ['backgroundRanks', 3], ['agingEffects', true], ['vmc', true], ['archetypePackages', true], ['occupations', true], ['traits', 2], ['drawbackTraits', 1], ['mythicFloorLevels', 3]]) {
     const m = new Character(loadCharacter(id));
     const before = numbers(m);
+    // A coin for money moves the wallet into the coin purse, where it stays.
+    const purse = key === 'currency' ? JSON.stringify([m.data.wealth.current, m.data.equipment.coins]) : null;
     m.set(`campaign.${key}`, value);
     const flipped = numbers(m);
     const again = reopen(m);
     check(`${id} ${key}: nothing drifts on reopen`, numbers(again), flipped);
     again.set(`campaign.${key}`, CAMPAIGN_DEFAULTS[key]);
+    if (purse) {
+      check(`${id} ${key}: the wallet went into the purse`, again.data.wealth.current <= 0, true);
+      const [current, coins] = JSON.parse(purse);
+      again.data.wealth.current = current;
+      if (coins) again.data.equipment.coins = coins; else delete again.data.equipment.coins;
+      again.recompute();
+    }
     const back = JSON.parse(numbers(again));
     const orig = JSON.parse(before);
     delete back.data.campaign;
@@ -128,24 +137,50 @@ console.log('\nwhat the money is called');
   check('and it counts as a change', campaignChanges(c.data), ['currency']);
   // A coin for a currency: the purse on Equipment is the same money.
   c.set('equipment.coins', { pp: 1, gp: 400, sp: 2, cp: 7 });
-  c.set('wealth.current', 50);
+  const coins = () => ['pp', 'gp', 'sp', 'cp'].map((k) => c.data.equipment.coins[k]);
   const v = c.wealthView();
-  check('gold counts the coin purse', [v.current, v.purse, v.onHand, v.after], [50, 410.27, 460.27, 460.27]);
-  check('the panel says which is which', draw().includes('wallet 50 · coins 410.27'), true);
-  check('and formulas read all of it', c.scope().mana.current, 460.27);
+  check('gold is the coin purse', [v.current, v.purse, v.onHand, v.after], [0, 410.27, 410.27, 410.27]);
+  check('the panel shows the purse in its own box', [draw().includes('value="410.27" data-set="wealth.current"'), draw().includes('wallet')], [true, false]);
+  check('and formulas read it', c.scope().mana.current, 410.27);
+  c.set('wealth.current', 460.27);
+  check('a figure typed there changes the gold coins', [coins(), c.data.wealth.current, c.wealthView().onHand], [[1, 450, 2, 7], 0, 460.27]);
+  c.set('wealth.current', 460.5);
+  check('with smaller coins for the change', coins(), [1, 450, 4, 10]);
+  c.set('wealth.current', 460.27);
+  check('and taken back the same way when they are there', coins(), [1, 450, 2, 7]);
   c.set('campaign.currency', 'gp');
   check('by its short name too', c.wealthView().onHand, 460.27);
   c.set('campaign.currency', 'Silver pieces');
-  check('silver counts it in silver', c.wealthView().purse, 4102.7);
+  check('silver counts it in silver', c.wealthView().purse, 4602.7);
   c.set('wealth.oathOfOfferings', true); c.set('wealth.manaPerDay', 20);
   c.set('wealth.lastOffering', '2026-01-01');
   c.set('campaign.currency', 'Gold');
   const day = new Date(2026, 0, 3);
-  check('an offering is owed out of both', c.wealthView(day).after, 460.27 - 20);
+  check('an offering is owed out of the purse', c.wealthView(day).after, 460.27 - 20);
   c.makeOffering(day);
-  check('and paid from the wallet, the coins left alone', [c.data.wealth.current, c.data.wealth.baseline, c.data.equipment.coins.gp, c.wealthView(day).gains], [30, 440.27, 400, 0]);
+  check('and paid from it', [c.data.wealth.current, c.data.wealth.baseline, coins(), c.wealthView(day).gains], [0, 440.27, [1, 430, 2, 7], 0]);
   c.set('wealth.oathOfOfferings', false);
+  c.addWealthEntry({ amount: 100, kind: 'session' });
+  check('a ledger line adds to the purse', [coins(), c.data.wealth.current], [[1, 530, 2, 7], 0]);
+  c.addWealthEntry({ amount: 535, kind: 'spend' });
+  check('a spend past the gold coins counts the purse again from gold down', [coins(), c.wealthView().onHand], [[0, 5, 2, 7], 5.27]);
+  c.removeWealthEntry(c.data.wealth.ledger.length - 1);
+  check('removing the line gives it back', [coins(), c.wealthView().onHand], [[0, 540, 2, 7], 540.27]);
+  c.addWealthEntry({ amount: 600, kind: 'spend' });
+  check('a spend past the whole purse empties it and the rest is owing',
+    [coins(), c.data.wealth.current, c.wealthView().onHand, draw().includes('owing 59.73')], [[0, 0, 0, 0], -59.73, -59.73, true]);
+  c.set('equipment.coins', { pp: 0, gp: 100, sp: 0, cp: 0 });
+  check('which the next coins pay', [coins(), c.data.wealth.current, c.wealthView().onHand], [[0, 40, 2, 7], 0, 40.27]);
+  {
+    // A sheet saved with gold in both places opens with it all in the purse.
+    const old = JSON.parse(JSON.stringify(c.toJSON()));
+    old.wealth.current = 50;
+    const o = new Character(old);
+    check('an older sheet\u2019s wallet gold moves into the purse', [o.data.wealth.current, o.data.equipment.coins.gp, o.wealthView().onHand], [0, 90, 90.27]);
+  }
+  c.set('equipment.coins', { pp: 0, gp: 0, sp: 0, cp: 0 });
   c.set('campaign.currency', '');
+  c.set('wealth.current', 30);
   check('mana is not coin', [c.wealthView().purse, c.wealthView().onHand], [0, 30]);
   check('blank is the table\'s again', [c.wealthView().currency, campaignChanges(c.data)], ['Mana', []]);
 }
