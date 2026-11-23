@@ -138,6 +138,15 @@ export function vancianForwardKey(c) {
   return key === 'x' ? null : `vancian.${key}.cl`;
 }
 
+/**
+ * The name a bonus to one spell level's slots goes by: `vancian.wizard.slots.1`.
+ * Null for a block with no name, as its caster level's is.
+ */
+export function vancianSlotKey(c, level) {
+  const cl = vancianForwardKey(c);
+  return cl ? `${cl.slice(0, -'.cl'.length)}.slots.${Number(level) || 0}` : null;
+}
+
 export function manifesterForwardKey(c) {
   const key = slug(c?.name);
   return key === 'x' ? null : `manifester.${key}.level`;

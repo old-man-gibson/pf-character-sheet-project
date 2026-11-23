@@ -12,8 +12,8 @@ import {
 } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { levelFollowingPin } from '../progression.js';
-import { closestName, evaluateAmount, vancianForwardKey } from '../util.js';
-import { lazyScope } from '../scope.js';
+import { closestName, evaluateAmount, vancianForwardKey, vancianSlotKey } from '../util.js';
+import { forwarded, lazyScope } from '../scope.js';
 
 let VANCIAN_TABLES = { classes: [] };
 
@@ -91,7 +91,7 @@ export const VANCIAN_DERIVED = [
     // `used` is play state and stays; `left` is the subtraction and does not.
     path: 'classes',
     list: 'spells',
-    keys: ['dc', 'base', 'classBonus', 'abilityBonus', 'atWill', 'slots', 'knownCount', 'left', 'usedNow'],
+    keys: ['dc', 'base', 'classBonus', 'abilityBonus', 'slotsForwarded', 'atWill', 'slots', 'knownCount', 'left', 'usedNow'],
   },
   { path: 'prepared', keys: ['left', 'usedNow'] },
 ];
@@ -418,6 +418,12 @@ export function recomputeVancian(model) {
       s.abilityBonus = s.base === null ? 0 : bonusSpellSlots(mod, s.level);
       s.atWill = s.level === 0 && hasCantrips;
 
+      // A bonus sent to `vancian.<class>.slots.<level>` (a ring of wizardry)
+      // adds to the slots the table and the casting stat give. It gives no
+      // slots at a level the class cannot cast yet, and a number typed over
+      // the slots is the whole answer, as it always was.
+      const slotKey = vancianSlotKey(c, s.level);
+      s.slotsForwarded = 0;
       if (s.perDay !== null && s.perDay !== undefined) {
         s.slots = Number(s.perDay);          // the player's own number wins
         s.atWill = false;
@@ -426,7 +432,8 @@ export function recomputeVancian(model) {
       } else if (s.base === null || !castableAt(score, s.level)) {
         s.slots = null;
       } else {
-        s.slots = s.base + s.abilityBonus;
+        s.slotsForwarded = slotKey ? forwarded(model, slotKey) : 0;
+        s.slots = Math.max(0, s.base + s.abilityBonus + s.slotsForwarded);
       }
 
       // A domain slot at a spell level the class cannot reach is not a slot.
