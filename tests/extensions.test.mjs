@@ -1897,9 +1897,9 @@ console.log('a catalogue pack\'s tables are menus too: class options, and powers
       .filter((b) => b.kind === 'archetype');
     check('a page whose only label heads a list keeps it as its feature', visions.features.map((f) => f.replaces), [['channel punishment invocation']]);
 
-    const race = activeBlocks([page('race', { name: 'Ridgeling', text: 'Ridgeling Racial Traits\n\nRacial Points: 10\n\nDarkvision: Ridgelings see in the dark.' })])
+    const race = activeBlocks([page('race', { name: 'Ridgeling', text: 'Ridgeling Racial Traits\n\nRacial Points: 10\n\nBase Speed: Ridgelings have a base speed of 30 feet.\n\nDarkvision: Ridgelings see in the dark.' })])
       .find((b) => b.kind === 'race');
-    check('a race\'s point cost is not a trait', race.traits.map((t) => t.name), ['Darkvision']);
+    check('a race\'s point cost and base speed are not traits', race.traits.map((t) => t.name), ['Darkvision']);
   }
 
   // An archetype entry is an archetype block for each class it names.
