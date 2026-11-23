@@ -2072,7 +2072,7 @@ export function ladderDice(ladder, level) {
  * (model/note-fill.js, `fillShownNotes`).
  */
 export const RULE_CORRECTIONS = ['attack-size-sign', 'poor-save-thirds', 'monster-crit-range', 'hp-meter-fill', 'load-penalties',
-  'nonproficiency-penalty', 'weapon-crit-shift', 'pack-notes'];
+  'nonproficiency-penalty', 'weapon-crit-shift', 'pack-notes', 'bonus-order'];
 
 /** Whether a document, as saved, predates a correction. */
 export const savedBefore = (doc, correction) => !(Array.isArray(doc?.corrections) && doc.corrections.includes(correction));

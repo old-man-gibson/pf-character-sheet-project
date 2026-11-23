@@ -1446,6 +1446,28 @@ export function resolveInlineNames(model, { late = false } = {}) {
   // the amounts it came to are listed here as they are (`named`).
   if (!model.contributions) {
     model.contributions = resolveContributions(bonuses, values, model.scope(), targets, null, named);
+    // A bonus to an ability score moves what nearly everything else is built
+    // on, so those are settled first. Where one landed and another bonus is
+    // aimed at an early stat, the second pass works the sheet out with the
+    // ability-score bonuses alone, and that other bonus is worked out again
+    // against it: `{ac += cha.mod}` reads the Charisma that
+    // `{cha.score += 4}` and a headband's enhancement bonus arrive at. The
+    // third pass then puts every amount in.
+    const full = model.contributions;
+    const scores = [];
+    let others = false;
+    full.entries.forEach((e, i) => {
+      const lands = landings(e);
+      if (lands.some(abilityScore)) scores.push(i);
+      else if (lands.some(totalledEarly)) others = true;
+    });
+    if (others && !model.oldBonusOrder && scores.some((i) => full.entries[i].value)) {
+      model.contributions = {
+        ...resolveContributions(scores.map((i) => bonuses[i]), values, model.scope(), targets,
+          (c, j) => full.entries[scores[j]]),
+        full,
+      };
+    }
   } else if (late || named.size) {
     // A bonus aimed only at something totalled later -- a skill, a
     // companion, a weapon, a tracker -- is worked out again, against a sheet
@@ -1460,13 +1482,20 @@ export function resolveInlineNames(model, { late = false } = {}) {
     //
     // A pass that only reads the names again keeps every amount, except the
     // ones sent to names, which are what the names now came to.
-    const prior = model.contributions;
+    //
+    // Where this pass had the ability-score bonuses alone (`full`, above),
+    // only those keep their amounts, and the recompute takes a third pass
+    // with everything in (`unsettled`).
+    const staged = !!model.contributions.full;
+    const prior = model.contributions.full || model.contributions;
+    const stands = staged ? abilityScore : totalledEarly;
     const keep = (c, i) => {
       const e = prior.entries[i];
       if (!e || e.path !== c.path || e.raw !== c.raw) return null;
-      return !late || [...e.lands, ...Object.keys(e.failed || {})].some(totalledEarly) ? e : null;
+      return !(late || staged) || landings(e).some(stands) ? e : null;
     };
     model.contributions = resolveContributions(bonuses, values, model.scope(), targets, keep, named);
+    if (staged) model.contributions.unsettled = true;
   }
   // Every name the prose *reads*, kept beside every name it defines: the
   // parse of each expression is cached by source, so the second pass costs
@@ -1994,6 +2023,13 @@ const absorbsEarly = (model) => Object.values(model.contributions?.absorbed || {
  * keeps the amount the first pass gave it; see resolveInlineNames.
  */
 const totalledEarly = (name) => FORWARD_EARLY.has(name) || inEarlyFamily(name);
+
+/** The six ability scores, as destinations: `cha.score`. */
+const ABILITY_SCORES = new Set(ABILITIES.map((a) => `${a}.score`));
+const abilityScore = (name) => ABILITY_SCORES.has(name);
+
+/** Every destination a resolved bonus is aimed at, landed or not. */
+const landings = (e) => [...e.lands, ...Object.keys(e.failed || {})];
 
 /**
  * What the second recompute pass has to do over again, read off the first

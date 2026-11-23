@@ -1678,8 +1678,36 @@ console.log('forwarded bonuses -- one aimed late reads the early stats with thei
   // A bonus aimed at an early stat still reads the sheet from before any.
   const wis = c.data.abilities.wis.score;
   drop = note('{int.score += 4} {wis.score += int.mod}');
-  check('an early bonus still reads the sheet before any bonus applies', c.data.abilities.wis.score, wis);
+  check('a bonus to an ability score still reads the sheet before any bonus applies', c.data.abilities.wis.score, wis);
   drop();
+
+  // Any other early stat reads the ability scores with their bonuses in.
+  const before = { ac: c.data.defenses.ac, will: c.data.saves.will.total, cha: c.data.abilities.cha.mod };
+  drop = note('{cha.score += 10} {ac += cha.mod} {saves.will += cha.mod}');
+  const cha = c.data.abilities.cha.mod;
+  check('the bonus moved the modifier', cha, before.cha + 5);
+  check('a bonus to AC reads an ability with its bonus in', c.data.defenses.ac, before.ac + cha);
+  check('and so does a bonus to a save', c.data.saves.will.total, before.will + cha);
+  const settledAc = c.data.defenses.ac;
+  c.recompute(); c.recompute();
+  check('recomputing settles it', c.data.defenses.ac, settledAc);
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  const again = new Character(saved);
+  check('reopening keeps it, with nothing in Other',
+    [again.data.defenses.ac, again.offsets['defenses.ac']], [settledAc, c.offsets['defenses.ac']]);
+  // A document saved when the bonus read the score from before its bonuses
+  // holds the lower total. It opens at the right one, not with the
+  // difference taken off in Other.
+  const old = structuredClone(saved);
+  old.corrections = old.corrections.filter((x) => x !== 'bonus-order');
+  for (const key of ['ac', 'touch', 'flatFooted']) old.defenses[key] -= 5;
+  old.saves.will.total -= 5;
+  const opened = new Character(old);
+  check('a document saved under the old order opens with the full bonus',
+    [opened.data.defenses.ac, opened.offsets['defenses.ac'], opened.data.saves.will.total],
+    [settledAc, c.offsets['defenses.ac'], c.data.saves.will.total]);
+  drop();
+  check('and it goes with the bonus', [c.data.defenses.ac, c.data.saves.will.total], [before.ac, before.will]);
 }
 
 /*
