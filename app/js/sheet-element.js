@@ -2659,7 +2659,18 @@ export class CharacterSheetElement extends HTMLElement {
       if (!PART_TYPES.has(picker.type)) picker.addEventListener('change', done, { once: true });
       picker.addEventListener('blur', done, { once: true });
     } else if (press.up) pay();                     // let go already -- a tap -- so its click is running now
-    else owed.timer = setTimeout(() => this.#payRender(owed), 1000);
+    else {
+      // A press still held after the second is a drag, across a number to
+      // select it, say: drawing under it would drop the selection. It is
+      // looked at again each second, and given up on after ten.
+      const wait = () => {
+        owed.timer = setTimeout(() => {
+          if (!press.up && this.#lastPress === press && Date.now() - press.at < 10000) wait();
+          else this.#payRender(owed);
+        }, 1000);
+      };
+      wait();
+    }
   }
 
   /**
@@ -2674,6 +2685,12 @@ export class CharacterSheetElement extends HTMLElement {
     const key = controlKey(active);
     const range = typeof active?.selectionStart === 'number'
       ? [active.selectionStart, active.selectionEnd, active.selectionDirection] : null;
+    // A number box reports no range, but where the browser says what is
+    // selected in it, a number dragged across comes back selected.
+    let picked = false;
+    if (!range && active?.type === 'number' && active.value !== '') {
+      try { picked = String(document.getSelection?.() ?? '') !== ''; } catch { /* no selection to ask */ }
+    }
     this.#render();
     const next = key && this.shadowRoot.querySelector(key);
     if (!next) return;
@@ -2681,6 +2698,8 @@ export class CharacterSheetElement extends HTMLElement {
     next.focus();
     if (range) {
       try { next.setSelectionRange(...range); } catch { /* not a text box after all */ }
+    } else if (picked) {
+      try { next.select(); } catch { caretToEnd(next); }
     } else caretToEnd(next);
   }
 
