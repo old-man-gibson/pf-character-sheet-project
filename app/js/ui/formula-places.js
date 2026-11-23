@@ -425,6 +425,7 @@ function placeOf(model, ref) {
     // A save's or the AC's typed-bonus cell on the Stats tab: `statCell:<path>`.
     case 'statCell': return { tab: 'stats', sel: [set(ref.slice('statCell:'.length))] };
     case 'vancianConcentration': return { tab: 'vancian', sel: [set(`vancian.classes.${a}.concentration`)] };
+    case 'vancianCasterLevel': return { tab: 'vancian', sel: [set(`vancian.classes.${a}.casterLevelOverride`)] };
     case 'deckManipulations': return deckPlace(set('cardcasting.manipulationsAvailable'), ['deck-manipulations']);
     case 'essence': return { tab: 'akashic', sel: [set(`akashic.essence.${a}`)] };
     // A companion's number-or-formula box or a movement row's bonus:

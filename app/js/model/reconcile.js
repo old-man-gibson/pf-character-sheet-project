@@ -561,13 +561,12 @@ export const FORMULA_FIELDS = [
     },
   },
   {
-    // The essence pool and its sources. The Essence Boon cell is not drawn
-    // while the casting tradition supplies the boon.
+    // The essence pool and its sources.
     key: 'essence', source: 'player', where: 'the Akashic tab',
     collect: (model) => {
       const a = model.data.akashic;
       return [['pool', 'Essence pool'], ...ESSENCE_SOURCES]
-        .filter(([key]) => stringFormula(a?.essence?.[key]) && !(key === 'boon' && a.calc?.traditionBoon))
+        .filter(([key]) => stringFormula(a?.essence?.[key]))
         .map(([key, label]) => ({
           id: `essence-${key}`, place: `essence:${key}`, name: /^essence/i.test(label) ? label : `${label} essence`,
           formula: a.essence[key], value: a.calc?.typed?.[key]?.value, error: a.calc?.typed?.[key]?.error,
@@ -586,11 +585,19 @@ export const FORMULA_FIELDS = [
   },
   {
     key: 'vancianConcentration', source: 'player', where: 'the Vancian tab',
-    collect: (model) => (model.data.vancian?.classes || []).flatMap((c, i) => (stringFormula(c.concentration) ? [{
-      id: `vancian-${i}-concentration`, place: `vancianConcentration:${i}`,
-      name: `${String(c.name || c.slotType || 'Casting class').trim()} concentration`,
-      formula: c.concentration, value: c.concentrationNum, error: c.concentrationError,
-    }] : [])),
+    collect: (model) => (model.data.vancian?.classes || []).flatMap((c, i) => {
+      const name = String(c.name || c.slotType || 'Casting class').trim();
+      return [
+        ...(stringFormula(c.casterLevelOverride) ? [{
+          id: `vancian-${i}-caster-level`, place: `vancianCasterLevel:${i}`, name: `${name} caster level`,
+          formula: c.casterLevelOverride, value: c.casterLevelBase, error: c.casterLevelError,
+        }] : []),
+        ...(stringFormula(c.concentration) ? [{
+          id: `vancian-${i}-concentration`, place: `vancianConcentration:${i}`, name: `${name} concentration`,
+          formula: c.concentration, value: c.concentrationNum, error: c.concentrationError,
+        }] : []),
+      ];
+    }),
   },
   {
     // A buff's six dials and its extra bonuses, each a number or a rule.

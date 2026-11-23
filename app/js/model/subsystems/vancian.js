@@ -84,7 +84,7 @@ export const VANCIAN_DERIVED = [
   {
     path: 'classes',
     keys: ['statMod', 'statScore', 'plannerLevel', 'casterLevel', 'casterLevelBase',
-      'casterLevelForwarded', 'casterLevelWaiting', 'levelClass', 'tableName', 'concentrationNum', 'concentrationError', 'concentrationAuto',
+      'casterLevelForwarded', 'casterLevelWaiting', 'casterLevelError', 'levelClass', 'tableName', 'concentrationNum', 'concentrationError', 'concentrationAuto',
       'slotTypeUnknown', 'noun', 'totalPerDay', 'totalKnown', 'totalLeft', 'highestLevel'],
   },
   {
@@ -331,7 +331,17 @@ export function recomputeVancian(model) {
     // Counted off the class the block is, which its name may only describe:
     // "Wizard (Evoker)" counts Wizard levels (see blockClassName).
     c.levelClass = model.blockClassName(c.name, c.slotType);
-    const counted = levelFollowingPin(model, c.levelClass, c.casterLevelOverride, { forwardKey: vancianForwardKey(c) });
+    // The pin is a number or a formula (`class.cleric.level +
+    // class.mystic_theurge.level`, for a class that advances this one's
+    // casting). A formula that does not work out follows the Planner.
+    let pin = c.casterLevelOverride;
+    c.casterLevelError = null;
+    if (typeof pin === 'string' && pin.trim() !== '' && !Number.isFinite(Number(pin))) {
+      const worked = evaluateAmount(pin, lazyScope(model));
+      c.casterLevelError = worked.error;
+      pin = worked.error ? null : worked.value;
+    }
+    const counted = levelFollowingPin(model, c.levelClass, pin, { forwardKey: vancianForwardKey(c) });
     const level = counted.base;
     /*
      * A bonus forwarded to `vancian.<class>.cl` raises the caster level and

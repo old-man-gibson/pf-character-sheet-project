@@ -12044,6 +12044,34 @@ console.log('tradition boons -- one pool of steps, split between points and esse
     [c.data.akashic.calc.traditionBoon, c.data.akashic.calc.sources], [16, 16]);
   check('and the shortfall against his typed pool is flagged, not hidden',
     c.data.akashic.calc.sourcesShort, 16 - c.data.akashic.calc.pool);
+  {
+    // The Essence Boon cell: blank is the tradition's essence, and a number or
+    // a formula typed there stands instead. The workbook's own 20 never
+    // counted, so it is cleared once and the pool opens where it was.
+    const k = () => c.data.akashic.calc;
+    check("the workbook's own figure is cleared", [c.data.akashic.essence.boon, k().boonAuto], [0, true]);
+    c.set('akashic.essence.boon', 30);
+    check("a typed boon stands in place of the tradition's", [k().typed.boon.value, k().sources, k().traditionBoon], [30, 30, 16]);
+    const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+    check('and is kept on reopen', [again.data.akashic.essence.boon, again.data.akashic.calc.sources], [30, 30]);
+    c.set('akashic.essence.boon', 'level * 2 + 1');
+    check('or a formula', [k().typed.boon.value, k().sources], [c.data.identity.level * 2 + 1, c.data.identity.level * 2 + 1]);
+    c.set('akashic.essence.boon', null);
+    check("blank is the tradition's again", [k().typed.boon.value, k().sources], [16, 16]);
+  }
+  {
+    // A casting class's caster level takes a formula: a prestige class that
+    // advances another class's casting adds its levels there.
+    const v = new Character(load('angou'));
+    v.listAdd('vancian.classes', { name: 'Wizard', slotType: 'Wizard', stat: 'Int', stat2: '', casterLevelOverride: 'level - 3', concentration: null });
+    const w = () => v.data.vancian.classes[v.data.vancian.classes.length - 1];
+    const level = v.data.identity.level;
+    check('a caster level written as a formula', [w().casterLevel, w().casterLevelBase, w().casterLevelError], [level - 3, level - 3, null]);
+    v.setItem('vancian.classes', v.data.vancian.classes.length - 1, 'casterLevelOverride', 'no.such.name +');
+    check('one that does not work out follows the Planner', [w().casterLevelBase, typeof w().casterLevelError], [w().plannerLevel, 'string']);
+    v.setItem('vancian.classes', v.data.vancian.classes.length - 1, 'casterLevelOverride', 4);
+    check('a number still pins it', [w().casterLevel, w().casterLevelError], [4, null]);
+  }
 
   // The split moves a step at a time, and the halves always add back up.
   c.set('training.magic.tradition.boonSP', 6);

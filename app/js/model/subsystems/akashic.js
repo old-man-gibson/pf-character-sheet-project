@@ -418,14 +418,14 @@ export function recomputeAkashic(model) {
 
   // The sheet's "Essence Boon" is the casting tradition's own pool taken as
   // essence rather than as spell points -- the same number, written twice.
-  // Now that the Spheres tab works it out, it is computed here instead of
-  // typed, and the typed figure stands in only for a character whose
-  // tradition grants nothing (a homebrew source the tradition never saw).
+  // The Spheres tab works it out, so a blank or 0 cell takes that figure. A
+  // number or a formula typed there stands instead: a tradition counted on
+  // both sides of a gestalt, or a source the tradition never saw.
   const traditionBoon = Number(model.data.training?.magic?.traditionEssence) || 0;
-  const sources = ESSENCE_SOURCES.reduce(
-    (t, [key]) => t + (key === 'boon' && traditionBoon ? traditionBoon : typed[key].value),
-    0,
-  );
+  if (model.oldBoonCell && traditionBoon && typeof a.essence?.boon === 'number') a.essence.boon = 0;
+  const boonAuto = essenceCellBlank(a.essence?.boon);
+  if (boonAuto) typed.boon = { value: traditionBoon, error: null };
+  const sources = ESSENCE_SOURCES.reduce((t, [key]) => t + typed[key].value, 0);
   // A blank or 0 Pool is the sources added up, for a character who weaves
   // veils: a named veilweaving class or the Veilweaving sphere. (A tradition's
   // boons count essence for any sphere caster.) A typed pool is checked
@@ -466,6 +466,7 @@ export function recomputeAkashic(model) {
     poolForwarded,
     sources,
     traditionBoon,
+    boonAuto,
     // What each pool cell came to ({ value, error }), and what the Radiant
     // Dawn maneuvers grant; a blank Radiant Dawn cell takes that figure.
     typed,
