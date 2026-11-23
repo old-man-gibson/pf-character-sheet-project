@@ -60,6 +60,7 @@ import { join } from 'node:path';
 import {
   unwrapTemplates, delist, stripMarkers, emphasis, delink, collapseFamilies, useTemplateSources,
 } from './wikitext.mjs';
+import { splitRacePage, fcoClassesFrom } from './wiki-races.mjs';
 import { systemClassifier, GENERAL } from './wiki-systems.mjs';
 import { slugId } from '../app/js/extensions.js';
 import { readArgs } from './lib/cli.mjs';
@@ -185,6 +186,7 @@ const LABELS = {
     resistance: 'Spell resistance',
   },
   'class option': { class: 'Class', option: 'Option' },
+  'favored class option': { class: 'Class' },
   archetype: {
     class: 'Class',
     featurereplace: 'Replaces',
@@ -250,6 +252,24 @@ const COMPOSE = {
    * every chakra's picker while the catalogue still knows them by name.
    */
   veil: (f) => ({ lines: f.has('slot') ? [] : [['Shapeable Slot(s)', 'None']], used: [] }),
+  /*
+   * A magic item in the words of its stat block, which every other pack uses
+   * too: Aura ("faint transmutation"), CL, Requirements, Cost. Its Category is
+   * the kind of item without the wiki's "Magic" in front: a Magic Ring is a Ring.
+   */
+  'magic item': (f) => {
+    const one = (k) => (f.get(k) || [])[0] || '';
+    return {
+      lines: [
+        ['Category', one('category').replace(/^magic\s+/i, '')],
+        ['Aura', [one('aurastrength'), one('auraschool')].filter(Boolean).join(' ')],
+        ['CL', one('casterlevel')],
+        ['Requirements', one('conreq')],
+        ['Cost', one('concost')],
+      ],
+      used: ['category', 'aurastrength', 'auraschool', 'casterlevel', 'conreq', 'concost'],
+    };
+  },
   /*
    * The three below each state the field that *identifies* the entry, and
    * each has a default, because `STRUCTURED_KINDS` matches on a field being
@@ -652,6 +672,8 @@ for await (const line of rl) {
  * paragraphs are the class's features and at what levels they come.
  */
 const EXPANDED = ['Class Table'];
+/** The classes a race's favored class options are written under, from `{{FCO}}`'s source. */
+let FCO_CLASSES = null;
 if (opt('templates')) {
   const sources = [];
   const trl = createInterface({ input: createReadStream(opt('templates'), { encoding: 'utf8' }), crlfDelay: Infinity });
@@ -660,6 +682,10 @@ if (opt('templates')) {
     const rec = JSON.parse(line);
     const name = String(rec.title || '').replace(/^Template:/i, '');
     if (EXPANDED.some((n) => n.toLowerCase() === name.toLowerCase())) sources.push([name, rec.body]);
+    // The classes a race's favored class options are written under.
+    if (/^fco$/i.test(name)) {
+      FCO_CLASSES = fcoClassesFrom(rec.body);
+    }
   }
   useTemplateSources(sources);
   console.log(`templates expanded from source: ${sources.map(([n]) => n).join(', ') || 'none found'}`);
@@ -743,11 +769,25 @@ for (const rec of records) {
         ? sections.flatMap((s, si) => (s ? splitListPage(s, { intro: si === 0 }) : []))
         : splitListPage(rec);
     }
+    pieces = pieces.flatMap((p) => splitRacePage(p, FCO_CLASSES));
     if (pieces.length > 1) listed += pieces.length;
-    const key = `${dir}\n${name}`;
-    if (!groups.has(key)) groups.set(key, { dir, name, perSphere, recs: [] });
-    groups.get(key).recs.push(...pieces);
+    // An entry cut out of a page of another kind -- a race's alternate traits --
+    // goes in with its own kind where documents are kept by kind.
+    for (const piece of pieces) {
+      const own = piece.kind !== rec.kind && (by === 'kind' || by === 'system' || by === 'book') ? plural(piece.kind) : name;
+      const key = `${dir}\n${own}`;
+      if (!groups.has(key)) groups.set(key, { dir, name: own, perSphere, recs: [] });
+      groups.get(key).recs.push(piece);
+    }
   });
+}
+
+// A book whose pages never name its publisher is named by its own
+// publication page, so its pack has an author like every other.
+for (const rec of records) {
+  if (rec.kind !== 'publication') continue;
+  const pub = (collapseFamilies(rec.fields).get('sourcepub') || [])[0];
+  if (pub && !publisher.has(field(rec.title))) publisher.set(field(rec.title), field(pub));
 }
 
 /* ---------------- writing ---------------- */
