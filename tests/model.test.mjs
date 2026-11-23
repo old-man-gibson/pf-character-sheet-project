@@ -15742,5 +15742,37 @@ console.log('a character begun here starts with no hit points nothing granted');
   check('an amount added after is kept, sixes or not', [typed.hpState.max, kept.offsets['hp.total'], kept.hpState.max], [18, 18, 18]);
 }
 
+console.log('a magic sphere may have a caster level of its own');
+{
+  const c = new Character(blankDocument({ id: 'zz-spherecl', name: 'Shifter', level: 8 }));
+  c.set('classes', [{ name: 'Shifter' }]);
+  c.listAdd('training.magic.classes', { name: 'Shifter', type: 'Mid', classLevelsOverride: 8, levels: [] });
+  const m = () => c.data.training.magic;
+  const row = (name) => m().sphereRows.find((r) => r.sphere === name);
+  const global = [m().globalCL, m().globalDC];
+  check('a mid-caster of 8 levels casts at 6', global[0], 6);
+  c.setSphereBonus('magic', 'Alteration', 'clBase', 8);
+  check('a caster level written for a sphere stands in for it', [row('Alteration').cl, row('Alteration').dc], [8, global[1] + 1]);
+  check('and for that sphere alone', [row('Dark').cl, row('Dark').dc, m().globalCL], [global[0], global[1], global[0]]);
+  c.setSphereBonus('magic', 'Alteration', 'clBase', 'class.shifter.level');
+  check('a formula too', [row('Alteration').cl, row('Alteration').clBaseNum, row('Alteration').clBaseError], [8, 8, null]);
+  c.setSphereBonus('magic', 'Alteration', 'clBonus', 1);
+  c.set('formulaNotes', '{sphere.alteration.cl += 2}');
+  check('bonuses to the sphere still add', [row('Alteration').cl, row('Alteration').dc], [11, global[1] + 1 + 1]);
+  c.set('formulaNotes', '');
+  c.setSphereBonus('magic', 'Alteration', 'clBonus', 0);
+  check('formulas read it', c.scope().sphere.alteration.cl, 8);
+  check('the Formulas tab lists it', c.audit().find((r) => r.id === 'sphere-magic-alteration-clBase')?.name, 'Alteration CL =');
+  c.setSphereBonus('magic', 'Alteration', 'clBase', 'no.such.name +');
+  check('one that does not work out is left out and says so', [row('Alteration').cl, typeof row('Alteration').clBaseError], [global[0], 'string']);
+  c.setSphereBonus('magic', 'Alteration', 'clBase', 8);
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('it is kept in the file', again.data.training.magic.sphereRows.find((r) => r.sphere === 'Alteration').cl, 8);
+  c.setSphereBonus('magic', 'Alteration', 'clBase', '');
+  check('blank follows the character again', [row('Alteration').cl, row('Alteration').clBaseNum], [global[0], null]);
+  c.setSphereBonus('magic', 'Alteration', 'clBase', 0);
+  check('and so does 0', row('Alteration').cl, global[0]);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -484,7 +484,7 @@ function sphereBonusPanel(model, sideKey, side) {
     // tradition, a bonus talent, a customized weapon, a technique -- or a
     // bonus typed or forwarded into it. The rest fold under All spheres.
     const rows = side.sphereRows || [];
-    const active = rows.filter((r) => r.talents > 0 || r.rankBonus || r.dcBonus || r.clBonus
+    const active = rows.filter((r) => r.talents > 0 || r.rankBonus || r.dcBonus || r.clBonus || r.clBase
       || r.clForwarded || r.babForwarded || r.dcForwarded);
     const isMagic = sideKey === 'magic';
     const [[rankField, rankLabel]] = TRAINING_SIDES[sideKey].sphereColumns;
@@ -504,9 +504,18 @@ function sphereBonusPanel(model, sideKey, side) {
       },
     ) + forwardedBadge(model, sphereForwardKey(r.sphere) ? `${sphereForwardKey(r.sphere)}.${into}` : '', {
       waiting: into === 'cl' && r.clWaiting ? 'no casting class has a level yet' : '' });
+    // A magic sphere's own caster level, blank while it follows the character's.
+    const own = (r) => exprField(`data-sphere-bonus="${esc(`magic|${r.sphere}|clBase`)}"`, r.clBase || '', {
+      width: '4rem',
+      placeholder: side.globalCL ?? '',
+      value: r.clBaseNum,
+      error: r.clBaseError,
+      title: 'A number or a formula, e.g. class.shifter.level. Blank uses the character\u2019s caster level.',
+    });
     const render = (r) => `<tr>
         <td>${esc(r.sphere)}</td>
         <td class="num">${r.talents || ''}</td>
+        ${isMagic ? `<td class="num">${own(r)}</td>` : ''}
         <td class="num">${bonus(r, rankField, 'floor(level / 4)', TRAINING_SIDES[sideKey].rankInto)}</td>
         <td class="num">${bonus(r, 'dcBonus', 'floor(level / 6)', 'dc')}</td>
         <td class="num total">${isMagic ? `${r.cl} / ${r.dc}` : `${fmt(r.attack)} / ${r.dc}`}</td>
@@ -520,6 +529,7 @@ function sphereBonusPanel(model, sideKey, side) {
                 ranks, and those are named in the hint under the table. The
                 skill spheres' Rank+ is on the Guile tab, where ranks are the
                 thing being added to. */''}
+          ${isMagic ? '<th class="num" title="This sphere\u2019s caster level in place of the character\u2019s. CL+ still adds to it.">CL =</th>' : ''}
           <th class="num" title="${esc(isMagic
     ? 'A bonus to this sphere’s caster level only'
     : 'A bonus to this sphere’s attack bonus only (its BAB, or the skill ranks Alchemy and Beastmastery use).')}">${
@@ -527,7 +537,7 @@ function sphereBonusPanel(model, sideKey, side) {
           <th class="num" title="A bonus to this sphere’s save DC only">DC+</th>
           <th class="num">${TRAINING_SIDES[sideKey].totalLabel}</th></tr></thead>
         <tbody>${active.length ? active.map(render).join('')
-    : `<tr><td colspan="5" class="hint">No spheres yet. A talent from a class level, the tradition or a bonus talent adds its sphere here.</td></tr>`}</tbody>
+    : `<tr><td colspan="${isMagic ? 6 : 5}" class="hint">No spheres yet. A talent from a class level, the tradition or a bonus talent adds its sphere here.</td></tr>`}</tbody>
       </table></div>
       <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">All spheres (${rows.length - active.length})</summary>
         <div class="tablewrap"><table><tbody>${rows.filter((r) => !active.includes(r)).map(render).join('')}</tbody></table></div>
