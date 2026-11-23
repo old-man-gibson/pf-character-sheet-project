@@ -19,7 +19,7 @@ import {
 } from '../companions.js';
 import { FEATURE_GROUP_COLORS, normalizeHex } from '../tracker-style.js';
 import { Character } from './character.js';
-import { mythicComputedTier } from './campaign.js';
+import { adoptTypedTrialTier, mythicComputedTier } from './campaign.js';
 import { normalizeWealth } from './stats/wealth.js';
 import { linksToSteps } from './session-chains.js';
 import { importAkashic, splitVeilName } from './subsystems/akashic.js';
@@ -1114,6 +1114,7 @@ export function normalise(model) {
     const imported = Number(d.identity?.mythicTier) || 0;
     d.mythic.tierOverride = imported !== computed ? imported : null;
   }
+  adoptTypedTrialTier(d);
   // Further mythic paths past the first (Dual Path and the like): each the
   // path, its 1st-tier base ability, and what granted it. The first path
   // stays `mythic.path` and is the one the bonus hit points per tier follow.
