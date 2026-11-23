@@ -87,7 +87,7 @@ function recipePlace(model, family, p) {
     case 'miscCMD': return 'defenses:miscCMD';
     case 'miscAttack': return 'overview:attack.miscBonus';
     case 'initMisc': return 'overview:hp.initMisc';
-    case 'mythicTier': return mythicPlace(c, 'tierOverride');
+    case 'mythicTier': return mythicPlace(c, campaignRules(c).mythicTier === 'trials' ? 'trialTier' : 'tierOverride');
     case 'armor': return c.equipment?.armor?.active ? 'armor' : null;
     case 'shield': {
       const i = (c.equipment?.shields || []).findIndex((s) => s?.active);

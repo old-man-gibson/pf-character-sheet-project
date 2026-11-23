@@ -26,6 +26,7 @@ import { downloadFile } from './download.js';
 import { runtime } from './extension-runtime.js';
 import { campaignPreset, changedRuleTitles, presetCampaign } from './model/campaign.js';
 import { readShared, sharedRules, writeShared } from './shared-rules.js';
+import { campaignLink } from './campaign-link.js';
 import {
   BLOCK_KINDS, TABLE_KINDS, inspectExtension, normalizeExtension, normalizeBlock, blankExtension,
   describeSummary, summarize, slugId, looksLikeExtension, looksLikeLibrary, buildLibrary, planLibrary,
@@ -400,6 +401,8 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
    * them, and saved or loaded as a file. A character set to its own rules
    * keeps them.
    */
+  // True after Copy link, so the link stays on show to be copied by hand.
+  let rulesLink = false;
   function rulesHtml() {
     const shared = readShared();
     const on = !!shared?.on;
@@ -415,9 +418,11 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
         <div class="actions">
           <button data-action="rules-save" ${on ? '' : 'disabled'} title="Download the shared rules as campaign-rules.json">Save as a file</button>
           <button data-action="rules-load" title="Load shared rules from a file.">Load from a file…</button>
+          <button data-action="rules-link" ${on ? '' : 'disabled'} title="Copy a link that opens the app with the shared rules">Copy link</button>
           ${on && changed.length ? '<button data-action="rules-reset" title="Reset the shared rules to defaults">Reset to defaults</button>' : ''}
           <input type="file" accept="application/json,.json" data-rules-file hidden>
         </div>
+        ${rulesLink && on ? `<label>Campaign link <input type="text" readonly data-rules-link value="${esc(campaignLink(shared.rules))}"></label>` : ''}
       </div>`;
   }
 
@@ -673,6 +678,7 @@ Hit Die: d12.
         case 'template': return `${b.features.length} feature(s): ${b.features.map((f) => f.name).join(', ')}`;
         case 'options': return [b.class && `for ${b.class}'s ${b.feature || '?'}`, `${b.options.length} entr${b.options.length === 1 ? 'y' : 'ies'}`,
           [...new Set(b.options.map((o) => o.category).filter(Boolean))].join(', ')].filter(Boolean).join(' · ');
+        case 'occupation': return [`pick ${b.picks} of ${b.skills.join(', ')}`, b.feats.length ? `feat: ${b.feats.join(' or ')}` : '', b.money].filter(Boolean).join(' · ');
         case 'package': return [b.class ? `for ${b.class}` : 'any class', b.includes.length ? `includes ${b.includes.join(', ')}` : '',
           b.grants.length ? `grants ${b.grants.join(', ')}` : '', b.features.length ? `${b.features.length} feature(s)` : ''].filter(Boolean).join(' · ');
         default: return '';
@@ -1399,6 +1405,17 @@ Hit Die: d12.
           ${F(i, 'name', 'Title', b.name)}
           ${A(i, 'text', 'Body', b.text, 6)}
         </div>`;
+      case 'occupation':
+        return `<div class="fields">
+          ${F(i, 'name', 'Occupation', b.name)}
+          ${F(i, 'picks', 'Skills to pick', b.picks)}
+          ${F(i, 'skills', 'Skills offered', b.skills.join(', '), { wide: true, ph: 'Acrobatics, Climb, Profession (sailor), Knowledge (any)' })}
+          ${F(i, 'feats', 'Bonus feats to choose from', b.feats.join(', '), { wide: true, ph: 'blank: no bonus feat' })}
+          ${F(i, 'money', 'Starting money', b.money, { ph: '3d4 × 10 gp' })}
+          ${F(i, 'alignment', 'Alignment', b.alignment, { ph: 'Any' })}
+          ${A(i, 'text', 'Text', b.text, 3)}
+          ${F(i, 'source', 'Source', b.source, { wide: true })}
+        </div>`;
       case 'package':
         return `<div class="fields">
           ${F(i, 'name', 'Package name', b.name)}
@@ -1572,6 +1589,18 @@ Hit Die: d12.
         downloadFile('campaign-rules.json', JSON.stringify(campaignPreset({ campaign: shared.rules }), null, 1));
       });
       q('[data-action="rules-load"]')?.addEventListener('click', () => q('[data-rules-file]')?.click());
+      q('[data-action="rules-link"]')?.addEventListener('click', async () => {
+        const shared = readShared();
+        if (!shared) return;
+        let copied = true;
+        try { await navigator.clipboard.writeText(campaignLink(shared.rules)); } catch { copied = false; }
+        rulesLink = true;
+        notice = copied ? 'Campaign link copied. It opens the app with the shared rules.'
+          : 'Select the campaign link below and copy it. It opens the app with the shared rules.';
+        error = null;
+        render();
+        if (!copied) q('[data-rules-link]')?.select();
+      });
       q('[data-rules-file]')?.addEventListener('change', async (e) => {
         const file = e.target.files?.[0];
         e.target.value = '';
@@ -1817,13 +1846,13 @@ Hit Die: d12.
       return;
     }
     switch (key) {
-      case 'hd': case 'skillRanks': b[key] = Number(value) || 0; return;
+      case 'hd': case 'skillRanks': case 'picks': b[key] = Number(value) || 0; return;
       case 'bab': b.bab = Number(value) || 0.75; return;
       case 'speed': b.speed = value === '' ? null : Number(value) || 0; return;
       case 'goodFort': case 'goodRef': case 'goodWill': b[key] = !!value; return;
       case 'type': b.type = value || null; return;
       case 'minFormula': b.minFormula = value === '' ? null : value; return;
-      case 'classSkills': case 'languages': case 'replaces': case 'stacksWith': case 'includes': b[key] = String(value).split(',').map((s) => s.trim()).filter(Boolean); return;
+      case 'classSkills': case 'languages': case 'skills': case 'feats': case 'replaces': case 'stacksWith': case 'includes': b[key] = String(value).split(',').map((s) => s.trim()).filter(Boolean); return;
       case 'grants': b.grants = normalizeBlock({ ...b, grants: String(value).split(',') }).grants; return;
       case 'features':
         if (b.kind === 'package') { b.features = parseClassFeatures(value); return; }

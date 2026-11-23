@@ -39,7 +39,7 @@ const COMPUTED_PATHS = [
   'defenses.acBonuses.abpDeflection', 'defenses.acBonuses.abpNatural',
   'saves.*.base', 'saves.*.total', 'saves.*.bonuses.abpResistance',
   'skills.*.bonus', 'skills.*.abilityMod', 'skills.*.totalRanks', 'skills.*.sphereRanks',
-  'skills.*.backgroundFree',
+  'skills.*.backgroundFree', 'skills.*.occupationSkill', 'skills.*.occupationBonus',
   'skillBudget.*',
   // The capacity and the load are worked out; Ant Haul, the score bonus,
   // the ability and the penalty switch are typed.

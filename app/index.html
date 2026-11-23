@@ -331,6 +331,18 @@
   </form>
 </dialog>
 
+<dialog id="rulesLinkDialog" class="box" aria-labelledby="rulesLinkTitle">
+  <form id="rulesLinkForm">
+    <h2 id="rulesLinkTitle">Use these campaign rules?</h2>
+    <p id="rulesLinkWhat"></p>
+    <p class="hint">All characters in this browser will use them, except characters set to their own rules.</p>
+    <div class="actions">
+      <button type="button" id="rulesLinkCancel" class="btn">Not now</button>
+      <button type="submit" class="btn primary">Use these rules</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="newDialog" class="box">
   <form id="newForm" method="dialog">
     <h2>New character</h2>
@@ -398,6 +410,8 @@
   import { gmToolsList } from './js/gm-tools.js';
   import { CAMPAIGN_DEFAULTS, campaignRules } from './js/model/campaign.js';
   import { readShared, writeShared } from './js/shared-rules.js';
+  import { changedRuleTitles, sameCampaign } from './js/model/campaign.js';
+  import { linkRules } from './js/campaign-link.js';
 
   const sheet = document.getElementById('sheet');
   const picker = document.getElementById('picker');
@@ -1395,6 +1409,41 @@
 
   draw();
   select();
+
+  /*
+   * A campaign link (js/campaign-link.js): the address carries campaign rules
+   * after its #. Ask, then make them the rules every character shares. The
+   * rules leave the address either way, so a reload does not ask again.
+   */
+  const rulesLinkDialog = document.getElementById('rulesLinkDialog');
+  let linkedRules = null;
+  function readRulesLink() {
+    const rules = linkRules(location.hash);
+    if (!rules) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    const shared = readShared();
+    if (shared?.on && sameCampaign(shared.rules, rules)) {
+      say('ok', 'This browser already uses the campaign rules from the link.');
+      return;
+    }
+    linkedRules = rules;
+    const changed = changedRuleTitles(rules);
+    document.getElementById('rulesLinkWhat').textContent = changed.length
+      ? `This link changes ${changed.length} rule${changed.length === 1 ? '' : 's'} from the defaults: ${changed.join(', ')}.`
+      : 'This link sets every rule to its default.';
+    if (!rulesLinkDialog.open) rulesLinkDialog.showModal();
+  }
+  document.getElementById('rulesLinkCancel').addEventListener('click', () => rulesLinkDialog.close());
+  document.getElementById('rulesLinkForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    rulesLinkDialog.close();
+    if (!linkedRules) return;
+    writeShared({ on: true, rules: linkedRules });
+    linkedRules = null;
+    say('ok', 'Campaign rules applied. You can change them in Extensions and Rules.');
+  });
+  addEventListener('hashchange', readRulesLink);
+  readRulesLink();
 
   // What was removed on an earlier visit is still restorable until it is a day
   // old; say so, unless the load already had something to say.

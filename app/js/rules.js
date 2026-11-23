@@ -832,6 +832,9 @@ export const BACKGROUND_SKILLS = ['Appraise', 'Artistry', 'Craft', 'Handle Anima
   'Kn. (engineering)', 'Kn. (geography)', 'Kn. (history)', 'Kn. (nobility)',
   'Linguistics', 'Lore', 'Perform', 'Profession', 'Sleight of Hand'];
 
+/** Whether a skill row is a class skill: ticked, or picked for the occupation (a campaign rule). */
+export const isClassSkill = (skill) => !!(skill?.classSkill || skill?.occupationSkill);
+
 /** Whether a skill row is a background skill: by its name, whatever its variant. */
 export function isBackgroundSkill(skill) {
   const name = String(skill?.name ?? skill ?? '');

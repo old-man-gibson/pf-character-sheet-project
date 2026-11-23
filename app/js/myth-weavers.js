@@ -31,7 +31,7 @@
  * table's way of filling the sheet.
  */
 
-import { abpGroupTotal, critMultOf, threatText, fmt } from './rules.js';
+import { abpGroupTotal, critMultOf, isClassSkill, threatText, fmt } from './rules.js';
 import { hasTokens, formatValue } from './inline.js';
 import { eachShown } from './ui/prose.js';
 
@@ -347,7 +347,7 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
     const k = `Skill${two(i + 1)}`;
     const ranks = num(s.totalRanks);
     const mod = num(s.abilityMod);
-    const classSkill = !!s.classSkill;
+    const classSkill = isClassSkill(s);
     const penalty = s.armorPenalty ? acp : 0;
     const total = num(s.bonus);
     set(k, name); set(`${k}Ab`, String(s.abilities?.[0] || '').slice(0, 3)); if (classSkill) set(`${k}CC`, '1');

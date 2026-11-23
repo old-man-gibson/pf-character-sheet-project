@@ -4255,6 +4255,17 @@ console.log('a psionic power’s note reads {…}');
   c.set('psionics.classes', [{ name: 'Psion', stat: 'Int', powers: [{ name: 'Mind Thrust', level: '1', note: 'Deals {thrust.dice = 2}d10' }] }]);
   check('a name defined in a power note can be read', c.scope().thrust?.dice, 2);
   check('and the Formulas tab says where it is', describeSource('powerNote:0:0'), 'power 1 of manifesting class 1, its note');
+  {
+    const doc = { mythic: { abilities: [{ name: 'Beyond Morality', featChoice: 'Mythic Improved Initiative {initiative += 1}' }, { name: '', featChoice: '' }] } };
+    check('a mythic feat is named as a feat is',
+      [describeSource('mythic:0:featEffect', doc), describeSource('mythic:0:featChoice', doc)],
+      ['Mythic Improved Initiative, its effect', 'Mythic Improved Initiative']);
+    check('and a path ability by its own name',
+      [describeSource('mythic:0:effect', doc), describeSource('mythic:0', doc)], ['Beyond Morality, its effect', 'Beyond Morality']);
+    check('a row with no name keeps its tier',
+      [describeSource('mythic:1:featEffect', doc), describeSource('mythic:1:effect', doc)],
+      ['the tier 2 feat’s effect', 'the tier 2 ability’s effect']);
+  }
 }
 
 console.log('an added veilweaving class row is shown until it is filled or removed');

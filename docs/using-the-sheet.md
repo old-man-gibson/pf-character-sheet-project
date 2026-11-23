@@ -359,14 +359,16 @@ straight there (*xp*, *milestones*, *trials* and *hit points* find it too).
 | **Hit points** | maximum every level | *Average after 1st*: half the die and 1 (5 on a d8). *Rolled after 1st*: a box per level on the Hit points panel; a level not rolled yet counts the average. 1st level always takes the whole die. |
 | **Age effects** | off | On: the Overview's age category changes ability scores, cumulative. Middle-Aged −1 Str/Dex/Con, +1 Int/Wis/Cha; Old −2/+1; Venerable −3/+1. Shown in the Age column on Stats. |
 | **Background** | Specialty | *Background skills* (Unchained) replace the Specialty. Background skills: Appraise, Artistry, Craft, Handle Animal, Knowledge (engineering, geography, history, nobility), Linguistics, Lore, Perform, Profession, Sleight of Hand. Background ranks per level (default 2) can only buy background skills. *Allocated*: each rank gives one picked skill full ranks. *Floating*: the ranks are a pool. |
+| **Occupations** | off | On: the Skills tab gains an Occupation panel. Pick an occupation from the enabled packs, or write your own with a number of skills to pick. Picked skills are class skills; one already ticked as a class skill gets +1 competence. An occupation with a bonus feat adds an Occupation row to Granted feats. |
 | **Variant multiclassing** | off | On: a character may pick a secondary class on Progression, with a feature at 3rd, 7th, 11th, 15th and 19th. Those replace the Level Up feats at the same levels. |
 | **Archetype packages** | off | On: a class may give up one of its archetype packages for another on Progression. The given-up package's features leave the class, and the taken package's features join it at the levels its own class gains them. Before the swap, the panel lists what will leave the ladder and what will join it. After it, the class's feature ladder strikes through what the class gave up and highlights what it gained, and its text shows under Given up. A package that grants spellcasting adds a casting class on Vancian Magic that counts this class's levels. Off: swaps already made stay, and the pill on the class row removes them. |
 | **Hero points** | tracked | Kept on the Details panel and as a Hero Points pool on the Trackers tab, so spending one is a play action. Off, the counter goes and the pool may be removed. |
 | **Antiheroes** | not offered | An **Antihero** box beside the hero points: ticked, the character has no hero points to spend and Feats gains an Antihero feat row. |
 | **Mythic** | in play | Off, the tier is 0: no mythic hit points, Mythic Power, mythic ability increases or tradition bonuses. *Feats & Mythic* is called *Feats*, with a note in place of the mythic panels, and the Mythic Power tracker can be removed. |
-| **Mythic tier** | from level (1 at 8th, 2 at 10th, 3 at 12th, 4 at 14th, then one a level to 10 at 20th) | *From level* with a ladder of the campaign's own: any tier's level replaceable. *From trials*: trials completed, counted on Feats & Mythic, so many a tier (the rate), any tier its own; a **Tier up** button appears once the next tier is earned. *Awarded by the GM*: the tier is whatever is typed in **Tier**, 0 until then. |
+| **Mythic tier** | from level (1 at 8th, 2 at 10th, 3 at 12th, 4 at 14th, then one a level to 10 at 20th) | *From level* with a ladder of the campaign's own: any tier's level replaceable. *From trials*: trials completed, counted on Feats & Mythic, so many a tier (the rate), any tier its own; a **Tier up** button appears once the next tier is earned. A number typed in **Tier** changes the tier reached, and Tier up carries on from it. *Awarded by the GM*: the tier is whatever is typed in **Tier**, 0 until then. |
 | **Highest mythic tier** | 10 | The ladders, trials and Tier up end there, and Feats & Mythic lists that many tiers. Past 10th a tier's level is the campaign's to give. |
-| **What a tier grants** | the table's | *Core*: a path ability every tier, a mythic feat on odd tiers and +2 to an ability on even ones, with no path power; an even tier's feat slot is greyed and what is written there waits. |
+| **Mythic feats** | odd tiers | *Even tiers*, or *Every N tiers* (1 is every tier; 3 is tiers 3, 6 and 9). The Mythic Feats table labels each tier with what it grants. |
+| **What a tier grants** | the table's | *Core*: a path ability every tier and +2 to an ability on even ones, with no path power; a tier with no mythic feat has its slot greyed and what is written there waits. |
 | **Automatic Bonus Progression** | the table's | Off, no resistance, deflection or natural armour from the ladder and no prowess picks; the Stats tab drops those columns and the prowess panel. *Core (Unchained)* adds armour and weapon attunement, ticked on the Stats tab (two items split the bonus from 8th; none ticked, the worn armour or the clothes take it, and an attuned item counts the higher of the attunement and its own enhancement), stops prowess at 18th, and gives legendary gifts at 19th and 20th, written down there with formulas allowed. |
 | **Alternate Training** | offered | Off, its tab goes and the technique grants nothing; what was picked is kept and held back from formulas. |
 | **Past Colossal** | not allowed | A size change past Colossal is counted: the header reads Colossal+1, +2…, and each step past adds 1d6 to a weapon's damage. Attack, AC and maneuver modifiers stay at Colossal's. |
@@ -395,6 +397,12 @@ library file under Extensions and Rules carries the shared rules too.
 from a file…** takes the rules from such a file, or from another character's file, as one
 undo step. Only the rules are taken. Both are on the panel and under Extensions and Rules.
 The panel folds like any other.
+
+**Campaign links.** **Copy link** copies the app's address with the rules after its `#`:
+the panel's button carries this character's rules, the one under Extensions and Rules the
+shared rules. Opening the link asks **Use these campaign rules?** and lists the rules it
+changes; on yes they become the rules every character in that browser shares. Nothing is
+sent to a server, and the link carries rules only, not packs.
 
 **Ladders.** Levels and mythic tiers each carry a ladder, folded under their row: a box
 per step, blank where the step follows the table or the rate (shown in the box), a number
