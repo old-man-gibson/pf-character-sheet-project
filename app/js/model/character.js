@@ -184,6 +184,12 @@ export class Character {
     // after. Measured the new way, the offset would take the difference and
     // the total would never move.
     this.oldBonusOrder = savedBefore(data, 'bonus-order');
+    // A document saved while the casting tradition's essence always stood in
+    // the Essence Boon cell may hold a number there that never counted (a
+    // workbook's own figure). The first time the tradition's essence is
+    // worked out, that number is cleared (see recomputeAkashic), so the pool
+    // opens where it was. A formula there was typed to be used, and is kept.
+    this.oldBoonCell = savedBefore(data, 'essence-boon-cell');
     this.#normalise();
     this.trackers = this.#loadTrackers();
     this.#reconcile();
@@ -222,6 +228,7 @@ export class Character {
       }
       this.recompute();
     }
+    this.oldBoonCell = false;
     if (this.oldBonusOrder) {
       this.oldBonusOrder = false;
       if (this.#forwardsEarly()) this.recompute();

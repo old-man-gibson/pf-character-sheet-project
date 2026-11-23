@@ -84,7 +84,7 @@ export const VANCIAN_DERIVED = [
   {
     path: 'classes',
     keys: ['statMod', 'statScore', 'plannerLevel', 'casterLevel', 'casterLevelBase',
-      'casterLevelForwarded', 'casterLevelWaiting', 'levelClass', 'tableName', 'concentrationNum', 'concentrationError', 'concentrationAuto',
+      'casterLevelForwarded', 'casterLevelWaiting', 'casterLevelError', 'levelClass', 'tableName', 'concentrationNum', 'concentrationError', 'concentrationAuto',
       'slotTypeUnknown', 'noun', 'totalPerDay', 'totalKnown', 'totalLeft', 'highestLevel'],
   },
   {
@@ -331,7 +331,23 @@ export function recomputeVancian(model) {
     // Counted off the class the block is, which its name may only describe:
     // "Wizard (Evoker)" counts Wizard levels (see blockClassName).
     c.levelClass = model.blockClassName(c.name, c.slotType);
-    const counted = levelFollowingPin(model, c.levelClass, c.casterLevelOverride, { forwardKey: vancianForwardKey(c) });
+    // The pin is a number or a formula (`class.cleric.level +
+    // class.mystic_theurge.level`, for a class that advances this one's
+    // casting). A formula that does not work out follows the Planner.
+    //
+    // In that formula this class's own caster level, and `vancian.cl` where
+    // this class is the highest, read the Planner's count: the level from
+    // before the box. Read as it stands, the box would be reading its own
+    // last answer, and `min(level, vancian.cl + 2)` would climb two a
+    // recalculation until it reached the level.
+    let pin = c.casterLevelOverride;
+    c.casterLevelError = null;
+    if (typeof pin === 'string' && pin.trim() !== '' && !Number.isFinite(Number(pin))) {
+      const worked = evaluateAmount(pin, () => scopeBeforePin(model, c, v.classes || []));
+      c.casterLevelError = worked.error;
+      pin = worked.error ? null : worked.value;
+    }
+    const counted = levelFollowingPin(model, c.levelClass, pin, { forwardKey: vancianForwardKey(c) });
     const level = counted.base;
     /*
      * A bonus forwarded to `vancian.<class>.cl` raises the caster level and
@@ -479,4 +495,21 @@ export function vancianNewDay(model) {
   for (const c of v.classes || []) for (const s of c.spells || []) s.used = 0;
   for (const p of v.prepared || []) p.used = 0;
   return model.recompute();
+}
+
+/**
+ * The scope a caster level box's formula reads: the sheet's, with this
+ * class's own caster level at the Planner's count, and `vancian.cl` the
+ * highest of that and the other classes' as they stand.
+ */
+function scopeBeforePin(model, block, blocks) {
+  const scope = model.scope();
+  const own = vancianForwardKey(block)?.split('.')[1];
+  const planner = model.classLevelCount(block.levelClass);
+  const others = blocks.filter((b) => b !== block && vancianForwardKey(b)?.split('.')[1] !== own)
+    .map((b) => Number(b.casterLevel) || 0);
+  return {
+    ...scope,
+    vancian: { ...scope.vancian, ...(own ? { [own]: { cl: planner } } : {}), cl: Math.max(planner, ...others) },
+  };
 }

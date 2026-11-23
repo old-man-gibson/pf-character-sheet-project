@@ -379,14 +379,10 @@ function akashicClassesPanel(a) {
           <table class="build"><tbody>
             <tr><th scope="row">Pool</th>
               <td class="num">${essenceCell(a, 'pool')}</td></tr>
-            ${ESSENCE_SOURCES.map(([key, label]) => (key === 'boon' && a.calc?.traditionBoon ? `<tr>
-              <th scope="row" title="The casting tradition's pool, taken as essence instead of spell points. Set it on the Magic Spheres tab.">
-                ${esc(label)}</th>
-              <td class="num total">${a.calc.traditionBoon}</td>
-            </tr>` : `<tr>
+            ${ESSENCE_SOURCES.map(([key, label]) => `<tr>
               <th scope="row">${esc(label)}</th>
               <td class="num">${essenceCell(a, key)}</td>
-            </tr>`)).join('')}
+            </tr>`).join('')}
             <tr${a.calc?.sourcesShort ? ` title="These sources add up to ${a.calc.sources}, but the daily pool above is ${a.calc.pool}. Clear the pool to use the sources."` : ''}>
               <th scope="row">Sources${a.calc?.sourcesShort ? ' <span class="badge err">≠ pool</span>' : ''}</th>
               <td class="num total">${a.calc?.sources ?? 0}</td></tr>
@@ -416,6 +412,10 @@ function essenceCell(a, key) {
     return auto(a.calc?.poolAuto ? a.calc.typed.pool.value : a.calc?.sources ?? 0, a.calc?.weaves
       ? 'Blank uses the total of the sources below. Or enter a number or a formula.'
       : 'Blank uses the total of the sources below once the character has a veilweaving class or the Veilweaving sphere. Or enter a number or a formula.');
+  }
+  if (key === 'boon') {
+    return auto(a.calc?.traditionBoon ?? 0,
+      'Blank uses the essence the casting tradition grants, set on the Magic Spheres tab. Or enter a number or a formula.');
   }
   if (key !== 'radiantDawn') return exprField(`data-set="akashic.essence.${key}"`, raw ?? 0, shown);
   const rd = a.calc?.radiantDawn || {};
@@ -994,7 +994,15 @@ function castingClassPanel(model, c, i) {
         </div>
         <div class="vcast-row">
           ${field('Slot table', select(`${base}.slotType`, c.slotType, castingTableNames()), 'vtable')}
-          ${field('Caster level', levelPin(`${base}.casterLevelOverride`, c.casterLevelOverride, c.plannerLevel, { width: '4.2rem' }))}
+          ${field('Caster level', exprField(`data-set="${base}.casterLevelOverride"`, c.casterLevelOverride ?? '', {
+    kind: 'expr-or-null',
+    width: '4.2rem',
+    value: c.casterLevelBase,
+    error: c.casterLevelError,
+    placeholder: String(c.plannerLevel ?? 0),
+    title: `Blank uses the ${c.plannerLevel ?? 0} level(s) of this class in the Planner. `
+      + 'Or enter a number or a formula, e.g. class.cleric.level + class.mystic_theurge.level',
+  }))}
           ${field('Concentration', `<span class="rollpair">${
     exprField(`data-set="${base}.concentration"`,
       typeof c.concentration === 'string' || Number(c.concentration) ? c.concentration : '', {
