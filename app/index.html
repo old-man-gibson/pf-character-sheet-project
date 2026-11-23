@@ -400,6 +400,7 @@
   import { inspectDocument } from './js/model.js';
   import { countChanges, historyFor, forget } from './js/history.js';
   import { mountServerSaves } from './js/server-saves.js';
+  import { playerNameOf, whoAmI } from './js/account.js';
   import { zip, safeName } from './js/zip.js';
   import { downloadFile } from './js/download.js';
   import { runtime as extensions } from './js/extension-runtime.js';
@@ -465,6 +466,11 @@
     newForm.elements.guide.checked = guide;
     noteBelow();
     newDialog.showModal();
+    // Signed in: the player is the account's name, unless one is typed first.
+    whoAmI().then((me) => {
+      const box = newForm.elements.player;
+      if (newDialog.open && !box.value) box.value = playerNameOf(me);
+    });
   }
   newForm.elements.level.addEventListener('input', noteBelow);
   // The level follows the lowest being set, until it is typed in itself.

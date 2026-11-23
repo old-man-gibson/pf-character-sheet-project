@@ -33,7 +33,7 @@
  */
 
 import {
-  DERIVED, FORWARD_BY_DERIVED, abilityMod, armorParts,
+  DERIVED, FORWARD_BY_DERIVED, abilityMod, abpDefence, armorParts,
   flatFootedCmd, isClassSkill, iterativeAttacks, savedBefore, skillTotal, statMod,
 } from '../rules.js';
 import { freeBackgroundSkills, occupationSkills, specialtyInPlay } from './campaign.js';
@@ -190,6 +190,11 @@ export class Character {
     // worked out, that number is cleared (see recomputeAkashic), so the pool
     // opens where it was. A formula there was typed to be used, and is kept.
     this.oldBoonCell = savedBefore(data, 'essence-boon-cell');
+    // A character begun here above 7th level was written with a CMD of 10,
+    // without the ABP deflection bonus its touch AC had, so the difference
+    // has sat in the CMD's hidden adjustment ever since (see the end of this
+    // constructor).
+    const blankCmd = data?.source?.kind === 'blank' && savedBefore(data, 'blank-cmd-deflection');
     this.#normalise();
     this.trackers = this.#loadTrackers();
     this.#reconcile();
@@ -229,10 +234,26 @@ export class Character {
       this.recompute();
     }
     this.oldBoonCell = false;
+    if (blankCmd) this.#dropBlankCmdDeflection();
     if (this.oldBonusOrder) {
       this.oldBonusOrder = false;
       if (this.#forwardsEarly()) this.recompute();
     }
+  }
+
+  /**
+   * Take the missing deflection bonus out of a begun-here character's hidden
+   * CMD adjustment. Nothing on such a sheet writes to that adjustment (a
+   * typed one is the Misc box), so one that is exactly a deflection bonus
+   * the ABP ladder gives, taken off, is that bonus and nothing else.
+   */
+  #dropBlankCmdDeflection() {
+    const off = this.offsets['defenses.cmd'];
+    if (typeof off !== 'number' || off >= 0) return;
+    const given = new Set(Array.from({ length: 40 }, (_, l) => abpDefence(l + 1).abpDeflection));
+    if (!given.has(-off)) return;
+    this.offsets['defenses.cmd'] = 0;
+    this.recompute();
   }
 
   /**

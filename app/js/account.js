@@ -62,6 +62,16 @@ export function whoAmI({ again = false } = {}) {
   return asked;
 }
 
+/**
+ * The name to offer as a new character's player: the signed-in account's,
+ * or '' when nobody is signed in or the account has no name of its own (the
+ * server's stand-ins: the account id, "Discord user").
+ */
+export function playerNameOf(me) {
+  const name = me?.signedIn ? String(me.name ?? '').trim() : '';
+  return !name || name === me.id || name === 'Discord user' ? '' : name;
+}
+
 /** The address that starts a sign-in and comes back to `returnTo`. */
 export function signInUrl(returnTo = location.pathname) {
   const url = api('auth/discord');

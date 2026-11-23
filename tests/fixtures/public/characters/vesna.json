@@ -537,8 +537,8 @@
   "ac": 17,
   "touch": 16,
   "flatFooted": 13,
-  "cmd": 24,
-  "ffCmd": 18,
+  "cmd": 26,
+  "ffCmd": 20,
   "acStat1": "Dex",
   "acStat2": null,
   "bonusAC": null,
@@ -6076,7 +6076,8 @@
   "weapon-crit-shift",
   "pack-notes",
   "bonus-order",
-  "essence-boon-cell"
+  "essence-boon-cell",
+  "blank-cmd-deflection"
  ],
  "log": [
   {
