@@ -563,10 +563,15 @@ export function parseSwaps(text, className = '') {
       continue;
     }
     // The same written the other way round: "the rogue talents gained at 2nd
-    // and 6th levels", "the bonus feat gained at 1st level".
-    const gained = list.match(/^(?:the\s+)?(.+?)\s+(?:gained|granted|received|obtained)\s+at\s+((?:\d{1,2}(?:st|nd|rd|th))(?:\s*(?:,|and|&)\s*(?:and\s+)?\d{1,2}(?:st|nd|rd|th))*)(?:\s+levels?)?$/i);
+    // and 6th levels", "the bonus feat normally gained at 1st level". Where
+    // other features come first -- "poison use and the ninja trick gained at
+    // 4th level" -- the level is the last one's, and the others go whole.
+    const gained = list.match(/^(?:the\s+)?(.+?)\s+(?:(?:normally|usually|typically|ordinarily)\s+)?(?:gained|granted|received|obtained)\s+at\s+((?:\d{1,2}(?:st|nd|rd|th))(?:\s*(?:,|and|&)\s*(?:and\s+)?\d{1,2}(?:st|nd|rd|th))*)(?:\s+levels?)?$/i);
     if (gained) {
-      const key = swapKey(gained[1], className);
+      const names = gained[1].split(/\s*,\s*(?:and\s+)?(?:the\s+)?|\s+and\s+the\s+/i).map((x) => x.trim()).filter(Boolean);
+      const last = names.pop();
+      for (const whole of names) push(verb === 'replaces' ? replaces : alters, swapKey(whole, className));
+      const key = swapKey(last, className);
       for (const x of gained[2].matchAll(/(\d{1,2})(?:st|nd|rd|th)/gi)) push(verb === 'replaces' ? replaces : alters, swapAt(key, Number(x[1])));
       continue;
     }
