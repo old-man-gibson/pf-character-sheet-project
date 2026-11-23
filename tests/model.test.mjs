@@ -15428,5 +15428,53 @@ console.log('a bonus with a limit: {dest += amount up to limit}');
   c.set('formulaNotes', '');
 }
 
+console.log('an AC bonus by its type: {ac.natural += 2} reaches the armour classes that type counts for');
+{
+  const c = new Character(blankDocument({ id: 'zz-acpart', name: 'AC', level: 3 }));
+  const d = () => c.data.defenses;
+  const at = () => [d().ac, d().touch, d().flatFooted, d().cmd];
+  const base = at();
+  const note = (text) => { c.set('formulaNotes', text); return c.contributions.entries.at(-1); };
+  const moved = () => at().map((v, i) => v - base[i]);
+
+  let e = note('{ac.natural += 2}');
+  check('natural armor: AC and flat-footed, not touch or CMD', [moved(), e.type, e.error], [[2, 0, 2, 0], 'natural', null]);
+  check('written the other way, the same', (note('{ac += 2 as natural}'), moved()), [2, 0, 2, 0]);
+  check('armor', (note('{ac.armor += 4}'), moved()), [4, 0, 4, 0]);
+  check('shield', (note('{ac.shield += 2}'), moved()), [2, 0, 2, 0]);
+  check('deflection reaches all four', (note('{ac.deflection += 1}'), moved()), [1, 1, 1, 1]);
+  check('dodge is lost flat-footed', (note('{ac.dodge += 1}'), moved()), [1, 1, 0, 1]);
+  check('and so it is as a typed bonus to every armour class', (note('{ac += 1 as dodge}'), moved()), [1, 1, 0, 0]);
+  check('an untyped bonus to every armour class is as it was', (note('{ac += 1}'), moved()), [1, 1, 1, 0]);
+  check('an armour class named on its own takes what it is sent', (note('{ac.touch += 2 as natural}'), moved()), [0, 2, 0, 0]);
+
+  e = note('{ac.natural += 1 as enhancement}');
+  check('an enhancement bonus to natural armor is the amulet\u2019s kind', [moved(), e.type], [[1, 0, 1, 0], 'enhancedNatural']);
+  check('and has a name of its own', (note('{ac.enhancedNatural += 1}'), moved()), [1, 0, 1, 0]);
+
+  note('{ac.natural += 2} {ac.natural += 3}');
+  check('two natural armor bonuses do not stack', moved(), [3, 0, 3, 0]);
+  note('{ac.dodge += 1} {ac.dodge += 1}');
+  check('two dodge bonuses do', moved(), [2, 2, 0, 2]);
+  note('{ac.natural += 2 up to ' + (base[0] + 1) + '}');
+  check('with a limit, measured on each armour class it reaches', moved(), [1, 0, 1, 0]);
+  check('offered as places to send a bonus',
+    ['ac.natural', 'ac.deflection', 'ac.dodge', 'ac.armor', 'ac.enhancedNatural'].every((n) => c.forwardTargets().list.some((t) => t.name === n)), true);
+
+  // A sheet saved while a natural armor bonus to "every armour class" reached
+  // touch AC opens with touch put right, and nothing hidden to make up for it.
+  note('{ac += 2 as natural}');
+  const now = at();
+  const old = JSON.parse(JSON.stringify(c.toJSON()));
+  old.corrections = old.corrections.filter((x) => x !== 'typed-ac-reach');
+  old.defenses.touch += 2;
+  const o = new Character(old);
+  check('an older sheet loses the bonus on touch AC',
+    [[o.data.defenses.ac, o.data.defenses.touch, o.data.defenses.flatFooted, o.data.defenses.cmd], o.offsets['defenses.touch']], [now, 0]);
+  const again = new Character(JSON.parse(JSON.stringify(o.toJSON())));
+  check('and stays so', [again.data.defenses.touch, again.offsets['defenses.touch']], [now[1], 0]);
+  c.set('formulaNotes', '');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

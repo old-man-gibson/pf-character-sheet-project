@@ -190,6 +190,11 @@ export class Character {
     // worked out, that number is cleared (see recomputeAkashic), so the pool
     // opens where it was. A formula there was typed to be used, and is kept.
     this.oldBoonCell = savedBefore(data, 'essence-boon-cell');
+    // A document saved while a typed bonus to "all armour classes" reached
+    // all three (a natural armor bonus on touch AC) holds totals worked out
+    // that way, so its offsets are measured that way and the sheet is worked
+    // out again after, as for the bonus order above.
+    this.oldAcReach = savedBefore(data, 'typed-ac-reach');
     this.#normalise();
     this.trackers = this.#loadTrackers();
     this.#reconcile();
@@ -229,6 +234,10 @@ export class Character {
       this.recompute();
     }
     this.oldBoonCell = false;
+    if (this.oldAcReach) {
+      this.oldAcReach = false;
+      if ((this.contributions?.entries || []).some((e) => e.type && e.targets.includes('ac'))) this.recompute();
+    }
     if (this.oldBonusOrder) {
       this.oldBonusOrder = false;
       if (this.#forwardsEarly()) this.recompute();
