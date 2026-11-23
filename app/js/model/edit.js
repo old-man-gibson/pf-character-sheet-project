@@ -114,6 +114,45 @@ export function listMove(model, path, index, delta) {
   return model;
 }
 
+/** The ways a list of spells or powers can be put in order. */
+export const CASTING_SORTS = ['level', 'name'];
+
+/**
+ * Put a list of spells or powers in order: by level, then name, or by name
+ * alone. A row's level is its `level`, or the number in a spell row's
+ * class-and-level cell ("Wiz 3"), with the class before it breaking a tie.
+ * A row with no name is a heading the player wrote, or a blank: it stays
+ * where it is and the rows between two of them are ordered among themselves.
+ * Taken back with Undo. Returns whether anything moved.
+ */
+export function sortCastingList(model, path, by) {
+  const arr = getPath(model.data, path);
+  if (!Array.isArray(arr) || !CASTING_SORTS.includes(by)) return false;
+  const text = (v) => String(v ?? '').trim();
+  const levelOf = (r) => {
+    const m = /(-?\d+)\D*$/.exec(text(r?.level) || text(r?.classLevel));
+    return m ? Number(m[1]) : -1;
+  };
+  const classOf = (r) => text(r?.classLevel).replace(/[\s\d]+$/, '').toLowerCase();
+  const byName = (a, b) => text(a.name).localeCompare(text(b.name), 'en', { sensitivity: 'base', numeric: true });
+  const compare = by === 'name' ? byName
+    : (a, b) => levelOf(a) - levelOf(b) || classOf(a).localeCompare(classOf(b)) || byName(a, b);
+  const next = [];
+  let run = [];
+  const flush = () => { next.push(...run.map((r, i) => [r, i]).sort((x, y) => compare(x[0], y[0]) || x[1] - y[1]).map(([r]) => r)); run = []; };
+  for (const row of arr) {
+    if (row && typeof row === 'object' && text(row.name)) run.push(row);
+    else { flush(); next.push(row); }
+  }
+  flush();
+  if (next.every((r, i) => r === arr[i])) return false;
+  markUndo(model, `Sorted by ${by}`);
+  arr.splice(0, arr.length, ...next);
+  model.recompute();
+  emit(model, { type: 'list-sort', path, by });
+  return true;
+}
+
 /**
  * Move an item to a place in its own list, for dragging one row past
  * another. `to` is where the item should land counting the list as it is

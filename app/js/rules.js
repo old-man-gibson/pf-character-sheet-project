@@ -2410,7 +2410,19 @@ export function skillTotal({ ranks = 0, classSkill = false, abilityMod: am = 0, 
 /** The types a gear row's bonus can be, in the picker's order, by name (BONUS_TYPES). */
 const GEAR_TYPE_KEYS = ['enhancement', 'armor', 'shield', 'deflection', 'natural', 'dodge', 'resistance',
   'competence', 'insight', 'luck', 'morale', 'sacred', 'profane', 'alchemical', 'circumstance', 'size',
-  'inherent', 'untyped'];
+  'inherent', 'racial', 'trait', 'untyped'];
+
+/**
+ * What a picker of bonus types stores when "Custom…" is chosen: a type of
+ * the player's own to be renamed, which the cell then shows as text.
+ */
+export const CUSTOM_BONUS_TYPE = 'Custom';
+
+/** Whether a stored bonus type is one the table does not know: a name of the player's own. */
+export function isCustomBonusType(type) {
+  const key = bonusTypeKey(type);
+  return key !== '' && !BONUS_TYPES[key];
+}
 export const GEAR_BONUS_TYPES = GEAR_TYPE_KEYS.map((k) => BONUS_TYPES[k].name);
 
 /**
@@ -2781,15 +2793,66 @@ export function craftingFraction(percent) {
  * additively (the sheet's MAX(1, COUNTIF x 2)), never dropping below x1
  * unless the player deliberately enters a fractional multiplier.
  *
+ * `stacking` is the campaign's rule for several multipliers: `add` (two x2
+ * make x4, three x6) or `multiply` (two x2 make x4, three x8).
+ *
  * Rows carry `valueNum`, the resolved number the model wrote for a field a
  * player may have typed as a formula.
  */
-export function craftingSpeed(base, increases = []) {
+export function craftingSpeed(base, increases = [], stacking = 'add') {
   const on = increases.filter((s) => s.enabled !== false);
   const amount = (s) => Number(s.valueNum ?? s.value) || 0;
   const flat = on.filter((s) => s.kind !== 'multiplier').reduce((t, s) => t + amount(s), 0);
-  const mult = on.filter((s) => s.kind === 'multiplier').reduce((t, s) => t + amount(s), 0);
+  const mults = on.filter((s) => s.kind === 'multiplier').map(amount);
+  const mult = stacking === 'multiply'
+    ? mults.filter((m) => m > 0).reduce((t, m) => t * m, 1)
+    : mults.reduce((t, m) => t + m, 0);
   return Math.max(0, ((Number(base) || 0) + flat) * (mult > 0 ? mult : 1));
+}
+
+/**
+ * The crafting post as a template: a word in square brackets is filled in
+ * from the project. A crafter's own template (`crafting.postTemplate`) takes
+ * its place.
+ */
+export const CRAFT_POST_TEMPLATE = [
+  '**Crafting**: [item]',
+  '**Crafter**: [crafter]',
+  '**Value**: [value] [currency]',
+  '**Cost**: [cost] [currency]',
+  '**Profit**: [profit]',
+  '**DC**: [dc]',
+  '**Check**: [check]',
+  '**Time to Completion**: [days] ([exact]) days',
+  '**Resources used:** [resources]',
+  '**Notes/Description**: [notes]',
+].join('\n');
+
+/** What a post template can name, with what each stands for. */
+export const CRAFT_POST_WORDS = [
+  ['item', 'the project\u2019s name'], ['crafter', 'who made it'], ['value', 'base price'], ['cost', 'crafting cost'],
+  ['profit', 'profit, or No Profit'], ['sale', 'sale price'], ['dc', 'the DC and what moved it'], ['check', 'the crafting check'],
+  ['days', 'days, rounded up'], ['exact', 'days, exact'], ['resources', 'resources used'], ['notes', 'notes'],
+  ['currency', 'the currency'],
+];
+
+/**
+ * Fill a post template. A word it does not know is left as written. An empty
+ * `[currency]` takes the space before it along. `without` names words whose
+ * whole lines are left out: an item kept has no profit or sale to report.
+ */
+export function fillPost(template, values, without = []) {
+  const gone = new Set(without);
+  const word = /\[([a-z]+)\]/gi;
+  return String(template ?? '').split('\n')
+    .filter((line) => ![...line.matchAll(word)].some((m) => gone.has(m[1].toLowerCase())))
+    .map((line) => line.replace(/( ?)\[([a-z]+)\]/gi, (all, space, name) => {
+      const key = name.toLowerCase();
+      if (!Object.hasOwn(values, key)) return all;
+      const text = String(values[key] ?? '');
+      return key === 'currency' && text === '' ? '' : `${space}${text}`;
+    }))
+    .join('\n');
 }
 
 /* ------------------------------------------------------------------ *

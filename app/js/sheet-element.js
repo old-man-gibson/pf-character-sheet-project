@@ -8040,6 +8040,10 @@ export class CharacterSheetElement extends HTMLElement {
       case 'level-up':
         if (levelUp(this.#model)) this.#render();
         break;
+      // A spell or power list put in order.
+      case 'sort-casting':
+        if (this.#model.sortCastingList(button.dataset.path, button.dataset.by)) this.#render();
+        break;
       // A mythic tier earned from trials is taken the same way.
       case 'tier-up':
         if (tierUp(this.#model)) this.#render();

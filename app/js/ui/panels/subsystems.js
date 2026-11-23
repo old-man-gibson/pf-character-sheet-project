@@ -1174,6 +1174,13 @@ function powerDatalist(c) {
   });
 }
 
+/** The buttons that put a list of spells or powers in order (edit.js sortCastingList). */
+function sortButtons(path, what) {
+  return `<span class="pair sortby"><span class="hint">Sort</span>
+    <button data-action="sort-casting" data-path="${esc(path)}" data-by="level" title="Order ${what} by level, then name. A row with no name stays where it is.">Level</button>
+    <button data-action="sort-casting" data-path="${esc(path)}" data-by="name" title="Order ${what} by name.">Name</button></span>`;
+}
+
 /**
  * The spell list, and where a prepared caster spends.
  *
@@ -1192,6 +1199,7 @@ function vancianPreparedPanel(model, v, ctx = {}) {
     return `<section class="panel span2">
       <h3>Spell list <span class="badge">${spells}</span>
         ${v.calc?.spent ? `<span class="badge">${v.calc.spent} spent today</span>` : ''}
+        ${spells > 1 ? sortButtons(list, 'the spells') : ''}
       </h3>
       <p class="hint">The workbook's first column is kept as a label. <strong>Prepared</strong>
         is how many times the spell is prepared, and the squares show how many are left.
@@ -1538,7 +1546,15 @@ function manifestingClassPanel(model, c, i, ctx = {}) {
         ${field('Ability 1', select(`${base}.stat`, c.stat, ABILITY_LABELS_LIST))}
         ${field('Ability 2', select(`${base}.stat2`, c.stat2, ABILITY_LABELS_LIST))}
         ${field('Points at 20', select(`${base}.curveTotal`, c.curveTotal, curveOptions()))}
-        ${field('Manifester level', levelPin(`${base}.manifesterLevelOverride`, c.manifesterLevelOverride, c.plannerLevel))}
+        ${field('Manifester level', exprField(`data-set="${base}.manifesterLevelOverride"`, c.manifesterLevelOverride ?? '', {
+    kind: 'expr-or-null',
+    width: '4.2rem',
+    value: c.manifesterLevelBase,
+    error: c.manifesterLevelError,
+    placeholder: String(c.plannerLevel ?? 0),
+    title: `Blank uses the ${c.plannerLevel ?? 0} level(s) of this class in the Planner. `
+      + 'Or enter a number or a formula, e.g. class.psion.level + class.cerebremancer.level',
+  }))}
       </div>
       ${line('From the curve', c.basePoints === null ? '—' : c.basePoints)}
       ${line('From abilities', fmt(c.abilityPoints ?? 0))}
@@ -1559,7 +1575,8 @@ function manifestingClassPanel(model, c, i, ctx = {}) {
           ${rowRemove(list, wi)}
         </tr>`).join('')}
       </tbody></table>` : '<p class="empty">No powers known.</p>'}
-      <div style="margin-top:6px">${addButton(list, 'Add power', { name: '', level: '', note: '' })}</div>
+      <div style="margin-top:6px">${addButton(list, 'Add power', { name: '', level: '', note: '' })}
+        ${(c.powers || []).filter((w) => w.name).length > 1 ? sortButtons(list, 'the powers') : ''}</div>
     </section>`;
   }
 

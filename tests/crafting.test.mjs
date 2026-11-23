@@ -62,5 +62,53 @@ for (const id of fixtureIds()) {
   check(`${id}: no crafter written`, 'crafter' in (m.data.crafting?.calc || {}), false);
 }
 
+console.log('\nspeed multipliers add, or multiply where the campaign says');
+{
+  const c = new Character(blankDocument({ name: 'Smith', level: 5 }));
+  c.set('crafting.baseSpeed', 1000);
+  c.set('crafting.speedIncreases', [1, 2, 3, 4].map((n) => ({ label: `x${n}`, kind: 'multiplier', value: 2, enabled: true })));
+  const speed = () => c.data.crafting.calc.speedPerDay;
+  const draw = () => renderCraftingPanel(c, { draft: {}, openPosts: new Map() });
+  check('four x2 add to x8', [speed(), draw().includes('Multipliers add together')], [8000, true]);
+  c.set('campaign.craftSpeed', 'multiply');
+  check('and multiply to x16', [speed(), draw().includes('Multipliers multiply')], [16000, true]);
+  c.setItem('crafting.speedIncreases', 3, 'enabled', false);
+  check('one switched off is left out', speed(), 8000);
+  c.listAdd('crafting.speedIncreases', { label: 'flat', kind: 'flat', value: 500, enabled: true });
+  check('a flat increase still adds to the base first', speed(), 12000);
+  c.set('crafting.speedIncreases', []);
+  check('none is the base rate', speed(), 1000);
+  c.set('campaign.craftSpeed', 'add');
+}
+
+console.log('\nan item made to keep, and a post in the crafter\u2019s own words');
+{
+  const c = new Character(blankDocument({ name: 'Smith', level: 5 }));
+  c.set('crafting.currency', 'gp');
+  c.set('crafting.projects', [{ name: 'Cloak', value: 1000, discountOverride: null, zeroProfit: false, itemDC: 15, checkMod: 0,
+    dcAdjustments: [], bypassed: [], dcNotes: '', resources: 'silk', notes: 'for me', buyerName: '', buyerTag: '', remaining: '' }]);
+  const calc = () => c.data.crafting.projects[0].calc;
+  const draw = () => renderCraftingPanel(c, { draft: {}, openPosts: new Map() });
+  const lines = () => calc().craftPost.split('\n');
+  check('a project for sale reports its profit and has a marketplace post',
+    [lines().some((l) => l.startsWith('**Profit**:')), calc().marketPost.includes('**Price Sold:**'), draw().includes('Marketplace post')], [true, true, true]);
+  const before = lines();
+  c.setItem('crafting.projects', 0, 'kept', true);
+  check('kept, the post leaves the profit line out and nothing else', lines(), before.filter((l) => !l.startsWith('**Profit**:')));
+  check('and there is no marketplace post or buyer', [calc().marketPost, draw().includes('Marketplace post'), draw().includes('Buyer (character)')], ['', false, false]);
+  c.setItem('crafting.projects', 0, 'kept', false);
+
+  c.set('crafting.postTemplate', 'Made [item] in [days] days for [cost] [currency]. [Notes] [nothing]\nSold at [sale] [currency], profit [profit]');
+  check('a template of the crafter\u2019s own is filled in, and an unknown word is left',
+    lines(), [`Made Cloak in ${calc().days} days for ${calc().cost} gp. for me [nothing]`, `Sold at ${calc().sale} gp, profit ${calc().net} gp`]);
+  c.setItem('crafting.projects', 0, 'kept', true);
+  check('kept, its sale line goes too', lines().length, 1);
+  c.set('crafting.currency', '');
+  check('no currency takes its space along', lines()[0].includes(`for ${calc().cost}. for me`), true);
+  c.set('crafting.postTemplate', '   ');
+  check('blank is the usual post again', lines()[0], '**Crafting**: Cloak');
+  check('the panel shows the usual text to start from', draw().includes('placeholder="**Crafting**: [item]'), true);
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

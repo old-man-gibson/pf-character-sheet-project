@@ -24,7 +24,7 @@ import {
 } from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, ASURA_TALENTS_PER_ODD_ESSENCE, BRAWLERS_VEST_TALENTS, COMBAT_SPHERES,
-  CRAFT_CHECK_MODES, CRAFT_SPEED_KINDS, CRAFT_SPEED_MULTIPLIER,
+  CRAFT_CHECK_MODES, CRAFT_POST_TEMPLATE, CRAFT_POST_WORDS, CRAFT_SPEED_KINDS, CRAFT_SPEED_MULTIPLIER,
   CRAFT_TIME_BASES, GEAR_BONUS_TYPES, GEAR_BONUS_TYPE_SHORT, MONK_UNARMED_LADDER, SIZE_MODIFIERS,
   TALENTED_KNUCKLE_TALENTS, UNARMED_SPHERES, WEAPON_ATTACK_TYPES, WEAPON_CRIT_MULTS,
   WEAPON_FAMILIARITY, WEAPON_GROUPS, WEAPON_HANDEDNESS, attackModeAbility, diceString, fmt, ARMOR_TYPES,
@@ -34,10 +34,10 @@ import { WEAPON_MODE_KEYS } from '../../roll20.js';
 import { check, field, num, autoNum, select, text } from '../fields.js';
 import {
   addButton, addManyButton, bigStat, collapsibleSub, editLine, exprField, itemBox, itemCheck, itemExpr,
-  itemNum, itemSelect, itemText, line, lineHtml, movedValue, removeAction, removeButton, rowRemove,
+  bonusTypeCell, itemNum, itemSelect, itemText, line, lineHtml, movedValue, removeAction, removeButton, rowRemove,
 } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
-import { currencyName } from '../../model/campaign.js';
+import { campaignRules, currencyName } from '../../model/campaign.js';
 import { craftCrafter, craftCrafters, craftSkills } from '../../model/subsystems/crafting.js';
 import { rollButton } from '../roll.js';
 import { weaponNow } from '../weapon-now.js';
@@ -467,7 +467,7 @@ function bonusCells(model, list, i, bi, g, { wide = false } = {}) {
       kind: 'expr-or-null', width: wide ? '4.4rem' : '3.6rem', placeholder: '—',
       value: st.value, error: st.error, title: 'A number or a formula, e.g. floor(level / 4)',
     })}</td>
-      <td class="btype" data-label="Bonus ${bi + 1} type">${itemSelect(list, i, `bonuses.${bi}.type`, b.type, GEAR_TYPE_OPTIONS)}</td>
+      <td class="btype" data-label="Bonus ${bi + 1} type">${bonusTypeCell(list, i, `bonuses.${bi}.type`, b.type, GEAR_TYPE_OPTIONS)}</td>
       <td class="bto" data-label="Bonus ${bi + 1} to">${targetSelect(model, list, i, bi, target, st.targetError)}${wide ? `
         <input type="text" class="target-free" value="${esc(target)}" data-item="${list}|${i}|bonuses.${bi}.target"
           data-kind="text" placeholder="or type one: resistance.fire"
@@ -861,13 +861,30 @@ export function renderCraftingPanel(model, ctx) {
     return `<div class="grid">
       ${craftSummaryPanel(cr)}
       <div class="band">
-        ${craftSpeedPanel(cr)}
+        ${craftSpeedPanel(model, cr)}
         ${craftCostPanel(cr)}
         ${craftCrafterPanel(model, cr)}
       </div>
       ${craftProjectsPanel(ctx, model, cr)}
+      ${craftTemplatePanel(cr)}
       ${systemExtrasPanel(model, cr, 'crafting', 'Item Crafting')}
     </div>`;
+  }
+
+/** The crafting post's wording, for a crafter who wants their own. */
+function craftTemplatePanel(cr) {
+    const own = String(cr.postTemplate ?? '');
+    return `<section class="panel span2">
+      <h3>Crafting post text ${own.trim() ? '<span class="badge">your own</span>' : ''}</h3>
+      <textarea rows="${Math.max(6, (own.trim() ? own : CRAFT_POST_TEMPLATE).split('\n').length)}" data-set="crafting.postTemplate"
+        data-kind="text" spellcheck="false" aria-label="Crafting post text"
+        placeholder="${esc(CRAFT_POST_TEMPLATE)}">${esc(own)}</textarea>
+      <p class="hint">
+        Every project's crafting post is written from this. A word in square brackets is filled in:
+        ${CRAFT_POST_WORDS.map(([word, what]) => `<code>[${word}]</code> ${esc(what)}`).join(', ')}.
+        Blank uses the text shown.
+      </p>
+    </section>`;
   }
 
 function craftSummaryPanel(cr) {
@@ -887,7 +904,7 @@ function craftSummaryPanel(cr) {
   }
 
   /** Progress per day: a base rate plus the increases the crafter has earned. */
-function craftSpeedPanel(cr) {
+function craftSpeedPanel(model, cr) {
     const list = 'crafting.speedIncreases';
     const rows = cr.speedIncreases || [];
     return `<section class="panel">
@@ -908,8 +925,10 @@ function craftSpeedPanel(cr) {
       })}</div>
       ${line('Progress / day', group(cr.calc?.speedPerDay))}
       <p class="hint">
-        Flat increases add to the base rate. Multipliers add together: two ×2 bonuses
-        make ×4. Amounts accept formulas (<code>level * 100</code>).
+        Flat increases add to the base rate. ${campaignRules(model.data).craftSpeed === 'multiply'
+    ? 'Multipliers multiply: three ×2 bonuses make ×8.'
+    : 'Multipliers add together: two ×2 bonuses make ×4.'}
+        Amounts accept formulas (<code>level * 100</code>).
       </p>
       <p class="hint">
         A project takes its <strong>base price</strong> ÷ this rate, rounded up.
@@ -1001,7 +1020,7 @@ function craftProjectsPanel(ctx, model, cr) {
       ${projects.map((p, i) => craftProject(ctx, model, cr, p, i)).join('')
       || '<p class="empty">No projects yet.</p>'}
       <div style="margin-top:8px">${addButton('crafting.projects', 'Add project', {
-      name: '', value: 0, discountOverride: null, zeroProfit: false, itemDC: 0, checkMod: 0,
+      name: '', value: 0, discountOverride: null, zeroProfit: false, kept: false, itemDC: 0, checkMod: 0,
       dcAdjustments: [], bypassed: [], dcNotes: '', resources: '', notes: '',
       buyerName: '', buyerTag: '', remaining: '',
     })}</div>
@@ -1018,7 +1037,7 @@ function craftProject(ctx, model, cr, p, i) {
       <div class="crafthead">
         ${itemText(list, i, 'name', p.name, 'Item name')}
         <span class="bigroll" title="Crafting cost">${group(k.cost)}</span>
-        <span class="bigroll dmg" title="Profit at the final sale price">${fmt(k.net)}</span>
+        ${p.kept ? '' : `<span class="bigroll dmg" title="Profit at the final sale price">${fmt(k.net)}</span>`}
         ${removeButton(list, i, { what: 'project' })}
       </div>
       <div class="weapongrid">
@@ -1028,6 +1047,8 @@ function craftProject(ctx, model, cr, p, i) {
   }))}
         ${field('Zero profit', `<span class="pair">${itemBox(list, i, 'zeroProfit', p.zeroProfit)}
           <span class="hint">sell at cost</span></span>`)}
+        ${field('Kept', `<span class="pair">${itemBox(list, i, 'kept', p.kept)}
+          <span class="hint">not for sale</span></span>`)}
         <span class="wsep"></span>
         ${field('Item DC', itemExpr(list, i, 'itemDC', p, { width: '4.4rem' }))}
         ${field('Check mod', itemNum(list, i, 'checkMod', p.checkMod))}
@@ -1035,10 +1056,10 @@ function craftProject(ctx, model, cr, p, i) {
       <div class="wcalc">
         <div class="hint">
           base price ${group(k.value)}${esc(unit)} · cost ${group(k.cost)}${esc(unit)} ·
-          gross ${group(k.gross)}${esc(unit)} · sells for ${group(k.sale)}${esc(unit)}
+          ${p.kept ? '' : `gross ${group(k.gross)}${esc(unit)} · sells for ${group(k.sale)}${esc(unit)}`}
         </div>
         <div class="wtotal">
-          profit <strong>${p.zeroProfit ? 'none' : `${fmt(k.net)}${esc(unit)}`}</strong> ·
+          ${p.kept ? 'kept' : `profit <strong>${p.zeroProfit ? 'none' : `${fmt(k.net)}${esc(unit)}`}</strong>`} ·
           <strong>${k.days ?? 0}</strong> day(s) <span class="avg">${k.daysExact ?? 0} exact</span> ·
           DC <strong>${k.dc ?? 0}</strong> vs check <strong>${fmt(k.check)}</strong>
           <span class="${k.succeeds ? 'ok' : 'crit'}">${k.succeeds ? '✔ succeeds' : '✘ fails'}</span>
@@ -1082,12 +1103,12 @@ function craftProject(ctx, model, cr, p, i) {
       </div>
       <div class="fieldgrid" style="margin-top:6px">
         ${field('Free-text DC note', itemText(list, i, 'dcNotes', p.dcNotes, 'Anything the notes above miss'))}
-        ${field('Buyer (character)', itemText(list, i, 'buyerName', p.buyerName))}
+        ${p.kept ? '' : `${field('Buyer (character)', itemText(list, i, 'buyerName', p.buyerName))}
         ${field('Buyer (Player#0000)', itemText(list, i, 'buyerTag', p.buyerTag))}
-        ${field(`${cr.currency || currencyName(model.data)} remaining`, itemText(list, i, 'remaining', p.remaining))}
+        ${field(`${cr.currency || currencyName(model.data)} remaining`, itemText(list, i, 'remaining', p.remaining))}`}
       </div>
       ${craftPost(ctx, `craft-${i}`, 'Crafting post', k.craftPost, 9)}
-      ${craftPost(ctx, `market-${i}`, 'Marketplace post', k.marketPost, 6)}
+      ${p.kept ? '' : craftPost(ctx, `market-${i}`, 'Marketplace post', k.marketPost, 6)}
     </div>`;
   }
 

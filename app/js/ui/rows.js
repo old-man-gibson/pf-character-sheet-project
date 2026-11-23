@@ -19,7 +19,7 @@ import { foldButton, isCollapsed } from './folds.js';
 // The fold helpers live in ./folds.js, which the escape-only modules can
 // import without this one; panels have always reached them through here.
 export { foldButton, isCollapsed, isOpen } from './folds.js';
-import { fmt } from '../rules.js';
+import { CUSTOM_BONUS_TYPE, fmt, isCustomBonusType } from '../rules.js';
 import { hasView, prose } from './prose.js';
 
 /**
@@ -81,6 +81,23 @@ export function itemCheck(list, i, field, value, label = '', title = '') {
 /** The checkbox alone, for a label that is already there: a `field`'s. */
 export function itemBox(list, i, field, value) {
   return `<input type="checkbox" ${value ? 'checked' : ''} data-item="${list}|${i}|${field}" data-kind="bool">`;
+}
+
+/**
+ * A bonus type: one from the list, or a name of the player's own.
+ *
+ * The list ends in "Custom…", which stores a type called Custom; a type the
+ * table does not know is drawn as text, to be renamed. Two bonuses of one
+ * custom type do not stack, as with any named type. Emptied, the cell is the
+ * list again.
+ */
+export function bonusTypeCell(list, i, field, value, options, blank = '\u2014', attrs = '') {
+  if (isCustomBonusType(value)) {
+    return `<input type="text" class="owntype" value="${esc(value)}" data-item="${list}|${i}|${field}" data-kind="text"
+      placeholder="type" aria-label="Bonus type"
+      title="A bonus type of your own. Two bonuses of the same type do not stack. Clear it to pick from the list.">`;
+  }
+  return itemSelect(list, i, field, value, [...options, [CUSTOM_BONUS_TYPE, 'Custom\u2026', 'A bonus type of your own']], blank, null, { attrs });
 }
 
 /**

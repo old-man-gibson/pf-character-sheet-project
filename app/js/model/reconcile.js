@@ -632,6 +632,14 @@ export const FORMULA_FIELDS = [
     }),
   },
   {
+    key: 'manifesterLevel', source: 'player', where: 'the Psionics tab',
+    collect: (model) => (model.data.psionics?.classes || []).flatMap((c, i) => (stringFormula(c.manifesterLevelOverride) ? [{
+      id: `psionic-${i}-manifester-level`, place: `manifesterLevel:${i}`,
+      name: `${String(c.name || 'Manifesting class').trim()} manifester level`,
+      formula: c.manifesterLevelOverride, value: c.manifesterLevelBase, error: c.manifesterLevelError,
+    }] : [])),
+  },
+  {
     // A buff's six dials and its extra bonuses, each a number or a rule.
     key: 'buff', source: 'player', where: 'a buff',
     collect: (model) => (model.data.buffs || []).flatMap((b, i) => {

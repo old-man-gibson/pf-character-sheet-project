@@ -7,10 +7,11 @@
  */
 
 import {
-  CRAFT_BASE_COSTS, CRAFT_BASE_SPEED, CRAFT_DC_PER_BYPASS, CRAFT_SPEED_MULTIPLIER,
-  craftingFraction, craftingSpeed, fmt, skillLabel,
+  CRAFT_BASE_COSTS, CRAFT_BASE_SPEED, CRAFT_DC_PER_BYPASS, CRAFT_POST_TEMPLATE, CRAFT_SPEED_MULTIPLIER,
+  craftingFraction, craftingSpeed, fillPost, fmt, skillLabel,
 } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
+import { campaignRules } from '../campaign.js';
 import { sheetReader } from '../document.js';
 import { lazyScope } from '../scope.js';
 import { COMPANION_KINDS, COMPANION_LABELS, companionInUse } from '../../companions.js';
@@ -334,7 +335,7 @@ export function recomputeCrafting(model) {
   };
 
   for (const s of cr.speedIncreases || []) resolve(s, 'value', s.label || 'Speed increase');
-  const speedPerDay = craftingSpeed(cr.baseSpeed, cr.speedIncreases || []);
+  const speedPerDay = craftingSpeed(cr.baseSpeed, cr.speedIncreases || [], campaignRules(model.data).craftSpeed);
 
   const presets = cr.baseCosts || [];
   const preset = presets[Number(cr.baseCostIndex) || 0] || presets[0] || { percent: 0 };
@@ -413,20 +414,26 @@ export function recomputeCrafting(model) {
     const dcLine = dcParts.length ? `${dc} (${dcParts.join(', ')})` : `${dc}`;
 
     // The workbook's own two Discord posts, regenerated from live values.
-    p.calc.craftPost = [
-      `**Crafting**: ${p.name ?? ''}`,
-      `**Crafter**: ${crafterName}`,
-      `**Value**: ${value}${suffix}`,
-      `**Cost**: ${cost}${suffix}`,
-      `**Profit**: ${p.zeroProfit ? 'No Profit' : `${p.calc.net}${suffix}`}`,
-      `**DC**: ${dcLine}`,
-      `**Check**: ${check}`,
-      `**Time to Completion**: ${p.calc.days} (${p.calc.daysExact}) days`,
-      `**Resources used:** ${p.resources ?? ''}`,
-      `**Notes/Description**: ${p.notes ?? ''}`,
-    ].join('\n');
+    // The crafting post is a template the crafter may rewrite. An item made
+    // to keep reports no profit or sale, and has no marketplace post.
+    const own = String(cr.postTemplate ?? '');
+    p.calc.craftPost = fillPost(own.trim() ? own : CRAFT_POST_TEMPLATE, {
+      item: p.name ?? '',
+      crafter: crafterName,
+      value,
+      cost,
+      profit: p.zeroProfit ? 'No Profit' : `${p.calc.net}${suffix}`,
+      sale,
+      dc: dcLine,
+      check,
+      days: p.calc.days,
+      exact: p.calc.daysExact,
+      resources: p.resources ?? '',
+      notes: p.notes ?? '',
+      currency: unit,
+    }, p.kept ? ['profit', 'sale'] : []);
 
-    p.calc.marketPost = [
+    p.calc.marketPost = p.kept ? '' : [
       `**Character Name:** ${crafterName}`,
       `**Item:** ${p.name ?? ''}`,
       `**Market Value:** ${value}`,

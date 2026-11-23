@@ -15774,5 +15774,108 @@ console.log('a magic sphere may have a caster level of its own');
   check('and so does 0', row('Alteration').cl, global[0]);
 }
 
+console.log('groups of skills are destinations: Knowledge skills, and skills with no ranks');
+{
+  const c = new Character(blankDocument({ id: 'zz-skillgroups', name: 'Groups', level: 5 }));
+  c.set('skills', [
+    { name: 'Knowledge', spec: 'Arcana', abilities: ['Int'], rankSources: { bought: 2, gear: false, other: false }, ranksOffset: 0 },
+    { name: 'Knowledge', spec: 'Nature', abilities: ['Int'], rankSources: { bought: 0, gear: false, other: false }, ranksOffset: 0 },
+    { name: 'Climb', abilities: ['Str'], rankSources: { bought: 0, gear: false, other: false }, ranksOffset: 0 },
+    { name: 'Stealth', abilities: ['Dex'], rankSources: { bought: 3, gear: false, other: false }, ranksOffset: 0 },
+  ]);
+  const bonus = () => c.data.skills.map((s) => s.bonus);
+  const base = bonus();
+  const moved = () => bonus().map((v, i) => v - base[i]);
+  check('the test skills have the ranks given', c.data.skills.map((s) => s.totalRanks), [2, 0, 0, 3]);
+  c.set('formulaNotes', '{skill.knowledge += 2}');
+  check('a bonus to every Knowledge skill', moved(), [2, 2, 0, 0]);
+  c.set('formulaNotes', '{skill.untrained += 1}');
+  check('a bonus to every skill with no ranks', moved(), [0, 1, 1, 0]);
+  c.setItem('skills', 2, 'rankSources.bought', 1);
+  check('which a skill leaves when it gains a rank', [c.data.skills[2].totalRanks, c.data.skills[2].bonus - base[2] - 1 - (c.data.skills[2].classSkill ? 3 : 0)], [1, 0]);
+  c.setItem('skills', 2, 'rankSources.bought', 0);
+  check('and joins again without one', moved(), [0, 1, 1, 0]);
+  const names = c.forwardTargets().list.filter((t) => /^skill\.(knowledge|untrained)$/.test(t.name)).map((t) => [t.name, t.label, t.family.length]);
+  check('both are listed with what they reach', names, [['skill.knowledge', 'Every Knowledge skill', 2], ['skill.untrained', 'Every skill with no ranks', 2]]);
+  c.set('formulaNotes', '');
+}
+
+console.log('a bonus type of the player\u2019s own, on a gear row and on a buff');
+{
+  const { bonusTypeCell } = await import('../app/js/ui/rows.js');
+  const { isCustomBonusType, CUSTOM_BONUS_TYPE, GEAR_BONUS_TYPES } = await import('../app/js/rules.js');
+  const c = new Character(blankDocument({ id: 'zz-owntype', name: 'Types', level: 5 }));
+  const str = () => c.data.abilities.str.tempScore;
+  const base = str();
+  c.listAdd('equipment.gear', { name: 'A', bonuses: [{ target: 'str.temp', value: 2, type: 'Bloodrage' }] });
+  c.listAdd('equipment.gear', { name: 'B', bonuses: [{ target: 'str.temp', value: 4, type: 'bloodrage' }] });
+  check('two gear bonuses of one custom type do not stack', str() - base, 4);
+  const last = c.data.equipment.gear.length - 1;
+  c.setItem('equipment.gear', last, 'bonuses.0.type', 'Fury');
+  check('two of different custom types do', str() - base, 6);
+
+  check('the picker has every type the sheet knows', ['Racial', 'Trait'].every((t) => GEAR_BONUS_TYPES.includes(t)), true);
+
+  const buff = (o) => ({ name: '', on: true, type: '', rounds: '', attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [], ...o });
+  c.data.buffs = [buff({ name: 'One', type: 'Fury', attack: 2 }), buff({ name: 'Two', type: 'fury', attack: 3 }), buff({ name: 'Three', type: 'Zeal', attack: 1 })];
+  c.recompute();
+  check('buffs of one custom type take the largest, another type adds', c.conditionState.delta.melee, 3 + 1);
+
+  check('a type the table knows is not custom, by key or by name', [isCustomBonusType('morale'), isCustomBonusType('Natural Armor'), isCustomBonusType(''), isCustomBonusType('Fury')],
+    [false, false, false, true]);
+  const options = [['morale', 'Morale'], ['luck', 'Luck']];
+  const picker = bonusTypeCell('buffs', 0, 'type', 'morale', options, 'Untyped');
+  check('a known type is a picker that ends in Custom', [picker.startsWith('<select'), picker.includes(`value="${CUSTOM_BONUS_TYPE}"`)], [true, true]);
+  const own = bonusTypeCell('buffs', 0, 'type', 'Fury <b>', options, 'Untyped');
+  check('a custom one is text to rename, escaped', [own.startsWith('<input type="text"'), own.includes('value="Fury &lt;b&gt;"'), own.includes('data-item="buffs|0|type"')], [true, true, true]);
+}
+
+console.log('a manifesting class may count another class\u2019s levels, as a casting class does');
+{
+  const c = new Character(blankDocument({ id: 'zz-prc', name: 'Prestige', level: 10 }));
+  c.set('classes', [{ name: 'Psion', levelsOverride: 6 }, { name: 'Cerebremancer', levelsOverride: 4 }]);
+  c.listAdd('psionics.classes', { name: 'Psion', stat: 'Int', stat2: '', curveTotal: 343, manifesterLevelOverride: null, powers: [] });
+  const p = () => c.data.psionics.classes[0];
+  const own = [p().manifesterLevel, p().basePoints];
+  check('alone, six levels of the class', own[0], 6);
+  c.setItem('psionics.classes', 0, 'manifesterLevelOverride', 'class.psion.level + class.cerebremancer.level');
+  check('with the other class counted, ten: level and power points', [p().manifesterLevel, p().manifesterLevelError, p().basePoints > own[1]], [10, null, true]);
+  c.setItem('psionics.classes', 0, 'manifesterLevelOverride', 'manifester.psion.level + 2');
+  check('its own level in the box is the Planner\u2019s, so it does not climb', [p().manifesterLevel, new Character(JSON.parse(JSON.stringify(c.toJSON()))).data.psionics.classes[0].manifesterLevel], [8, 8]);
+  check('the Formulas tab lists it', c.audit().find((r) => r.id === 'psionic-0-manifester-level')?.name, 'Psion manifester level');
+  c.setItem('psionics.classes', 0, 'manifesterLevelOverride', 'no.such.name +');
+  check('one that does not work out follows the Planner and says so', [p().manifesterLevel, typeof p().manifesterLevelError], [6, 'string']);
+  c.setItem('psionics.classes', 0, 'manifesterLevelOverride', 4);
+  check('a number still pins it', p().manifesterLevel, 4);
+}
+
+console.log('a spell or power list put in order');
+{
+  const c = new Character(blankDocument({ id: 'zz-sort', name: 'Sorted', level: 10 }));
+  c.set('vancian.prepared', [
+    { prepUsed: '', classLevel: 'Wiz 3', name: 'Fireball', used: 1 },
+    { prepUsed: '', classLevel: 'Wiz 1', name: 'Shield' },
+    { prepUsed: '', classLevel: 'Clr 1', name: 'Bless' },
+    { prepUsed: 'Scrolls', classLevel: '', name: '' },
+    { prepUsed: '', classLevel: 'Wiz 2', name: 'Web' },
+    { prepUsed: '', classLevel: 'Wiz 10', name: 'Zenith' },
+    { prepUsed: '', classLevel: '', name: 'Alarm' },
+  ]);
+  const names = () => c.data.vancian.prepared.map((r) => r.name || `[${r.prepUsed}]`);
+  check('by level, then class, then name, each side of a heading on its own',
+    [c.sortCastingList('vancian.prepared', 'level'), names()], [true, ['Bless', 'Shield', 'Fireball', '[Scrolls]', 'Alarm', 'Web', 'Zenith']]);
+  check('a row keeps what it had spent', c.data.vancian.prepared.find((r) => r.name === 'Fireball').used, 1);
+  check('already in order, nothing moves', c.sortCastingList('vancian.prepared', 'level'), false);
+  check('by name', [c.sortCastingList('vancian.prepared', 'name'), names()], [true, ['Bless', 'Fireball', 'Shield', '[Scrolls]', 'Alarm', 'Web', 'Zenith']]);
+  check('Undo takes it back', [c.undo(), names().slice(0, 3)], ['Sorted by name', ['Bless', 'Shield', 'Fireball']]);
+  check('an unknown order is refused', c.sortCastingList('vancian.prepared', 'school'), false);
+
+  c.listAdd('psionics.classes', { name: 'Psion', stat: 'Int', stat2: '', curveTotal: 343, manifesterLevelOverride: 10, powers: [
+    { name: 'Energy Ray', level: '1' }, { name: 'Detect Psionics', level: '0' }, { name: 'Body Adjustment', level: '3' }, { name: 'Astral Construct', level: '1' },
+  ] });
+  c.sortCastingList('psionics.classes.0.powers', 'level');
+  check('powers by level, then name', c.data.psionics.classes[0].powers.map((w) => w.name), ['Detect Psionics', 'Astral Construct', 'Energy Ray', 'Body Adjustment']);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

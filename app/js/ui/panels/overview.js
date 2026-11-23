@@ -129,7 +129,7 @@ import { colorControl } from '../color-control.js';
 import { AGE_CATEGORIES, campaignRules, isAntihero, levelProgress, specialtyInPlay, traitPlan } from '../../model/campaign.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
-  addButton, bigStat, editLine, exprField, grip, itemCheck, itemExpr, itemNum, itemSelect,
+  addButton, bigStat, bonusTypeCell, editLine, exprField, grip, itemCheck, itemExpr, itemNum, itemSelect,
   itemText, line, lineHtml, movedInline, movedSub, movedTitle, movedValue, removeAction, removeButton,
   removeControl, rowRemove, rowTools, workingTitle,
 } from '../rows.js';
@@ -473,7 +473,7 @@ function buffsPanel(model, ctx) {
     const list = 'buffs';
     // The bonus types a buff can be; Untyped is the blank choice.
     const typeOptions = Object.entries(BONUS_TYPES).filter(([k]) => k !== 'untyped').map(([k, t]) => [k, t.name]);
-    const typeName = (b) => BONUS_TYPES[b.type]?.name?.toLowerCase() || '';
+    const typeName = (b) => BONUS_TYPES[b.type]?.name?.toLowerCase() || String(b.type || '').trim().toLowerCase();
     const roundsLeft = (b) => Math.max(0, Math.floor(Number(b.rounds) || 0));
     const counting = buffs.some((b) => b?.on && roundsLeft(b) > 0);
     // Collapsed, a buff is one line: tick, name, what it comes to. Opened, each
@@ -534,8 +534,8 @@ function buffsPanel(model, ctx) {
       return `<div class="buffeditor">
         <div class="fieldgrid">
           <label class="fld"><span>Buff</span>${itemText(list, i, 'name', b.name, 'Citadel banner')}</label>
-          <label class="fld"><span>Bonus type</span>${itemSelect(list, i, 'type', b.type, typeOptions, 'Untyped', null,
-    { attrs: 'title="Typed bonuses do not stack with another of the same type: only the largest counts. Untyped, dodge and circumstance stack."' })}</label>
+          <label class="fld"><span>Bonus type</span>${bonusTypeCell(list, i, 'type', b.type, typeOptions, 'Untyped',
+    'title="Typed bonuses do not stack with another of the same type: only the largest counts. Untyped, dodge and circumstance stack."')}</label>
           <label class="fld"><span>Rounds left</span>${itemNum(list, i, 'rounds', b.rounds)}</label>
           ${BUFF_MOD_KEYS.map((k) => dial(b, i, k)).join('')}
         </div>
