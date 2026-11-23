@@ -35,6 +35,7 @@ import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/a
 import { tempHpGrant } from './stats/defenses.js';
 import { wealthViewOf } from './stats/wealth.js';
 import { boundScope, essenceScope, veilScope } from './subsystems/akashic.js';
+import { readiedNames } from './subsystems/maneuvers.js';
 import { manipulationName } from './subsystems/cardcasting.js';
 import { trackerFacts, trackerShown } from './trackers.js';
 import { featLevel, featNames, isAhead, rowLevel } from './feats.js';
@@ -42,7 +43,7 @@ import { MONSTER_PROSE_FIELDS } from '../monster/block.js';
 import { transparencySources } from './transparency.js';
 import {
   classForwardKey, flatNames, isFormulaText, manifesterForwardKey, skillForwardKey, skillRanksNamed, slug,
-  inEarlyFamily, speedForwardKey, sphereForwardKey, trackerForwardKey, vancianForwardKey,
+  inEarlyFamily, speedForwardKey, sphereForwardKey, trackerForwardKey, vancianForwardKey, vancianSlotKey,
 } from './util.js';
 
 /**
@@ -798,6 +799,24 @@ function castingLevelFacts(model, key) {
 }
 
 /**
+ * One spell level's slots, as a destination: `target` is the slots from
+ * before any bonus, `target.base` the table's and `target.ability` the
+ * casting stat's. Neither moves with a bonus to the slots, so the block's own
+ * figures from the last pass are the ones to read.
+ */
+function spellSlotFacts(model, key) {
+  if (!/^vancian\..+\.slots\.\d+$/.test(key)) return null;
+  for (const c of model.data.vancian?.classes || []) {
+    const s = (c.spells || []).find((x) => vancianSlotKey(c, x.level) === key);
+    if (!s) continue;
+    const base = Number(s.base) || 0;
+    const ability = Number(s.abilityBonus) || 0;
+    return { kind: 'spells per day', late: false, values: { total: base + ability, base, ability } };
+  }
+  return null;
+}
+
+/**
  * What `target` is for destination key `key`: `{ kind, values, late }`, the
  * shape inline.js reads. `kind` names the destination in words, for error
  * messages.
@@ -821,7 +840,7 @@ export function targetFacts(model, key, scope) {
   }
   const companion = companionTargetFacts(model, key);
   if (companion) return companion;
-  const casting = castingLevelFacts(model, key);
+  const casting = castingLevelFacts(model, key) || spellSlotFacts(model, key);
   if (casting) return casting;
   const branch = TARGET_BRANCHES.find(([test]) => test.test(key));
   if (branch) {
@@ -1014,6 +1033,23 @@ export function forwardTargets(model) {
   };
   levelFamily('vancian.cl', model.data.vancian?.classes, vancianForwardKey, 'Vancian caster level');
   levelFamily('manifester.level', model.data.psionics?.classes, manifesterForwardKey, 'manifester level');
+  // A casting class's spells per day, one spell level at a time, and all of
+  // its levels at once: a ring of wizardry is `{vancian.wizard.slots.1 +=
+  // target.base}`.
+  for (const c of model.data.vancian?.classes || []) {
+    const every = vancianSlotKey(c, 0)?.replace(/\.0$/, '');
+    if (!every || expand.has(every)) continue;
+    const members = [];
+    for (const s of c.spells || []) {
+      const name = vancianSlotKey(c, s.level);
+      if (expand.has(name)) continue;
+      add(name, `${String(c.name || c.slotType).trim()}: level ${s.level} spells per day`);
+      members.push(name);
+    }
+    if (!members.length) continue;
+    expand.set(every, members);
+    list.push({ name: every, label: `${String(c.name || c.slotType).trim()}: spells per day at every level`, family: members });
+  }
 
   // The most essence one veil can hold. A talent or class feature that raises
   // it ("Capacity Increase") adds to the class blocks' cap; see recomputeAkashic.
@@ -1806,7 +1842,7 @@ export function proseSources(model) {
   // A bonus written there waits for the maneuver to be readied, as a buff's
   // waits for its tick; a definition stands either way. Same `future` state.
   (d.maneuvers?.disciplines || []).forEach((disc, di) => {
-    const readied = new Set((disc.known || []).map((n) => String(n).trim().toLowerCase()));
+    const readied = new Set(readiedNames(disc).map((n) => String(n).trim().toLowerCase()));
     for (const [name, entry] of Object.entries(disc.notes || {})) {
       const off = readied.has(String(name).trim().toLowerCase()) ? null : { future: true };
       if (typeof entry === 'string') { push(`maneuverNote:${di}:${name}`, entry, null, off); continue; }

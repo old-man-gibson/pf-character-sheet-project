@@ -614,6 +614,19 @@ still reads 10/11 maneuvers and 4/4 stances with his six per-discipline counts
 homebrew maneuver, a discipline the reference tab never had — is kept on the
 character so nothing from a sheet is lost.
 
+**Known and readied.** Each maneuver has two boxes: the first marks it known, the second
+readied. A maneuver must be known to be readied, and a stance is only known. A bonus
+written on a maneuver applies while it is readied; a stance's applies while it is known.
+The Overview's Readied maneuvers card and the session cards list the readied maneuvers
+and the known stances. On a sheet from before the second box, everything known is
+readied until one is unticked.
+
+**How many are allowed.** The table at the top of the tab has a row for each class or
+feat that grants maneuvers, with how many it lets the character know, ready and hold as
+stances. Each count is a number or a formula. The last row holds counts from anywhere
+else, and the totals are what Known, Readied and Stances are measured against. With no
+readied count entered, readying has no limit.
+
 Every row is three targets, and each does one thing. The **tick box** readies the
 maneuver and is the only thing that does — it used to be the whole row, so reading a
 maneuver meant hitting the ✎ dead on or readying it by accident. **Clicking the name**

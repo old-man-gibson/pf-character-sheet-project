@@ -8,7 +8,8 @@
 import { MANEUVER_FIELDS } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { emit } from '../events.js';
-import { getPath, normalizeName, packRows } from '../util.js';
+import { lazyScope } from '../scope.js';
+import { evaluateAmount, getPath, normalizeName, packRows } from '../util.js';
 
 let MANEUVER_CATALOGUE = { disciplines: [] };
 
@@ -182,7 +183,7 @@ export function importManeuvers(tab) {
  * discipline the reference tab never listed -- is kept in `custom` so nothing
  * from a sheet is lost.
  */
-export function shrinkDiscipline({ name, entries = [], known, custom, notes, readiedStances }) {
+export function shrinkDiscipline({ name, entries = [], known, custom, notes, readiedStances, readied }) {
   // The player's own entries ride along whichever shape arrives. Copied a
   // level down, because an entry is now a record of its own and a shallow
   // copy would hand two disciplines the same one.
@@ -198,6 +199,7 @@ export function shrinkDiscipline({ name, entries = [], known, custom, notes, rea
     return {
       name, known: [...known], custom: custom ? [...custom] : [], notes: keptNotes,
       ...(Array.isArray(readiedStances) && readiedStances.length ? { readiedStances: [...readiedStances] } : {}),
+      ...(Array.isArray(readied) ? { readied: [...readied] } : {}),
     };
   }
   const granted = new Set(disciplineEntries(name).map((e) => e.name));
@@ -213,13 +215,31 @@ export function shrinkDiscipline({ name, entries = [], known, custom, notes, rea
   return out;
 }
 
+/** What a source of maneuvers gives a count of: known, readied, stances. */
+export const SOURCE_COUNTS = ['known', 'readied', 'stances'];
+
 export const MANEUVER_DERIVED = [
   'calc',
   // `entries` is the discipline's whole catalogue, rebuilt from the shared
   // file on every recompute. Saving it would put back the 206 rows this was
   // meant to get rid of.
-  { path: 'disciplines', keys: ['knownManeuvers', 'knownStances', 'entries', 'inCatalogue'] },
+  { path: 'disciplines', keys: ['knownManeuvers', 'knownStances', 'readiedManeuvers', 'entries', 'inCatalogue'] },
+  { path: 'sources', keys: SOURCE_COUNTS.flatMap((k) => [`${k}Num`, `${k}Error`]) },
 ];
+
+/**
+ * The names on a discipline whose bonuses apply: the maneuvers readied, and
+ * the stances known (a stance is not readied). A discipline with no
+ * `readied` list predates the second tick, when one tick meant both, so
+ * everything known on it is readied.
+ */
+export function readiedNames(d) {
+  const known = (d?.known || []);
+  if (!Array.isArray(d?.readied)) return [...known];
+  const has = new Set(known.map(maneuverKey));
+  const stances = (d.readiedStances || []).filter((n) => has.has(maneuverKey(n)));
+  return [...d.readied.filter((n) => has.has(maneuverKey(n))), ...stances];
+}
 
 /**
  * Expand each discipline against the catalogue, and count what is readied.
@@ -236,6 +256,7 @@ export function recomputeManeuvers(model) {
 
   let maneuvers = 0;
   let stances = 0;
+  let readiedCount = 0;
   for (const d of m.disciplines || []) {
     const readied = new Set((d.known || []).map(maneuverKey));
     // A maneuver readied from a discipline the catalogue no longer lists
@@ -255,27 +276,58 @@ export function recomputeManeuvers(model) {
         level: 0, kind: wasStance.has(maneuverKey(name)) || typedStance(name) ? 'stance' : 'maneuver', name, type: '',
       }));
 
+    // Known and readied are two ticks. A stance is known and never readied;
+    // its `readied` follows `known`, which is what its bonuses go by.
+    const readiedOnly = Array.isArray(d.readied) ? new Set(d.readied.map(maneuverKey)) : null;
     d.entries = [...granted, ...extra, ...missing]
-      .map((e) => ({ ...e, known: readied.has(maneuverKey(e.name)) }));
+      .map((e) => {
+        const known = readied.has(maneuverKey(e.name));
+        return { ...e, known, readied: known && (e.kind === 'stance' || !readiedOnly || readiedOnly.has(maneuverKey(e.name))) };
+      });
     const stancesNow = d.entries.filter((e) => e.known && e.kind === 'stance').map((e) => e.name);
     if (stancesNow.length) d.readiedStances = stancesNow;
     else delete d.readiedStances;
     d.knownManeuvers = d.entries.filter((e) => e.known && e.kind !== 'stance').length;
     d.knownStances = d.entries.filter((e) => e.known && e.kind === 'stance').length;
+    d.readiedManeuvers = d.entries.filter((e) => e.readied && e.kind !== 'stance').length;
     d.inCatalogue = granted.length > 0;
     maneuvers += d.knownManeuvers;
     stances += d.knownStances;
+    readiedCount += d.readiedManeuvers;
   }
 
-  const possibleManeuvers = Number(m.possibleManeuvers) || 0;
-  const possibleStances = Number(m.possibleStances) || 0;
+  // How many the character may know, ready and hold as stances: each source
+  // (a class, a feat) its own row, a number or a formula, and the two boxes
+  // the tab always had as the rest.
+  const scope = lazyScope(model);
+  const from = { known: 0, readied: 0, stances: 0 };
+  for (const s of m.sources || []) {
+    for (const k of SOURCE_COUNTS) {
+      const worked = evaluateAmount(s[k], scope);
+      s[`${k}Num`] = worked.value;
+      s[`${k}Error`] = worked.error;
+      from[k] += worked.error ? 0 : Math.max(0, worked.value);
+    }
+  }
+  const possibleManeuvers = (Number(m.possibleManeuvers) || 0) + from.known;
+  const possibleStances = (Number(m.possibleStances) || 0) + from.stances;
+  const possibleReadied = (Number(m.possibleReadied) || 0) + from.readied;
+  const over = {
+    known: maneuvers > possibleManeuvers,
+    stances: stances > possibleStances,
+    // A sheet that never said how many it may ready is not over a limit of none.
+    readied: possibleReadied > 0 && readiedCount > possibleReadied,
+  };
   m.calc = {
     maneuvers,
     stances,
+    readied: readiedCount,
     possibleManeuvers,
     possibleStances,
+    possibleReadied,
+    over,
     // The sheet's "Not Legal" flag: more picked than the class allows.
-    legal: maneuvers <= possibleManeuvers && stances <= possibleStances,
+    legal: !over.known && !over.stances && !over.readied,
   };
 }
 
@@ -294,9 +346,34 @@ export function toggleManeuver(model, path, name, ready) {
   // a "roar" an older pack wrote.
   const known = (d.known || []).filter((n) => maneuverKey(n) !== maneuverKey(name));
   if (ready) known.push(name);
+  // A maneuver no longer known is no longer readied. One newly known is not
+  // readied until its own tick, where the discipline keeps a list of them.
+  if (!ready && Array.isArray(d.readied)) d.readied = d.readied.filter((n) => maneuverKey(n) !== maneuverKey(name));
   d.known = known;
   model.recompute();
   emit(model, { type: 'set', path: `${path}.known`, value: d.known });
+  return model;
+}
+
+/**
+ * Ready or unready one known maneuver. The first press on a discipline from
+ * before the second tick writes its list: every maneuver known there was
+ * readied, and stays so, apart from the one pressed.
+ */
+export function readyManeuver(model, path, name, ready) {
+  const d = getPath(model.data, path);
+  if (!d) return model;
+  const isKnown = (d.known || []).some((n) => maneuverKey(n) === maneuverKey(name));
+  if (!isKnown) return model;
+  // A stance is known, not readied: it has no place on the list.
+  if ((d.entries || []).some((e) => e.kind === 'stance' && maneuverKey(e.name) === maneuverKey(name))) return model;
+  const stances = new Set((d.entries || []).filter((e) => e.kind === 'stance').map((e) => maneuverKey(e.name)));
+  const list = (Array.isArray(d.readied) ? d.readied : (d.known || []).filter((n) => !stances.has(maneuverKey(n))))
+    .filter((n) => maneuverKey(n) !== maneuverKey(name));
+  if (ready) list.push(name);
+  d.readied = list;
+  model.recompute();
+  emit(model, { type: 'set', path: `${path}.readied`, value: d.readied });
   return model;
 }
 

@@ -537,8 +537,8 @@
   "ac": 17,
   "touch": 16,
   "flatFooted": 13,
-  "cmd": 24,
-  "ffCmd": 18,
+  "cmd": 26,
+  "ffCmd": 20,
   "acStat1": "Dex",
   "acStat2": null,
   "bonusAC": null,
@@ -3791,7 +3791,8 @@
   "possibleManeuvers": 0,
   "possibleStances": 0,
   "disciplines": [],
-  "sourceExtras": []
+  "sourceExtras": [],
+  "sources": []
  },
  "psionics": {
   "classes": [
@@ -6076,6 +6077,7 @@
   "pack-notes",
   "bonus-order",
   "essence-boon-cell",
+  "blank-cmd-deflection",
   "typed-ac-reach"
  ],
  "log": [

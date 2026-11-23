@@ -2990,16 +2990,16 @@ console.log('conditions move CMD through Strength as well as Dexterity');
   // Flat-footed CMD is worked out, where it used to sit at the 10 a blank
   // sheet starts with.
   const d = () => c.data.defenses;
-  check('flat-footed CMD is the CMD less the Dex bonus', [d().cmd, d().ffCmd], [14, 12]);
+  check('flat-footed CMD is the CMD less the Dex bonus', [d().cmd, d().ffCmd], [15, 13]);
   c.set('defenses.acBonuses.dodge', 1);
-  check('and less a dodge bonus, which CMD keeps', [d().cmd, d().ffCmd], [15, 12]);
+  check('and less a dodge bonus, which CMD keeps', [d().cmd, d().ffCmd], [16, 13]);
   c.set('defenses.uncannyDodge', true);
-  check('uncanny dodge keeps both', d().ffCmd, 15);
+  check('uncanny dodge keeps both', d().ffCmd, 16);
   c.set('defenses.uncannyDodge', false);
   c.set('statsBuild.dex.pointBuy', 8);
-  check('a Dex penalty is not lost, only the dodge bonus', [d().cmd, d().ffCmd], [12, 11]);
+  check('a Dex penalty is not lost, only the dodge bonus', [d().cmd, d().ffCmd], [13, 12]);
   const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
-  check('and the figure survives a save and reload', again.data.defenses.ffCmd, 11);
+  check('and the figure survives a save and reload', again.data.defenses.ffCmd, 12);
 }
 
 console.log('caster-level bonuses wait for casting; spell points count classes the character has');
@@ -15488,6 +15488,158 @@ console.log('an AC bonus by its type: {ac.natural += 2} reaches the armour class
   const again = new Character(JSON.parse(JSON.stringify(o.toJSON())));
   check('and stays so', [again.data.defenses.touch, again.data.defenses.cmd, again.offsets['defenses.touch'], again.offsets['defenses.cmd']], [now[1], now[3], 0, 0]);
   c.set('formulaNotes', '');
+}
+
+console.log('maneuvers -- known and readied are two ticks, and the counts allowed come from sources');
+{
+  const c = new Character(blankDocument({ name: 'Initiator', level: 6 }));
+  const P = 'maneuvers.disciplines.0';
+  c.set('maneuvers.disciplines', [{
+    name: 'Homebrew Way', known: ['Strike One', 'Strike Two', 'Guard Stance'],
+    custom: [
+      { level: 1, kind: 'maneuver', name: 'Strike One', type: 'Strike' }, { level: 1, kind: 'maneuver', name: 'Strike Two', type: 'Strike' },
+      { level: 1, kind: 'maneuver', name: 'Strike Three', type: 'Strike' }, { level: 1, kind: 'stance', name: 'Guard Stance', type: 'Stance' },
+    ],
+    notes: {},
+  }]);
+  const d = () => c.data.maneuvers.disciplines[0];
+  const k = () => c.data.maneuvers.calc;
+  const flags = (name) => { const e = d().entries.find((x) => x.name === name); return [e.known, e.readied]; };
+
+  // A discipline from before the second tick: one tick meant both.
+  check('everything known on an older discipline is readied', [d().knownManeuvers, d().readiedManeuvers, d().knownStances, 'readied' in d()], [2, 2, 1, false]);
+  const will = () => c.data.saves.will.total;
+  const base = will();
+  c.setManeuverNote(P, 'Strike One', '{saves.will += 2}');
+  c.setManeuverNote(P, 'Guard Stance', '{saves.will += 1}');
+  check('and its bonuses apply as they did', will() - base, 3);
+
+  c.readyManeuver(P, 'Strike One', false);
+  check('unreadying one writes the list, the rest staying readied', [d().readied, flags('Strike One'), flags('Strike Two')], [['Strike Two'], [true, false], [true, true]]);
+  check('known and not readied: its bonus waits; the stance\u2019s goes by known', will() - base, 1);
+  c.readyManeuver(P, 'Strike One', true);
+  check('readied again', [flags('Strike One'), will() - base], [[true, true], 3]);
+
+  c.toggleManeuver(P, 'Strike Three', true);
+  check('a maneuver newly known is not readied yet', [flags('Strike Three'), d().knownManeuvers, d().readiedManeuvers], [[true, false], 3, 2]);
+  c.readyManeuver(P, 'Never Heard Of It', true);
+  check('one that is not known cannot be readied', d().readied.includes('Never Heard Of It'), false);
+  c.toggleManeuver(P, 'Strike One', false);
+  check('forgetting one unreadies it', [flags('Strike One'), d().readied.includes('Strike One'), will() - base], [[false, false], false, 1]);
+  c.readyManeuver(P, 'Guard Stance', true);
+  check('a stance is known, never on the readied list', [flags('Guard Stance'), d().readiedManeuvers, d().readied], [[true, true], 1, ['Strike Two']]);
+  c.undoPlay();
+  c.undoPlay();
+  check('each tick is undone like any other', flags('Strike One'), [true, true]);
+
+  // How many are allowed: a row per source, each a number or a formula.
+  check('no sources: the totals typed on the tab, and no limit on readied',
+    [k().possibleManeuvers, k().possibleReadied, k().possibleStances, k().over], [0, 0, 0, { known: true, stances: true, readied: false }]);
+  c.listAdd('maneuvers.sources', { name: 'Warder', known: 'level', readied: 4, stances: 2 });
+  c.listAdd('maneuvers.sources', { name: 'Feat', known: 1, readied: 0, stances: 0 });
+  check('the sources add up', [k().possibleManeuvers, k().possibleReadied, k().possibleStances], [7, 4, 2]);
+  check('a formula shows what it came to', [c.data.maneuvers.sources[0].knownNum, c.data.maneuvers.sources[0].knownError], [6, null]);
+  c.set('maneuvers.possibleManeuvers', 2);
+  c.set('maneuvers.possibleReadied', 1);
+  check('with the tab\u2019s own boxes as the rest', [k().possibleManeuvers, k().possibleReadied, k().legal], [9, 5, true]);
+  c.set('maneuvers.possibleReadied', 0);
+  c.setItem('maneuvers.sources', 0, 'readied', 1);
+  check('more readied than allowed is over the limit', [k().readied, k().possibleReadied, k().over.readied, k().legal], [2, 1, true, false]);
+  c.setItem('maneuvers.sources', 0, 'readied', 'no.such.name +');
+  check('a count that does not work out counts for nothing and says so',
+    [k().possibleReadied, typeof c.data.maneuvers.sources[0].readiedError], [0, 'string']);
+  c.setItem('maneuvers.sources', 0, 'readied', 4);
+
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  check('saved: the ticks and the rows, none of the working',
+    [saved.maneuvers.disciplines[0].readied.length, saved.maneuvers.sources.map((s) => Object.keys(s).sort().join()), 'entries' in saved.maneuvers.disciplines[0]],
+    [2, ['known,name,readied,stances', 'known,name,readied,stances'], false]);
+  const again = new Character(saved);
+  check('and reopened the same', [again.data.maneuvers.calc.readied, again.data.maneuvers.calc.possibleManeuvers, again.data.saves.will.total], [k().readied, k().possibleManeuvers, will()]);
+}
+
+console.log('spells per day take bonuses: {vancian.<class>.slots.<level> += …}');
+{
+  const c = new Character(blankDocument({ id: 'zz-slots', name: 'Slots', level: 10 }));
+  for (let i = 0; i < 10; i += 1) c.set(`progression.levels.${i}.classes`, ['Wizard']);
+  c.set('statsBuild.int.pointBuy', 18);
+  c.listAdd('vancian.classes', {
+    name: 'Wizard', slotType: 'Wizard', stat: 'Int', stat2: '', prep: 'prepared', source: 'arcane', casterLevelOverride: null, concentration: null,
+    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null })),
+  });
+  const w = () => c.data.vancian.classes.at(-1);
+  const at = (level) => w().spells.find((s) => s.level === level);
+  const note = (text) => { c.set('formulaNotes', text); return c.contributions.entries.at(-1); };
+  const plain = w().spells.map((s) => s.slots);
+  const first = at(1);
+  check('a wizard 10 has 1st-level slots from the table and the stat', [first.base > 0, first.slots, first.slotsForwarded], [true, first.base + first.abilityBonus, 0]);
+
+  // A ring of wizardry doubles the table's 1st-level slots, not the stat's.
+  const ring = note('Ring of Wizardry I {vancian.wizard.slots.1 += target.base}');
+  check('a bonus reading the table\u2019s slots doubles them', [at(1).slots, at(1).slotsForwarded, ring.error], [plain[1] + first.base, first.base, null]);
+  c.recompute(); c.recompute();
+  check('and holds still', at(1).slots, plain[1] + first.base);
+  check('the other levels are as they were', w().spells.filter((s) => s.level !== 1).map((s) => s.slots), plain.filter((_, i) => i !== 1));
+  check('the day\u2019s total counts it', w().totalPerDay, plain.reduce((t, n) => t + (n || 0), 0) + first.base);
+  check('target alone is the slots before bonuses', (note('{vancian.wizard.slots.2 += target}'), at(2).slots), plain[2] * 2);
+
+  note('{vancian.wizard.slots += 1}');
+  const reached = plain.map((n, i) => (n === null || at(i).atWill ? n : n + 1));
+  check('every level the class casts at once', w().spells.map((s) => s.slots), reached);
+  check('a level it cannot cast yet gets none', [plain[9], at(9).slots, at(9).slotsForwarded], [null, null, 0]);
+
+  note('{vancian.wizard.slots.3 -= 20}');
+  check('never below none', at(3).slots, 0);
+  note('{vancian.wizard.slots.1 += 2 up to 5}');
+  check('with a limit', at(1).slots, Math.max(plain[1], 5));
+
+  c.setItem(`vancian.classes.${c.data.vancian.classes.length - 1}.spells`, 1, 'perDay', 3);
+  note('{vancian.wizard.slots.1 += 4}');
+  check('a number typed over the slots is the whole answer', [at(1).slots, at(1).slotsForwarded], [3, 0]);
+  c.setItem(`vancian.classes.${c.data.vancian.classes.length - 1}.spells`, 1, 'perDay', null);
+  check('cleared, the bonus counts again', at(1).slots, plain[1] + 4);
+
+  const names = c.forwardTargets().list.map((t) => t.name);
+  check('the slots are offered as places to send a bonus',
+    [names.includes('vancian.wizard.slots.1'), names.includes('vancian.wizard.slots'), names.includes('vancian.wizard.cl')], [true, true, true]);
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and survive a save and reload', again.data.vancian.classes.at(-1).spells.find((s) => s.level === 1).slots, plain[1] + 4);
+  c.set('formulaNotes', '');
+}
+
+console.log('a character begun here has the ABP deflection bonus in its CMD');
+{
+  const made = (level) => new Character(blankDocument({ id: 'zz-cmd', name: 'CMD', level }));
+  const c = made(10);
+  check('CMD matches touch AC, with nothing hidden',
+    [c.data.defenses.cmd, c.data.defenses.touch, c.offsets['defenses.cmd']], [12, 12, 0]);
+  check('and at 20th', [made(20).data.defenses.cmd, made(20).offsets['defenses.cmd']], [15, 0]);
+  check('nothing to add below the first deflection bonus', [made(3).data.defenses.cmd, made(3).offsets['defenses.cmd']], [10, 0]);
+
+  // One begun before the fix was saved with a CMD of 10 and the difference hidden.
+  const old = JSON.parse(JSON.stringify(c.toJSON()));
+  old.corrections = old.corrections.filter((x) => x !== 'blank-cmd-deflection');
+  old.defenses.cmd -= 2;
+  old.defenses.ffCmd -= 2;
+  const o = new Character(old);
+  check('an older one opens with the bonus counted', [o.data.defenses.cmd, o.offsets['defenses.cmd']], [12, 0]);
+  const again = new Character(JSON.parse(JSON.stringify(o.toJSON())));
+  check('and stays there', [again.data.defenses.cmd, again.offsets['defenses.cmd']], [12, 0]);
+
+  // Leveled since: the missing bonus is the one from the level it was made at.
+  const grown = structuredClone(old);
+  grown.identity.level = 20;
+  const g = new Character(grown);
+  check('one made at 10th and now 20th', [g.data.defenses.cmd, g.offsets['defenses.cmd']], [15, 0]);
+
+  // A workbook's CMD keeps whatever its own sheet added or took off.
+  const book = structuredClone(old);
+  book.source = { ...book.source, kind: 'workbook' };
+  check('a converted workbook is left alone', new Character(book).offsets['defenses.cmd'], -2);
+  // And a difference that is no deflection bonus is not this.
+  const odd = structuredClone(old);
+  odd.defenses.cmd -= 5;
+  check('nor is a difference the ladder never gives', new Character(odd).offsets['defenses.cmd'], -7);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -6878,6 +6878,13 @@ export class CharacterSheetElement extends HTMLElement {
         this.#rerender(box);
       });
     });
+    root.querySelectorAll('[data-mready]').forEach((box) => {
+      box.addEventListener('change', () => {
+        const [path, name] = maneuverRef(box.dataset.mready);
+        this.#model.readyManeuver(path, name, box.checked);
+        this.#rerender(box);
+      });
+    });
 
     /*
      * Opening a maneuver. The name reads it, the ✎ writes it, and both are

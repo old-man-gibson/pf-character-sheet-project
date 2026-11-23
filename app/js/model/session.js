@@ -1,6 +1,6 @@
 import { evaluateFormula } from '../formula.js';
 import { forwarded } from './scope.js';
-import { maneuverDetails } from './subsystems/maneuvers.js';
+import { maneuverDetails, readiedNames } from './subsystems/maneuvers.js';
 import { veilDetails } from './subsystems/akashic.js';
 
 // A maneuver's catalogue "Action" as the session's action type. Anything else
@@ -178,10 +178,11 @@ export function sessionShortcuts(model) {
     }
   }
   for (const key of ['grantedFeats', 'templates', 'training']) walk(model.data[key]);
-  // A known maneuver or stance carries its catalogue card: the action it is
-  // initiated with decides which group offers it, and the rest fills the card.
+  // A readied maneuver or a known stance carries its catalogue card: the
+  // action it is initiated with decides which group offers it, and the rest
+  // fills the card.
   for (const discipline of model.data.maneuvers?.disciplines || []) {
-    for (const name of discipline.known || []) {
+    for (const name of readiedNames(discipline)) {
       const entry = maneuverDetails(discipline, name);
       const action = String(entry.action || '').trim();
       add('maneuver', name, entry.text || 'See the Maneuvers tab for the full rules.', {

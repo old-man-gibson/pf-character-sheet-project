@@ -419,6 +419,7 @@ recompute have anywhere to *put* an arriving bonus:
 | `sphere.study.ranks`, `sphere.study.dc` | a skill sphere's granted ranks and save DC — the Rank+ and DC+ columns on the Guile tab |
 | `spheres.cl`, `spheres.dc`, `spheres.msb`, `spheres.msd` | the Spheres of Power caster level, global DC, MSB and MSD — beside the typed bonus on each line of Casting numbers. Caster level carries into the DC, concentration and every sphere's own CL |
 | `vancian.<class>.cl`, `vancian.cl` | one Vancian casting class's caster level, by the block's name (or its slot table's, if it has none), or every one of them. Caster level only: the slots are keyed to levels of the class, which is `class.<name>.level` |
+| `vancian.<class>.slots.<level>`, `vancian.<class>.slots` | one Vancian casting class's spells per day at one spell level, or at every level it casts. `target.base` is the table's slots and `target.ability` the casting stat's, so a ring of wizardry is `{vancian.wizard.slots.1 += target.base}`. A level the class cannot cast yet gets nothing, and a number typed over the slots ignores bonuses |
 | `manifester.<class>.level`, `manifester.level` | one manifesting class's manifester level, or every one. Not the power points, for the same reason |
 | `spheres.sp` | Spheres of Power spell points. Added beside Bonus SP |
 | `pp.pool` | the power point pool. Added beside Bonus points |
