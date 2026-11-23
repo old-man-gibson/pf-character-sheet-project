@@ -9,6 +9,7 @@
  */
 
 import { GAME_SYSTEMS, cleanSkillVariant } from '../rules.js';
+import { emptiesTrialTier } from './campaign.js';
 import { DEFAULT_TAB_ORDER, PROFICIENCY_LISTS, blankProficiencies, buildDefaultTabs } from './document.js';
 import { normalizeHex } from '../tracker-style.js';
 import { emit } from './events.js';
@@ -24,6 +25,7 @@ import { getPath, setPath, skillKey } from './util.js';
  * Used by every input in the UI, so it is the single write entry point.
  */
 export function setValue(model, path, value) {
+  if (emptiesTrialTier(model.data, path, value)) return model;
   // Constitution damage and drain take hit points with them: the maximum
   // falls with the modifier, and so does what is left, so the damage already
   // taken stays what it was -- and healing them gives the points back.

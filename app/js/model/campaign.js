@@ -760,6 +760,17 @@ export function mythicTierFloor(d) {
  * rule (`tierOverride`) is where the trials start, and is left in the
  * document for that rule to come back to.
  */
+/**
+ * Whether an edit is the Tier box being emptied while the tier comes from
+ * trials. The box holds the one tier there is, so emptied it keeps the tier
+ * it had: a blank is no tier to go to, and working it out from the count
+ * again would hand over every tier the trials could buy.
+ */
+export function emptiesTrialTier(d, path, value) {
+  return path === 'mythic.trialTier' && campaignRules(d).mythicTier === 'trials'
+    && count(value, null) === null && count(d?.mythic?.trialTier, null) !== null;
+}
+
 export function settleTrialTier(d) {
   const m = d.mythic || (d.mythic = {});
   if (campaignRules(d).mythicTier !== 'trials') delete m.trialTier;

@@ -981,5 +981,23 @@ console.log('\na lowest mythic tier by level');
   check('nor has a campaign without mythic', [mythicTierFloor(c.data), c.data.identity.mythicTier], [0, 0]);
 }
 
+console.log('emptying the Tier box under trials keeps the tier');
+{
+  const c = new Character(blankDocument({ id: 'zz-trialbox', name: 'Trials', level: 10 }));
+  c.set('campaign.mythic', true);
+  c.set('campaign.mythicTier', 'trials');
+  c.set('mythic.trials', 6);
+  c.set('mythic.trialTier', 2);
+  check('six trials at one a tier, taken to tier 2', [c.data.identity.mythicTier, c.data.mythic.trialTier], [2, 2]);
+  c.set('mythic.trialTier', null);
+  check('emptied, the box keeps the tier it had', [c.data.identity.mythicTier, c.data.mythic.trialTier], [2, 2]);
+  c.set('mythic.trialTier', '');
+  check('however it is emptied', c.data.mythic.trialTier, 2);
+  c.set('mythic.trialTier', 4);
+  check('a number still changes it', c.data.identity.mythicTier, 4);
+  tierUp(c);
+  check('and Tier up carries on from there', c.data.identity.mythicTier, 5);
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
