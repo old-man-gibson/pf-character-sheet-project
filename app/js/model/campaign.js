@@ -120,7 +120,8 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
   maxTier: 10,
   /**
    * What the campaign's money is called: the Wealth wallet and crafting's
-   * unit. The coin purse keeps its platinum, gold, silver and copper.
+   * unit. The coin purse keeps its platinum, gold, silver and copper, and
+   * a currency named for one of them counts the purse as on hand.
    */
   currency: 'Mana',
   /**
