@@ -12082,6 +12082,16 @@ console.log('tradition boons -- one pool of steps, split between points and esse
     check('one that does not work out follows the Planner', [w().casterLevelBase, typeof w().casterLevelError], [w().plannerLevel, 'string']);
     v.setItem('vancian.classes', v.data.vancian.classes.length - 1, 'casterLevelOverride', 4);
     check('a number still pins it', [w().casterLevel, w().casterLevelError], [4, null]);
+    // A formula naming this class's own caster level reads the Planner's
+    // count, not its own last answer, so it does not climb as it is reread.
+    const at = v.data.vancian.classes.length - 1;
+    const planner = w().plannerLevel;
+    const settled = () => { const seen = [w().casterLevel]; for (let n = 0; n < 3; n += 1) { v.recompute(); seen.push(w().casterLevel); } return seen; };
+    v.setItem('vancian.classes', at, 'casterLevelOverride', 'min(level, vancian.wizard.cl + 2)');
+    const want = Math.min(level, planner + 2);
+    check('its own caster level in the box is the Planner’s count', settled(), [want, want, want, want]);
+    v.setItem('vancian.classes', at, 'casterLevelOverride', 'min(level, vancian.cl + 2)');
+    check('and so is every class’s, where this one is the highest', settled(), [want, want, want, want]);
   }
 
   // The split moves a step at a time, and the halves always add back up.
