@@ -15475,6 +15475,8 @@ console.log('spells per day take bonuses: {vancian.<class>.slots.<level> += …}
   const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('and survive a save and reload', again.data.vancian.classes.at(-1).spells.find((s) => s.level === 1).slots, plain[1] + 4);
   c.set('formulaNotes', '');
+}
+
 console.log('a character begun here has the ABP deflection bonus in its CMD');
 {
   const made = (level) => new Character(blankDocument({ id: 'zz-cmd', name: 'CMD', level }));
