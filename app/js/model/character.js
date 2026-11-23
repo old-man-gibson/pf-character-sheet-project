@@ -34,9 +34,9 @@
 
 import {
   DERIVED, FORWARD_BY_DERIVED, abilityMod, armorParts,
-  flatFootedCmd, iterativeAttacks, skillTotal, statMod,
+  flatFootedCmd, isClassSkill, iterativeAttacks, skillTotal, statMod,
 } from '../rules.js';
-import { freeBackgroundSkills, specialtyInPlay } from './campaign.js';
+import { freeBackgroundSkills, occupationSkills, specialtyInPlay } from './campaign.js';
 import {
   applyMythic, attunementUnlocked, pointBuySummary, pointBuyTable, refreshAbilities, setBuild,
   setMythicPick, setPick,
@@ -298,6 +298,8 @@ export class Character {
     const specialtyKeys = specialtyInPlay(c)
       ? new Set(Object.values(c.specialtySkills || {}).filter(Boolean)) : new Set();
     const freeBackground = freeBackgroundSkills(c);
+    // An occupation's picked skills (a campaign rule) are class skills.
+    const occupation = occupationSkills(c);
     const sphereRanksBySkill = this.#sphereRanksBySkill();
     // Skill spheres pay into a skill the operative chose rather than one a
     // table named, so their ranks are worked out against the martial side's
@@ -338,6 +340,8 @@ export class Character {
       // saves exactly what it did.
       if (free) s.backgroundFree = true;
       else delete s.backgroundFree;
+      if (occupation.has(skillKey(s))) s.occupationSkill = true;
+      else delete s.occupationSkill;
       s.sphereRanks = spheres;
       s.totalRanks = capped + s.ranksOffset;
     });
@@ -385,7 +389,7 @@ export class Character {
       const am = statMod(c, primary, null);
       const computed = skillTotal({
         ranks: s.totalRanks,
-        classSkill: !!s.classSkill,
+        classSkill: isClassSkill(s),
         abilityMod: am,
         misc: 0,
         acp: s.armorPenalty ? armorParts(c).acp : 0,
@@ -410,7 +414,11 @@ export class Character {
       // it for the same reason `forwarded` is: the column has to go on saying
       // what was typed in it.
       s.competence = guileRanks.competence.get(i) || 0;
-      s.bonus = computed + misc + s.forwarded + s.competence;
+      // An occupation skill that was a class skill already: +1 competence,
+      // which does not stack with the sphere one.
+      if (s.occupationSkill && s.classSkill) s.occupationBonus = 1;
+      else delete s.occupationBonus;
+      s.bonus = computed + misc + s.forwarded + Math.max(s.competence, s.occupationBonus || 0);
       s.abilityMod = am;
     });
 

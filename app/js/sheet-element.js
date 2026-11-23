@@ -60,6 +60,7 @@ import {
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
 import { packageBlocks, packageId, swapPackage } from './packages.js';
+import { chooseOccupation, occupationBlocks } from './occupations.js';
 import { COMPANION_KINDS, COMPANION_LABELS } from './companions.js';
 import { applyBlock, looksLikeExtension, looksLikeLibrary, removeArchetype, typeArchetypes } from './extensions.js';
 import { describePublish, publishDocument } from './publish.js';
@@ -74,6 +75,7 @@ import {
   awardXp, campaignPreset, campaignRules, followsShared, levelUp, presetCampaign, sameCampaign, tierUp, specialtyInPlay,
 } from './model/campaign.js';
 import { readShared, sharedRules, writeShared } from './shared-rules.js';
+import { campaignLink } from './campaign-link.js';
 import { esc, val, abilityKey, nameDatalist, portraitCss, portraitHtml } from './ui/html.js';
 import * as fields from './ui/fields.js';
 
@@ -383,7 +385,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(campaign|vmc|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|backgroundSkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|ageCategory|xp|milestones|size|heroPoints|antihero|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(campaign|vmc|occupation|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|backgroundSkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|ageCategory|xp|milestones|size|heroPoints|antihero|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /**
  * The input types a caret can be put back into after a re-render.
@@ -617,6 +619,8 @@ export class CharacterSheetElement extends HTMLElement {
   // "Every character" pressed once on the Campaign rules panel, where nothing
   // is shared yet: the second press shares this character's rules with all.
   #campaignShareArmed = false;
+  // After Copy link on the Campaign rules panel: { copied }, until the rules change.
+  #campaignLinkShown = null;
   // True while this sheet writes the shared campaign rules itself; see #writeSharedRules.
   #writingShared = false;
   #publishedLink = null;    // { url, rev, summary, copied } after Publish, until dismissed
@@ -1601,6 +1605,15 @@ export class CharacterSheetElement extends HTMLElement {
       this.#historyNote = `Could not publish: ${err.message.replace(/\.$/, '')}.`;
     }
     this.#renderHeader();
+  }
+
+  /** The campaign link to the clipboard, and shown on the panel: selected where the clipboard is refused. */
+  async #copyCampaignLink() {
+    let copied = true;
+    try { await navigator.clipboard.writeText(campaignLink(this.#model.data.campaign || {})); } catch { copied = false; }
+    this.#campaignLinkShown = { copied };
+    this.#render();
+    if (!copied) this.shadowRoot.querySelector('[data-camplink]')?.select();
   }
 
   /** The share link to the clipboard, or selected where the clipboard is refused. */
@@ -4145,6 +4158,8 @@ export class CharacterSheetElement extends HTMLElement {
       // Whom the campaign rules are for: the rules the browser shares.
       sharedRules: this.isPublished ? null : readShared(),
       campaignShareArmed: this.#campaignShareArmed,
+      campaignLink: this.#campaignLinkShown
+        ? { url: campaignLink(this.#model.data.campaign || {}), copied: this.#campaignLinkShown.copied } : null,
       // The guide's first step is this panel: it marks the one rule to set.
       wizardRules: this.#wizardOn() && this.#model.wizardState().step.id === 'rules',
     }));
@@ -5987,7 +6002,7 @@ export class CharacterSheetElement extends HTMLElement {
         const play = this.#fieldPlayLabel(path, value);
         if (play) this.#model.play(play, () => this.#model.set(path, value));
         else this.#model.set(path, value);
-        if (/^campaign(\.|$)/.test(path)) this.#shareCampaignEdit();
+        if (/^campaign(\.|$)/.test(path)) { this.#campaignLinkShown = null; this.#shareCampaignEdit(); }
         const filled = this.#fillNoteFor(input);
         // A catalogue cell has something to show the moment it holds a name
         // the catalogue knows, and that showing happens at render.
@@ -6094,6 +6109,14 @@ export class CharacterSheetElement extends HTMLElement {
     // today sits under a path AFFECTS_DERIVED matches, and so comes back as
     // fresh markup anyway; this is what keeps one that does not -- a slot an
     // extension adds, a new top-level key -- from wearing the old colour.
+    // The occupation (a campaign rule): a pack's, the player's own, or none.
+    root.querySelectorAll('select[data-occupation]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        const block = occupationBlocks(extensionRuntime.blocks()).find((b) => b.name === sel.value);
+        chooseOccupation(this.#model, block || sel.value);
+        this.#render();
+      });
+    });
     root.querySelectorAll('select[data-ab]').forEach((sel) => {
       sel.addEventListener('change', () => {
         // The option knows best: a picker whose choices are not ability names
@@ -8036,6 +8059,7 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       }
       case 'campaign-reset':
+        this.#campaignLinkShown = null;
         this.#model.markUndo('Put the campaign rules back to the table\'s');
         this.#model.set('campaign', {});
         this.#shareCampaignEdit();
@@ -8047,6 +8071,10 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       case 'campaign-load':
         this.shadowRoot.querySelector('[data-campaignfile]')?.click();
+        break;
+      // The rules as a link to the app: copied, and shown so it can be copied by hand.
+      case 'campaign-link':
+        this.#copyCampaignLink();
         break;
       case 'formulas':
         this.#tab = 'formulas';

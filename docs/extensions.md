@@ -46,6 +46,9 @@ A pack carries two kinds of thing:
       "features": [{ "level": 1, "name": "Relic lore", "text": "This replaces quick change." }] },
     { "kind": "package", "name": "Blade Drill", "class": "Fighter",
       "includes": ["bonus feats@1", "bonus feats@6", "bravery", "weapon training"], "grants": [] },
+    { "kind": "occupation", "name": "Sailor", "picks": 2,
+      "skills": ["Acrobatics", "Climb", "Profession (sailor)", "Swim"], "feats": ["Dodge", "Athletic"],
+      "money": "3d4 × 10 gp" },
     { "kind": "tracker", "name": "Rage rounds", "maxFormula": "4 + con.mod + (level - 1) * 2", "refresh": "per day" },
     { "kind": "race", "name": "Dwarf", "size": "Medium", "speed": 20,
       "abilityMods": { "con": 2, "wis": 2, "cha": -2 },
@@ -416,6 +419,12 @@ several archetypes come off in does not matter. The feature's own text stays on 
 tab throughout: it arrives one time fewer, it does not go. A level the class never granted
 at is **not** a swap that happened: nothing is changed and the report says so, which is what
 catches a page whose table and prose disagree.
+
+**Occupations** (a campaign rule, off by default). An `occupation` block lists the `skills`
+it offers, how many the character `picks`, and optionally `feats` to choose a bonus feat
+from, `money` and `alignment`. "Profession" offers every Profession skill and
+"Knowledge (any)" every Knowledge. With the rule on, the Skills tab lists the enabled packs'
+occupations.
 
 **Archetype packages** (a campaign rule, off by default). A `package` block names a class, the
 features it holds (`includes`, one grant as `"bonus feats@6"`) and the powers it grants
