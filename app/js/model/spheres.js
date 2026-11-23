@@ -280,7 +280,9 @@ export const TRAINING_SIDES = {
     other: 'combat', spheres: MAGIC_SPHERES, types: CASTING_TYPES, title: 'Magic training',
     talentNoun: 'magic', role: 'casting', typeLabel: 'Casting type', modLabel: 'Casting score',
     levelNoun: 'caster level', rankInto: 'cl', totalLabel: 'CL / DC',
-    sphereColumns: [['clBonus', 'CL+'], ['dcBonus', 'DC+']],
+    // CL = is the sphere's caster level in place of the character's: "uses
+    // her class level as her caster level for this sphere".
+    sphereColumns: [['clBonus', 'CL+'], ['dcBonus', 'DC+'], ['clBase', 'CL =']],
   },
   guile: {
     other: null, spheres: GUILE_SPHERES, types: [], title: 'Skill expertise',
@@ -2246,8 +2248,18 @@ export function recomputeSphereRows(model) {
       // unlocked (see recomputeTraining).
       const unlocked = t.magic.castingUnlocked !== false;
       const clPlus = unlocked ? cl.value + clForwarded : 0;
+      // A caster level written for this sphere stands in for the character's
+      // own, and the bonuses to the sphere still add to it. Blank or 0 is
+      // none. The DC moves by half the difference, as it follows caster level.
+      const written = row.clBase === undefined || row.clBase === null || String(row.clBase).trim() === ''
+        ? null : amount(row.clBase);
+      const own = written && !written.error && written.value > 0 ? Math.floor(written.value) : null;
+      const base = own ?? t.magic.globalCL;
+      const dcMoved = own === null ? 0 : Math.floor(own / 2) - Math.floor(t.magic.globalCL / 2);
       return {
         ...row,
+        clBaseNum: own,
+        clBaseError: written?.error || null,
         talents: talentsIn(t.magic.tally, row.sphere),
         clBonusNum: cl.value,
         clBonusError: cl.error,
@@ -2256,11 +2268,11 @@ export function recomputeSphereRows(model) {
         clForwarded,
         dcForwarded,
         clWaiting: unlocked ? 0 : cl.value + clForwarded,
-        cl: t.magic.globalCL + clPlus,
+        cl: base + clPlus,
         // A sphere's DC follows its caster level, so a CL bonus -- typed or
         // forwarded -- is worth half of itself here as well, as the global
         // one is.
-        dc: t.magic.globalDC + Math.floor(clPlus / 2) + dcPlus.value + dcForwarded,
+        dc: t.magic.globalDC + dcMoved + Math.floor(clPlus / 2) + dcPlus.value + dcForwarded,
       };
     });
   }
