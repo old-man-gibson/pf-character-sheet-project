@@ -332,7 +332,7 @@ sphere talents, crafting resources and notes — can carry formulas inside the t
 | `{= expr}` | inline value: evaluates and displays the result |
 | `{name = expr}` | **named** value: evaluates, displays, and defines `name` for use anywhere on the character |
 | `{name}` | reference: displays a previously named value |
-| `{dest += expr}` | **forwarded** bonus: evaluates, displays, and adds the answer to `dest` — a skill, a save, AC, an attack, an ability score. `as size` on the end gives it a type |
+| `{dest += expr}` | **forwarded** bonus: evaluates, displays, and adds the answer to `dest` — a skill, a save, AC, an attack, an ability score. `as size` on the end gives it a type; `up to level` on the end sets a limit the stat cannot pass |
 
 **Which fields take them.** A field that understands formulas carries a soft gold
 bar down its **right** edge — the same gold the computed values wear — and says so
@@ -724,6 +724,30 @@ both are named.
 character defines — `{skill.stealth += skill_familiarity}` works. The one direction that
 does not exist is the reverse: a *name* may not be written in terms of a bonus. Names are
 resolved first and bonuses second, so nothing can loop.
+
+#### A bonus with a limit: `up to`
+
+*Magical Knack: your caster level in the class increases by 2, but cannot exceed your Hit
+Dice.* Write the amount, then `up to` and the limit:
+
+```
+Magical Knack {vancian.wizard.cl += 2 up to level}
+```
+
+A wizard 4 at character level 10 gets the whole +2. A wizard 9 gets +1. A wizard 10 gets
+nothing. The limit is any formula: `up to hp.total / 10`, `up to ac.total + 2`,
+`up to class.monk.level`. A type goes before or after it:
+`{str.score += 6 as enhancement up to 30}`.
+
+The limit is measured against the stat from before bonuses, like everything else a bonus
+reads, so two limited bonuses to one stat are each checked on their own. A stat already
+past the limit gets nothing; nothing is taken off. It works on a stat that has a value
+before bonuses: an ability score, a save, armor class, an attack, initiative, hit points,
+a class level, a speed, a caster or manifester level. A skill, a weapon and a tracker are
+only totalled after bonuses, and a limit on one is reported as an error. `-=` takes no
+limit.
+
+To limit the amount instead of the total, use `min`: `{ac += min(wis.mod, class.monk.level)}`.
 
 #### `target` in forwarded bonuses
 

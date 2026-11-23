@@ -15377,5 +15377,56 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   check('a GM\'s cast is the member\'s cast', remotePlayArg('cast?mode=big&sp=1', cc.id), `cast?mode=big&sp=1&who=${cc.id}`);
   check('even with no argument, and whoever the page named', [remotePlayArg('', cc.id), remotePlayArg('ongoing?who=', cc.id)], [`cast?who=${cc.id}`, `ongoing?who=${cc.id}`]);
 }
+console.log('a bonus with a limit: {dest += amount up to limit}');
+{
+  const c = new Character(blankDocument({ id: 'zz-upto', name: 'Up to', level: 10 }));
+  for (let i = 0; i < 4; i += 1) c.set(`progression.levels.${i}.classes`, ['Wizard']);
+  c.listAdd('vancian.classes', { name: 'Wizard', slotType: 'Wizard', stat: 'Int', stat2: '', casterLevelOverride: null, concentration: null });
+  const wizard = () => c.data.vancian.classes.at(-1);
+  const note = (text) => { c.set('formulaNotes', text); return c.contributions.entries.at(-1); };
+  const settled = (get) => { const seen = [get()]; c.recompute(); c.recompute(); seen.push(get()); return seen; };
+
+  // Magical Knack: +2 caster level, never above the character's level.
+  note('{vancian.wizard.cl += 2 up to level}');
+  check('room under the limit: the whole bonus, and it holds still', settled(() => wizard().casterLevel), [6, 6]);
+  check('the slots still read the class level', wizard().casterLevelBase, 4);
+  for (let i = 4; i < 9; i += 1) c.set(`progression.levels.${i}.classes`, ['Wizard']);
+  check('one short of the limit: one of the two', settled(() => wizard().casterLevel), [10, 10]);
+  c.set('progression.levels.9.classes', ['Wizard']);
+  check('at the limit: nothing', [wizard().casterLevel, c.contributions.entries.at(-1).value], [10, 0]);
+  for (let i = 4; i < 10; i += 1) c.set(`progression.levels.${i}.classes`, []);
+
+  // The limit is any formula, on any stat with a value before bonuses.
+  const ac = c.data.defenses.ac;
+  note(`{ac += 5 up to ${ac} + int.mod + 2}`);
+  check('a limit worked out from other values', settled(() => c.data.defenses.ac), [ac + 2, ac + 2]);
+  const str = c.data.abilities.str.score;
+  note(`{str.score += 6 as enhancement up to ${str + 4}}`);
+  check('with a type before the limit', [c.data.abilities.str.score, c.contributions.entries.at(-1).type], [str + 4, 'enhancement']);
+  note(`{str.score += 6 up to ${str + 4} as temp.size}`);
+  check('or after it', [c.contributions.entries.at(-1).type, c.contributions.entries.at(-1).temporary], ['temp.size', true]);
+  const hp = c.scope().hp.total;
+  note(`{hp.total += 50 up to ${hp + 7}}`);
+  check('hit points', c.scope().hp.total, hp + 7);
+  note(`{ac += 3 up to ${ac - 4}}`);
+  check('already past the limit: nothing, and nothing taken off', c.data.defenses.ac, ac);
+  note(`{ac += -2 up to ${ac + 10}}`);
+  check('a penalty written as a negative amount passes through', c.data.defenses.ac, ac - 2);
+
+  // Printed back as it was written, not as the formula it stands for.
+  const e = note('{vancian.wizard.cl += 2 up to level}');
+  check('listed as written', [e.said, e.limit], ['2 up to level', 'level']);
+  check('and so in the breakdown', c.forwardedInto('vancian.wizard.cl').from[0].expr, '2 up to level');
+
+  // A skill is only totalled after bonuses, so it has nothing to hold to a limit.
+  const bad = note('{skill.perception += 2 up to 10}');
+  const why = bad.error || Object.values(bad.failed || {})[0] || '';
+  check('a stat totalled after bonuses says so in the bonus\'s words',
+    [/^"up to" needs the value before bonuses, and a skill is only totalled after them/.test(why), c.data.skills.find((s) => s.name === 'Perception').forwarded], [true, 0]);
+  const off = note('{ac -= 2 up to 5}');
+  check('taking off "up to" something is not a formula', [typeof off.error, c.data.defenses.ac], ['string', ac]);
+  c.set('formulaNotes', '');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -771,6 +771,32 @@ function weaponFacts(w) {
 }
 
 /**
+ * A Vancian caster level or a manifester level, as a destination: `target`
+ * is the level from before any bonus to it, which is the class's levels in
+ * the Planner or the number its box pins. Counted here rather than read off
+ * the block, whose own figure is last pass's and has the bonuses in.
+ */
+function castingLevelFacts(model, key) {
+  const kinds = [
+    [model.data.vancian?.classes, vancianForwardKey, 'casterLevelOverride', 'casterLevelBase', 'a Vancian caster level'],
+    [model.data.psionics?.classes, manifesterForwardKey, 'manifesterLevelOverride', 'manifesterLevelBase', 'a manifester level'],
+  ];
+  for (const [blocks, keyOf, pinField, baseField, kind] of kinds) {
+    const block = (blocks || []).find((b) => keyOf(b) === key);
+    if (!block) continue;
+    const pin = block[pinField];
+    const pinned = pin !== null && pin !== undefined && String(pin).trim() !== '';
+    // A box holding a formula was worked out with the block; its answer does
+    // not include a bonus, so last pass's is the level before them.
+    const total = pinned && !Number.isFinite(Number(pin)) ? Number(block[baseField]) || 0
+      : Math.max(0, Math.min(20, pinned ? Math.floor(Number(pin)) || 0
+        : model.classLevelCount(model.blockClassName(block.name, block.slotType))));
+    return { kind, late: false, values: { total } };
+  }
+  return null;
+}
+
+/**
  * What `target` is for destination key `key`: `{ kind, values, late }`, the
  * shape inline.js reads. `kind` names the destination in words, for error
  * messages.
@@ -794,6 +820,8 @@ export function targetFacts(model, key, scope) {
   }
   const companion = companionTargetFacts(model, key);
   if (companion) return companion;
+  const casting = castingLevelFacts(model, key);
+  if (casting) return casting;
   const branch = TARGET_BRANCHES.find(([test]) => test.test(key));
   if (branch) {
     const other = (path) => (OTHER_COLUMNS.has(path) ? model.offsetOf(OTHER_COLUMNS.get(path)) : 0);
@@ -1332,7 +1360,7 @@ export function forwardedInto(model, name, only = '') {
         // The place it was written, as ui/formula-places.js reads it.
         path: e.path,
         value: e.value,
-        expr: e.expr,
+        expr: e.said || e.expr,
         sign: e.sign,
         type: e.type,
         temporary: !!e.temporary,

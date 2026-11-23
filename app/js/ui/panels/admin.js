@@ -58,7 +58,7 @@ export function forwardedRows(model) {
       value: e.value,
       shown: e.values ? eachShown(e) : null,
       each: e.values ? eachLine(model, e) : null,
-      expr: e.expr,
+      expr: e.said || e.expr,
       type: e.type,
       where: describeSource(e.path),
       place: e.path,
