@@ -77,7 +77,7 @@ import {
   wearsBarding,
 } from '../../companions.js';
 import { hasTokens } from '../../inline.js';
-import { getPath } from '../../model/util.js';
+import { getPath, vancianSlotKey } from '../../model/util.js';
 import { speedTable } from '../speeds.js';
 import { countsTowardLine } from '../counts-toward.js';
 import { squareLayout } from '../../tracker-style.js';
@@ -1036,12 +1036,14 @@ function castingClassPanel(model, c, i) {
     const auto = slotText(s);
     const breakdown = s.base === null || s.base === undefined
       ? (s.atWill ? 'At will: the class knows cantrips' : 'Not castable at this level')
-      : `${s.base} from the table${s.abilityBonus ? ` + ${s.abilityBonus} for the casting stat` : ''}`;
+      : `${s.base} from the table${s.abilityBonus ? ` + ${s.abilityBonus} for the casting stat` : ''}${
+        s.slotsForwarded ? ` ${s.slotsForwarded < 0 ? '−' : '+'} ${Math.abs(s.slotsForwarded)} from bonuses` : ''}`;
     const autoKnown = s.knownCount === null || s.knownCount === undefined ? '—' : String(s.knownCount);
     return `<tr>
           <th scope="row">${esc(s.level)}</th>
           <td class="num">${autoNum(`data-item="${base}.spells|${si}|perDay"`, s.perDay,
-    { placeholder: auto, width: '4.2rem', title: `${breakdown}. Type a number to override.` })}</td>
+    { placeholder: auto, width: '4.2rem', title: `${breakdown}. Type a number to override.` })}${
+      forwardedBadge(model, vancianSlotKey(c, s.level) || '')}</td>
           ${hasBonus ? `<td class="num total">${val(s.classBonus)}</td>` : ''}
           <td class="num">${autoNum(`data-item="${base}.spells|${si}|known"`, s.known, {
     placeholder: autoKnown,

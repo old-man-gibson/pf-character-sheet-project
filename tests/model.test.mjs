@@ -15428,6 +15428,55 @@ console.log('a bonus with a limit: {dest += amount up to limit}');
   c.set('formulaNotes', '');
 }
 
+console.log('spells per day take bonuses: {vancian.<class>.slots.<level> += …}');
+{
+  const c = new Character(blankDocument({ id: 'zz-slots', name: 'Slots', level: 10 }));
+  for (let i = 0; i < 10; i += 1) c.set(`progression.levels.${i}.classes`, ['Wizard']);
+  c.set('statsBuild.int.pointBuy', 18);
+  c.listAdd('vancian.classes', {
+    name: 'Wizard', slotType: 'Wizard', stat: 'Int', stat2: '', prep: 'prepared', source: 'arcane', casterLevelOverride: null, concentration: null,
+    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null })),
+  });
+  const w = () => c.data.vancian.classes.at(-1);
+  const at = (level) => w().spells.find((s) => s.level === level);
+  const note = (text) => { c.set('formulaNotes', text); return c.contributions.entries.at(-1); };
+  const plain = w().spells.map((s) => s.slots);
+  const first = at(1);
+  check('a wizard 10 has 1st-level slots from the table and the stat', [first.base > 0, first.slots, first.slotsForwarded], [true, first.base + first.abilityBonus, 0]);
+
+  // A ring of wizardry doubles the table's 1st-level slots, not the stat's.
+  const ring = note('Ring of Wizardry I {vancian.wizard.slots.1 += target.base}');
+  check('a bonus reading the table\u2019s slots doubles them', [at(1).slots, at(1).slotsForwarded, ring.error], [plain[1] + first.base, first.base, null]);
+  c.recompute(); c.recompute();
+  check('and holds still', at(1).slots, plain[1] + first.base);
+  check('the other levels are as they were', w().spells.filter((s) => s.level !== 1).map((s) => s.slots), plain.filter((_, i) => i !== 1));
+  check('the day\u2019s total counts it', w().totalPerDay, plain.reduce((t, n) => t + (n || 0), 0) + first.base);
+  check('target alone is the slots before bonuses', (note('{vancian.wizard.slots.2 += target}'), at(2).slots), plain[2] * 2);
+
+  note('{vancian.wizard.slots += 1}');
+  const reached = plain.map((n, i) => (n === null || at(i).atWill ? n : n + 1));
+  check('every level the class casts at once', w().spells.map((s) => s.slots), reached);
+  check('a level it cannot cast yet gets none', [plain[9], at(9).slots, at(9).slotsForwarded], [null, null, 0]);
+
+  note('{vancian.wizard.slots.3 -= 20}');
+  check('never below none', at(3).slots, 0);
+  note('{vancian.wizard.slots.1 += 2 up to 5}');
+  check('with a limit', at(1).slots, Math.max(plain[1], 5));
+
+  c.setItem(`vancian.classes.${c.data.vancian.classes.length - 1}.spells`, 1, 'perDay', 3);
+  note('{vancian.wizard.slots.1 += 4}');
+  check('a number typed over the slots is the whole answer', [at(1).slots, at(1).slotsForwarded], [3, 0]);
+  c.setItem(`vancian.classes.${c.data.vancian.classes.length - 1}.spells`, 1, 'perDay', null);
+  check('cleared, the bonus counts again', at(1).slots, plain[1] + 4);
+
+  const names = c.forwardTargets().list.map((t) => t.name);
+  check('the slots are offered as places to send a bonus',
+    [names.includes('vancian.wizard.slots.1'), names.includes('vancian.wizard.slots'), names.includes('vancian.wizard.cl')], [true, true, true]);
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and survive a save and reload', again.data.vancian.classes.at(-1).spells.find((s) => s.level === 1).slots, plain[1] + 4);
+  c.set('formulaNotes', '');
+}
+
 console.log('a character begun here has the ABP deflection bonus in its CMD');
 {
   const made = (level) => new Character(blankDocument({ id: 'zz-cmd', name: 'CMD', level }));
