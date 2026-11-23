@@ -19,7 +19,7 @@ import { featCatalogue } from '../../model.js';
 import { featLevel, isAhead, rowLevel } from '../../model/feats.js';
 import { fromLevelField, fromLevelHead, plannedRow } from '../from-level.js';
 import {
-  campaignRules, isAntihero, mythicTierGrantOf, mythicTierReached, trialProgress, specialtyInPlay, vmcTakesSlot, vmcClass,
+  campaignRules, isAntihero, mythicFeatWhen, mythicTierGrantOf, occupationFeatInPlay, occupationOf, mythicTierReached, trialProgress, specialtyInPlay, vmcTakesSlot, vmcClass,
 } from '../../model/campaign.js';
 import {
   MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS,
@@ -71,6 +71,8 @@ function grantedFeatsSection(model, ctx) {
     const majorName = String(major.name || major.category || major.text || '').trim();
     // An antihero's feat, bought with the hero points it gave up (a campaign rule).
     const antihero = isAntihero(c);
+    // An occupation's feat (a campaign rule), with the feats it offers.
+    const occupation = occupationFeatInPlay(c) ? occupationOf(c) : null;
     // The specialty's feat, while the Specialty is in play (background skills,
     // a campaign rule, replace it).
     const specialty = specialtyInPlay(c);
@@ -88,7 +90,7 @@ function grantedFeatsSection(model, ctx) {
     </tr>`;
 
     return `<h4 class="subhead">Granted feats
-        <span class="badge">${(hasMajor ? 1 : 0) + (specialty ? 1 : 0) + (antihero ? 1 : 0) + (g.others || []).length}</span>
+        <span class="badge">${(hasMajor ? 1 : 0) + (specialty ? 1 : 0) + (antihero ? 1 : 0) + (occupation ? 1 : 0) + (g.others || []).length}</span>
       </h4>
       <div class="tablewrap"><table class="granted stacked${(g.others || []).length ? '' : ' notools'}">
         <thead><tr><th class="grip"></th><th class="src">Source</th><th class="fname">Feat</th>
@@ -98,6 +100,7 @@ function grantedFeatsSection(model, ctx) {
           ${hasMajor ? fixed('drawback', 'Drawback', majorName.slice(0, 60)) : ''}
           ${specialty ? fixed('specialty', 'Specialty') : ''}
           ${antihero ? fixed('antihero', 'Antihero', 'In place of hero points') : ''}
+          ${occupation ? fixed('occupation', 'Occupation', [occupation.name, occupation.feats.join(' or ')].filter(Boolean).join(': ')) : ''}
           ${(g.others || []).map((f, i) => `<tr ${rows.rowDrop('grantedFeats.others', i)}${plannedRow(isAhead(rowLevel(f), level), rowLevel(f))}>
             ${rows.rowGrip()}
             <td data-stack="head">${rows.itemText('grantedFeats.others', i, 'source', f.source, 'Oath 2, Attunement…')}</td>
@@ -247,11 +250,13 @@ export function renderFeaturesPanel(model, ctx) {
     // What each tier is reached at: a level, or trials in all (a campaign rule).
     const reached = (t) => mythicTierReached(c, t);
     const reachedHead = reached(1).head;
+    // The tiers a mythic feat comes at (a campaign rule), in words.
+    const featWhen = mythicFeatWhen(c);
     // One row per tier, to the campaign's highest (the table's is 10).
     const tiers = Array.from({ length: rules.maxTier }, (_, i) => i + 1);
     // Trials completed, when the tier comes from them (a campaign rule).
     const trials = trialProgress(c);
-    const auto = trials ? `from trials: ${trials.tier}` : `auto: ${m.computedTier ?? 0}`;
+    const auto = `auto: ${m.computedTier ?? 0}`;
     /*
      * The feats stack, each panel the width of the page.
      *
@@ -309,13 +314,15 @@ export function renderFeaturesPanel(model, ctx) {
         <h3>Mythic <span class="badge">tier ${tier}</span></h3>
         <div class="fieldgrid">
           ${fields.field('Path', fields.text('mythic.path', m.path))}
-          ${fields.field(awarded ? 'Tier (awarded by the GM)' : `Tier (${esc(auto)})`, `<span class="pair">
-            ${fields.autoNum('data-set="mythic.tierOverride"', m.tierOverride, {
+          ${fields.field(awarded ? 'Tier (awarded by the GM)' : trials ? 'Tier (from trials)' : `Tier (${esc(auto)})`, `<span class="pair">
+            ${trials ? fields.autoNum('data-set="mythic.trialTier"', m.trialTier, {
+    width: '3.6rem', label: 'Mythic tier', extra: `min="0" max="${rules.maxTier}"`,
+    title: 'The tier reached through trials. Tier up raises it. Enter a number to change it.',
+  }) : fields.autoNum('data-set="mythic.tierOverride"', m.tierOverride, {
     placeholder: m.computedTier ?? 0, width: '3.6rem', auto: !awarded, label: 'Mythic tier',
     title: awarded
       ? 'The tier awarded by the GM. Blank is 0. The campaign rules on the ⚙ tab set where the tier comes from.'
-      : trials ? 'The tier reached through trials with Tier up. Enter a number to override it.'
-        : 'Automatic from level. Enter a number to override it.',
+      : 'Automatic from level. Enter a number to override it.',
   })}
             <span class="value">→ ${esc(c.identity.mythicTier ?? 0)}</span></span>`)}
           ${trials ? fields.field('Trials completed', `<span class="pair">
@@ -417,8 +424,8 @@ export function renderFeaturesPanel(model, ctx) {
             <thead><tr>
               <th class="num">Tier</th>
               <th class="num" title="${esc(reachedHead === 'Trials' ? 'Total trials completed when this tier is reached' : 'The character level this tier is reached at')}">${reachedHead}</th>
-              <th title="${esc(rules.mythicLadder === 'core' ? 'What the tier grants: a mythic feat on odd tiers, nothing on even tiers.'
-    : 'What the tier grants: a feat on odd tiers, an RP power on even tiers.')}">Grants</th>
+              <th title="${esc(rules.mythicLadder === 'core' ? `What the tier grants: a mythic feat on ${featWhen}, nothing on other tiers.`
+    : `What the tier grants: a feat on ${featWhen}, an RP power on other tiers.`)}">Grants</th>
               <th>Name</th>
               <th title="What the granted feat does. Formulas work here.">Effect</th>
             </tr></thead>
@@ -439,9 +446,8 @@ export function renderFeaturesPanel(model, ctx) {
             }).join('')}</tbody>
           </table></div>
           <p class="hint">
-            ${rules.mythicLadder === 'core' ? `Odd tiers grant a mythic feat. On the core ladder, even tiers grant
-            no feat; their +2 ability increase is in the ladder above, and anything written in an even row
-            is not used.` : 'Odd tiers grant a mythic feat. Even tiers grant an RP power.'}
+            ${rules.mythicLadder === 'core' ? `A mythic feat comes on ${featWhen}. On the core ladder, other tiers grant
+            no feat, and anything written in their rows is not used.` : `A mythic feat comes on ${featWhen}. Other tiers grant an RP power.`}
             <strong>Grants</strong> is what the tier gives, <strong>Name</strong> is what you
             took, and <strong>Effect</strong> is what it does. A long effect is folded to one line;
             ▸ opens it. Formulas work here and in the path abilities above: write “{= tier * 2}”

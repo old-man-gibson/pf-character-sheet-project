@@ -78,6 +78,13 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
    * ones) or `core` (the feat on odd tiers, the +2 alone on even ones).
    */
   mythicLadder: 'table',
+  /**
+   * The tiers a mythic feat comes at: `odd` ones, `even` ones, or `every`
+   * so many tiers (`mythicFeatEvery`: 1 is every tier, 3 is tiers 3, 6, 9).
+   */
+  mythicFeats: 'odd',
+  /** Tiers from one mythic feat to the next, under `every`. */
+  mythicFeatEvery: 1,
   /** Alternate Training techniques are offered: their tab, and what they grant. */
   altTraining: true,
   /**
@@ -142,6 +149,12 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
    * classes, and the pill on the class row still removes them.
    */
   archetypePackages: false,
+  /**
+   * Occupations: what the character did before adventuring, picked on Skills
+   * (`d.occupation`). Its picked skills are class skills, +1 competence on
+   * one that already was, and some come with a bonus feat.
+   */
+  occupations: false,
 });
 
 /** The levels a variant multiclass grants a secondary class feature at, in place of a feat. */
@@ -159,6 +172,8 @@ export const ADVANCEMENT_MODES = Object.freeze(['typed', 'xp', 'milestones']);
 export const HIT_POINT_MODES = Object.freeze(['max', 'average', 'rolled']);
 /** The two ladders ABP and the mythic tiers may follow. */
 export const LADDERS = Object.freeze(['table', 'core']);
+/** The values a select offers for `mythicFeats`. */
+export const MYTHIC_FEAT_TIERS = Object.freeze(['odd', 'even', 'every']);
 
 /**
  * The experience a level takes in all, from the core rules' three tables:
@@ -226,6 +241,8 @@ export function campaignRules(d) {
     abpLadder: LADDERS.includes(c.abpLadder) ? c.abpLadder : CAMPAIGN_DEFAULTS.abpLadder,
     optionalArray: bool('optionalArray'),
     mythicLadder: LADDERS.includes(c.mythicLadder) ? c.mythicLadder : CAMPAIGN_DEFAULTS.mythicLadder,
+    mythicFeats: MYTHIC_FEAT_TIERS.includes(c.mythicFeats) ? c.mythicFeats : CAMPAIGN_DEFAULTS.mythicFeats,
+    mythicFeatEvery: Math.max(1, count(c.mythicFeatEvery, CAMPAIGN_DEFAULTS.mythicFeatEvery)),
     altTraining: bool('altTraining'),
     pastColossal: bool('pastColossal'),
     advancement: ADVANCEMENT_MODES.includes(c.advancement) ? c.advancement : CAMPAIGN_DEFAULTS.advancement,
@@ -244,6 +261,7 @@ export function campaignRules(d) {
     agingEffects: bool('agingEffects'),
     vmc: bool('vmc'),
     archetypePackages: bool('archetypePackages'),
+    occupations: bool('occupations'),
   };
 }
 
@@ -306,6 +324,66 @@ export function freeBackgroundSkills(d) {
 export function isAntihero(d) {
   const rules = campaignRules(d);
   return rules.heroPoints && rules.antiheroes && d?.identity?.antihero === true;
+}
+
+/** Skills an occupation picks when it does not say how many. */
+export const OCCUPATION_PICKS = 2;
+
+/** A skill name as an occupation's list and a skill row both spell it: base and variant. */
+function skillParts(label) {
+  const m = /^([^(]*?)\s*(?:\(([^)]*)\))?\s*$/.exec(String(label ?? '').toLowerCase().trim()) || [];
+  return {
+    base: String(m[1] ?? '').trim().replace(/^knowledge$/, 'kn.'),
+    variant: String(m[2] ?? '').trim().replace(/^the\s+/, ''),
+  };
+}
+
+/**
+ * Whether a skill row is one an occupation offers. "Profession" offers every
+ * Profession row and "Knowledge (any)" every Knowledge; "Profession (sailor)"
+ * offers that row and a Profession row not named yet.
+ */
+export function occupationOffers(offer, skill) {
+  const want = skillParts(offer);
+  const variant = String(skill?.spec ?? '').trim();
+  const have = skillParts(variant ? `${skill?.name} (${variant})` : skill?.name);
+  if (!want.base || want.base !== have.base) return false;
+  return !want.variant || want.variant === 'any' || !have.variant || want.variant === have.variant;
+}
+
+/**
+ * The character's occupation while the campaign uses them, else null:
+ * its name, how many skills it picks, the skills and feats it offers (empty
+ * lists offer any), and the picked skill rows' keys. A pick past the count,
+ * or of a skill the occupation does not offer, gives nothing.
+ */
+export function occupationOf(d) {
+  if (!campaignRules(d).occupations) return null;
+  const o = d?.occupation && typeof d.occupation === 'object' ? d.occupation : {};
+  const list = (v) => (Array.isArray(v) ? v.map((x) => String(x ?? '').trim()).filter(Boolean) : []);
+  const name = String(o.name ?? '').trim();
+  const offers = list(o.offers);
+  const picks = Math.min(12, count(o.picks, OCCUPATION_PICKS));
+  const rows = new Map((d?.skills || []).map((s) => [skillKey(s), s]));
+  const map = o.skills && typeof o.skills === 'object' ? o.skills : {};
+  const skills = new Set(Array.from({ length: picks }, (_, i) => map[i])
+    .filter((k) => rows.has(k) && (!offers.length || offers.some((x) => occupationOffers(x, rows.get(k))))));
+  return {
+    name, picks, offers, skills, listed: o.listed === true,
+    feats: list(o.feats), money: String(o.money ?? '').trim(), alignment: String(o.alignment ?? '').trim(),
+  };
+}
+
+/** The picked occupation skills' keys: empty with the rule off. */
+export const occupationSkills = (d) => occupationOf(d)?.skills ?? new Set();
+
+/**
+ * Whether the occupation's bonus feat is in play: an occupation is named,
+ * and it is not one from a pack that grants no feat.
+ */
+export function occupationFeatInPlay(d) {
+  const o = occupationOf(d);
+  return !!o && !!o.name && !(o.listed && !o.feats.length);
 }
 
 /** Whether this character has hero points to spend. */
@@ -382,12 +460,21 @@ export const RULE_TITLES = Object.freeze({
   mythicTrialRate: 'Trials a tier',
   maxTier: 'Highest mythic tier',
   mythicLadder: 'What a tier grants',
+  mythicFeats: 'Mythic feats',
+  mythicFeatEvery: 'Tiers per mythic feat',
   abp: 'Automatic Bonus Progression',
   abpLadder: 'Which ABP',
   optionalArray: 'Optional array',
   altTraining: 'Alternate Training',
   pastColossal: 'Past Colossal',
   currency: 'Currency',
+  skillSystem: 'Background',
+  backgroundRanks: 'Background ranks',
+  backgroundUse: 'Background rank use',
+  agingEffects: 'Age effects',
+  vmc: 'Variant multiclassing',
+  archetypePackages: 'Archetype packages',
+  occupations: 'Occupations',
 });
 
 /** The rules a campaign block changes from the table's, by name. */
@@ -447,14 +534,48 @@ export function prowessPicks(d) {
   };
 }
 
+/** Whether a mythic feat comes at `tier` under these rules. */
+export function mythicFeatAt(d, tier) {
+  const rules = campaignRules(d);
+  if (tier < 1) return false;
+  if (rules.mythicFeats === 'every') return tier % rules.mythicFeatEvery === 0;
+  return rules.mythicFeats === 'even' ? tier % 2 === 0 : tier % 2 === 1;
+}
+
+/** The tiers a mythic feat comes at, to the campaign's highest. */
+export function mythicFeatTiers(d) {
+  return Array.from({ length: campaignRules(d).maxTier }, (_, i) => i + 1).filter((t) => mythicFeatAt(d, t));
+}
+
+/** The tiers a mythic feat comes at, in words: "odd tiers", "every 3rd tier". */
+export function mythicFeatWhen(d) {
+  const { mythicFeats, mythicFeatEvery: n } = campaignRules(d);
+  if (mythicFeats !== 'every') return `${mythicFeats} tiers`;
+  if (n === 1) return 'every tier';
+  const tens = n % 100;
+  const nth = tens > 10 && tens < 14 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th';
+  return `every ${n}${nth} tier`;
+}
+
 /**
  * What a mythic tier hands over beside its path ability, as the Mythic Feats
- * table labels it: the sheet's own label where it kept one, else the
- * ladder's. Null where the core ladder gives nothing (an even tier).
+ * table labels it: a feat on a feat tier; on any other an RP power, or under
+ * the core ladder nothing (null). On the table's own odd tiers the sheet's
+ * label is kept where it has one.
  */
 export function mythicTierGrantOf(d, tier, label = '') {
-  if (campaignRules(d).mythicLadder === 'core') return tier % 2 ? `Mythic feat ${Math.ceil(tier / 2)}` : null;
-  return label || mythicTierGrant(tier);
+  const rules = campaignRules(d);
+  const core = rules.mythicLadder === 'core';
+  if (rules.mythicFeats === 'odd') {
+    if (core) return tier % 2 ? `Mythic feat ${Math.ceil(tier / 2)}` : null;
+    return label || mythicTierGrant(tier);
+  }
+  const feat = mythicFeatAt(d, tier);
+  // The feat or power's number: how many like it have come by this tier.
+  let n = 0;
+  for (let t = 1; t <= tier; t++) if (mythicFeatAt(d, t) === feat) n += 1;
+  if (feat) return `${core ? 'Mythic feat' : 'Feat'} ${n}`;
+  return core ? null : `RP Power ${n}`;
 }
 
 /* ---------------- room for every level and tier ---------------- */
@@ -569,11 +690,31 @@ function trialTierNow(d) {
  * Tier up raises it. Under any other rule it goes, so switching back to
  * trials starts from the count again, and a sheet that never used trials
  * carries nothing.
+ *
+ * Under trials there is one tier, not a reached tier with a typed one over
+ * it: the Tier box writes this figure, so a tier typed there (to go back
+ * one, say) is where Tier up carries on from. A tier typed under another
+ * rule (`tierOverride`) is where the trials start, and is left in the
+ * document for that rule to come back to.
  */
 export function settleTrialTier(d) {
   const m = d.mythic || (d.mythic = {});
   if (campaignRules(d).mythicTier !== 'trials') delete m.trialTier;
-  else if (count(m.trialTier, null) === null) m.trialTier = trialTierNow(d);
+  else if (count(m.trialTier, null) === null) m.trialTier = count(m.tierOverride, null) ?? trialTierNow(d);
+}
+
+/**
+ * A sheet saved while a tier typed over the trials was the tier shown: that
+ * tier becomes the tier reached, once, on load. Tier up raised the reached
+ * tier underneath it, where nobody saw it move. The saved tier tells the two
+ * apart: from here on it is the reached tier, never the typed one.
+ */
+export function adoptTypedTrialTier(d) {
+  const m = d?.mythic;
+  if (!m || campaignRules(d).mythicTier !== 'trials') return;
+  const typed = count(m.tierOverride, null);
+  if (typed === null || count(m.trialTier, null) === null) return;
+  if (count(d.identity?.mythicTier, 0) === typed) m.trialTier = typed;
 }
 
 /**
@@ -595,11 +736,14 @@ export function mythicComputedTier(d) {
 /**
  * The mythic tier as it stands: 0 with mythic off; otherwise the tier typed on
  * Feats & Mythic (an override, or the GM's award), or what the rules give.
- * Every reader of the tier goes through this, so the tier the numbers use,
- * the tracker's and the one seeded on load cannot disagree.
+ * Under trials the tier reached is the one figure, typed or pressed. Every
+ * reader of the tier goes through this, so the tier the numbers use, the
+ * tracker's and the one seeded on load cannot disagree.
  */
 export function mythicTierOf(d) {
-  if (!campaignRules(d).mythic) return 0;
+  const rules = campaignRules(d);
+  if (!rules.mythic) return 0;
+  if (rules.mythicTier === 'trials') return mythicComputedTier(d);
   return d?.mythic?.tierOverride ?? mythicComputedTier(d);
 }
 

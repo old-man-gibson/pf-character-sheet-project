@@ -16,7 +16,7 @@
  * filling one never touches another.
  */
 import { abilityTextKey, addedAbilitiesOf, companionAbilityText, takesArchetypes } from '../companions.js';
-import { isAntihero, specialtyInPlay, vmcTakesSlot } from './campaign.js';
+import { isAntihero, occupationFeatInPlay, specialtyInPlay, vmcTakesSlot } from './campaign.js';
 import { emit } from './events.js';
 import { featLevel } from './feats.js';
 import { blankTalentNotes, fillTalentNotes } from './spheres.js';
@@ -34,6 +34,7 @@ export function shownGrantedFeats(d) {
     major.name || major.category || major.text ? 'drawback' : '',
     specialtyInPlay(d) ? 'specialty' : '',
     isAntihero(d) ? 'antihero' : '',
+    occupationFeatInPlay(d) ? 'occupation' : '',
   ].filter(Boolean);
 }
 

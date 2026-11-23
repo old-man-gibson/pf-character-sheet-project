@@ -11,7 +11,7 @@
  * unused-skill filter has been switched off. Everything else it imports.
  */
 import { esc } from '../html.js';
-import { field, select } from '../fields.js';
+import { field, select, text } from '../fields.js';
 import { addButton, exprField, itemCheck, itemSelect, itemText } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
 import { rollButton } from '../roll.js';
@@ -22,6 +22,9 @@ import {
 import { skillForwardKey } from '../../model.js';
 import { campaignRules } from '../../model/campaign.js';
 import { isBackgroundSkill } from '../../rules.js';
+import { occupationOf, occupationOffers } from '../../model/campaign.js';
+import { OWN_OCCUPATION, occupationBlocks } from '../../occupations.js';
+import { runtime as extensionRuntime } from '../../extension-runtime.js';
 
 /**
  * Which skill rows the table shows, as indices into `model.data.skills`.
@@ -135,6 +138,49 @@ export function renderSkillsPanel(model, ctx) {
       </section>`;
     };
 
+    /*
+     * The occupation (a campaign rule): one from the enabled packs or the
+     * player's own, and the skills picked for it, which are class skills.
+     */
+    const occupationPanel = () => {
+      const o = occupationOf(model.data);
+      if (!o) return '';
+      const listed = occupationBlocks(extensionRuntime.blocks());
+      const picks = model.data.occupation?.skills || {};
+      // With no occupations in the packs there is no list: the player writes their own.
+      const hasList = listed.length > 0 || o.listed;
+      const own = !o.listed && (!hasList || model.data.occupation?.picks !== undefined || !!o.name);
+      const chosen = o.listed ? o.name : own ? OWN_OCCUPATION : '';
+      const names = listed.map((x) => x.name);
+      // An occupation picked from a pack since switched off still shows by name.
+      if (o.listed && !names.includes(o.name)) names.push(o.name);
+      const opt = (value, label) => `<option value="${esc(value)}"${value === chosen ? ' selected' : ''}>${esc(label)}</option>`;
+      const offered = (s) => !o.offers.length || o.offers.some((x) => occupationOffers(x, s));
+      const facts = [
+        o.offers.length ? `Pick ${o.picks} of: ${esc(o.offers.join(', '))}.` : '',
+        o.feats.length ? `Bonus feat: ${esc(o.feats.join(' or '))} (on <strong>Feats</strong>).` : '',
+        o.money ? `Starting money: ${esc(o.money)}.` : '',
+        o.alignment ? `Alignment: ${esc(o.alignment)}.` : '',
+      ].filter(Boolean);
+      return `<section class="panel occupation">
+        <h3>Occupation
+          ${chosen ? `<span class="badge${o.skills.size < o.picks ? '' : ' ok'}">${o.skills.size} of ${o.picks} picked</span>` : ''}
+        </h3>
+        <div class="fieldgrid">
+          ${hasList ? field('Occupation', `<select data-occupation aria-label="Occupation">
+            ${opt('', 'None')}${names.map((n) => opt(n, n)).join('')}${opt(OWN_OCCUPATION, 'Your own')}
+          </select>`) : ''}
+          ${own ? field('Name', text('occupation.name', o.name, 'Sailor')) : ''}
+          ${own ? field('Skills to pick', `<input type="number" min="0" max="12" value="${esc(o.picks)}"
+            data-set="occupation.picks" data-kind="number" aria-label="Skills to pick" style="width:4.5rem">`) : ''}
+          ${chosen ? Array.from({ length: o.picks }, (_, k) => field(`Occupation skill ${k + 1}`,
+    select(`occupation.skills.${k}`, picks[k], pickOptions(offered)))).join('') : ''}
+        </div>
+        ${facts.length ? `<p class="hint">${facts.join(' ')}</p>` : ''}
+        <p class="hint">Picked skills are class skills (occ). One already ticked as a class skill gets +1 competence.</p>
+      </section>`;
+    };
+
     const b = model.data.skillBudget || {};
     const budgetClass = b.status === 'error' ? 'err' : b.status === 'warning' ? 'warn' : 'ok';
 
@@ -196,6 +242,7 @@ export function renderSkillsPanel(model, ctx) {
           Each specialty skill gets ranks equal to your level, marked ★ in the table below.
         </p>
       </section>`}
+      ${occupationPanel()}
       </div>
 
       <section class="panel span2">
@@ -227,7 +274,8 @@ export function renderSkillsPanel(model, ctx) {
                 <td class="num total" data-stack="head"><span class="rollpair">${fmt(s.bonus)}${
                   rollButton(model, 'skill', i, `a ${skillLabel(s.name, s.spec) || 'skill'} check`, cs)}</span></td>
                 <td class="num" data-label="Ranks">${esc(s.totalRanks)}</td>
-                <td class="mid" data-label="Class skill">${itemCheck('skills', i, 'classSkill', s.classSkill)}</td>
+                <td class="mid" data-label="Class skill">${itemCheck('skills', i, 'classSkill', s.classSkill)}${s.occupationSkill
+    ? `<span class="badge occskill" title="${s.occupationBonus ? 'Occupation skill: +1 competence, already a class skill' : 'Occupation skill: a class skill'}">occ${s.occupationBonus ? ' +1' : ''}</span>` : ''}</td>
                 <td class="num bought" data-label="Bought">${s.backgroundFree
     ? '<span class="dim" title="Background pick: full ranks">—</span>'
     : exprField(`data-item="skills|${i}|rankSources.bought"`,
