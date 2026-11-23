@@ -237,6 +237,10 @@ export function campaignPanel(model, ctx = {}) {
     ? 'Each background rank per level gives one picked skill full ranks (picked on <strong>Skills</strong>).'
     : 'Background ranks form a pool for background skills only.'}</p>`
       : ''),
+          row(['traits', 'drawbackTraits'], 'Traits',
+    `<span class="pair">${ruleCount('traits', rules.traits, 'Traits without a drawback', 'traits')}
+      ${ruleCount('drawbackTraits', rules.drawbackTraits, 'Drawbacks that give a trait', 'from drawbacks')}</span>`,
+    'This is how many traits a character picks, and how many more a drawback each can add.'),
           row('occupations', 'Occupations', check('occupations', 'Occupations'),
     'Each character picks an occupation on <strong>Skills</strong>. Its picked skills are class skills.'),
           row('vmc', 'Variant multiclassing', check('vmc', 'Variant multiclassing'),
@@ -256,6 +260,11 @@ export function campaignPanel(model, ctx = {}) {
           row('mythicTier', 'Mythic tier', tierSelect, tierHint, tierMore),
           row('maxTier', 'Highest mythic tier', mostBox('maxTier', rules.maxTier, TIER_CEILING, 'Highest mythic tier', !rules.mythic),
     'This is the maximum mythic tier.'),
+          row('mythicFloorLevels', 'Lowest mythic tier',
+    ruleCount('mythicFloorLevels', rules.mythicFloorLevels, 'Levels per tier of the lowest mythic tier', 'levels per tier'),
+    rules.mythicTier === 'level' ? 'This applies when the tier comes from trials or the GM.'
+      : rules.mythicFloorLevels ? `The tier is never below the level divided by ${rules.mythicFloorLevels}, rounded down.`
+        : '0 is no lowest tier.'),
           row(['mythicFeats', 'mythicFeatEvery'], 'Mythic feats', featControl, featHint),
           row('mythicLadder', 'What a tier grants', ruleSelect('mythicLadder', rules.mythicLadder,
     [['table', 'Table'], ['core', 'Core (Mythic Adventures)']], 'What a mythic tier grants', !rules.mythic),

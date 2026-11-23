@@ -1157,7 +1157,7 @@ export function wealthPanel(model, ctx) {
         ${v.due ? `<span class="badge ${v.expected.total > 0 ? 'err' : ''}" title="The amount of the next offering as of today.">owed ${n(v.expected.total)}</span>` : ''}
       </h3>
       <div class="bigstats wealthstats">
-        ${bigStat('On hand', n(v.current), v.currency)}
+        ${bigStat('On hand', n(v.onHand), v.purse ? `wallet ${n(v.current)} · coins ${n(v.purse)}` : v.currency)}
         ${v.due ? `${bigStat('Owed', n(v.expected.total), [
     v.oathOfOfferings ? `oath ${n(v.expected.oath)}` : '',
     v.materialCasting ? `casting ${n(v.expected.casting)}` : '',
