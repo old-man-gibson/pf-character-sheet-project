@@ -34,7 +34,7 @@
 
 import {
   DERIVED, FORWARD_BY_DERIVED, abilityMod, armorParts,
-  flatFootedCmd, iterativeAttacks, skillTotal, statMod,
+  flatFootedCmd, iterativeAttacks, savedBefore, skillTotal, statMod,
 } from '../rules.js';
 import { freeBackgroundSkills, specialtyInPlay } from './campaign.js';
 import {
@@ -178,6 +178,12 @@ export class Character {
 
     this.offsets = {};
     this.ffCmdExtra = 0;
+    // A document saved before bonuses read the ability scores with their
+    // bonuses in (see recompute) holds totals worked out the old way, so its
+    // offsets are measured the old way and the sheet is worked out again
+    // after. Measured the new way, the offset would take the difference and
+    // the total would never move.
+    this.oldBonusOrder = savedBefore(data, 'bonus-order');
     this.#normalise();
     this.trackers = this.#loadTrackers();
     this.#reconcile();
@@ -216,6 +222,10 @@ export class Character {
       }
       this.recompute();
     }
+    if (this.oldBonusOrder) {
+      this.oldBonusOrder = false;
+      if (this.#forwardsEarly()) this.recompute();
+    }
   }
 
   /**
@@ -226,14 +236,19 @@ export class Character {
    * may be aimed at have been totalled -- so the sheet is worked out, the
    * bonuses are read off it, and it is worked out again with them in hand.
    *
-   * Never a third time. The second pass reuses the amounts the first one
-   * arrived at for the bonuses aimed at those early stats, rather than working
-   * them out afresh, so a bonus can never chase its own destination round a
-   * loop and settle somewhere that depends on where it started. A bonus aimed
-   * only at something totalled after them -- a skill, a companion -- is worked
-   * out again on the second pass, so that it reads the early stats with their
-   * bonuses in. A character with no forwarded bonuses, or none aimed earlier
-   * than the skills, costs exactly what it always did.
+   * A third time only where a bonus to an ability score sits beside a bonus
+   * to another early stat, and never a fourth. A bonus to an ability score
+   * keeps the amount the first pass gave it. The second pass is then worked
+   * out with those alone, and every other bonus aimed at an early stat is
+   * read off it, so that `{ac += cha.mod}` reads the Charisma its bonuses
+   * arrive at; the third pass has them all and keeps their amounts. With no
+   * ability-score bonus the second pass keeps every early amount and is the
+   * last. Either way no bonus reads a sheet with itself in, so none can chase
+   * its own destination round a loop. A bonus aimed only at something
+   * totalled after them -- a skill, a companion -- is worked out again on
+   * each later pass, so that it reads the early stats with their bonuses in.
+   * A character with no forwarded bonuses, or none aimed earlier than the
+   * skills, costs exactly what it always did.
    */
   recompute() {
     this.contributions = null;
@@ -246,7 +261,10 @@ export class Character {
     this.recomputing = {};
     try {
       this.#computePass();
-      if (this.#forwardsEarly()) this.#computePass();
+      if (this.#forwardsEarly()) {
+        this.#computePass();
+        if (this.contributions?.unsettled) this.#computePass();
+      }
     } finally {
       this.recomputing = outer;
     }
