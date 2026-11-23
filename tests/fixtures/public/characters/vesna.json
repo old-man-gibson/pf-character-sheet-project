@@ -6079,7 +6079,8 @@
   "essence-boon-cell",
   "blank-cmd-deflection",
   "typed-ac-reach",
-  "ac-penalty-cmd"
+  "ac-penalty-cmd",
+  "blank-hp-other"
  ],
  "log": [
   {

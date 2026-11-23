@@ -2110,7 +2110,15 @@ export function ladderDice(ladder, level) {
  */
 export const RULE_CORRECTIONS = ['attack-size-sign', 'poor-save-thirds', 'monster-crit-range', 'hp-meter-fill', 'load-penalties',
   'nonproficiency-penalty', 'weapon-crit-shift', 'pack-notes', 'bonus-order', 'essence-boon-cell', 'blank-cmd-deflection',
-  'typed-ac-reach', 'ac-penalty-cmd'];
+  'typed-ac-reach', 'ac-penalty-cmd', 'blank-hp-other'];
+
+/**
+ * What a new character's hit points once started at for each level, before it
+ * had a class: an amount nothing granted, which stayed in the Other box once
+ * the classes were in. A new character starts with none; the figure is kept
+ * to recognise the leftover on a sheet begun before (Character's constructor).
+ */
+export const BLANK_HP_PER_LEVEL = 6;
 
 /** Whether a document, as saved, predates a correction. */
 export const savedBefore = (doc, correction) => !(Array.isArray(doc?.corrections) && doc.corrections.includes(correction));

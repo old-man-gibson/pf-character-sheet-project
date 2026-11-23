@@ -33,7 +33,7 @@
  */
 
 import {
-  DERIVED, FORWARD_BY_DERIVED, abilityMod, abpDefence, armorParts,
+  BLANK_HP_PER_LEVEL, DERIVED, FORWARD_BY_DERIVED, abilityMod, abpDefence, armorParts,
   flatFootedCmd, isClassSkill, iterativeAttacks, savedBefore, skillTotal, statMod,
 } from '../rules.js';
 import { freeBackgroundSkills, occupationSkills, specialtyInPlay } from './campaign.js';
@@ -203,6 +203,9 @@ export class Character {
     // has sat in the CMD's hidden adjustment ever since (see the end of this
     // constructor).
     const blankCmd = data?.source?.kind === 'blank' && savedBefore(data, 'blank-cmd-deflection');
+    // The same character was given 6 hit points a level that nothing granted,
+    // and they have sat in the hit points' Other box since.
+    const blankHp = data?.source?.kind === 'blank' && savedBefore(data, 'blank-hp-other');
     this.#normalise();
     this.trackers = this.#loadTrackers();
     this.#reconcile();
@@ -243,6 +246,7 @@ export class Character {
     }
     this.oldBoonCell = false;
     if (blankCmd) this.#dropBlankCmdDeflection();
+    if (blankHp) this.#dropBlankHitPoints();
     if (this.oldAcReach) {
       this.oldAcReach = false;
       if ((this.contributions?.entries || []).some((e) => e.type && e.targets.some((t) => String(t).toLowerCase() === 'ac'))) this.recompute();
@@ -257,6 +261,23 @@ export class Character {
       this.oldBonusOrder = false;
       if (this.#forwardsEarly()) this.recompute();
     }
+  }
+
+  /**
+   * Clear the hit points a begun-here character was started with: 6 a level,
+   * in the Other box. What is cleared is an amount that could be that
+   * leftover -- above nothing, and a whole number of sixes. A negative
+   * amount, or any other figure, is the player's own and is left alone.
+   */
+  #dropBlankHitPoints() {
+    const other = this.offsets['hp.total'];
+    if (typeof other !== 'number' || other <= 0 || other % BLANK_HP_PER_LEVEL !== 0) return;
+    this.offsets['hp.total'] = 0;
+    // Current hit points come down with the maximum, so a character at full
+    // is still at full and a wounded one is no more or less wounded.
+    const hp = this.data.hp;
+    if (hp && Number.isFinite(Number(hp.current)) && hp.current !== null && hp.current !== '') hp.current = Number(hp.current) - other;
+    this.recompute();
   }
 
   /**
