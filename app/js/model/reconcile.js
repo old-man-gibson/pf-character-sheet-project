@@ -90,6 +90,17 @@ const DEFENCE_BOX_LABELS = {
 };
 
 /**
+ * A mythic row's cell by the name written on the row: the feat for the feat
+ * and its effect, the path ability for the ability and its effect.
+ */
+function mythicRowName(row, cell) {
+  const feat = cell === 'featChoice' || cell === 'featEffect';
+  const name = String((feat ? row?.featChoice : row?.name) ?? '').replace(/\{[^}]*\}/g, '').trim();
+  if (!name) return '';
+  return cell === 'featEffect' || cell === 'effect' ? `${name}, its effect` : name;
+}
+
+/**
  * A prose source path (`note:1`, `feature:Monk:5:Special`) as something a
  * player can go and look at. The paths are internal, stable and meaningless
  * to a reader; this is the one place that translates them.
@@ -109,7 +120,8 @@ export function describeSource(path, d = null) {
     const said = ['gear', 'other', 'gearBonus', 'otherBonus'].includes(head) ? named(item?.name)
       : ['gearNote', 'otherNote'].includes(head) ? named(item?.name, ', description')
         : head === 'feat' ? named(d.featGroups?.[a]?.entries?.[b]?.name, ', its note')
-          : head === 'note' ? named(d.notes?.[a]?.title, ', on Lore') : '';
+          : head === 'note' ? named(d.notes?.[a]?.title, ', on Lore')
+            : head === 'mythic' ? mythicRowName(d.mythic?.abilities?.[a], b) : '';
     if (said) return said;
   }
   switch (head) {
