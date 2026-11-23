@@ -123,7 +123,7 @@ import {
 import { cookingView } from './subsystems/cooking.js';
 import { craftSkills, recomputeCrafting } from './subsystems/crafting.js';
 import {
-  recomputeManeuvers, setManeuverField, setManeuverNote, toggleManeuver,
+  readyManeuver, recomputeManeuvers, setManeuverField, setManeuverNote, toggleManeuver,
 } from './subsystems/maneuvers.js';
 import { altTrainingPrereq, altTrainingTalents, recomputeAltTraining } from './subsystems/alt-training.js';
 import { psionicsNewDay, recomputePsionics } from './subsystems/psionics.js';
@@ -190,6 +190,11 @@ export class Character {
     // worked out, that number is cleared (see recomputeAkashic), so the pool
     // opens where it was. A formula there was typed to be used, and is kept.
     this.oldBoonCell = savedBefore(data, 'essence-boon-cell');
+    // A document saved while a typed bonus to "all armour classes" reached
+    // all three (a natural armor bonus on touch AC) holds totals worked out
+    // that way, so its offsets are measured that way and the sheet is worked
+    // out again after, as for the bonus order above.
+    this.oldAcReach = savedBefore(data, 'typed-ac-reach');
     // A character begun here above 7th level was written with a CMD of 10,
     // without the ABP deflection bonus its touch AC had, so the difference
     // has sat in the CMD's hidden adjustment ever since (see the end of this
@@ -235,6 +240,10 @@ export class Character {
     }
     this.oldBoonCell = false;
     if (blankCmd) this.#dropBlankCmdDeflection();
+    if (this.oldAcReach) {
+      this.oldAcReach = false;
+      if ((this.contributions?.entries || []).some((e) => e.type && e.targets.some((t) => String(t).toLowerCase() === 'ac'))) this.recompute();
+    }
     if (this.oldBonusOrder) {
       this.oldBonusOrder = false;
       if (this.#forwardsEarly()) this.recompute();
@@ -891,7 +900,8 @@ export class Character {
 
   // subsystems/maneuvers.js
   #recomputeManeuvers(...a) { return recomputeManeuvers(this, ...a); }
-  toggleManeuver(path, name, ready) { return this.play(`${name} ${ready ? 'readied' : 'unreadied'}`, () => toggleManeuver(this, path, name, ready)); }
+  toggleManeuver(path, name, known) { return this.play(`${name} ${known ? 'known' : 'no longer known'}`, () => toggleManeuver(this, path, name, known)); }
+  readyManeuver(path, name, ready) { return this.play(`${name} ${ready ? 'readied' : 'unreadied'}`, () => readyManeuver(this, path, name, ready)); }
   setManeuverNote(...a) { return setManeuverNote(this, ...a); }
   setManeuverField(...a) { return setManeuverField(this, ...a); }
 

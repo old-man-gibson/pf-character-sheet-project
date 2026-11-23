@@ -3791,7 +3791,8 @@
   "possibleManeuvers": 0,
   "possibleStances": 0,
   "disciplines": [],
-  "sourceExtras": []
+  "sourceExtras": [],
+  "sources": []
  },
  "psionics": {
   "classes": [
@@ -6076,7 +6077,8 @@
   "pack-notes",
   "bonus-order",
   "essence-boon-cell",
-  "blank-cmd-deflection"
+  "blank-cmd-deflection",
+  "typed-ac-reach"
  ],
  "log": [
   {

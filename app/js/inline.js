@@ -734,11 +734,16 @@ export function resolveContributions(contributions, names, baseScope, targets, k
   const absorbed = {};        // destination -> the bonuses its own column takes
   const absorbs = targets?.absorbs || (() => false);
 
-  for (const [i, c] of contributions.entries()) {
+  for (const [i, written] of contributions.entries()) {
+    // A destination can name the bonus's type (`ac.natural`), where the
+    // bonus does not say one itself.
+    const impliedType = targets?.typeOf?.(written.targets, written.type) || '';
+    const c = impliedType ? { ...written, type: impliedType } : written;
     const lands = [];
     const dropped = [];
     for (const t of c.targets) {
-      const into = expand(t);
+      const all = expand(t);
+      const into = all && targets?.reach ? targets.reach(t, all, c.type) : all;
       if (!into) {
         dropped.push(t);
         // Two different mistakes, told apart because the fixes differ: a

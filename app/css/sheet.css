@@ -1862,6 +1862,15 @@ button.tiny {
   margin: -1px 0 0; border-radius: 4px; cursor: pointer;
 }
 .mtick:hover { background: var(--cs-accent-soft); }
+/* The second tick, readied, and the letters over the two columns of ticks. A
+   stance has no second tick, and keeps the gap so its name lines up. */
+.mtick.mready.is-none { width: 19px; cursor: default; }
+.mtick.mready.is-none:hover { background: none; }
+.mlegend {
+  display: flex; gap: 4px; padding: 0 4px; font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.04em; color: var(--cs-muted);
+}
+.mlegend span { flex: none; width: 19px; text-align: center; }
 /* The overview pen: quiet until the maneuver holds something. */
 .mnote-btn {
   flex: none; padding: 0 4px; border: 0; background: none; font-size: 0.72rem;

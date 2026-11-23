@@ -15428,6 +15428,136 @@ console.log('a bonus with a limit: {dest += amount up to limit}');
   c.set('formulaNotes', '');
 }
 
+console.log('an AC bonus by its type: {ac.natural += 2} reaches the armour classes that type counts for');
+{
+  const c = new Character(blankDocument({ id: 'zz-acpart', name: 'AC', level: 3 }));
+  const d = () => c.data.defenses;
+  const at = () => [d().ac, d().touch, d().flatFooted, d().cmd];
+  const base = at();
+  const note = (text) => { c.set('formulaNotes', text); return c.contributions.entries.at(-1); };
+  const moved = () => at().map((v, i) => v - base[i]);
+
+  let e = note('{ac.natural += 2}');
+  check('natural armor: AC and flat-footed, not touch or CMD', [moved(), e.type, e.error], [[2, 0, 2, 0], 'natural', null]);
+  check('written the other way, the same', (note('{ac += 2 as natural}'), moved()), [2, 0, 2, 0]);
+  check('armor', (note('{ac.armor += 4}'), moved()), [4, 0, 4, 0]);
+  check('shield', (note('{ac.shield += 2}'), moved()), [2, 0, 2, 0]);
+  check('deflection reaches all four', (note('{ac.deflection += 1}'), moved()), [1, 1, 1, 1]);
+  check('dodge is lost flat-footed', (note('{ac.dodge += 1}'), moved()), [1, 1, 0, 1]);
+  check('and so it is as a typed bonus to every armour class, which CMD counts too', (note('{ac += 1 as dodge}'), moved()), [1, 1, 0, 1]);
+  check('a deflection bonus to every armour class counts for CMD', (note('{ac += 2 as deflection}'), moved()), [2, 2, 2, 2]);
+  check('named beside it, CMD still takes it once', (note('{ac, ac.cmd += 2 as deflection}'), moved()), [2, 2, 2, 2]);
+  check('written in capitals, the same', (note('{AC += 2 as Deflection}'), moved()), [2, 2, 2, 2]);
+  {
+    // A gear row's bonus to AC is sent the same way: a ring of protection.
+    c.set('formulaNotes', '');
+    c.listAdd('equipment.gear', { name: 'Ring of Protection +2', bonuses: [{ target: 'ac', value: 2, type: 'Deflection' }] });
+    check('a ring of protection on a gear row raises CMD', moved(), [2, 2, 2, 2]);
+    c.set('equipment.gear', c.data.equipment.gear.slice(0, -1));
+    check('and goes with the ring', moved(), [0, 0, 0, 0]);
+  }
+  check('an armor bonus to every armour class still does not', (note('{ac += 4 as armor}'), moved()), [4, 0, 4, 0]);
+  check('an untyped bonus to every armour class is as it was', (note('{ac += 1}'), moved()), [1, 1, 1, 0]);
+  check('an armour class named on its own takes what it is sent', (note('{ac.touch += 2 as natural}'), moved()), [0, 2, 0, 0]);
+
+  e = note('{ac.natural += 1 as enhancement}');
+  check('an enhancement bonus to natural armor is the amulet\u2019s kind', [moved(), e.type], [[1, 0, 1, 0], 'enhancedNatural']);
+  check('and has a name of its own', (note('{ac.enhancedNatural += 1}'), moved()), [1, 0, 1, 0]);
+
+  note('{ac.natural += 2} {ac.natural += 3}');
+  check('two natural armor bonuses do not stack', moved(), [3, 0, 3, 0]);
+  note('{ac.dodge += 1} {ac.dodge += 1}');
+  check('two dodge bonuses do', moved(), [2, 2, 0, 2]);
+  note('{ac.natural += 2 up to ' + (base[0] + 1) + '}');
+  check('with a limit, measured on each armour class it reaches', moved(), [1, 0, 1, 0]);
+  check('offered as places to send a bonus',
+    ['ac.natural', 'ac.deflection', 'ac.dodge', 'ac.armor', 'ac.enhancedNatural'].every((n) => c.forwardTargets().list.some((t) => t.name === n)), true);
+
+  // A sheet saved while a natural armor bonus to "every armour class" reached
+  // touch AC opens with touch put right, and nothing hidden to make up for it.
+  note('{ac += 2 as natural} {ac += 1 as deflection}');
+  const now = at();
+  const old = JSON.parse(JSON.stringify(c.toJSON()));
+  old.corrections = old.corrections.filter((x) => x !== 'typed-ac-reach');
+  old.defenses.touch += 2;
+  old.defenses.cmd -= 1;
+  const o = new Character(old);
+  check('an older sheet loses the natural armor on touch AC and gains the deflection on CMD',
+    [[o.data.defenses.ac, o.data.defenses.touch, o.data.defenses.flatFooted, o.data.defenses.cmd], o.offsets['defenses.touch']], [now, 0]);
+  check('with nothing hidden in CMD either', o.offsets['defenses.cmd'], 0);
+  const again = new Character(JSON.parse(JSON.stringify(o.toJSON())));
+  check('and stays so', [again.data.defenses.touch, again.data.defenses.cmd, again.offsets['defenses.touch'], again.offsets['defenses.cmd']], [now[1], now[3], 0, 0]);
+  c.set('formulaNotes', '');
+}
+
+console.log('maneuvers -- known and readied are two ticks, and the counts allowed come from sources');
+{
+  const c = new Character(blankDocument({ name: 'Initiator', level: 6 }));
+  const P = 'maneuvers.disciplines.0';
+  c.set('maneuvers.disciplines', [{
+    name: 'Homebrew Way', known: ['Strike One', 'Strike Two', 'Guard Stance'],
+    custom: [
+      { level: 1, kind: 'maneuver', name: 'Strike One', type: 'Strike' }, { level: 1, kind: 'maneuver', name: 'Strike Two', type: 'Strike' },
+      { level: 1, kind: 'maneuver', name: 'Strike Three', type: 'Strike' }, { level: 1, kind: 'stance', name: 'Guard Stance', type: 'Stance' },
+    ],
+    notes: {},
+  }]);
+  const d = () => c.data.maneuvers.disciplines[0];
+  const k = () => c.data.maneuvers.calc;
+  const flags = (name) => { const e = d().entries.find((x) => x.name === name); return [e.known, e.readied]; };
+
+  // A discipline from before the second tick: one tick meant both.
+  check('everything known on an older discipline is readied', [d().knownManeuvers, d().readiedManeuvers, d().knownStances, 'readied' in d()], [2, 2, 1, false]);
+  const will = () => c.data.saves.will.total;
+  const base = will();
+  c.setManeuverNote(P, 'Strike One', '{saves.will += 2}');
+  c.setManeuverNote(P, 'Guard Stance', '{saves.will += 1}');
+  check('and its bonuses apply as they did', will() - base, 3);
+
+  c.readyManeuver(P, 'Strike One', false);
+  check('unreadying one writes the list, the rest staying readied', [d().readied, flags('Strike One'), flags('Strike Two')], [['Strike Two'], [true, false], [true, true]]);
+  check('known and not readied: its bonus waits; the stance\u2019s goes by known', will() - base, 1);
+  c.readyManeuver(P, 'Strike One', true);
+  check('readied again', [flags('Strike One'), will() - base], [[true, true], 3]);
+
+  c.toggleManeuver(P, 'Strike Three', true);
+  check('a maneuver newly known is not readied yet', [flags('Strike Three'), d().knownManeuvers, d().readiedManeuvers], [[true, false], 3, 2]);
+  c.readyManeuver(P, 'Never Heard Of It', true);
+  check('one that is not known cannot be readied', d().readied.includes('Never Heard Of It'), false);
+  c.toggleManeuver(P, 'Strike One', false);
+  check('forgetting one unreadies it', [flags('Strike One'), d().readied.includes('Strike One'), will() - base], [[false, false], false, 1]);
+  c.readyManeuver(P, 'Guard Stance', true);
+  check('a stance is known, never on the readied list', [flags('Guard Stance'), d().readiedManeuvers, d().readied], [[true, true], 1, ['Strike Two']]);
+  c.undoPlay();
+  c.undoPlay();
+  check('each tick is undone like any other', flags('Strike One'), [true, true]);
+
+  // How many are allowed: a row per source, each a number or a formula.
+  check('no sources: the totals typed on the tab, and no limit on readied',
+    [k().possibleManeuvers, k().possibleReadied, k().possibleStances, k().over], [0, 0, 0, { known: true, stances: true, readied: false }]);
+  c.listAdd('maneuvers.sources', { name: 'Warder', known: 'level', readied: 4, stances: 2 });
+  c.listAdd('maneuvers.sources', { name: 'Feat', known: 1, readied: 0, stances: 0 });
+  check('the sources add up', [k().possibleManeuvers, k().possibleReadied, k().possibleStances], [7, 4, 2]);
+  check('a formula shows what it came to', [c.data.maneuvers.sources[0].knownNum, c.data.maneuvers.sources[0].knownError], [6, null]);
+  c.set('maneuvers.possibleManeuvers', 2);
+  c.set('maneuvers.possibleReadied', 1);
+  check('with the tab\u2019s own boxes as the rest', [k().possibleManeuvers, k().possibleReadied, k().legal], [9, 5, true]);
+  c.set('maneuvers.possibleReadied', 0);
+  c.setItem('maneuvers.sources', 0, 'readied', 1);
+  check('more readied than allowed is over the limit', [k().readied, k().possibleReadied, k().over.readied, k().legal], [2, 1, true, false]);
+  c.setItem('maneuvers.sources', 0, 'readied', 'no.such.name +');
+  check('a count that does not work out counts for nothing and says so',
+    [k().possibleReadied, typeof c.data.maneuvers.sources[0].readiedError], [0, 'string']);
+  c.setItem('maneuvers.sources', 0, 'readied', 4);
+
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  check('saved: the ticks and the rows, none of the working',
+    [saved.maneuvers.disciplines[0].readied.length, saved.maneuvers.sources.map((s) => Object.keys(s).sort().join()), 'entries' in saved.maneuvers.disciplines[0]],
+    [2, ['known,name,readied,stances', 'known,name,readied,stances'], false]);
+  const again = new Character(saved);
+  check('and reopened the same', [again.data.maneuvers.calc.readied, again.data.maneuvers.calc.possibleManeuvers, again.data.saves.will.total], [k().readied, k().possibleManeuvers, will()]);
+}
+
 console.log('spells per day take bonuses: {vancian.<class>.slots.<level> += …}');
 {
   const c = new Character(blankDocument({ id: 'zz-slots', name: 'Slots', level: 10 }));

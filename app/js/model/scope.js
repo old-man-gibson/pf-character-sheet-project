@@ -12,6 +12,7 @@ import {
   ABILITIES, AC_BONUS_TYPES, DEFENCE_PART_FAMILIES, FORWARD_FAMILIES, FORWARD_LATE,
   FORWARD_STATS, MANEUVER_FIELDS, SAVE_BONUS_TYPES, SHEET_ALIASES, armorParts, gearBonusToken, skillLabel,
   ABP_DEFENCE_CAP, ENHANCEMENT_CAP, abpPair, abpPairReason, columnTypes, isClassSkill, statMod,
+  AC_PART_TYPES, acPartReach, acReachOf, acTypeReachesCmd, bonusColumnName,
 } from '../rules.js';
 import { deathThreshold, effectiveMythicTier, fmt, mythicPowerUses, surgeDie } from '../rules.js';
 import {
@@ -34,6 +35,7 @@ import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/a
 import { tempHpGrant } from './stats/defenses.js';
 import { wealthViewOf } from './stats/wealth.js';
 import { boundScope, essenceScope, veilScope } from './subsystems/akashic.js';
+import { readiedNames } from './subsystems/maneuvers.js';
 import { manipulationName } from './subsystems/cardcasting.js';
 import { trackerFacts, trackerShown } from './trackers.js';
 import { featLevel, featNames, isAhead, rowLevel } from './feats.js';
@@ -1136,6 +1138,16 @@ export function forwardTargets(model) {
     expand.set(name, members);
     list.push({ name, label: `All ${name === 'ac' ? 'armour classes' : name}`, family: members });
   }
+  // An AC bonus by its type: `{ac.natural += 2}` is a natural armor bonus,
+  // on the armour classes a natural armor bonus counts for.
+  const acPart = new Map();
+  for (const type of AC_PART_TYPES) {
+    const name = `ac.${type}`;
+    const members = acPartReach(type);
+    expand.set(name, members);
+    acPart.set(name, type);
+    list.push({ name, label: `${bonusColumnName(type)} bonus to AC`, family: members });
+  }
 
   // Weapons are matched rather than enumerated. "Melee weapons", "axes" and
   // "the guitar axe" are all the same shape of rule -- a condition on which
@@ -1240,6 +1252,28 @@ export function forwardTargets(model) {
     },
     columnsOf: (key) => typedColumns(model, key),
     absorbs: (key, e) => gearColumnTakes(model, key, e),
+    // The type a destination names where the bonus names none: `ac.natural`.
+    // An enhancement bonus sent to the natural armor is the amulet's kind.
+    typeOf: (names, written = '') => {
+      const part = acPart.get((names || []).map((n) => canonical(n) || n).find((n) => acPart.has(n)));
+      if (!part) return '';
+      if (!written) return part;
+      return part === 'natural' && written === 'enhancement' ? 'enhancedNatural' : '';
+    },
+    // "All armour classes" is the ones a bonus of this type counts for: a
+    // natural armor bonus does not reach touch AC, nor a dodge bonus
+    // flat-footed, and a deflection bonus counts for CMD as well (a gear
+    // row's "AC, Deflection" is sent this way). An armour class named on its
+    // own gets what is sent to it.
+    // A sheet saved while every type reached all three is measured that way
+    // first (`oldAcReach`, see Character's constructor).
+    reach: (name, into, type) => {
+      if (model.oldAcReach || canonical(name) !== 'ac') return into;
+      const flags = acReachOf(type);
+      const reached = into.filter((key) => !(key === 'ac.touch' && flags.touch === false)
+        && !(key === 'ac.flatFooted' && flags.flatFooted === false));
+      return acTypeReachesCmd(type) ? [...reached, 'ac.cmd'] : reached;
+    },
   };
 }
 
@@ -1808,7 +1842,7 @@ export function proseSources(model) {
   // A bonus written there waits for the maneuver to be readied, as a buff's
   // waits for its tick; a definition stands either way. Same `future` state.
   (d.maneuvers?.disciplines || []).forEach((disc, di) => {
-    const readied = new Set((disc.known || []).map((n) => String(n).trim().toLowerCase()));
+    const readied = new Set(readiedNames(disc).map((n) => String(n).trim().toLowerCase()));
     for (const [name, entry] of Object.entries(disc.notes || {})) {
       const off = readied.has(String(name).trim().toLowerCase()) ? null : { future: true };
       if (typeof entry === 'string') { push(`maneuverNote:${di}:${name}`, entry, null, off); continue; }

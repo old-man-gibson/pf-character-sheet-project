@@ -83,7 +83,7 @@ import { countsTowardLine } from '../counts-toward.js';
 import { squareLayout } from '../../tracker-style.js';
 import { abilitySelect, check, field, num, autoNum, levelPin, levelPinHint, postBox, roValue, select, text } from '../fields.js';
 import {
-  addButton, bigStat, collapsible, exprField, foldButton, gridCell, isCollapsed, isOpen, itemCheck, itemNum,
+  addButton, bigStat, collapsible, exprField, foldButton, gridCell, isCollapsed, isOpen, itemCheck, itemExpr, itemNum,
   itemSelect, itemText, line,
   lineHtml, miniStat, proseList, removeButton, rowRemove, rowTools, working,
 } from '../rows.js';
@@ -712,14 +712,34 @@ export function maneuversPanel(model, ctx) {
       <section class="panel span2">
         <h3>Maneuvers ${k.legal === false ? '<span class="badge err">over the limit</span>' : ''}</h3>
         <div class="statbar">
-          ${miniStat('Maneuvers', `${k.maneuvers ?? 0}/${k.possibleManeuvers ?? 0}`)}
+          ${miniStat('Known', `${k.maneuvers ?? 0}/${k.possibleManeuvers ?? 0}`)}
+          ${miniStat('Readied', `${k.readied ?? 0}/${k.possibleReadied ?? 0}`)}
           ${miniStat('Stances', `${k.stances ?? 0}/${k.possibleStances ?? 0}`)}
           ${miniStat('Disciplines', (m.disciplines || []).length)}
-          <span class="statbar-fill"></span>
-          <label class="minifield">Maneuvers allowed
-            ${num('maneuvers.possibleManeuvers', m.possibleManeuvers, 'style="width:3.4rem"')}</label>
-          <label class="minifield">Stances allowed
-            ${num('maneuvers.possibleStances', m.possibleStances, 'style="width:3.4rem"')}</label>
+        </div>
+        <div class="tablewrap squeeze" style="margin-top:8px"><table class="build msources">
+          <thead><tr><th>Allowed from</th><th>Known</th><th>Readied</th><th>Stances</th><th></th></tr></thead>
+          <tbody>
+            ${(m.sources || []).map((s, i) => `<tr>
+              <td>${itemText('maneuvers.sources', i, 'name', s.name, 'Class or feat')}</td>
+              ${['known', 'readied', 'stances'].map((f) => `<td>${itemExpr('maneuvers.sources', i, f, s, { width: '4.2rem' })}</td>`).join('')}
+              <td>${removeButton('maneuvers.sources', i, { what: 'source', tiny: true })}</td>
+            </tr>`).join('')}
+            <tr>
+              <th scope="row">${(m.sources || []).length ? 'Other' : 'Total'}</th>
+              <td>${num('maneuvers.possibleManeuvers', m.possibleManeuvers, 'style="width:4.2rem" aria-label="Maneuvers known allowed"')}</td>
+              <td>${num('maneuvers.possibleReadied', m.possibleReadied ?? 0, 'style="width:4.2rem" aria-label="Maneuvers readied allowed"')}</td>
+              <td>${num('maneuvers.possibleStances', m.possibleStances, 'style="width:4.2rem" aria-label="Stances allowed"')}</td>
+              <td></td>
+            </tr>
+            ${(m.sources || []).length ? `<tr><th scope="row">Total</th>
+              <td class="total">${k.possibleManeuvers ?? 0}</td><td class="total">${k.possibleReadied ?? 0}</td>
+              <td class="total">${k.possibleStances ?? 0}</td><td></td></tr>` : ''}
+          </tbody>
+        </table></div>
+        <div class="pair" style="margin-top:6px">
+          ${addButton('maneuvers.sources', 'Add a source', { name: '', known: 0, readied: 0, stances: 0 })}
+          <span class="hint">One row per class or feat that grants maneuvers. Each count is a number or a formula.</span>
         </div>
         <div class="pair" style="margin-top:8px">
           <select data-action="add-discipline" aria-label="Add a discipline">
@@ -729,7 +749,9 @@ export function maneuversPanel(model, ctx) {
           ${available.length ? '' : '<span class="hint">Every discipline in the catalog is trained.</span>'}
         </div>
         <p class="hint" style="margin-top:6px">
-          <strong>Tick</strong> a maneuver to ready it. <strong>Click its name</strong> to read
+          The first box marks a maneuver as <strong>known</strong>, the second as <strong>readied</strong>.
+          A bonus written on a maneuver applies while it is readied. A stance is only known.
+          <strong>Click a name</strong> to read
           your description, or ✎ to edit its type, action, range, target, duration, saving throw
           and description. Each field accepts <code>{…}</code> formulas.
           <strong>Right-click</strong> a name to open its page on the
@@ -762,10 +784,11 @@ function disciplineColumn(model, ctx, d, i) {
       <div class="discipline-head">
         ${foldButton(model, `disc:${d.name}`, { open: !collapsed, cls: 'disclose', title: collapsed ? 'Expand' : 'Collapse' })}
         <span class="dname" title="${esc(d.name)}">${esc(d.name) || '<em>Unnamed</em>'}</span>
-        <span class="dcount" title="readied maneuvers / stances">${d.knownManeuvers ?? 0}<i>/</i>${d.knownStances ?? 0}</span>
+        <span class="dcount" title="maneuvers known / readied / stances known">${d.knownManeuvers ?? 0}<i>/</i>${d.readiedManeuvers ?? 0}<i>/</i>${d.knownStances ?? 0}</span>
         ${removeButton('maneuvers.disciplines', i, { what: 'discipline', title: `Stop training ${d.name}`, tiny: true })}
       </div>
       ${collapsed ? '' : `<div class="discipline-body">
+        ${entries.length ? '<div class="mlegend" aria-hidden="true"><span title="Known">K</span><span title="Readied">R</span></div>' : ''}
         ${d.inCatalogue === false && !entries.length
     ? '<p class="empty">Not in the catalog.</p>' : ''}
         ${levels.map((lvl) => `
@@ -782,10 +805,15 @@ function disciplineColumn(model, ctx, d, i) {
     const written = maneuverIsWritten(own);
     return `
             <div class="mrow${e.known ? ' is-known' : ''}${open ? ' is-open' : ''}">
-              <label class="mtick" title="${esc(e.known ? `Stop readying ${e.name}` : `Ready ${e.name}`)}">
+              <label class="mtick" title="${esc(e.known ? `${e.name} is known. Untick to forget it.` : `Know ${e.name}`)}">
                 <input type="checkbox" ${e.known ? 'checked' : ''}
                   data-ready="${list}|${esc(e.name)}" data-kind="bool"
-                  aria-label="Ready ${esc(e.name)}"></label>
+                  aria-label="Know ${esc(e.name)}"></label>
+              ${e.kind === 'stance' ? '<span class="mtick mready is-none" title="A stance is known, not readied."></span>'
+    : `<label class="mtick mready" title="${esc(!e.known ? `Know ${e.name} first` : e.readied ? `${e.name} is readied. Untick to unready it.` : `Ready ${e.name}`)}">
+                <input type="checkbox" ${e.readied ? 'checked' : ''} ${e.known ? '' : 'disabled'}
+                  data-mready="${list}|${esc(e.name)}" data-kind="bool"
+                  aria-label="Ready ${esc(e.name)}"></label>`}
               <button data-view type="button" class="mname" data-mopen="${esc(key)}"
                 ${wiki ? `data-wiki="${esc(wiki)}"` : ''} aria-expanded="${open}"
                 title="${esc(e.name)}${entry.type ? `: ${esc(entry.type)}` : ''}
@@ -833,7 +861,7 @@ function maneuverCard(model, ctx, list, e, entry, own, key, wiki) {
           title="${editing ? 'Stop editing.' : 'Describe what it does.'}">${editing ? 'Done' : 'Edit'}</button>
         <button data-view class="tiny" data-mclose="${esc(key)}" title="Close" aria-label="Close ${esc(e.name)}">×</button>
       </div>
-      ${editing ? maneuverCells(model, list, e, own) : maneuverRead(model, ctx, entry, key, e.known)}
+      ${editing ? maneuverCells(model, list, e, own) : maneuverRead(model, ctx, entry, key, e.readied)}
     </div>`;
 }
 
@@ -845,7 +873,7 @@ function maneuverCard(model, ctx, list, e, entry, own, key, wiki) {
  * em-dashes is a form rather than a rules entry.
  */
 // A bonus written on a maneuver applies only while it is readied.
-const UNREADIED = { inactiveTitle: 'Not readied, so the bonus is not applying. Ready it to switch it on.' };
+const UNREADIED = { inactiveTitle: 'Not readied (or, for a stance, not known), so the bonus is not applying.' };
 
 function maneuverRead(model, ctx, entry, key, readied = true) {
   const shown = MANEUVER_FIELDS
@@ -890,7 +918,7 @@ function maneuverCells(model, list, e, own) {
       ? maneuverSelect(bind(f), own[f.key], f.options,
         under ? `${under} (from the catalog)` : '—')
       : prose(model, `${bind(f)} placeholder="${esc(ghost)}"`,
-        own[f.key], f.lines || 1, 'grow', null, { ...UNREADIED, inactive: !e.known });
+        own[f.key], f.lines || 1, 'grow', null, { ...UNREADIED, inactive: !e.readied });
     return `<div class="mcell"><span class="k">${esc(f.label)}</span>${control}</div>`;
   };
   const lines = [...new Set(MANEUVER_FIELDS.map((f) => f.line))];

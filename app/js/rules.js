@@ -1331,6 +1331,43 @@ export const BONUS_TYPES = {
 };
 
 /**
+ * Which armour classes a bonus of a type reaches, as a bonus sent by a
+ * formula: BONUS_TYPES' own flags, and armor and shield bonuses, which a
+ * touch attack ignores and CMD never counts. `natural_armor` is the old
+ * spelling of `natural`.
+ */
+const ARMOR_SIDE = { touch: false, cmd: false };
+export function acReachOf(type) {
+  const key = String(type || '').toLowerCase().replace(/^temp\./, '').replace(/^natural_armor$/, 'natural');
+  if (key === 'armor' || key === 'shield' || key === 'enhancednatural') return ARMOR_SIDE;
+  return BONUS_TYPES[key]?.ac || {};
+}
+
+/**
+ * The AC bonus types CMD counts as well. The rule names them, and it is a
+ * closed list (see BONUS_TYPES): a bonus of one of these sent to "all armour
+ * classes" reaches CMD too, as a ring of protection's does.
+ */
+const CMD_AC_TYPES = new Set(['circumstance', 'deflection', 'dodge', 'insight', 'luck', 'morale', 'profane', 'sacred']);
+export const acTypeReachesCmd = (type) => CMD_AC_TYPES.has(String(type || '').toLowerCase().replace(/^temp./, ''));
+
+/**
+ * The AC bonus types a formula can aim at by name: `{ac.natural += 2}` is a
+ * natural armor bonus on every armour class that counts one. Untyped is plain
+ * `ac`. An enhancement bonus to natural armor (an amulet of natural armor)
+ * is `ac.enhancedNatural`, or `{ac.natural += 1 as enhancement}`.
+ */
+export const AC_PART_TYPES = ['armor', 'shield', 'natural', 'enhancedNatural', 'deflection', 'dodge', 'circumstance',
+  'insight', 'luck', 'morale', 'sacred', 'profane', 'size'];
+
+/** The armour classes `ac.<type>` reaches: AC, touch, flat-footed and CMD, less the ones the type does not. */
+export function acPartReach(type) {
+  const reach = acReachOf(type);
+  return [['ac.total', null], ['ac.touch', 'touch'], ['ac.flatFooted', 'flatFooted'], ['ac.cmd', 'cmd']]
+    .filter(([, flag]) => !flag || reach[flag] !== false).map(([name]) => name);
+}
+
+/**
  * The columns of a save or AC row that are not a bonus type of their own:
  * Automatic Bonus Progression's half of each capped pair (ABP_DEFENCE_GROUPS),
  * and the template's and the imported sheet's remainders.
@@ -2072,7 +2109,8 @@ export function ladderDice(ladder, level) {
  * (model/note-fill.js, `fillShownNotes`).
  */
 export const RULE_CORRECTIONS = ['attack-size-sign', 'poor-save-thirds', 'monster-crit-range', 'hp-meter-fill', 'load-penalties',
-  'nonproficiency-penalty', 'weapon-crit-shift', 'pack-notes', 'bonus-order', 'essence-boon-cell', 'blank-cmd-deflection'];
+  'nonproficiency-penalty', 'weapon-crit-shift', 'pack-notes', 'bonus-order', 'essence-boon-cell', 'blank-cmd-deflection',
+  'typed-ac-reach'];
 
 /** Whether a document, as saved, predates a correction. */
 export const savedBefore = (doc, correction) => !(Array.isArray(doc?.corrections) && doc.corrections.includes(correction));
