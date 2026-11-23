@@ -650,6 +650,9 @@ export function targetsHtml(groups, total, query, own = '') {
       <code>damage.mult</code> (multiplied on a crit). Leave out <em>which</em> to apply to every
       weapon: <code>{damage += 2}</code>, <code>{weapon.attack += 1}</code>. A bonus that matches
       no weapon yet applies when a matching weapon is added.</p>
+    <p class="hint"><strong><code>up to</code>:</strong> a limit the stat cannot pass, written after the
+      amount. The limit is any formula. <code>{vancian.wizard.cl += 2 up to level}</code> adds 2 to the
+      caster level, or less where 2 would take it above the character's level.</p>
     <p class="hint"><strong><code>target</code>:</strong> inside the formula, <code>target</code> is
       the stat the bonus is added to, and a formula that uses it is evaluated once per destination.
       Its parts have the same names as when the stat is read directly: on a skill,

@@ -61,6 +61,11 @@ const TARGET_RE = /^target\./;
 // permanent bonus moves the score, a temporary one moves only the working
 // score every derived number is built from.
 const AS_RE = /\s+as\s+([A-Za-z][A-Za-z0-9_.-]*)\s*$/;
+// "... up to level" on a bonus is a limit on what the stat comes to: "+2 to
+// caster level, which cannot exceed your Hit Dice". The limit is any formula.
+// Two bare words side by side are not a formula, so the words cannot be
+// mistaken for part of one.
+const UP_TO_RE = /^([\s\S]*?\S)\s+up\s+to\s+(\S[\s\S]*)$/i;
 
 /** Split prose into text and token segments. */
 export function tokenize(text) {
@@ -93,13 +98,43 @@ function parseTargets(left, { keyword = false } = {}) {
   return parts.map((p) => p.replace(TARGET_RE, ''));
 }
 
-/** Split "expr as temp.size" into the expression, its type, and when it applies. */
-function parseType(expr) {
-  const m = AS_RE.exec(expr);
+/**
+ * A bonus with a limit, as one formula: the amount, or the room left under
+ * the limit where that is less, and never below nothing. `target` is the
+ * stat from before bonuses, as it is in any bonus, so the limit cannot be
+ * reading the bonus it is limiting. A penalty written as a negative amount
+ * passes through: there is nothing for an upper limit to take off it.
+ */
+const limited = (amountExpr, limitExpr) => `min((${amountExpr}), max(0, (${limitExpr}) - target))`;
+
+/**
+ * Split "expr up to limit as temp.size" into the expression, its limit, its
+ * type, and when it applies. The type may follow the amount or the limit.
+ * A limit is on what a bonus adds up to; taking off "up to" something says
+ * nothing, so with `limits` off the words stay in the formula, which fails.
+ */
+function parseType(source, limits = true) {
+  let expr = String(source);
+  let m = AS_RE.exec(expr);
+  if (m) expr = expr.slice(0, m.index);
+  const cap = limits ? UP_TO_RE.exec(expr) : null;
+  let limit = '';
+  if (cap) {
+    limit = cap[2].trim();
+    expr = cap[1];
+    // "+= 2 as size up to 30": the type sat before the limit.
+    if (!m) {
+      m = AS_RE.exec(expr);
+      if (m) expr = expr.slice(0, m.index);
+    }
+  }
+  expr = expr.trim();
   const raw = m ? m[1].toLowerCase() : '';
   const temporary = raw === 'temp' || raw.startsWith('temp.');
   return {
-    expr: m ? expr.slice(0, m.index).trim() : expr.trim(),
+    expr: limit ? limited(expr, limit) : expr,
+    // What was written, for a list that prints the bonus back.
+    ...(limit ? { limit, said: `${expr} up to ${limit}` } : {}),
     // "as temp" on its own says *when*, not *what kind*, so it is untyped and
     // two of them stack the way two untyped bonuses do. "as temp.size" keeps
     // the whole string as its type, which is what makes a temporary size bonus
@@ -167,8 +202,9 @@ function parseToken(inner, raw) {
   if (push) {
     const targets = parseTargets(push[1]);
     if (targets) {
+      const sign = push[2] === '-' ? -1 : 1;
       return {
-        kind: 'push', targets, sign: push[2] === '-' ? -1 : 1, raw, ...parseType(push[3]),
+        kind: 'push', targets, sign, raw, ...parseType(push[3], sign > 0),
       };
     }
   }
@@ -320,6 +356,11 @@ function amount(expr, scope, sign) {
  * `value` is the amount shown inline: the most common non-zero amount, or 0
  * if every amount is 0.
  */
+/** Why a limit cannot be kept on a stat that is only totalled after bonuses, in the words the bonus used. */
+const LIMIT_NEEDS = /^"target" alone is not available for (.+?): /;
+export const limitError = (message) => String(message).replace(LIMIT_NEEDS,
+  (_, kind) => `"up to" needs the value before bonuses, and ${kind} is only totalled after them: `);
+
 export function amountsPerTarget(expr, sign, keys, scopeFor, targetOf, settled = null) {
   const values = { ...settled?.values };
   const failed = { ...settled?.failed };
@@ -385,6 +426,7 @@ export function collectContributions(sources) {
           expr: t.expr,
           type: t.type || '',
           temporary: !!t.temporary,
+          ...(t.limit ? { limit: t.limit, said: t.said } : {}),
           path,
           scope,
           raw: t.raw,
@@ -739,6 +781,7 @@ export function resolveContributions(contributions, names, baseScope, targets, k
     } else if (kept || (targetOf && readsTarget(c.expr))) {
       each = kept ? { value: kept.value, values: kept.values, failed: kept.failed || {} }
         : amountsPerTarget(c.expr, c.sign, keys, scopeFor, targetOf);
+      if (c.limit && !kept) each.failed = Object.fromEntries(Object.entries(each.failed).map(([k, w]) => [k, limitError(w)]));
     } else {
       try {
         value = amount(c.expr, scopeFor(null), c.sign);
