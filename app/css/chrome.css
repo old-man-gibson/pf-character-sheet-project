@@ -166,3 +166,8 @@ dialog.box::backdrop{background:rgba(10,12,15,.45)}
 
 /* Printed pages: the margins the sheet fits wide tables to (PRINT_WIDTH in sheet-element.js). */
 @page{margin:10mm}
+
+/* No up and down buttons in a number cell. The arrow keys still step it. */
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
