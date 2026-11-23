@@ -32,7 +32,7 @@ import { campaignRules, coreAbp, isAntihero, specialtyInPlay, vmcTakesSlot, vmcC
 import { sphereTableNames, talentsIn } from './spheres.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
 import { tempHpGrant } from './stats/defenses.js';
-import { wealthView } from './stats/wealth.js';
+import { wealthViewOf } from './stats/wealth.js';
 import { boundScope, essenceScope, veilScope } from './subsystems/akashic.js';
 import { manipulationName } from './subsystems/cardcasting.js';
 import { trackerFacts, trackerShown } from './trackers.js';
@@ -278,7 +278,7 @@ export function characterScope(model) {
       cmb: c.attack.totalCmb,
     },
     // The wallet: what is on hand, what the next offering costs, what is left after it.
-    mana: (() => { const w = wealthView(c.wealth, new Date(), model.casterLevel); return { current: w.current, expected: w.expected.total, after: w.after, perDay: w.manaPerDay }; })(),
+    mana: (() => { const w = wealthViewOf(model); return { current: w.onHand, expected: w.expected.total, after: w.after, perDay: w.manaPerDay }; })(),
     caster: {
       level: model.casterLevel,
       dc: Number(c.training?.magic?.globalDC) || 0,

@@ -126,7 +126,27 @@ console.log('\nwhat the money is called');
   check('the campaign\'s own', [c.wealthView().currency, draw().includes('Current gold'), draw().includes('Gold / day'), draw().includes('Current mana')],
     ['Gold', true, true, false]);
   check('and it counts as a change', campaignChanges(c.data), ['currency']);
+  // A coin for a currency: the purse on Equipment is the same money.
+  c.set('equipment.coins', { pp: 1, gp: 400, sp: 2, cp: 7 });
+  c.set('wealth.current', 50);
+  const v = c.wealthView();
+  check('gold counts the coin purse', [v.current, v.purse, v.onHand, v.after], [50, 410.27, 460.27, 460.27]);
+  check('the panel says which is which', draw().includes('wallet 50 · coins 410.27'), true);
+  check('and formulas read all of it', c.scope().mana.current, 460.27);
+  c.set('campaign.currency', 'gp');
+  check('by its short name too', c.wealthView().onHand, 460.27);
+  c.set('campaign.currency', 'Silver pieces');
+  check('silver counts it in silver', c.wealthView().purse, 4102.7);
+  c.set('wealth.oathOfOfferings', true); c.set('wealth.manaPerDay', 20);
+  c.set('wealth.lastOffering', '2026-01-01');
+  c.set('campaign.currency', 'Gold');
+  const day = new Date(2026, 0, 3);
+  check('an offering is owed out of both', c.wealthView(day).after, 460.27 - 20);
+  c.makeOffering(day);
+  check('and paid from the wallet, the coins left alone', [c.data.wealth.current, c.data.wealth.baseline, c.data.equipment.coins.gp, c.wealthView(day).gains], [30, 440.27, 400, 0]);
+  c.set('wealth.oathOfOfferings', false);
   c.set('campaign.currency', '');
+  check('mana is not coin', [c.wealthView().purse, c.wealthView().onHand], [0, 30]);
   check('blank is the table\'s again', [c.wealthView().currency, campaignChanges(c.data)], ['Mana', []]);
 }
 

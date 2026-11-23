@@ -176,7 +176,7 @@ export function renderOverviewPanel(model, ctx) {
     // what is left once the offering owed today is paid.
     const w = model.wealthView();
     const n = (x) => Number(x || 0).toLocaleString('en-US');
-    return bigStat(w.currency, n(w.current), w.due && w.expected.total
+    return bigStat(w.currency, n(w.onHand), w.due && w.expected.total
       ? `after offering ${n(w.after)}` : (w.due ? 'nothing owed' : 'on hand'));
   })()}
         </div>

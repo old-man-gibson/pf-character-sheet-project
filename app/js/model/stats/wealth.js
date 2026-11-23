@@ -10,6 +10,7 @@
 import { currencyName } from '../campaign.js';
 import { emit } from '../events.js';
 import { numOrNull } from '../util.js';
+import { COIN_KINDS, coinValue } from '../../rules.js';
 import { markUndo, rowLabel } from '../undo.js';
 
 export const WEALTH_KINDS = ['session', 'reward', 'spend', 'offering', 'adjust'];
@@ -78,6 +79,20 @@ export function normalizeWealth(w) {
   };
 }
 
+/**
+ * The coin purse in the campaign's money, when that money is a coin: a
+ * currency named "Gold" or "gp" is the purse's own gold, so the wallet counts
+ * it, with the other coins at their worth. Any other currency (mana) is not
+ * coin, and the purse is no part of it.
+ */
+export function purseIn(currency, coins) {
+  const name = String(currency || '').trim().toLowerCase().replace(/\s+(pieces?|coins?)$/, '');
+  const kind = COIN_KINDS.find(([k, label]) => name === k || name === label.toLowerCase());
+  if (!kind) return 0;
+  // Whole copper first: 0.1 + 0.07 is not 0.17 in floating point.
+  return Math.round(coinValue(coins) * 100) / (kind[2] * 100);
+}
+
 /** Whole days from `from` (YYYY-MM-DD) to `to`, as TODAY() - date counts them; 0 if unknown or in the future. */
 function daysBetween(from, to) {
   if (!from) return 0;
@@ -114,9 +129,11 @@ function nextMonthDay(from, today) {
  * part, and what is left after it. `today` is injectable so a test does not
  * move with the calendar, and so is `casterLevel`, which the material-casting
  * upkeep is charged against: it is 10 a level every whole month, so the same
- * month costs a 4th-level caster 40 and a 15th-level one 150.
+ * month costs a 4th-level caster 40 and a 15th-level one 150. `purse` is the
+ * coin purse in the same money (see purseIn): `current` stays the wallet's
+ * own figure, the one the field edits, and `onHand` is the two together.
  */
-export function wealthView(w, today = new Date(), casterLevel = 0) {
+export function wealthView(w, today = new Date(), casterLevel = 0, purse = 0) {
   const v = normalizeWealth(w);
   const cl = Math.max(0, Number(casterLevel) || 0);
   const offeringPerDay = v.manaPerDay / 2;
@@ -127,8 +144,10 @@ export function wealthView(w, today = new Date(), casterLevel = 0) {
   const casting = v.materialCasting ? months * castingPerMonth : 0;
   const expected = oath + casting;
   const day = isoDay(today);
+  const onHand = v.current + (Number(purse) || 0);
   return {
     ...v,
+    purse: Number(purse) || 0, onHand,
     offeringPerDay, days, months, casterLevel: cl, castingPerMonth,
     // The date box's ceiling, and a last offering past it -- typed, not
     // picked -- which counts no days and no months rather than going negative.
@@ -137,8 +156,8 @@ export function wealthView(w, today = new Date(), casterLevel = 0) {
     // When the material-casting upkeep next grows by a month.
     nextMonth: v.materialCasting ? nextMonthDay(v.lastOffering, today) : '',
     expected: { oath, casting, total: expected },
-    after: v.current - expected,
-    gains: v.baseline === null ? null : v.current - v.baseline,
+    after: onHand - expected,
+    gains: v.baseline === null ? null : onHand - v.baseline,
     due: v.oathOfOfferings || v.materialCasting,
   };
 }
@@ -148,7 +167,9 @@ export function wealthView(w, today = new Date(), casterLevel = 0) {
  * left after it -- in the money the campaign's rules name.
  */
 export function wealthViewOf(model, today = new Date()) {
-  return { ...wealthView(model.data.wealth, today, model.casterLevel), currency: currencyName(model.data) };
+  const currency = currencyName(model.data);
+  const purse = purseIn(currency, model.data.equipment?.coins);
+  return { ...wealthView(model.data.wealth, today, model.casterLevel, purse), currency };
 }
 
 /**
@@ -198,7 +219,8 @@ export function makeOffering(model, today = new Date()) {
   const w = model.data.wealth;
   const entry = { date: isoDay(today), label: 'Oath of Offerings' + (view.expected.casting ? ' & material casting' : ''), amount: -view.expected.total, kind: 'offering' };
   w.ledger.push(entry);
-  w.current = view.after;
+  // The offering comes out of the wallet; coins in the purse stay where they are.
+  w.current = view.current - view.expected.total;
   w.baseline = view.after;
   w.lastOffering = isoDay(today);
   w.sessionMana = 0;
