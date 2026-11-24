@@ -927,7 +927,7 @@ function craftSpeedPanel(model, cr) {
       <p class="hint">
         Flat increases add to the base rate. ${campaignRules(model.data).craftSpeed === 'multiply'
     ? 'Multipliers multiply: three ×2 bonuses make ×8.'
-    : 'Multipliers add together: two ×2 bonuses make ×4.'}
+    : 'Multipliers add together: three ×2 bonuses make ×4.'}
         Amounts accept formulas (<code>level * 100</code>).
       </p>
       <p class="hint">

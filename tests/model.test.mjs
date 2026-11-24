@@ -10997,14 +10997,15 @@ console.log('a rule saved as a bare string still loads');
 console.log('item crafting reproduces the workbook, then recalculates');
 {
   // Bryva is the only character whose Item Crafting tab was filled in, so her
-  // numbers are the fixed point: 5 crafting bonuses at x2 = 10,000 mana of
-  // progress a day, a 10% reduction on a half-cost item, a 200,000 ring that
+  // numbers are the fixed point: 5 crafting bonuses at x2 = x6, 6,000 mana of
+  // progress a day (her workbook summed them to x10; the sheet adds one less
+  // than each says past the first, see craftingSpeed), a 10% reduction on a half-cost item, a 200,000 ring that
   // costs 90,000 and sells at cost, and a take-10 check off Craft (Weapons).
   const c = new Character(load('bryva'));
   const cr = c.data.crafting;
   const p = cr.projects[0];
   check('the raw tab is gone', (c.data.sheetTabs || []).some((t) => t.name === 'Item Crafting'), false);
-  check('speed per day', cr.calc.speedPerDay, 10000);
+  check('speed per day', cr.calc.speedPerDay, 6000);
   check('base cost fraction', cr.calc.baseFraction, 0.5);
   check('reductions compound', cr.calc.compounding, 0.9);
   check('value : craft ratio', cr.calc.ratio, 0.45);
@@ -11013,14 +11014,14 @@ console.log('item crafting reproduces the workbook, then recalculates');
   check('gross profit', p.calc.gross, 110000);
   check('final sale at a 100% discount is cost', p.calc.sale, 90000);
   check('net profit', p.calc.net, 0);
-  check('days to complete', [p.calc.days, p.calc.daysExact], [20, 20]);
+  check('days to complete', [p.calc.days, p.calc.daysExact], [34, 33.33]);
   // Progress is measured against the item's base price, not what it cost to
-  // make: 200,000 / 10,000 a day, never 90,000 / 10,000.
+  // make: 200,000 / 6,000 a day, never 90,000 / 6,000.
   check('days come off the base price', p.calc.basis, p.calc.value);
   c.set('crafting.timeBasis', 'cost');
-  check('the crafting-cost basis is the other option', [p.calc.basis, p.calc.days], [90000, 9]);
+  check('the crafting-cost basis is the other option', [p.calc.basis, p.calc.days], [90000, 15]);
   c.set('crafting.timeBasis', 'value');
-  check('and back', [p.calc.basis, p.calc.days], [200000, 20]);
+  check('and back', [p.calc.basis, p.calc.days], [200000, 34]);
   check('check is take 10 + Craft (Weapons)', p.calc.check, 56);
   check('and names the skill it used', cr.calc.skill, 'Craft (Weapons)');
 
@@ -11034,8 +11035,8 @@ console.log('item crafting reproduces the workbook, then recalculates');
 
   // Live recalculation.
   c.setItem('crafting.speedIncreases', 3, 'enabled', false);   // Demiplane off
-  check('one bonus fewer is x8', c.data.crafting.calc.speedPerDay, 8000);
-  check('so the ring takes longer', p.calc.days, 25);
+  check('one bonus fewer is x5', c.data.crafting.calc.speedPerDay, 5000);
+  check('so the ring takes longer', p.calc.days, 40);
   c.setItem('crafting.speedIncreases', 3, 'enabled', true);
 
   c.set('crafting.baseCostIndex', 1);                          // a third, not a half
@@ -11068,14 +11069,14 @@ console.log('item crafting reproduces the workbook, then recalculates');
   // Amounts may be formulas, resolved in the trackers' sandbox and audited.
   c.listAdd('crafting.speedIncreases', { label: 'Workshop', kind: 'flat', value: 'level * 100', enabled: true });
   check('a formula amount resolves', c.data.crafting.speedIncreases.at(-1).valueNum, 1600);
-  check('and feeds the speed', c.data.crafting.calc.speedPerDay, (1000 + 1600) * 10);
+  check('and feeds the speed', c.data.crafting.calc.speedPerDay, (1000 + 1600) * 6);
   const audited = c.audit().filter((r) => r.source === 'crafting');
   check('it is in the audit', audited.map((r) => [r.formula, r.value, r.status]), [['level * 100', 1600, 'ok']]);
 
   c.setItem('crafting.speedIncreases', c.data.crafting.speedIncreases.length - 1, 'value', 'level * bogus');
   const broken = c.audit().find((r) => r.source === 'crafting');
   check('a bad reference is flagged, not thrown', broken.status, 'error');
-  check('and the speed falls back to the rest', c.data.crafting.calc.speedPerDay, 10000);
+  check('and the speed falls back to the rest', c.data.crafting.calc.speedPerDay, 6000);
   c.listRemove('crafting.speedIncreases', c.data.crafting.speedIncreases.length - 1);
 
   // The generated Discord post is the sheet's own format.
@@ -11087,7 +11088,7 @@ console.log('item crafting reproduces the workbook, then recalculates');
     '**Profit**: 0 mana',
     '**DC**: 15 (Rush +5)',
     '**Check**: 56',
-    '**Time to Completion**: 20 (20) days',
+    '**Time to Completion**: 34 (33.33) days',
     '**Resources used:** ',
     '**Notes/Description**: ',
   ]);

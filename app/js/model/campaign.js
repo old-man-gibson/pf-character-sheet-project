@@ -71,8 +71,8 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
    */
   abpLadder: 'table',
   /**
-   * How several crafting speed multipliers combine: `add` (two x2 make x4,
-   * three x6) or `multiply` (three x2 make x8).
+   * How several crafting speed multipliers combine: `add` (each one past
+   * the first adds one less than it says: three x2 make x4) or `multiply` (three x2 make x8).
    */
   craftSpeed: 'add',
   /** The optional array: +2 ability picks at 8th, 12th and 16th, on the Stats tab. */

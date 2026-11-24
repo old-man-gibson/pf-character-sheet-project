@@ -2789,12 +2789,14 @@ export function craftingFraction(percent) {
 }
 
 /**
- * Progress per day: flat increases add to the base, multipliers stack
- * additively (the sheet's MAX(1, COUNTIF x 2)), never dropping below x1
- * unless the player deliberately enters a fractional multiplier.
+ * Progress per day: flat increases add to the base, then the multipliers
+ * apply.
  *
- * `stacking` is the campaign's rule for several multipliers: `add` (two x2
- * make x4, three x6) or `multiply` (two x2 make x4, three x8).
+ * `stacking` is the campaign's rule for several multipliers. `add` is the
+ * game's own for multiplying twice: each multiplier adds one less than it
+ * says, so x2 and x2 and x2 make x4 (1 + 1 + 1 + 1) and x2 and x3 make x4.
+ * `multiply` takes them as said: three x2 make x8. A multiplier of 0 or
+ * less is left out.
  *
  * Rows carry `valueNum`, the resolved number the model wrote for a field a
  * player may have typed as a formula.
@@ -2803,10 +2805,10 @@ export function craftingSpeed(base, increases = [], stacking = 'add') {
   const on = increases.filter((s) => s.enabled !== false);
   const amount = (s) => Number(s.valueNum ?? s.value) || 0;
   const flat = on.filter((s) => s.kind !== 'multiplier').reduce((t, s) => t + amount(s), 0);
-  const mults = on.filter((s) => s.kind === 'multiplier').map(amount);
+  const mults = on.filter((s) => s.kind === 'multiplier').map(amount).filter((m) => m > 0);
   const mult = stacking === 'multiply'
-    ? mults.filter((m) => m > 0).reduce((t, m) => t * m, 1)
-    : mults.reduce((t, m) => t + m, 0);
+    ? mults.reduce((t, m) => t * m, 1)
+    : mults.reduce((t, m) => t + m - 1, 1);
   return Math.max(0, ((Number(base) || 0) + flat) * (mult > 0 ? mult : 1));
 }
 

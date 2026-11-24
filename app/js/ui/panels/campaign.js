@@ -280,7 +280,7 @@ export function campaignPanel(model, ctx = {}) {
     [['add', 'Multipliers add'], ['multiply', 'Multipliers multiply']], 'How crafting speed multipliers combine'),
     rules.craftSpeed === 'multiply'
       ? 'Three \u00d72 crafting speed increases make \u00d78.'
-      : 'Three \u00d72 crafting speed increases make \u00d76.'),
+      : 'Three \u00d72 crafting speed increases make \u00d74.'),
           row('currency', 'Currency',
     `<input type="text" value="${esc(d.campaign?.currency ?? '')}" placeholder="${esc(rules.currency)}" data-set="campaign.currency"
           data-kind="text" aria-label="Currency name" style="width:9rem">`,

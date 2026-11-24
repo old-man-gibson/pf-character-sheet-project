@@ -69,7 +69,7 @@ console.log('\nspeed multipliers add, or multiply where the campaign says');
   c.set('crafting.speedIncreases', [1, 2, 3, 4].map((n) => ({ label: `x${n}`, kind: 'multiplier', value: 2, enabled: true })));
   const speed = () => c.data.crafting.calc.speedPerDay;
   const draw = () => renderCraftingPanel(c, { draft: {}, openPosts: new Map() });
-  check('four x2 add to x8', [speed(), draw().includes('Multipliers add together')], [8000, true]);
+  check('four x2 add to x5', [speed(), draw().includes('Multipliers add together')], [5000, true]);
   c.set('campaign.craftSpeed', 'multiply');
   check('and multiply to x16', [speed(), draw().includes('Multipliers multiply')], [16000, true]);
   c.setItem('crafting.speedIncreases', 3, 'enabled', false);
