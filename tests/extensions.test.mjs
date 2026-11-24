@@ -1775,9 +1775,16 @@ console.log('a catalogue pack\'s tables are menus too: class options, and powers
       named('Stancer Vow').options.map((o) => o.name)],
     [['Ash Stance', 'Bog Stance'], [['Crane Step', 'Ex', 6], ['Iron Root', 'Su', null], ['Open Palm', 'Ex', null]], ['Lone Vow']]);
   check('a short line inside an entry is not the next entry', named('Stancer Art').options[0].text.includes('1 point'), true);
-  check('powers of another kind are offered whole, by type, and by the word types share — plain powers are not',
+  check('powers of another kind are offered whole and by family: the word types share, or a type that shares none — plain powers are not',
     menus.filter((m) => !m.class).map((m) => [m.name, m.options.length]),
-    [['Knack', 3], ['Knack: Form Shaping', 1], ['Knack: Substance Shaping', 1], ['Knack: Utility', 1], ['Knack: Shaping', 2]]);
+    [['Knack', 3], ['Knack: Shaping', 2], ['Knack: Utility', 1]]);
+  check('types meet whatever their case or trailing tag, and the menu names are capitalized one way',
+    optionCataloguesFromTables({ powers: { powers: [
+      { name: 'A', kind: 'knack', type: 'form shaping' }, { name: 'B', kind: 'knack', type: 'Form Shaping' },
+      { name: 'C', kind: 'knack', type: 'Substance Shaping (Sp)' }, { name: 'D', kind: 'knack', type: 'utility' },
+      { name: 'E', kind: 'knack', type: 'Utility (Xx)' }, { name: 'F', kind: 'knack', type: 'Utility(Su)' },
+    ] } }).map((m) => [m.name, m.options.map((o) => o.name).join('')]),
+    [['Knack', 'ABCDEF'], ['Knack: Shaping', 'ABC'], ['Knack: Utility', 'DEF']]);
   check('what a player chooses on rides beside the name',
     named('Knack').options[0].category, 'Form Shaping, level 2, burn 1, Fire');
   setOptionCatalogues(menus);
