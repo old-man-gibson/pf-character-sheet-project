@@ -48,7 +48,31 @@ export function forgeStore({ factory = globalThis.indexedDB, storage = globalThi
     entries() { return cache; },
     async save(entry) { await medium.commit([[KEY + entry.id, JSON.stringify(entry)]]); cache.set(entry.id, entry); },
     async saveMany(list) { await medium.commit(list.map((e) => [KEY + e.id, JSON.stringify(e)])); for (const e of list) cache.set(e.id, e); },
-    async remove(id) { await medium.commit([[KEY + id, null]]); cache.delete(id); },
+    /**
+     * Delete entries, all in one write. An entry under a deleted one that is
+     * not itself deleted stays, with its link cleared. Resolves what
+     * `putBack` needs to undo it: the deleted entries, and `[id, parent]` for
+     * each one unlinked.
+     */
+    async removeMany(ids) {
+      const gone = new Set([...ids].filter((id) => cache.has(id)));
+      const removed = [...gone].map((id) => cache.get(id));
+      const kept = [...cache.values()].filter((e) => e.parent && gone.has(e.parent) && !gone.has(e.id));
+      const unlinked = kept.map((e) => ({ ...e, parent: '' }));
+      await medium.commit([...removed.map((e) => [KEY + e.id, null]), ...unlinked.map((e) => [KEY + e.id, JSON.stringify(e)])]);
+      for (const id of gone) cache.delete(id);
+      for (const e of unlinked) cache.set(e.id, e);
+      return { removed, unlinked: kept.map((e) => [e.id, e.parent]) };
+    },
+    async remove(id) { return this.removeMany([id]); },
+    /**
+     * Undo a `removeMany`, in one write: the entries come back, and each
+     * unlinked entry gets its link back unless it has been given another since.
+     */
+    async putBack({ removed = [], unlinked = [] }) {
+      const relinked = unlinked.map(([id, parent]) => cache.get(id) && !cache.get(id).parent && { ...cache.get(id), parent }).filter(Boolean);
+      await this.saveMany([...removed, ...relinked]);
+    },
     /** Small facts beside the entries: the pack revision counter, mostly. */
     getMeta(key) { return meta[key]; },
     async setMeta(key, value) { meta = { ...meta, [key]: value }; await medium.commit([[META, JSON.stringify(meta)]]); },
