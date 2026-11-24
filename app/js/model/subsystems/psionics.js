@@ -10,7 +10,7 @@ import { statKeys, statMod } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { levelFollowingPin } from '../progression.js';
 import { forwarded } from '../scope.js';
-import { closestName, manifesterForwardKey } from '../util.js';
+import { closestName, evaluateAmount, manifesterForwardKey } from '../util.js';
 
 let PSIONIC_TABLES = { powerLevels: [], curves: [], classes: [] };
 
@@ -88,7 +88,7 @@ export const PSIONIC_DERIVED = [
   'pool', 'left', 'spentNow',
   {
     path: 'classes',
-    keys: ['plannerLevel', 'manifesterLevel', 'manifesterLevelBase', 'manifesterLevelForwarded',
+    keys: ['plannerLevel', 'manifesterLevel', 'manifesterLevelBase', 'manifesterLevelError', 'manifesterLevelForwarded',
       'manifesterLevelWaiting', 'levelClass', 'curveKnown', 'basePoints',
       'abilityPoints', 'points', 'powerCount'],
   },
@@ -214,6 +214,23 @@ export function importPsionics(tab, identity = {}) {
  * The two ability terms are floored separately rather than as a sum, because
  * that is how the sheet's formula adds them.
  */
+/**
+ * The scope a manifester level box's formula reads: the sheet's, with this
+ * class's own manifester level at the Planner's count, and
+ * `manifester.level` the highest of that and the other classes' as they stand.
+ */
+function scopeBeforePin(model, block, blocks) {
+  const scope = model.scope();
+  const own = manifesterForwardKey(block)?.split('.')[1];
+  const planner = model.classLevelCount(block.levelClass);
+  const others = blocks.filter((b) => b !== block && manifesterForwardKey(b)?.split('.')[1] !== own)
+    .map((b) => Number(b.manifesterLevel) || 0);
+  return {
+    ...scope,
+    manifester: { ...scope.manifester, ...(own ? { [own]: { level: planner } } : {}), level: Math.max(planner, ...others) },
+  };
+}
+
 export function recomputePsionics(model) {
   const p = model.data.psionics;
   if (!p) return;
@@ -225,7 +242,20 @@ export function recomputePsionics(model) {
     // Manifester level is levels of the class, counted off the Planner the way
     // the sheet's COUNTIF did, unless a block pins it.
     c.levelClass = model.blockClassName(c.name);
-    const counted = levelFollowingPin(model, c.levelClass, c.manifesterLevelOverride, { forwardKey: manifesterForwardKey(c) });
+    // The pin is a number or a formula (`class.psion.level +
+    // class.cerebremancer.level`, for a class that advances this one's
+    // manifesting), as a Vancian class's caster level box is. A formula that
+    // does not work out follows the Planner. In it this class's own
+    // manifester level reads the Planner's count, the level from before the
+    // box, so the box never reads its own last answer.
+    let pin = c.manifesterLevelOverride;
+    c.manifesterLevelError = null;
+    if (typeof pin === 'string' && pin.trim() !== '' && !Number.isFinite(Number(pin))) {
+      const worked = evaluateAmount(pin, () => scopeBeforePin(model, c, p.classes || []));
+      c.manifesterLevelError = worked.error;
+      pin = worked.error ? null : worked.value;
+    }
+    const counted = levelFollowingPin(model, c.levelClass, pin, { forwardKey: manifesterForwardKey(c) });
     const level = counted.base;
     c.plannerLevel = counted.planner;
     // A bonus forwarded to `manifester.<class>.level` raises the manifester

@@ -276,6 +276,11 @@ export function campaignPanel(model, ctx = {}) {
     [['table', 'Table'], ['core', 'Core (Unchained)']], 'Which ABP', !rules.abp)}`,
     `Enables Automatic Bonus Progression (saves, AC, prowess).${rules.abpLadder === 'core'
       ? ' Core adds armor and weapon attunement and legendary gifts; prowess stops at 18th.' : ''}`),
+          row('craftSpeed', 'Crafting speed', ruleSelect('craftSpeed', rules.craftSpeed,
+    [['add', 'Multipliers add'], ['multiply', 'Multipliers multiply']], 'How crafting speed multipliers combine'),
+    rules.craftSpeed === 'multiply'
+      ? 'Three \u00d72 crafting speed increases make \u00d78.'
+      : 'Three \u00d72 crafting speed increases make \u00d74.'),
           row('currency', 'Currency',
     `<input type="text" value="${esc(d.campaign?.currency ?? '')}" placeholder="${esc(rules.currency)}" data-set="campaign.currency"
           data-kind="text" aria-label="Currency name" style="width:9rem">`,

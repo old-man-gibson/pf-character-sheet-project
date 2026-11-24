@@ -1005,7 +1005,7 @@ function castingClassPanel(model, c, i) {
 
     return `<section class="panel vclass">
       <h3>
-        ${itemText('vancian.classes', i, 'name', c.name, 'Casting class')}
+        ${classPick(model, 'vancian.classes', i, c.name, 'Casting class')}
         <span class="badge">CL ${c.casterLevel ?? 0}</span>${
   forwardedBadge(model, vancianForwardKey(c) || '', { waiting: c.casterLevelWaiting
     ? 'this class has no levels yet, so the bonus is held until its first level' : '' })}
@@ -1175,6 +1175,26 @@ function powerDatalist(c) {
 }
 
 /**
+ * Which of the character's classes a casting or manifesting block is: a
+ * picker of the Classes table and the Planner, as a training block has. A
+ * name it already holds that is not a class stays, marked. With no classes
+ * yet there is nothing to pick from, so the name is typed.
+ */
+function classPick(model, list, i, name, what) {
+  const names = model.classNames();
+  if (!names.length) return itemText(list, i, 'name', name, what);
+  return itemSelect(list, i, 'name', name, names, '—', null,
+    { attrs: `aria-label="${what}" title="${what}: one of this character’s classes. Its levels in the Planner set the level here."` });
+}
+
+/** The buttons that put a list of spells or powers in order (edit.js sortCastingList). */
+function sortButtons(path, what) {
+  return `<span class="pair sortby"><span class="hint">Sort</span>
+    <button data-action="sort-casting" data-path="${esc(path)}" data-by="level" title="Order ${what} by level, then name. A row with no name stays where it is.">Level</button>
+    <button data-action="sort-casting" data-path="${esc(path)}" data-by="name" title="Order ${what} by name.">Name</button></span>`;
+}
+
+/**
  * The spell list, and where a prepared caster spends.
  *
  * A prepared caster commits an exact number of uses to each spell, so the pool
@@ -1192,6 +1212,7 @@ function vancianPreparedPanel(model, v, ctx = {}) {
     return `<section class="panel span2">
       <h3>Spell list <span class="badge">${spells}</span>
         ${v.calc?.spent ? `<span class="badge">${v.calc.spent} spent today</span>` : ''}
+        ${spells > 1 ? sortButtons(list, 'the spells') : ''}
       </h3>
       <p class="hint">The workbook's first column is kept as a label. <strong>Prepared</strong>
         is how many times the spell is prepared, and the squares show how many are left.
@@ -1523,7 +1544,7 @@ function manifestingClassPanel(model, c, i, ctx = {}) {
 
     return `<section class="panel span2">
       <h3>
-        ${itemText('psionics.classes', i, 'name', c.name, 'Manifesting class')}
+        ${classPick(model, 'psionics.classes', i, c.name, 'Manifesting class')}
         <span class="badge">ML ${c.manifesterLevel ?? 0}</span>${
   forwardedBadge(model, manifesterForwardKey(c) || '', { waiting: c.manifesterLevelWaiting
     ? 'this class has no levels yet, so the bonus is held until its first level' : '' })}
@@ -1538,7 +1559,15 @@ function manifestingClassPanel(model, c, i, ctx = {}) {
         ${field('Ability 1', select(`${base}.stat`, c.stat, ABILITY_LABELS_LIST))}
         ${field('Ability 2', select(`${base}.stat2`, c.stat2, ABILITY_LABELS_LIST))}
         ${field('Points at 20', select(`${base}.curveTotal`, c.curveTotal, curveOptions()))}
-        ${field('Manifester level', levelPin(`${base}.manifesterLevelOverride`, c.manifesterLevelOverride, c.plannerLevel))}
+        ${field('Manifester level', exprField(`data-set="${base}.manifesterLevelOverride"`, c.manifesterLevelOverride ?? '', {
+    kind: 'expr-or-null',
+    width: '4.2rem',
+    value: c.manifesterLevelBase,
+    error: c.manifesterLevelError,
+    placeholder: String(c.plannerLevel ?? 0),
+    title: `Blank uses the ${c.plannerLevel ?? 0} level(s) of this class in the Planner. `
+      + 'Or enter a number or a formula, e.g. class.psion.level + class.cerebremancer.level',
+  }))}
       </div>
       ${line('From the curve', c.basePoints === null ? '—' : c.basePoints)}
       ${line('From abilities', fmt(c.abilityPoints ?? 0))}
@@ -1559,7 +1588,8 @@ function manifestingClassPanel(model, c, i, ctx = {}) {
           ${rowRemove(list, wi)}
         </tr>`).join('')}
       </tbody></table>` : '<p class="empty">No powers known.</p>'}
-      <div style="margin-top:6px">${addButton(list, 'Add power', { name: '', level: '', note: '' })}</div>
+      <div style="margin-top:6px">${addButton(list, 'Add power', { name: '', level: '', note: '' })}
+        ${(c.powers || []).filter((w) => w.name).length > 1 ? sortButtons(list, 'the powers') : ''}</div>
     </section>`;
   }
 

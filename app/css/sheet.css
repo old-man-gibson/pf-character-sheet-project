@@ -2794,6 +2794,10 @@ label.fld > .value.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
    a wrapping row: without this the outer row wraps and the pair does not, so
    on a narrow screen one long pair carries the page sideways with it. */
 .pair { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; }
+/* The buttons that put a spell or power list in order: at the far end of the heading. */
+h3 > .pair.sortby { margin-left: auto; font-weight: normal; }
+.pair.sortby { display: inline-flex; }
+.pair.sortby button { padding: 2px 8px; font-size: 0.78rem; }
 .pair input { width: 3.4rem; }
 /* A pick list in a pair is as wide as its longest option, like the rest of the
    row. At the global `width: 100%` it took the line to itself, and on a wide
@@ -2837,6 +2841,8 @@ h3 input.grouptitle:hover { border-color: var(--cs-line); }
    template) is as wide as a name, with its badges beside it. At the global
    `width: 100%` it took the heading's first line and pushed the badges under. */
 .panel > h3 > input[type="text"]:not(.grouptitle) { flex: 1 1 12rem; width: auto; max-width: 21rem; }
+/* The same heading as a picker of the character’s classes. */
+.panel > h3 > select[data-item$="|name"] { flex: 0 1 auto; width: auto; min-width: 9rem; max-width: 21rem; }
 
 /* ---------- hit points ---------- */
 .hpbar {
@@ -3273,6 +3279,7 @@ table.gear tr.gearcardrow > td { padding: 0; }
   text-transform: none; letter-spacing: 0;
 }
 .gearcard table.gearbonuses td.btype select { width: auto; min-width: 7rem; }
+.gearcard table.gearbonuses td.btype input.owntype { width: 7rem; }
 /* A set width, not one its options decide: the To picker is drawn with only
    its own choice and gets the whole list when pressed, and a width that
    followed the list would jump under the pointer. The whole list always
@@ -3301,6 +3308,8 @@ table.gear td.qty input { width: 3.2rem; }
 table.gear td.cost input { width: 100%; min-width: 4.2rem; }
 table.gear td.bval > .xf:only-child { min-width: 0; width: var(--xf-w, 3.6rem); }
 table.gear td.btype select { width: auto; min-width: 4.6rem; padding: 3px 4px; }
+/* A bonus type of the player's own, in the place of the picker. */
+table.gear td.btype input.owntype { width: 4.6rem; padding: 3px 4px; text-align: left; }
 table.gear td.bto select.target { width: 100%; min-width: 6rem; padding: 3px 4px; }
 table.gear th.num, table.gear td.bval { text-align: center; }
 /* A destination the sheet cannot place: said on the cell, and on its tooltip. */

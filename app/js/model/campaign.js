@@ -70,6 +70,11 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
    * legendary gifts at 19th and 20th).
    */
   abpLadder: 'table',
+  /**
+   * How several crafting speed multipliers combine: `add` (each one past
+   * the first adds one less than it says: three x2 make x4) or `multiply` (three x2 make x8).
+   */
+  craftSpeed: 'add',
   /** The optional array: +2 ability picks at 8th, 12th and 16th, on the Stats tab. */
   optionalArray: true,
   /**
@@ -183,6 +188,8 @@ export const BACKGROUND_USES = Object.freeze(['allocated', 'floating']);
 export const MYTHIC_TIER_SOURCES = Object.freeze(['level', 'trials', 'awarded']);
 export const ADVANCEMENT_MODES = Object.freeze(['typed', 'xp', 'milestones']);
 export const HIT_POINT_MODES = Object.freeze(['max', 'average', 'rolled']);
+/** How crafting speed multipliers combine. */
+export const CRAFT_SPEED_MODES = Object.freeze(['add', 'multiply']);
 /** The two ladders ABP and the mythic tiers may follow. */
 export const LADDERS = Object.freeze(['table', 'core']);
 /** The values a select offers for `mythicFeats`. */
@@ -252,6 +259,7 @@ export function campaignRules(d) {
     hitPoints: HIT_POINT_MODES.includes(c.hitPoints) ? c.hitPoints : CAMPAIGN_DEFAULTS.hitPoints,
     abp: bool('abp'),
     abpLadder: LADDERS.includes(c.abpLadder) ? c.abpLadder : CAMPAIGN_DEFAULTS.abpLadder,
+    craftSpeed: CRAFT_SPEED_MODES.includes(c.craftSpeed) ? c.craftSpeed : CAMPAIGN_DEFAULTS.craftSpeed,
     optionalArray: bool('optionalArray'),
     mythicLadder: LADDERS.includes(c.mythicLadder) ? c.mythicLadder : CAMPAIGN_DEFAULTS.mythicLadder,
     mythicFeats: MYTHIC_FEAT_TIERS.includes(c.mythicFeats) ? c.mythicFeats : CAMPAIGN_DEFAULTS.mythicFeats,
@@ -513,6 +521,7 @@ export const RULE_TITLES = Object.freeze({
   mythicFeatEvery: 'Tiers per mythic feat',
   abp: 'Automatic Bonus Progression',
   abpLadder: 'Which ABP',
+  craftSpeed: 'Crafting speed',
   optionalArray: 'Optional array',
   altTraining: 'Alternate Training',
   pastColossal: 'Past Colossal',

@@ -906,12 +906,23 @@ export function forwardTargets(model) {
   // row that answers to it, which is what "+2 to Craft" means when the
   // character keeps two Craft rows.
   const skills = [];
+  // Two groups of them, for a rule about a kind of skill: every Knowledge
+  // skill, and every skill with no ranks in it ("untrained skill checks"),
+  // which changes as ranks are bought.
+  const knowledge = [];
+  const ranked = new Set();
   for (const sk of model.data.skills || []) {
     const name = skillForwardKey(sk);
+    if ((Number(sk.totalRanks) || 0) > 0) ranked.add(name);
     if (expand.has(name)) continue;
     add(name, skillLabel(sk.name, sk.spec));
     skills.push(name);
+    if (/^knowledge\b/i.test(String(sk.name || '').trim())) knowledge.push(name);
   }
+  const skillGroups = [
+    ['skill.knowledge', 'Every Knowledge skill', knowledge],
+    ['skill.untrained', 'Every skill with no ranks', skills.filter((name) => !ranked.has(name))],
+  ];
   for (const [name, label] of FORWARD_STATS) add(name, label);
   for (const [name, label] of FORWARD_LATE) add(name, label);
 
@@ -1134,6 +1145,11 @@ export function forwardTargets(model) {
 
   expand.set('skill', skills);
   list.push({ name: 'skill', label: 'Every skill', family: skills });
+  for (const [name, label, members] of skillGroups) {
+    if (expand.has(name)) continue;               // a skill of that very name is itself
+    expand.set(name, members);
+    list.push({ name, label, family: members });
+  }
   for (const [name, members] of Object.entries(FORWARD_FAMILIES)) {
     expand.set(name, members);
     list.push({ name, label: `All ${name === 'ac' ? 'armour classes' : name}`, family: members });

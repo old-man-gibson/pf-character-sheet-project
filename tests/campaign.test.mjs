@@ -60,7 +60,7 @@ for (const id of fixtureIds()) {
   for (const [key, value] of [['abp', false], ['mythic', false], ['heroPoints', false], ['pointBuy', 20], ['mythicTier', 'awarded'],
     ['mythicTier', 'trials'], ['advancement', 'xp'], ['advancement', 'milestones'], ['mythicTrialRate', 3], ['currency', 'Gold'], ['altTraining', false], ['antiheroes', true],
     ['maxLevel', 6], ['maxLevel', 25], ['maxTier', 5], ['maxTier', 12], ['gestalt', false], ['hitPoints', 'average'], ['hitPoints', 'rolled'],
-    ['abpLadder', 'core'], ['mythicLadder', 'core'], ['mythicFeats', 'even'], ['mythicFeats', 'every'], ['mythicFeatEvery', 3], ['pastColossal', true], ['minLevel', 1], ['minLevel', 8], ['maxLevel', 60],
+    ['abpLadder', 'core'], ['craftSpeed', 'multiply'], ['mythicLadder', 'core'], ['mythicFeats', 'even'], ['mythicFeats', 'every'], ['mythicFeatEvery', 3], ['pastColossal', true], ['minLevel', 1], ['minLevel', 8], ['maxLevel', 60],
     ['skillSystem', 'background'], ['backgroundUse', 'floating'], ['backgroundRanks', 3], ['agingEffects', true], ['vmc', true], ['archetypePackages', true], ['occupations', true], ['traits', 2], ['drawbackTraits', 1], ['mythicFloorLevels', 3]]) {
     const m = new Character(loadCharacter(id));
     const before = numbers(m);

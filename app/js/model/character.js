@@ -45,7 +45,7 @@ import { breakdown } from './breakdown.js';
 import { shapeLevelUpFeats } from './feats.js';
 import { normalise, toDocument } from './document.js';
 import {
-  addSystemTab, addSystemTabColumn, hideTab, listAdd, listAt, listMove, listMoveInto, listMoveTo, listRemove,
+  addSystemTab, addSystemTabColumn, hideTab, listAdd, listAt, listMove, listMoveInto, listMoveTo, listRemove, sortCastingList,
   moveTab, removeSystemTab, removeSystemTabColumn, renameSkill, renameSystemTab, resetTabOrder, sessionDefaultTabs,
   setItem, setTabColor, setTabName, setTabOrder, setValue, setViewMode, showTab, systemTabsInUse,
   tabColor, tabName, tabOrder,
@@ -939,6 +939,8 @@ export class Character {
   readyManeuver(path, name, ready) { return this.play(`${name} ${ready ? 'readied' : 'unreadied'}`, () => readyManeuver(this, path, name, ready)); }
   setManeuverNote(...a) { return setManeuverNote(this, ...a); }
   setManeuverField(...a) { return setManeuverField(this, ...a); }
+
+  sortCastingList(...a) { return sortCastingList(this, ...a); }
 
   // subsystems/psionics.js
   #recomputePsionics(...a) { return recomputePsionics(this, ...a); }

@@ -10997,14 +10997,15 @@ console.log('a rule saved as a bare string still loads');
 console.log('item crafting reproduces the workbook, then recalculates');
 {
   // Bryva is the only character whose Item Crafting tab was filled in, so her
-  // numbers are the fixed point: 5 crafting bonuses at x2 = 10,000 mana of
-  // progress a day, a 10% reduction on a half-cost item, a 200,000 ring that
+  // numbers are the fixed point: 5 crafting bonuses at x2 = x6, 6,000 mana of
+  // progress a day (her workbook summed them to x10; the sheet adds one less
+  // than each says past the first, see craftingSpeed), a 10% reduction on a half-cost item, a 200,000 ring that
   // costs 90,000 and sells at cost, and a take-10 check off Craft (Weapons).
   const c = new Character(load('bryva'));
   const cr = c.data.crafting;
   const p = cr.projects[0];
   check('the raw tab is gone', (c.data.sheetTabs || []).some((t) => t.name === 'Item Crafting'), false);
-  check('speed per day', cr.calc.speedPerDay, 10000);
+  check('speed per day', cr.calc.speedPerDay, 6000);
   check('base cost fraction', cr.calc.baseFraction, 0.5);
   check('reductions compound', cr.calc.compounding, 0.9);
   check('value : craft ratio', cr.calc.ratio, 0.45);
@@ -11013,14 +11014,14 @@ console.log('item crafting reproduces the workbook, then recalculates');
   check('gross profit', p.calc.gross, 110000);
   check('final sale at a 100% discount is cost', p.calc.sale, 90000);
   check('net profit', p.calc.net, 0);
-  check('days to complete', [p.calc.days, p.calc.daysExact], [20, 20]);
+  check('days to complete', [p.calc.days, p.calc.daysExact], [34, 33.33]);
   // Progress is measured against the item's base price, not what it cost to
-  // make: 200,000 / 10,000 a day, never 90,000 / 10,000.
+  // make: 200,000 / 6,000 a day, never 90,000 / 6,000.
   check('days come off the base price', p.calc.basis, p.calc.value);
   c.set('crafting.timeBasis', 'cost');
-  check('the crafting-cost basis is the other option', [p.calc.basis, p.calc.days], [90000, 9]);
+  check('the crafting-cost basis is the other option', [p.calc.basis, p.calc.days], [90000, 15]);
   c.set('crafting.timeBasis', 'value');
-  check('and back', [p.calc.basis, p.calc.days], [200000, 20]);
+  check('and back', [p.calc.basis, p.calc.days], [200000, 34]);
   check('check is take 10 + Craft (Weapons)', p.calc.check, 56);
   check('and names the skill it used', cr.calc.skill, 'Craft (Weapons)');
 
@@ -11034,8 +11035,8 @@ console.log('item crafting reproduces the workbook, then recalculates');
 
   // Live recalculation.
   c.setItem('crafting.speedIncreases', 3, 'enabled', false);   // Demiplane off
-  check('one bonus fewer is x8', c.data.crafting.calc.speedPerDay, 8000);
-  check('so the ring takes longer', p.calc.days, 25);
+  check('one bonus fewer is x5', c.data.crafting.calc.speedPerDay, 5000);
+  check('so the ring takes longer', p.calc.days, 40);
   c.setItem('crafting.speedIncreases', 3, 'enabled', true);
 
   c.set('crafting.baseCostIndex', 1);                          // a third, not a half
@@ -11068,14 +11069,14 @@ console.log('item crafting reproduces the workbook, then recalculates');
   // Amounts may be formulas, resolved in the trackers' sandbox and audited.
   c.listAdd('crafting.speedIncreases', { label: 'Workshop', kind: 'flat', value: 'level * 100', enabled: true });
   check('a formula amount resolves', c.data.crafting.speedIncreases.at(-1).valueNum, 1600);
-  check('and feeds the speed', c.data.crafting.calc.speedPerDay, (1000 + 1600) * 10);
+  check('and feeds the speed', c.data.crafting.calc.speedPerDay, (1000 + 1600) * 6);
   const audited = c.audit().filter((r) => r.source === 'crafting');
   check('it is in the audit', audited.map((r) => [r.formula, r.value, r.status]), [['level * 100', 1600, 'ok']]);
 
   c.setItem('crafting.speedIncreases', c.data.crafting.speedIncreases.length - 1, 'value', 'level * bogus');
   const broken = c.audit().find((r) => r.source === 'crafting');
   check('a bad reference is flagged, not thrown', broken.status, 'error');
-  check('and the speed falls back to the rest', c.data.crafting.calc.speedPerDay, 10000);
+  check('and the speed falls back to the rest', c.data.crafting.calc.speedPerDay, 6000);
   c.listRemove('crafting.speedIncreases', c.data.crafting.speedIncreases.length - 1);
 
   // The generated Discord post is the sheet's own format.
@@ -11087,7 +11088,7 @@ console.log('item crafting reproduces the workbook, then recalculates');
     '**Profit**: 0 mana',
     '**DC**: 15 (Rush +5)',
     '**Check**: 56',
-    '**Time to Completion**: 20 (20) days',
+    '**Time to Completion**: 34 (33.33) days',
     '**Resources used:** ',
     '**Notes/Description**: ',
   ]);
@@ -15772,6 +15773,109 @@ console.log('a magic sphere may have a caster level of its own');
   check('blank follows the character again', [row('Alteration').cl, row('Alteration').clBaseNum], [global[0], null]);
   c.setSphereBonus('magic', 'Alteration', 'clBase', 0);
   check('and so does 0', row('Alteration').cl, global[0]);
+}
+
+console.log('groups of skills are destinations: Knowledge skills, and skills with no ranks');
+{
+  const c = new Character(blankDocument({ id: 'zz-skillgroups', name: 'Groups', level: 5 }));
+  c.set('skills', [
+    { name: 'Knowledge', spec: 'Arcana', abilities: ['Int'], rankSources: { bought: 2, gear: false, other: false }, ranksOffset: 0 },
+    { name: 'Knowledge', spec: 'Nature', abilities: ['Int'], rankSources: { bought: 0, gear: false, other: false }, ranksOffset: 0 },
+    { name: 'Climb', abilities: ['Str'], rankSources: { bought: 0, gear: false, other: false }, ranksOffset: 0 },
+    { name: 'Stealth', abilities: ['Dex'], rankSources: { bought: 3, gear: false, other: false }, ranksOffset: 0 },
+  ]);
+  const bonus = () => c.data.skills.map((s) => s.bonus);
+  const base = bonus();
+  const moved = () => bonus().map((v, i) => v - base[i]);
+  check('the test skills have the ranks given', c.data.skills.map((s) => s.totalRanks), [2, 0, 0, 3]);
+  c.set('formulaNotes', '{skill.knowledge += 2}');
+  check('a bonus to every Knowledge skill', moved(), [2, 2, 0, 0]);
+  c.set('formulaNotes', '{skill.untrained += 1}');
+  check('a bonus to every skill with no ranks', moved(), [0, 1, 1, 0]);
+  c.setItem('skills', 2, 'rankSources.bought', 1);
+  check('which a skill leaves when it gains a rank', [c.data.skills[2].totalRanks, c.data.skills[2].bonus - base[2] - 1 - (c.data.skills[2].classSkill ? 3 : 0)], [1, 0]);
+  c.setItem('skills', 2, 'rankSources.bought', 0);
+  check('and joins again without one', moved(), [0, 1, 1, 0]);
+  const names = c.forwardTargets().list.filter((t) => /^skill\.(knowledge|untrained)$/.test(t.name)).map((t) => [t.name, t.label, t.family.length]);
+  check('both are listed with what they reach', names, [['skill.knowledge', 'Every Knowledge skill', 2], ['skill.untrained', 'Every skill with no ranks', 2]]);
+  c.set('formulaNotes', '');
+}
+
+console.log('a bonus type of the player\u2019s own, on a gear row and on a buff');
+{
+  const { bonusTypeCell } = await import('../app/js/ui/rows.js');
+  const { isCustomBonusType, CUSTOM_BONUS_TYPE, GEAR_BONUS_TYPES } = await import('../app/js/rules.js');
+  const c = new Character(blankDocument({ id: 'zz-owntype', name: 'Types', level: 5 }));
+  const str = () => c.data.abilities.str.tempScore;
+  const base = str();
+  c.listAdd('equipment.gear', { name: 'A', bonuses: [{ target: 'str.temp', value: 2, type: 'Bloodrage' }] });
+  c.listAdd('equipment.gear', { name: 'B', bonuses: [{ target: 'str.temp', value: 4, type: 'bloodrage' }] });
+  check('two gear bonuses of one custom type do not stack', str() - base, 4);
+  const last = c.data.equipment.gear.length - 1;
+  c.setItem('equipment.gear', last, 'bonuses.0.type', 'Fury');
+  check('two of different custom types do', str() - base, 6);
+
+  check('the picker has every type the sheet knows', ['Racial', 'Trait'].every((t) => GEAR_BONUS_TYPES.includes(t)), true);
+
+  const buff = (o) => ({ name: '', on: true, type: '', rounds: '', attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [], ...o });
+  c.data.buffs = [buff({ name: 'One', type: 'Fury', attack: 2 }), buff({ name: 'Two', type: 'fury', attack: 3 }), buff({ name: 'Three', type: 'Zeal', attack: 1 })];
+  c.recompute();
+  check('buffs of one custom type take the largest, another type adds', c.conditionState.delta.melee, 3 + 1);
+
+  check('a type the table knows is not custom, by key or by name', [isCustomBonusType('morale'), isCustomBonusType('Natural Armor'), isCustomBonusType(''), isCustomBonusType('Fury')],
+    [false, false, false, true]);
+  const options = [['morale', 'Morale'], ['luck', 'Luck']];
+  const picker = bonusTypeCell('buffs', 0, 'type', 'morale', options, 'Untyped');
+  check('a known type is a picker that ends in Custom', [picker.startsWith('<select'), picker.includes(`value="${CUSTOM_BONUS_TYPE}"`)], [true, true]);
+  const own = bonusTypeCell('buffs', 0, 'type', 'Fury <b>', options, 'Untyped');
+  check('a custom one is text to rename, escaped', [own.startsWith('<input type="text"'), own.includes('value="Fury &lt;b&gt;"'), own.includes('data-item="buffs|0|type"')], [true, true, true]);
+}
+
+console.log('a manifesting class may count another class\u2019s levels, as a casting class does');
+{
+  const c = new Character(blankDocument({ id: 'zz-prc', name: 'Prestige', level: 10 }));
+  c.set('classes', [{ name: 'Psion', levelsOverride: 6 }, { name: 'Cerebremancer', levelsOverride: 4 }]);
+  c.listAdd('psionics.classes', { name: 'Psion', stat: 'Int', stat2: '', curveTotal: 343, manifesterLevelOverride: null, powers: [] });
+  const p = () => c.data.psionics.classes[0];
+  const own = [p().manifesterLevel, p().basePoints];
+  check('alone, six levels of the class', own[0], 6);
+  c.setItem('psionics.classes', 0, 'manifesterLevelOverride', 'class.psion.level + class.cerebremancer.level');
+  check('with the other class counted, ten: level and power points', [p().manifesterLevel, p().manifesterLevelError, p().basePoints > own[1]], [10, null, true]);
+  c.setItem('psionics.classes', 0, 'manifesterLevelOverride', 'manifester.psion.level + 2');
+  check('its own level in the box is the Planner\u2019s, so it does not climb', [p().manifesterLevel, new Character(JSON.parse(JSON.stringify(c.toJSON()))).data.psionics.classes[0].manifesterLevel], [8, 8]);
+  check('the Formulas tab lists it', c.audit().find((r) => r.id === 'psionic-0-manifester-level')?.name, 'Psion manifester level');
+  c.setItem('psionics.classes', 0, 'manifesterLevelOverride', 'no.such.name +');
+  check('one that does not work out follows the Planner and says so', [p().manifesterLevel, typeof p().manifesterLevelError], [6, 'string']);
+  c.setItem('psionics.classes', 0, 'manifesterLevelOverride', 4);
+  check('a number still pins it', p().manifesterLevel, 4);
+}
+
+console.log('a spell or power list put in order');
+{
+  const c = new Character(blankDocument({ id: 'zz-sort', name: 'Sorted', level: 10 }));
+  c.set('vancian.prepared', [
+    { prepUsed: '', classLevel: 'Wiz 3', name: 'Fireball', used: 1 },
+    { prepUsed: '', classLevel: 'Wiz 1', name: 'Shield' },
+    { prepUsed: '', classLevel: 'Clr 1', name: 'Bless' },
+    { prepUsed: 'Scrolls', classLevel: '', name: '' },
+    { prepUsed: '', classLevel: 'Wiz 2', name: 'Web' },
+    { prepUsed: '', classLevel: 'Wiz 10', name: 'Zenith' },
+    { prepUsed: '', classLevel: '', name: 'Alarm' },
+  ]);
+  const names = () => c.data.vancian.prepared.map((r) => r.name || `[${r.prepUsed}]`);
+  check('by level, then class, then name, each side of a heading on its own',
+    [c.sortCastingList('vancian.prepared', 'level'), names()], [true, ['Bless', 'Shield', 'Fireball', '[Scrolls]', 'Alarm', 'Web', 'Zenith']]);
+  check('a row keeps what it had spent', c.data.vancian.prepared.find((r) => r.name === 'Fireball').used, 1);
+  check('already in order, nothing moves', c.sortCastingList('vancian.prepared', 'level'), false);
+  check('by name', [c.sortCastingList('vancian.prepared', 'name'), names()], [true, ['Bless', 'Fireball', 'Shield', '[Scrolls]', 'Alarm', 'Web', 'Zenith']]);
+  check('Undo takes it back', [c.undo(), names().slice(0, 3)], ['Sorted by name', ['Bless', 'Shield', 'Fireball']]);
+  check('an unknown order is refused', c.sortCastingList('vancian.prepared', 'school'), false);
+
+  c.listAdd('psionics.classes', { name: 'Psion', stat: 'Int', stat2: '', curveTotal: 343, manifesterLevelOverride: 10, powers: [
+    { name: 'Energy Ray', level: '1' }, { name: 'Detect Psionics', level: '0' }, { name: 'Body Adjustment', level: '3' }, { name: 'Astral Construct', level: '1' },
+  ] });
+  c.sortCastingList('psionics.classes.0.powers', 'level');
+  check('powers by level, then name', c.data.psionics.classes[0].powers.map((w) => w.name), ['Detect Psionics', 'Astral Construct', 'Energy Ray', 'Body Adjustment']);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
