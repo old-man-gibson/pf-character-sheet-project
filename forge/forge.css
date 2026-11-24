@@ -25,6 +25,15 @@
 .tg .chips{display:flex;flex-wrap:wrap;gap:4px}
 a.wl.tinted{color:var(--entry-color);border-bottom-color:var(--entry-color)}
 .list{flex:1;overflow:auto;padding:6px}
+/* Selecting entries to delete: the bar over the list, and a box at the start of each row. */
+.bulk{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 8px 0}
+.bulk[hidden]{display:none}
+.bulk label{display:inline-flex;gap:5px;align-items:center;cursor:pointer;white-space:nowrap;font-size:12px}
+.bulk .d{font-size:12px;color:var(--ink3);white-space:nowrap}
+.list.picking .row{grid-template-columns:auto minmax(0,1fr) auto}
+.list.picking .row .m{grid-column:2/-1}
+.row .pick{grid-row:1/span 2;align-self:center;margin:0;cursor:pointer}
+.drop button.danger{color:var(--bad)}
 .sheet[style*="--entry-color"] h1{color:var(--entry-color);border-bottom-color:var(--entry-color)}
 
 /* ---------- editor ---------- */

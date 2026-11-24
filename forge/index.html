@@ -36,6 +36,8 @@
         <button data-act="exp-md">Download this entry as Markdown<small>Includes its children</small></button>
         <button data-act="exp-md-all">Download everything as Markdown<small>One document, grouped by type</small></button>
         <hr>
+        <button class="danger" data-act="delete-all">Delete all entries<small>Categories and tag colors are not deleted.</small></button>
+        <hr>
         <button data-act="sheet">Open the character sheet<small>The app next door, where the published pack is read</small></button>
       </div>
     </div>
@@ -44,6 +46,7 @@
   <aside class="rail">
     <div class="typegroups" id="typegroups"></div>
     <div class="railsplit" id="railSplit" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the filters and the list; double-click to reset" title="Drag to resize; double-click to reset"></div>
+    <div class="bulk" id="pickBar" hidden></div>
     <div class="list" id="list"></div>
   </aside>
 

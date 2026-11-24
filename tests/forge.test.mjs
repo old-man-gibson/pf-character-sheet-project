@@ -174,5 +174,134 @@ eq(Object.keys(TYPES).length, builtinCount, 'none applied is the built-in set');
   eq(importWildTalents(wiki, got).length, 0, 'importing the list again adds nothing');
 }
 
+/* ---- selecting entries to delete, deleting them, and Undo ---- */
+{
+  const { shownEntries, listTree, treeBelow } = await import('../forge/js/schema.js');
+  const { markPicks, setPicks, showPickCount, pickCount } = await import('../app/js/ui/picks.js');
+  const disc = entry('zz-disc', 'discipline', 'Zz Gale', {}, 'Wind.');
+  const m1 = entry('zz-m1', 'maneuver', 'Zz Gust', { level: 1, mtype: 'Strike' }, 'A gust.', 'zz-disc');
+  const m2 = entry('zz-m2', 'maneuver', 'Zz Squall', { level: 2, mtype: 'Boost' }, 'Fire and wind.', 'zz-disc');
+  const sub = entry('zz-sub', 'maneuver', 'Zz Squall Follow-up', { mtype: 'Strike' }, 'After.', 'zz-m2');
+  const tagged = entry('zz-note', 'article', 'Zz Gale notes', {}, 'Notes.', '', ['Zz Gale']);
+  const feat = entry('zz-feat', 'feat', 'Zz Fire Step', {}, 'Step.');
+  const all = [disc, m1, m2, sub, tagged, feat];
+  const nameOf = (id) => all.find((e) => e.id === id)?.name || '';
+  const resolveName = (n) => all.find((e) => e.name.toLowerCase() === String(n).trim().toLowerCase())?.id || null;
+  const sorted = sortEntries(all, nameOf);
+
+  // What the list shows, and so what All shown ticks.
+  eq(shownEntries(sorted).map((e) => e.id).sort(), all.map((e) => e.id).sort(), 'with no search or filter every entry is shown');
+  eq(shownEntries(sorted, { filter: 'maneuver' }).map((e) => e.id).sort(), ['zz-m1', 'zz-m2', 'zz-sub'], 'a type filter shows that type only');
+  eq(shownEntries(sorted, { q: 'fire' }).map((e) => e.id).sort(), ['zz-feat', 'zz-m2'], 'a search matches names and text');
+  eq(shownEntries(sorted, { tag: 'zz gale' }).map((e) => e.id), ['zz-note'], 'a tag filter matches tags whatever their case');
+
+  // A parent's box takes everything shown under it, however deep, folded or not.
+  const tree = listTree(shownEntries(sorted), resolveName);
+  eq(tree.roots.map((e) => e.id).sort(), ['zz-disc', 'zz-feat'], 'the tree stands the discipline and the feat at the top');
+  eq(treeBelow(tree, 'zz-disc').sort(), ['zz-m1', 'zz-m2', 'zz-note', 'zz-sub'], 'under the discipline: its maneuvers, theirs, and the article tagged with its name');
+  eq(treeBelow(tree, 'zz-m2'), ['zz-sub'], 'under a maneuver: its follow-up');
+  eq(treeBelow(tree, 'zz-feat'), [], 'nothing under a feat');
+  const filtered = listTree(shownEntries(sorted, { filter: 'maneuver' }), resolveName);
+  eq(treeBelow(filtered, 'zz-m2'), ['zz-sub'], 'a filter that hides the discipline keeps the maneuvers own children under them');
+  const loop = listTree([{ ...newEntry('discipline', 'A'), id: 'a', parent: 'b' }, { ...newEntry('discipline', 'B'), id: 'b', parent: 'a' }]);
+  eq(treeBelow(loop, 'a'), ['b'], 'two entries under each other do not walk forever');
+
+  // The boxes: a box over several ids is ticked, a dash, or clear.
+  const picked = new Set();
+  const box = () => ({ checked: false, indeterminate: false, disabled: false });
+  const rowBox = box();
+  setPicks(picked, ['zz-disc', ...treeBelow(tree, 'zz-disc')], true);
+  eq([...picked].sort(), ['zz-disc', 'zz-m1', 'zz-m2', 'zz-note', 'zz-sub'], 'ticking the discipline ticks it and everything under it');
+  markPicks(rowBox, ['zz-disc', ...treeBelow(tree, 'zz-disc')], picked);
+  eq([rowBox.checked, rowBox.indeterminate], [true, false], 'its box reads ticked');
+  setPicks(picked, ['zz-m2', ...treeBelow(tree, 'zz-m2')], false);
+  markPicks(rowBox, ['zz-disc', ...treeBelow(tree, 'zz-disc')], picked);
+  eq([rowBox.checked, rowBox.indeterminate, [...picked].sort()], [false, true, ['zz-disc', 'zz-m1', 'zz-note']], 'unticking a maneuver unticks its follow-up and leaves a dash on the discipline');
+  const allBox = box();
+  markPicks(allBox, shownEntries(sorted).map((e) => e.id), picked);
+  eq([allBox.checked, allBox.indeterminate], [false, true], 'All shown is a dash while some are ticked');
+  setPicks(picked, shownEntries(sorted, { filter: 'maneuver' }).map((e) => e.id), true);
+  eq([...picked].sort(), ['zz-disc', 'zz-m1', 'zz-m2', 'zz-note', 'zz-sub'], 'All shown under a filter ticks only the shown entries');
+  setPicks(picked, shownEntries(sorted).map((e) => e.id), true);
+  markPicks(allBox, shownEntries(sorted).map((e) => e.id), picked);
+  eq([allBox.checked, allBox.indeterminate, picked.size], [true, false, 6], 'All shown with nothing filtered ticks every entry');
+  const none = box();
+  markPicks(none, [], picked);
+  eq([none.checked, none.disabled], [false, true], 'a box over nothing is disabled');
+
+  // The counts, the way the bar shows them.
+  const button = { disabled: false };
+  const span = { textContent: '', closest: () => button };
+  const count = { textContent: '' };
+  const root = { querySelector: () => count, querySelectorAll: () => [span] };
+  showPickCount(root, 1000, ['entry', 'entries']);
+  eq([count.textContent, span.textContent, button.disabled], ['1,000 selected', '1,000 entries', false], 'the bar counts what is ticked');
+  showPickCount(root, 0, ['entry', 'entries']);
+  eq([span.textContent, button.disabled], ['0 entries', true], 'and Delete is disabled with nothing ticked');
+  eq(pickCount(1, ['pack', 'packs']), '1 pack', 'one is singular');
+
+  // Delete selected: one write, children not selected kept and unlinked; Undo puts it all back.
+  // A Storage that can refuse one write, the way a full browser does.
+  const fakeStorage = () => {
+    const mem = new Map();
+    const s = { writes: 0, refuseAt: 0 };
+    const write = () => { s.writes++; if (s.writes === s.refuseAt) throw new Error('full'); };
+    return Object.assign(s, {
+      getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+      setItem: (k, v) => { write(); mem.set(k, String(v)); },
+      removeItem: (k) => { write(); mem.delete(k); },
+      keys: () => mem.keys(),
+    });
+  };
+  const storage = fakeStorage();
+  const fs = forgeStore({ factory: null, storage });
+  await fs.open();
+  await fs.saveMany(structuredClone(all));
+  const reread = async (where = storage) => { const s = forgeStore({ factory: null, storage: where }); await s.open(); return s.entries(); };
+
+  storage.refuseAt = storage.writes + 2;
+  let threw = false;
+  try { await fs.removeMany(['zz-disc', 'zz-feat']); } catch { threw = true; }
+  ok(threw, 'a delete the browser refuses partway throws');
+  eq([fs.entries().size, (await reread()).size], [6, 6], 'and deletes nothing: the writes are one commit');
+
+  const undo = await fs.removeMany(['zz-disc', 'zz-m2']);
+  eq([...fs.entries().keys()].sort(), ['zz-feat', 'zz-m1', 'zz-note', 'zz-sub'], 'the two ticked entries are deleted');
+  eq([fs.entries().get('zz-m1').parent, fs.entries().get('zz-sub').parent], ['', ''], 'their children not ticked are kept, unlinked');
+  eq([m1.parent, sub.parent], ['zz-disc', 'zz-m2'], 'the entries given to the store are not changed in place');
+  const after = await reread();
+  eq([after.size, after.get('zz-m1').parent], [4, ''], 'and that is what is stored');
+  eq(undo.unlinked.sort(), [['zz-m1', 'zz-disc'], ['zz-sub', 'zz-m2']], 'Undo knows each unlinked entry and its container');
+
+  await fs.saveMany([{ ...fs.entries().get('zz-sub'), parent: 'zz-m1' }]);
+  await fs.putBack(undo);
+  const back2 = await reread();
+  eq([...back2.keys()].sort(), all.map((e) => e.id).sort(), 'Undo puts every deleted entry back');
+  eq([back2.get('zz-m1').parent, back2.get('zz-sub').parent], ['zz-disc', 'zz-m1'], 'it links the unlinked entries again, except one given another container since');
+
+  // Delete all, and its Undo.
+  const everything = await fs.removeMany([...fs.entries().keys()]);
+  eq([fs.entries().size, (await reread()).size, everything.unlinked.length], [0, 0, 0], 'delete all leaves nothing and unlinks nothing');
+  await fs.putBack(everything);
+  eq((await reread()).size, 6, 'Undo of delete all puts all six back');
+  await fs.remove('zz-disc');
+  eq([fs.entries().has('zz-disc'), fs.entries().get('zz-m1').parent], [false, ''], 'deleting one entry is the same delete');
+
+  // A 1,000-entry import, deleted and put back, each in one write.
+  const bigStorage = fakeStorage();
+  const big = forgeStore({ factory: null, storage: bigStorage });
+  await big.open();
+  const thousand = Array.from({ length: 1000 }, (_, i) => ({ ...newEntry('maneuver', `Zz ${i}`, 'zz-disc'), id: `zz-big-${i}`, body: 'x'.repeat(200) }));
+  await big.saveMany(thousand);
+  const t0 = performance.now();
+  const bigUndo = await big.removeMany(thousand.map((e) => e.id));
+  const t1 = performance.now();
+  await big.putBack(bigUndo);
+  const t2 = performance.now();
+  eq([bigUndo.removed.length, big.entries().size, (await reread(bigStorage)).size], [1000, 1000, 1000], '1,000 entries deleted and put back');
+  ok(t1 - t0 < 250 && t2 - t1 < 250, `1,000 entries delete in ${Math.round(t1 - t0)} ms and come back in ${Math.round(t2 - t1)} ms`);
+  console.log(`forge: 1,000-entry delete ${(t1 - t0).toFixed(1)} ms, undo ${(t2 - t1).toFixed(1)} ms (store over a fake Storage)`);
+}
+
 console.log(`forge: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

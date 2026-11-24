@@ -8,12 +8,13 @@
  * sheet's own local extension store so the app next door reads it on its
  * next load.
  */
-import { TYPES, GROUPS, BASE, ELEMENT_BASE, esc, uid, slug, now, ord, str, newEntry, linksIn, sortEntries, applyCustomTypes, normalizeCustomTypes } from './schema.js';
+import { TYPES, GROUPS, BASE, ELEMENT_BASE, esc, uid, slug, now, ord, str, newEntry, linksIn, sortEntries, applyCustomTypes, normalizeCustomTypes, fieldText, shownEntries, listTree, treeBelow } from './schema.js';
 import { forgeStore } from './store.js';
 import { forgeToPack, importPack, importWildTalents, looksLikeWildTalents } from './pack.js';
 import { extensionStore, isPackKey, packsWorthMoving } from '../../app/js/extensions.js';
 import { packMedium } from '../../app/js/pack-storage.js';
 import { downloadFile } from '../../app/js/download.js';
+import { markPicks, setPicks, showPickCount, pickCount } from '../../app/js/ui/picks.js';
 import { mountThemes } from './theme.js';
 
 const $ = (s) => document.querySelector(s);
@@ -21,7 +22,10 @@ const $$ = (s) => [...document.querySelectorAll(s)];
 const stable = (o) => JSON.stringify(o, (k, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v).sort().reduce((a, kk) => { a[kk] = v[kk]; return a; }, {}) : v));
 
 const store = forgeStore();
-const S = { selected: null, dirty: false, filter: 'all', tag: '', q: '', nameIndex: new Map(), saveTimer: null, pendingSave: new Map(), rendered: '', folded: readFolded(), revealed: null };
+const S = { selected: null, dirty: false, filter: 'all', tag: '', q: '', nameIndex: new Map(), saveTimer: null, pendingSave: new Map(), rendered: '', folded: readFolded(), revealed: null,
+  // Selecting entries to delete: whether the list is in that mode, the ticked
+  // ids, and the list as last drawn (its tree, and every id it shows).
+  picking: false, picked: new Set(), tree: null, shown: [] };
 
 /* Which containers in the list are folded shut. A browser preference: the
    list is a way of reading, and which disciplines you keep shut is nothing
@@ -54,7 +58,6 @@ const taggedTo = (id) => {
   return key ? sortedEntries().filter((e) => e.id !== id && e.parent !== id && (e.tags || []).some((t) => t.trim().toLowerCase() === key)) : [];
 };
 const contentsOf = (id) => [...childrenOf(id), ...taggedTo(id)];
-const fieldText = (e) => Object.values(e.fields || {}).join(' ');
 const firstId = () => sortedEntries()[0]?.id || null;
 function reindex() {
   S.nameIndex = new Map();
@@ -80,7 +83,6 @@ async function writeEntry(e) {
   try { await store.save(e); } catch (err) { toast(`Save failed: ${err.message}`, 'bad'); }
   reindex(); statusIdle();
 }
-async function removeEntry(id) { try { await store.remove(id); } catch (err) { toast(`Delete failed: ${err.message}`, 'bad'); } reindex(); statusIdle(); }
 function statusIdle() { setStatus(store.medium === 'IndexedDB' ? 'ok' : 'local', `${entries().size} entries · ${store.medium === 'IndexedDB' ? 'this browser' : 'localStorage only'}`); }
 
 /* ===================== Rendering helpers ===================== */
@@ -262,11 +264,18 @@ function renderRail() {
   if (tags.length) h += `<div class="tg"><h4>Tags</h4><div class="chips">${tags.map(([t, n]) => `<button class="chip${tagTint(t)}" data-tag="${esc(t)}" aria-pressed="${S.tag === t}" title="Right-click to colour">${esc(t)} <b>${n}</b></button>`).join('')}</div></div>`;
   $('#typegroups').innerHTML = h;
   const q = S.q.trim().toLowerCase();
-  const items = sortedEntries().filter((e) => (S.filter === 'all' || e.type === S.filter)
-    && (!S.tag || (e.tags || []).some((t) => t.toLowerCase() === S.tag.toLowerCase()))
-    && (!q || `${e.name} ${(e.tags || []).join(' ')} ${e.body} ${fieldText(e)}`.toLowerCase().includes(q)));
+  const items = shownEntries(sortedEntries(), S);
+  // A ticked entry deleted meanwhile is not ticked any more.
+  for (const id of S.picked) if (!entries().has(id)) S.picked.delete(id);
+  if (S.picking && entries().size < 2) { S.picking = false; S.picked.clear(); }
+  S.shown = items.map((e) => e.id);
+  $('#pickBar').innerHTML = pickBar();
+  $('#pickBar').hidden = entries().size < 2;
+  $('#list').classList.toggle('picking', S.picking);
   if (!items.length) {
+    S.tree = null;
     $('#list').innerHTML = `<div class="empty">${entries().size ? 'Nothing matches.' : 'No entries yet.<br>Click <b>New entry</b> to start, or import a JSON file.'}</div>`;
+    syncPicks();
     return;
   }
   /*
@@ -278,17 +287,8 @@ function renderRail() {
    * unfolds everything, since a match hidden in a fold is no match; and the
    * open entry's containers are never shut over it.
    */
-  const inList = new Set(items.map((e) => e.id));
-  const kidsOf = new Map();
-  const under = new Map();   // entry id -> the container it is shown under
-  const file = (e, under_) => { if (!kidsOf.has(under_)) kidsOf.set(under_, []); kidsOf.get(under_).push(e); under.set(e.id, under_); };
-  for (const e of items) if (e.parent && inList.has(e.parent)) file(e, e.parent);
-  // Then the tagged ones, after a container's own children.
-  for (const e of items) {
-    if (under.has(e.id)) continue;
-    const host = (e.tags || []).map((t) => resolveName(t)).find((id) => id && id !== e.id && inList.has(id) && isContainer(entries().get(id)));
-    if (host) file(e, host);
-  }
+  S.tree = listTree(items, resolveName);
+  const { kidsOf, under } = S.tree;
   // The open entry's containers open -- once, when it becomes the open one.
   // Not on every redraw: a fold made over the open entry would otherwise be
   // undone by the redraw the fold itself causes, and a group holding the open
@@ -311,10 +311,84 @@ function renderRail() {
       ? `<button class="fold" data-fold="${e.id}" aria-expanded="${!folded}" title="${folded ? 'Show' : 'Hide'} the ${kids.length} ${kids.length === 1 ? 'entry' : 'entries'} under this">${folded ? '▸' : '▾'}</button>`
       : '';
     const tint = /^#[0-9a-f]{6}$/i.test(e.color || '') ? `;--entry-color:${e.color}` : '';
-    return `<div class="row${depth ? ' child' : ''}${kids.length ? ' hasfold' : ''}${tint ? ' tinted' : ''}" data-id="${e.id}" style="--depth:${depth}${tint}" aria-current="${e.id === S.selected}">${fold}<span class="n">${esc(e.name) || '<i>Untitled</i>'}</span><span class="k">${f.level ? `L${esc(f.level)}` : folded ? `${kids.length}` : ''}</span><span class="m">${esc(meta)}${tagBadges ? ` ${tagBadges}` : ''}</span></div>`
+    const pick = S.picking ? `<input type="checkbox" class="pick" data-pick="${esc(e.id)}" aria-label="Select ${esc(e.name || 'Untitled')}${kids.length ? ' and the entries under it' : ''}">` : '';
+    return `<div class="row${depth ? ' child' : ''}${kids.length ? ' hasfold' : ''}${tint ? ' tinted' : ''}" data-id="${e.id}" style="--depth:${depth}${tint}" aria-current="${e.id === S.selected}">${fold}${pick}<span class="n">${esc(e.name) || '<i>Untitled</i>'}</span><span class="k">${f.level ? `L${esc(f.level)}` : folded ? `${kids.length}` : ''}</span><span class="m">${esc(meta)}${tagBadges ? ` ${tagBadges}` : ''}</span></div>`
       + (folded ? '' : kids.map((k) => row(k, depth + 1)).join(''));
   };
-  $('#list').innerHTML = items.filter((e) => !under.has(e.id)).map((e) => row(e, 0)).join('');
+  $('#list').innerHTML = S.tree.roots.map((e) => row(e, 0)).join('');
+  syncPicks();
+}
+
+/* ===================== Selecting entries to delete ===================== */
+/* The bar over the list: a button that starts selecting, then an All shown
+   box, the count, Delete and Cancel -- the Extensions dialog's way of
+   removing several packs (app/js/ui/picks.js). A row's box stands for the
+   entry and everything shown under it, folded or not; All shown is every
+   entry the search, type and tag show. Delete acts on every ticked entry,
+   shown or not. */
+function pickBar() {
+  if (!S.picking) return '<button class="btn small" data-pick-start title="Tick entries, then delete them together.">Select entries to delete</button>';
+  return `<label><input type="checkbox" data-pick-all> All shown</label>
+    <span class="d" data-pick-count></span><span class="spacer"></span>
+    <button class="btn small danger" data-pick-delete>Delete <span data-pick-n></span></button><button class="btn small" data-pick-stop>Cancel</button>`;
+}
+/** The ids a row's box stands for: the entry and everything shown under it. */
+const rowPicks = (id) => (S.tree ? [id, ...treeBelow(S.tree, id)] : [id]);
+/** Every box and count follows `S.picked`; no markup changes. */
+function syncPicks() {
+  if (!S.picking) return;
+  for (const box of $$('#list [data-pick]')) markPicks(box, rowPicks(box.dataset.pick), S.picked);
+  const all = $('#pickBar [data-pick-all]');
+  if (all) markPicks(all, S.shown, S.picked);
+  showPickCount($('#pickBar'), S.picked.size, ['entry', 'entries']);
+}
+function endPicking() { S.picking = false; S.picked.clear(); }
+$('#pickBar').addEventListener('click', async (ev) => {
+  if (ev.target.closest('[data-pick-start]')) { S.picking = true; S.picked.clear(); renderRail(); return; }
+  if (ev.target.closest('[data-pick-stop]')) { endPicking(); renderRail(); return; }
+  if (ev.target.closest('[data-pick-delete]')) {
+    const ids = [...S.picked];
+    if (!ids.length) return;
+    const gone = new Set(ids);
+    const kept = [...entries().values()].filter((e) => e.parent && gone.has(e.parent) && !gone.has(e.id)).length;
+    if (!await ask(`Delete ${pickCount(ids.length, ['entry', 'entries'])}?${kept ? ` ${pickCount(kept, ['child entry', 'child entries'])} not selected will be kept but unlinked.` : ''}`)) return;
+    endPicking();
+    await deleteEntries(ids, pickCount(ids.length, ['entry', 'entries']));
+  }
+});
+$('#pickBar').addEventListener('change', (ev) => {
+  if (!ev.target.matches('[data-pick-all]')) return;
+  setPicks(S.picked, S.shown, ev.target.checked); syncPicks();
+});
+$('#list').addEventListener('change', (ev) => {
+  const box = ev.target.closest('[data-pick]'); if (!box) return;
+  setPicks(S.picked, rowPicks(box.dataset.pick), box.checked); syncPicks();
+});
+
+/**
+ * Delete entries -- one from the editor, the ticked ones, or all of them --
+ * in one write, with one Undo that puts them all back in one write. Entries
+ * under a deleted one that are not deleted stay, unlinked, and Undo links
+ * them again.
+ */
+async function deleteEntries(ids, what) {
+  // A save the editor scheduled for a deleted entry must not land after the
+  // delete and write it back: an edit followed within the second by Delete
+  // used to come back on its own. The other pending saves go first, so the
+  // delete's write is the last word on the entries it unlinks.
+  for (const id of ids) S.pendingSave.delete(id);
+  if (S.pendingSave.size) await flushSaves();
+  let undo;
+  try { undo = await store.removeMany(ids); } catch (err) { toast(`Delete failed: ${err.message}`, 'bad'); return; }
+  reindex();
+  if (!entries().has(S.selected)) { S.selected = firstId(); S.dirty = false; }
+  renderAll(); statusIdle();
+  toast(`Deleted ${what}`, '', { label: 'Undo', run: async () => {
+    try { await store.putBack(undo); } catch (err) { toast(`Undo failed: ${err.message}`, 'bad'); return; }
+    reindex();
+    if (undo.removed.length === 1 || !S.selected) S.selected = undo.removed[0]?.id || firstId();
+    renderAll(); statusIdle();
+  } });
 }
 
 /* ===================== Render: editor ===================== */
@@ -368,20 +442,7 @@ function renderEditor() {
   $('#delBtn').addEventListener('click', async () => {
     const kids = childrenOf(e.id);
     if (!await ask(`Delete “${e.name || 'Untitled'}”?${kids.length ? ` Its ${kids.length} child entries will be kept but unlinked.` : ''}`)) return;
-    // What Undo puts back: the entry as it was, and the children's link to it.
-    const gone = structuredClone(e);
-    const unlinked = kids.map((k) => k.id);
-    // A save the editor scheduled for this entry must not land after the
-    // delete and write it back: an edit followed within the second by Delete
-    // used to come back on its own.
-    S.pendingSave.delete(e.id);
-    for (const k of kids) { k.parent = ''; await writeEntry(k); }
-    await removeEntry(e.id); S.selected = firstId(); S.dirty = false; renderAll();
-    toast(`Deleted “${gone.name || 'Untitled'}”`, '', { label: 'Undo', run: async () => {
-      await writeEntry(gone);
-      for (const id of unlinked) { const k = entries().get(id); if (k) { k.parent = gone.id; await writeEntry(k); } }
-      S.selected = gone.id; renderAll(); statusIdle();
-    } });
+    await deleteEntries([e.id], `“${e.name || 'Untitled'}”`);
   });
 }
 function onEdit(ev) {
@@ -445,7 +506,12 @@ document.addEventListener('click', (ev) => {
   const tg = ev.target.closest('[data-tag-go]'); if (tg) { S.tag = tg.dataset.tagGo; S.filter = 'all'; renderRail(); setPane('list'); return; }
   const fold = ev.target.closest('[data-fold]');
   if (fold) { const id = fold.dataset.fold; if (S.folded.has(id)) S.folded.delete(id); else S.folded.add(id); writeFolded(); renderRail(); return; }
-  const row = ev.target.closest('.row[data-id]'); if (row) { go(row.dataset.id); return; }
+  const row = ev.target.closest('.row[data-id]');
+  if (row) {
+    // Selecting, a press anywhere on a row ticks its box.
+    if (S.picking) { if (!ev.target.closest('[data-pick]')) row.querySelector('[data-pick]')?.click(); return; }
+    go(row.dataset.id); return;
+  }
   const chip = ev.target.closest('.chip[data-f]'); if (chip) { S.filter = chip.dataset.f; renderRail(); return; }
   const tchip = ev.target.closest('.chip[data-tag]'); if (tchip) { S.tag = S.tag === tchip.dataset.tag ? '' : tchip.dataset.tag; renderRail(); return; }
   const tab = ev.target.closest('.panetabs [data-pane]'); if (tab) { setPane(tab.dataset.pane); return; }
@@ -506,6 +572,13 @@ async function doIO(act) {
     if (!entries().size) return toast('Nothing to export', 'bad');
     const rev = await nextRevision();
     return download('homebrew-workbench.json', JSON.stringify(forgeToPack(sortedEntries(), { revision: rev }), null, 1));
+  }
+  if (act === 'delete-all') {
+    const n = entries().size;
+    if (!n) return toast('Nothing to delete', 'bad');
+    if (!await ask(`Delete all ${pickCount(n, ['entry', 'entries'])}?`)) return undefined;
+    endPicking();
+    return deleteEntries([...entries().keys()], `all ${pickCount(n, ['entry', 'entries'])}`);
   }
   if (act === 'exp-md') { if (!cur) return toast('Select an entry first', 'bad'); return download(`${slug(cur.name)}.md`, mdOf(cur)); }
   if (act === 'exp-md-all') {
