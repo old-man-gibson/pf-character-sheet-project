@@ -525,7 +525,7 @@ function buffsPanel(model, ctx) {
       const b = buffs[editing];
       const i = editing;
       const bonusRow = (row, j) => `<span class="buffbonus">
-        ${itemSelect(list, i, `bonuses.${j}.target`, row.target, BUFF_TARGETS, null, null, { attrs: 'aria-label="What this bonus moves"' })}
+        ${itemSelect(list, i, `bonuses.${j}.target`, row.target, BUFF_TARGETS, null, null, { attrs: 'data-search aria-label="What this bonus moves"' })}
         ${exprField(`data-item="${list}|${i}|bonuses.${j}.value"`, row.value, {
     width: '5.5rem', value: row.valueNum, error: row.valueError, title: 'A number or a formula, e.g. 1 + essence.shoulder',
   })}

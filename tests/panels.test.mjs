@@ -1690,5 +1690,44 @@ console.log('\nthe Extensions tab: a shelf of many blocks arrives with every pac
   runtime.bundled = had;
 }
 
+console.log('\nthe search list over a long picker');
+{
+  const { rankRows, ownChoice, searchRowsHtml } = await import('../app/js/ui/search-list.js');
+  const rows = [
+    { value: '', label: '-', side: '', group: '' },
+    { value: 'ac.insight', label: 'Insight bonus to AC', side: 'ac.insight', group: 'Armor class' },
+    { value: 'ac.natural', label: 'Natural Armor bonus to AC', side: 'ac.natural', group: 'Armor class' },
+    { value: 'ac.touch', label: 'Touch AC', side: 'ac.touch', group: 'Armor class' },
+    { value: 'hp.total', label: 'Max hit points', side: 'hp.total', group: 'Hit points' },
+    { value: 'int.score', label: 'Intelligence', side: 'int.score', group: 'Ability scores' },
+    { value: 'skill.intimidate', label: 'Intimidate', side: 'skill.intimidate', group: 'Skills' },
+    { value: 'sphere.telekinesis.cl', label: 'Telekinesis: caster level', side: 'sphere.telekinesis.cl', group: 'Spheres' },
+    { value: 'familiar.ac.touch', label: 'Tau-to: Touch AC', side: 'familiar.ac.touch', group: 'Tau-to' },
+  ];
+  const found = (typed) => rankRows(rows, typed).map((r) => r.value);
+  check('nothing typed is the whole list as it stands', found('  ').length, rows.length);
+  check('"int" finds Intelligence first, and nothing from the middle of a word', found('int'), ['int.score', 'skill.intimidate']);
+  check('a later word of a name counts', found('armor'), ['ac.natural', 'ac.insight', 'ac.touch']);
+  check('so does the formula name, as written', found('ac.touch'), ['ac.touch', 'familiar.ac.touch']);
+  check('every word typed must be there, in any order', found('touch tau'), ['familiar.ac.touch']);
+  check('capitals do not matter', found('TELEK'), ['sphere.telekinesis.cl']);
+  check('a name nothing goes by may be the player\u2019s own', [ownChoice(rows, ' Fury '), ownChoice(rows, 'touch ac'), ownChoice(rows, 'INT.SCORE'), ownChoice(rows, '')], ['Fury', '', '', '']);
+  const whole = searchRowsHtml(rankRows(rows, ''), { current: 'int.score', at: 5 });
+  ok('untyped, the groups are headings and the held choice is marked',
+    (whole.match(/class="sl-group"/g) || []).length === 6 && /class="sl-row on"[^>]*data-sl="5" aria-selected="true"/.test(whole));
+  const some = searchRowsHtml(rankRows(rows, 'int'), { typed: 'int', own: 'int' });
+  ok('typed, each row says its group and the own name is the last row',
+    !some.includes('sl-group') && some.includes('<span class="sl-in">Ability scores</span>') && /data-sl="2"[^>]*>\s*<span class="sl-label">Use \u201cint\u201d/.test(some));
+  ok('a name is escaped', searchRowsHtml([{ value: 'x', label: '<b>', side: '', group: '' }]).includes('&lt;b&gt;'));
+  ok('nothing found says so', searchRowsHtml([], { typed: 'zz' }).includes('Nothing matches.'));
+
+  const c = new Character(blankDocument({ id: 'zz-search', name: 'Search', level: 3 }));
+  c.set('equipment.gear', [{ name: 'Ring', slot: 'Ring 1', bonuses: [{ value: 1, type: 'Deflection', target: 'ac.total' }] }]);
+  const html = gear.renderGearPanel(c, {});
+  ok('the gear type and To pickers open as search lists',
+    /<select data-item="equipment\.gear\|0\|bonuses\.0\.type"[^>]*data-search="own"/.test(html)
+      && /<select class="target"[^>]*data-search /.test(html));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
