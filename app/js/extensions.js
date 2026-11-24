@@ -1867,9 +1867,10 @@ function listedOptions(text, source) {
  *    that are each a Kineticist's Element are the list an Element column picks
  *    from; one entry whose text is itself a list of arts is that list.
  *  - a row of the powers table whose kind is not `power` is something a class
- *    takes one of at a time. They are offered whole, by their type ("Utility",
- *    "Substance Infusion"), and by the word types share ("Infusion"), since a
- *    column is as often ruled by the family as by the kind.
+ *    takes one of at a time. They are offered whole, and by family: the word
+ *    types share ("Infusion" for form and substance infusions), or a type
+ *    that shares none ("Utility"), since a column is as often ruled by the
+ *    family as by the kind.
  *
  * Looked up by name like any menu, so nothing is copied onto a character.
  */
@@ -1936,14 +1937,21 @@ export function optionCataloguesFromTables(tables) {
       options: list.map((r) => readEntry(r.row, `power|${name}`, () => normalizeOptions([r.option], name)[0])).filter(Boolean),
     });
     menu(title(kind), rows);
-    const types = [...new Set(rows.map((r) => r.family).filter(Boolean))];
-    for (const t of types) menu(`${title(kind)}: ${t}`, rows.filter((r) => r.family === t));
-    // "Form Infusion" and "Substance Infusion" are both what an Infusion slot takes.
-    const lastWord = (t) => t.split(/\s+/).pop();
-    for (const w of new Set(types.map(lastWord))) {
-      const sharing = types.filter((t) => lastWord(t) === w);
-      if (sharing.length > 1) menu(`${title(kind)}: ${w}`, rows.filter((r) => sharing.includes(r.family)));
+    // One menu per family, in the order the families first appear. Types that
+    // share a last word are one family named by that word, since "Form
+    // Infusion" and "Substance Infusion" are both what an Infusion slot takes;
+    // a type that shares it with none is a family by its own name.
+    const family = (r) => lower(r.family).replace(/\s*\([^)]*\)$/, '').replace(/\s+/g, ' ').trim();
+    const lastWord = (t) => t.split(' ').pop();
+    const types = [...new Set(rows.map(family).filter(Boolean))];
+    const families = new Map();
+    for (const t of types) {
+      const shared = types.some((u) => u !== t && lastWord(u) === lastWord(t));
+      const name = shared ? lastWord(t) : t;
+      if (!families.has(name)) families.set(name, new Set());
+      families.get(name).add(t);
     }
+    for (const [name, members] of families) menu(`${title(kind)}: ${title(name)}`, rows.filter((r) => members.has(family(r))));
   }
   return out.filter((c) => c.name && c.options.length);
 }
