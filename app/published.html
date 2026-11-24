@@ -48,9 +48,19 @@
   }
   .wrap { padding: 14px; }
   .empty { padding: 40px 16px; text-align: center; color: #9aa3b2; }
+  /* The legal notice and Donate link (js/site-notice.js). */
+  footer.legal {
+    max-width: 60rem; margin: 0 auto; padding: 14px 16px 24px;
+    border-top: 1px solid #2c313b; color: #9aa3b2; font-size: 0.78rem;
+  }
+  footer.legal p { margin: 0 0 6px; }
+  footer.legal a { color: #b9c2d0; }
+  footer.legal a[hidden] { display: none; }
   @media (prefers-color-scheme: light) {
     body { background: #f4f5f7; color: #1b1d21; }
     .bar { background: #fff; border-bottom-color: #dfe2e8; }
+    footer.legal { border-top-color: #dfe2e8; color: #5c6472; }
+    footer.legal a { color: #475065; }
     .bar .note { color: #5c6472; }
     .bar .tag { background: #eceef2; color: #475065; }
   }
@@ -70,8 +80,17 @@
     “Preview published” on a sheet.</p>
 </div>
 
+<footer class="legal">
+  <div id="legalText"></div>
+  <p><a id="donate" target="_blank" rel="noopener" hidden>Donate</a></p>
+</footer>
+
 <script type="module">
 import './js/sheet-element.js';
+import { legalHtml, showDonate } from './js/site-notice.js';
+
+document.getElementById('legalText').innerHTML = legalHtml();
+showDonate(document.getElementById('donate'));
 
 const params = new URLSearchParams(location.search);
 
