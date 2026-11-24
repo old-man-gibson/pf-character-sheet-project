@@ -62,41 +62,77 @@ const menuKey = (s) => String(s || '').toLowerCase()
   .trim()
   .replace(/(\w{3,})s$/, '$1');
 
-/** Register the menus the active packs provide. Keyed by name, case-blind. */
+/**
+ * Options added to a menu's list, each name once. A name already there keeps
+ * its place and takes the newer copy, the way a later pack's stands everywhere
+ * else; names are matched as `menuKey` matches them, so "Bleeding Attack (Ex)"
+ * is "Bleeding Attack".
+ */
+function addOptions(list, more) {
+  const at = new Map(list.map((o, i) => [menuKey(o.name), i]));
+  for (const o of more) {
+    const key = menuKey(o.name);
+    if (at.has(key)) list[at.get(key)] = o;
+    else { at.set(key, list.length); list.push(o); }
+  }
+  return list;
+}
+
+/**
+ * Register the menus the active packs provide. Keyed by name, case-blind.
+ *
+ * Two packs with a menu of one name -- a book's rogue talents and another
+ * book's -- make one menu with the options of both, each option once. What
+ * the later menu leaves blank (its class, its text) the earlier one's fills.
+ */
 export function setOptionCatalogues(list) {
   OPTION_CATALOGUES = new Map();
   for (const c of Array.isArray(list) ? list : []) {
     const name = String(c?.name || '').trim();
     if (!name) continue;
+    const options = (Array.isArray(c?.options) ? c.options : []).map((o) => ({
+      name: String(o?.name || ''),
+      type: o?.type ? String(o.type) : null,
+      category: String(o?.category || ''),
+      source: String(o?.source || ''),
+      text: String(o?.text || ''),
+      minLevel: o?.minLevel == null ? null : Number(o.minLevel) || null,
+      replaces: (Array.isArray(o?.replaces) ? o.replaces : []).map(String).filter(Boolean),
+    })).filter((o) => o.name);
+    const had = OPTION_CATALOGUES.get(name.toLowerCase());
+    const pick = (k) => String(c?.[k] || '').trim() || had?.[k] || '';
     OPTION_CATALOGUES.set(name.toLowerCase(), {
       name,
-      class: String(c?.class || '').trim(),
-      feature: String(c?.feature || '').trim(),
-      classKey: menuKey(c?.class),
-      featureKey: menuKey(c?.feature),
-      text: String(c?.text || ''),
+      class: pick('class'),
+      feature: pick('feature'),
+      classKey: menuKey(pick('class')),
+      featureKey: menuKey(pick('feature')),
+      text: String(c?.text || '') || had?.text || '',
       // Text to look a feature up in, not a list a column picks from.
-      hidden: !!c?.hidden,
+      hidden: !!c?.hidden && (!had || had.hidden),
       archetype: !!c?.archetype,
-      options: (Array.isArray(c?.options) ? c.options : []).map((o) => ({
-        name: String(o?.name || ''),
-        type: o?.type ? String(o.type) : null,
-        category: String(o?.category || ''),
-        source: String(o?.source || ''),
-        text: String(o?.text || ''),
-        minLevel: o?.minLevel == null ? null : Number(o.minLevel) || null,
-        replaces: (Array.isArray(o?.replaces) ? o.replaces : []).map(String).filter(Boolean),
-      })).filter((o) => o.name),
+      options: addOptions(had ? [...had.options] : [], options),
     });
   }
-  // From the map, not the list: a later menu of the same name takes the earlier one's place.
   VISIBLE_MENUS = [...OPTION_CATALOGUES.values()].filter((c) => !c.hidden);
   MENUS_BY_FEATURE = new Map();
   MENUS_BY_CLASS = new Map();
+  const add = (index, key, c) => {
+    if (!index.has(key)) index.set(key, []);
+    index.get(key).push(c);
+  };
   for (const c of VISIBLE_MENUS) {
-    for (const [index, key] of [[MENUS_BY_FEATURE, c.featureKey], [MENUS_BY_CLASS, c.classKey]]) {
-      if (!index.has(key)) index.set(key, []);
-      index.get(key).push(c);
+    add(MENUS_BY_FEATURE, c.featureKey, c);
+    add(MENUS_BY_CLASS, c.classKey, c);
+  }
+  // A menu of one type of a kind ("Wild Talent: utility") is also what a
+  // column named for the type answers to: a class table writes "utility wild
+  // talent" or "infusion". After the menus named so outright, which win.
+  for (const c of VISIBLE_MENUS) {
+    const typed = !c.classKey && c.feature.match(/^([^:]+):\s*(.+)$/);
+    if (!typed) continue;
+    for (const key of new Set([menuKey(typed[2]), menuKey(`${typed[2]} ${typed[1]}`)])) {
+      if (key && key !== c.featureKey) add(MENUS_BY_FEATURE, key, c);
     }
   }
 }

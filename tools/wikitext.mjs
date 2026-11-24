@@ -116,6 +116,21 @@ const NAMED = {
 };
 
 /**
+ * Templates expanded from their own source rather than guessed at, by
+ * lower-cased name (`useTemplateSources`). A class page's `{{Class Table}}` is
+ * the one that needs it: every argument is named (`sp1=`, `xa=`), so the
+ * default rule leaves nothing, and the table is what says which labelled
+ * paragraphs are the class's features.
+ */
+const SOURCES = new Map();
+
+/** Expand these templates from their wikitext source: `[[name, source], …]`. */
+export function useTemplateSources(entries) {
+  SOURCES.clear();
+  for (const [name, source] of entries) SOURCES.set(String(name).replace(/\s+/g, ' ').trim().toLowerCase(), String(source));
+}
+
+/**
  * What a template leaves behind.
  *
  * The default is its last argument, which is what the wiki's link templates
@@ -129,6 +144,17 @@ function render(inner, title, unknown) {
   const name = args[0].replace(/\s+/g, ' ').trim().toLowerCase();
   const rest = args.slice(1).filter((a) => !/^[a-z0-9_ -]{1,20}=/i.test(a));
 
+  if (SOURCES.has(name)) {
+    const given = {};
+    let n = 0;
+    for (const a of args.slice(1)) {
+      const eq = a.indexOf('=');
+      if (eq > 0 && /^[\w -]+$/.test(a.slice(0, eq).trim())) given[a.slice(0, eq).trim()] = a.slice(eq + 1).trim();
+      else given[String(++n)] = a;
+    }
+    // Rows on lines of their own, apart from the prose around them.
+    return `\n\n${tablesAsPipes(expandTemplate(SOURCES.get(name), given, title))}\n\n`;
+  }
   if (name === 'pagename' || name === 'subst:pagename') return title;
   // A template written about here wins over every general rule below, so that
   // a name appearing in two lists cannot go silently missing -- which is what
@@ -164,6 +190,218 @@ export function unwrapTemplates(text, title = '', unknown = null) {
     out = out.slice(0, open) + render(out.slice(open + 2, close), title, unknown) + out.slice(close + 2);
   }
   return out;
+}
+
+/* ---------------- a template from its source ---------------- */
+
+/**
+ * Wikitext as a tree of text, `{{…}}` calls and `{{{…}}}` parameters, each
+ * call's or parameter's arguments split on its own pipes. A run of braces is
+ * matched the way MediaWiki matches it: three closing braces end a parameter
+ * and two end a call, so `{{#if:{{{a|}}}}}` closes both. The pipes inside a
+ * `[[link|label]]` are the link's.
+ */
+function parseBraces(text) {
+  const root = { parts: [[]] };
+  const stack = [root];
+  const top = () => stack[stack.length - 1];
+  const put = (x) => top().parts[top().parts.length - 1].push(x);
+  let i = 0;
+  while (i < text.length) {
+    if (text.startsWith('{{', i)) {
+      let n = 0;
+      while (text[i + n] === '{') n++;
+      stack.push({ open: n, parts: [[]] });
+      i += n;
+      continue;
+    }
+    if (text.startsWith('}}', i) && stack.length > 1) {
+      let m = 0;
+      while (text[i + m] === '}') m++;
+      i += m;
+      while (m >= 2 && stack.length > 1) {
+        const el = top();
+        const take = el.open >= 3 && m >= 3 ? 3 : 2;
+        const node = { kind: take === 3 ? 'param' : 'call', parts: el.parts };
+        el.open -= take;
+        m -= take;
+        if (el.open >= 2) el.parts = [[node]];
+        else {
+          stack.pop();
+          if (el.open === 1) put('{');
+          put(node);
+        }
+      }
+      if (m) put('}'.repeat(m));
+      continue;
+    }
+    if (stack.length > 1 && text.startsWith('[[', i)) {
+      const end = text.indexOf(']]', i);
+      if (end !== -1) { put(text.slice(i, end + 2)); i = end + 2; continue; }
+    }
+    if (text[i] === '|' && stack.length > 1) { top().parts.push([]); i++; continue; }
+    let j = i + 1;
+    while (j < text.length && !'{}|['.includes(text[j])) j++;
+    put(text.slice(i, j));
+    i = j;
+  }
+  // Braces that never close are text.
+  while (stack.length > 1) {
+    const el = stack.pop();
+    put('{'.repeat(el.open));
+    el.parts.forEach((p, k) => { if (k) put('|'); p.forEach(put); });
+  }
+  return root.parts[0];
+}
+
+/**
+ * A `#expr` / `#ifexpr` expression's value: numbers, `+ - * /`, `mod`,
+ * comparisons, `and`, `or`, `not` and brackets, in MediaWiki's order of
+ * precedence. NaN for anything else.
+ */
+export function wikiExpr(src) {
+  const tokens = String(src).toLowerCase().match(/\d+(?:\.\d+)?|\.\d+|<=|>=|<>|!=|mod\b|and\b|or\b|not\b|[-+*/()<>=]|\S/g) || [];
+  let k = 0;
+  const peek = () => tokens[k];
+  const unary = () => {
+    const t = tokens[k++];
+    if (t === '-') return -unary();
+    if (t === '+') return unary();
+    if (t === 'not') return unary() ? 0 : 1;
+    if (t === '(') { const v = or(); if (tokens[k] === ')') k++; return v; }
+    const v = Number(t);
+    return Number.isFinite(v) ? v : NaN;
+  };
+  const times = () => {
+    let v = unary();
+    while (['*', '/', 'mod'].includes(peek())) {
+      const op = tokens[k++];
+      const r = unary();
+      v = op === '*' ? v * r : op === '/' ? v / r : Math.trunc(v) % Math.trunc(r);
+    }
+    return v;
+  };
+  const plus = () => {
+    let v = times();
+    while (peek() === '+' || peek() === '-') v = tokens[k++] === '+' ? v + times() : v - times();
+    return v;
+  };
+  const compare = () => {
+    let v = plus();
+    while (['=', '<', '>', '<=', '>=', '!=', '<>'].includes(peek())) {
+      const op = tokens[k++];
+      const r = plus();
+      v = Number({ '=': v === r, '<': v < r, '>': v > r, '<=': v <= r, '>=': v >= r, '!=': v !== r, '<>': v !== r }[op]);
+    }
+    return v;
+  };
+  const and = () => { let v = compare(); while (peek() === 'and') { k++; const r = compare(); v = Number(!!v && !!r); } return v; };
+  const or = () => { let v = and(); while (peek() === 'or') { k++; const r = and(); v = Number(!!v || !!r); } return v; };
+  if (!tokens.length) return NaN;
+  const v = or();
+  return k === tokens.length && Number.isFinite(v) ? v : NaN;
+}
+
+/** `#switch`: the value of the first case that matches, a case without `=` falling through to the next. */
+function switchCase(value, cases, frame) {
+  const same = (a, b) => a === b || (a !== '' && b !== '' && !Number.isNaN(Number(a)) && Number(a) === Number(b));
+  let found = false;
+  let fallback = '';
+  for (let k = 0; k < cases.length; k++) {
+    const nodes = cases[k];
+    const at = nodes.findIndex((n) => typeof n === 'string' && n.includes('='));
+    if (at === -1) {
+      const key = expandNodes(nodes, frame).trim();
+      if (k === cases.length - 1) return found ? '' : key;   // a last case with no `=` is the default
+      if (same(key, value)) found = true;
+      continue;
+    }
+    const cut = nodes[at].indexOf('=');
+    const key = expandNodes([...nodes.slice(0, at), nodes[at].slice(0, cut)], frame).trim();
+    const out = () => expandNodes([nodes[at].slice(cut + 1), ...nodes.slice(at + 1)], frame).trim();
+    if (found || same(key, value)) return out();
+    if (key === '#default') fallback = out();
+  }
+  return fallback;
+}
+
+function expandNodes(nodes, frame) {
+  let out = '';
+  for (const n of nodes) {
+    if (typeof n === 'string') out += n;
+    else if (n.kind === 'param') {
+      const name = expandNodes(n.parts[0], frame).trim();
+      out += Object.hasOwn(frame.args, name) ? frame.args[name]
+        : n.parts.length > 1 ? expandNodes(n.parts[1], frame) : `{{{${name}}}}`;
+    } else out += expandCall(n, frame);
+  }
+  return out;
+}
+
+function expandCall(n, frame) {
+  const head = expandNodes(n.parts[0], frame);
+  const arg = (k) => (n.parts[k] ? expandNodes(n.parts[k], frame).trim() : '');
+  const fn = head.match(/^\s*#(\w+)\s*:([\s\S]*)$/);
+  if (fn) {
+    const first = fn[2].trim();
+    switch (fn[1].toLowerCase()) {
+      case 'if': return first ? arg(1) : arg(2);
+      case 'ifexpr': { const v = wikiExpr(first); return !Number.isNaN(v) && v ? arg(1) : arg(2); }
+      case 'expr': { const v = wikiExpr(first); return Number.isNaN(v) ? '' : String(Number(v.toPrecision(12))); }
+      case 'len': return String(first.length);
+      case 'switch': return switchCase(first, n.parts.slice(1), frame);
+      default: return '';
+    }
+  }
+  const name = head.replace(/\s+/g, ' ').trim().toLowerCase();
+  if (name === '!') return '|';
+  if (name === 'pagename' || name === 'basepagename') return frame.title;
+  // The page's name without the bracket that tells two pages of one name apart.
+  if (name === 'pagename nd') return arg(1).replace(/\s*\([^()]*\)\s*$/, '');
+  return '';
+}
+
+/**
+ * A template's source expanded with the arguments a page gave it: parameters
+ * filled in, and `#if`, `#ifexpr`, `#switch`, `#expr` and `#len` worked out.
+ * Enough for a template that computes a table from its arguments; any other
+ * template it calls leaves nothing.
+ */
+export function expandTemplate(source, args = {}, title = '') {
+  return expandNodes(parseBraces(String(source ?? '')), { args, title });
+}
+
+/**
+ * Every `{| … |}` table in a stretch of wikitext as pipe rows, `| a | b |`,
+ * the form a class table takes in every other pack. The header kept is the
+ * last row of headers before the first row of data (a row of group headings
+ * above it goes), the caption goes, and a cell is its text: `attr|` and
+ * category links off, links as their labels, line breaks as spaces.
+ */
+export function tablesAsPipes(text) {
+  return String(text ?? '').replace(/\[\[\s*Category\s*:[^\]]*\]\]/gi, '')
+    .replace(/^[ \t]*\{\|[^\n]*\n([\s\S]*?)^[ \t]*\|\}[ \t]*$/gm, (_, inner) => {
+      const rows = [];
+      for (const chunk of inner.split(/^[ \t]*\|-[^\n]*$/m)) {
+        const cells = [];
+        let header = true;
+        for (const line of chunk.split('\n')) {
+          const t = line.trim();
+          if (!t || t.startsWith('|+')) continue;
+          if (t[0] === '|' || t[0] === '!') {
+            if (t[0] === '|') header = false;
+            for (const c of t.slice(1).split(t[0] === '!' ? /!!|\|\|/ : /\|\|/)) cells.push(c);
+          } else if (cells.length) cells[cells.length - 1] += ` ${t}`;
+        }
+        const text = cells.map((c) => delink(c.replace(/^\s*[^|[\]{}]*=[^|[\]{}]*\|(?!\|)/, ''))
+          .replace(/<br\s*\/?>/gi, ' ').replace(/\|/g, '/').replace(/\s+/g, ' ').trim());
+        if (text.length) rows.push({ header, text });
+      }
+      const first = rows.findIndex((r) => !r.header);
+      if (first === -1) return '';
+      const head = rows.slice(0, first).filter((r) => r.header).pop();
+      return [...(head ? [head] : []), ...rows.slice(first)].map((r) => `| ${r.text.join(' | ')} |`).join('\n');
+    });
 }
 
 /* ---------------- markers ---------------- */
