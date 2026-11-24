@@ -1,0 +1,91 @@
+/**
+ * Class pages for tests/reader-version.test.mjs: one of each shape the class
+ * reader knows. Made up for the tests, as the pages in extensions.test.mjs are.
+ */
+export const pages = [
+  {
+    name: 'Stancer (Class)', source: 'Book p. 2',
+    fields: [['Hit Die', 'd10'], ['Skill Ranks', '4'], ['Base attack bonus', '1'], ['Fort save', '2'], ['Ref save', '1'], ['Will save', '1']],
+    text: [
+      'Hit Die: d10.',
+      'Class Skills: The stancer\'s class skills are Acrobatics (Dex), Climb (Str), and Knowledge (all) (Int).',
+      'Rooted Stance (Ex): She plants her feet.',
+      'Iron Root (Su): At 4th level she cannot be moved.',
+    ].join('\n\n'),
+  },
+  {
+    name: 'Stancer (Revised)', source: 'Book p. 3', fields: [['Class skills', 'Climb (Str), and Swim (Str)']],
+    text: 'Requirements: none.\n\nIron Root (Su): At 4th level she cannot be moved.',
+  },
+  {
+    name: 'Striker', source: 'Book p. 8', fields: [['Hit Die', 'd10']],
+    text: [
+      'Qi (Su): Strikers gain qi. They regain it in the following ways.',
+      '*Killing Blow:* At 10th level, they regain 1 qi when they drop a foe.',
+      'Qi Techniques: A striker spends qi on these.',
+      '0 qi point(s):\n- *Near Miss (Ex):* At 10th level, a miss deals damage anyway.\nUnarmed Strike: At 1st level, a striker gains Improved Unarmed Strike.',
+      'Combo Strikes: At 3rd level, a striker can use combo strikes.',
+      'One Hit:\n- *Dual Strike (Ex):* At 8th level, it hits twice.',
+      'Table: Combo Strikes\nLevel\tHits\n3rd\t1',
+      'Note: The table counts hits.',
+      'At 7th level, the striker gains three hit combo strikes.',
+      'Two Hits:\n- *Leg Sweep (Ex):* The target falls prone.',
+      'Still Mind (Ex): At 4th level, a striker gains a +2 bonus on saves against enchantments.',
+    ].join('\n\n'),
+  },
+  {
+    name: 'Prowler', source: 'Book p. 1', fields: [['Hit Die', 'd8']],
+    text: [
+      'Hit Die: d8.',
+      '',
+      '| | Spells Per Day |',
+      '| Level | Base Attack Bonus | Fort Save | Ref Save | Will Save | Special | AC Bonus | Spells Per Day |',
+      '| 1st | +0 | +0 | +2 | +0 | Sneak attack +1d6, smite evil 1/day, *summon monster I*, 1st favored enemy | +0 | +1 level of arcane class/',
+      '+1 level of divine class |',
+      '| 2nd | +1 | +0 | +3 | +0 | Evasion, prowler trick | +0 | — |',
+      '| 3rd | +2 | +1 | +3 | +1 | Sneak attack +2d6, *summon monster II*, weapon training 1 | +1 | — |',
+      '| 4th | +3 | +1 | +4 | +1 | Prowler trick, smite evil 2/day | +1 | — |',
+      '| 5th | +3 | +1 | +4 | +1 | Weapon training 2, 2nd favored enemy | +1 | — |',
+      '| 6th | +4 | +2 | +5 | +2 | Prowler trick | +2 | — |',
+      '',
+      '**Weapon and Armor Proficiency**: Light armor.',
+      '',
+      '**Sneak Attack**: The prowler deals extra damage.',
+      '',
+      '**Opportune Dodge (Ex)**: At 2nd level she slips aside.',
+      '',
+      '**Greater Prowler Tricks**: Starting at 2nd level, a prowler gains one of the following tricks:',
+      '',
+      '**Quiet Step**: She moves at full speed.',
+      '',
+      '**Snare Sense**: She notices snares.',
+      '',
+      '**AC Bonus**: She adds her Wisdom to her AC.',
+    ].join('\n'),
+  },
+  {
+    name: 'Seeker', source: 'Book p. 4', fields: [],
+    text: [
+      '| Level | Base Attack Bonus | Fort Save | Ref Save | Will Save | Special |',
+      '| 1st | +0 | +2 | +2 | +2 | Qi, hunter\'s focus |',
+      '',
+      'Qi (Su): A seeker regains qi in the following ways:',
+      '',
+      '*Killing Blow:* She regains 1 qi when she drops a foe.',
+      '',
+      'Qi Techniques: She spends qi on these.',
+      '',
+      'Hunter\'s Focus: She chooses one of the following:',
+      '',
+      'Relentless (Ex): At 5th level, she keeps going.',
+    ].join('\n'),
+  },
+  {
+    name: 'Forger', source: 'Book p. 5', fields: [['Hit Die', 'd10']],
+    text: [
+      'Thunderous Blows (Ex): At 1st level the forger deals 1d6 extra damage. This damage increases by 1d6 at 3rd level and every two levels thereafter.',
+      'Forging Insight (Ex): At 2nd level and every 2 levels thereafter the forger gains one forging insight.',
+      'Bonus Feats: At 4th, 12th, and 20th levels, a forger gains a bonus feat.',
+    ].join('\n\n'),
+  },
+];

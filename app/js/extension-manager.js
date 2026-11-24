@@ -31,7 +31,7 @@ import {
   BLOCK_KINDS, TABLE_KINDS, inspectExtension, normalizeExtension, normalizeBlock, blankExtension,
   describeSummary, summarize, slugId, looksLikeExtension, looksLikeLibrary, buildLibrary, planLibrary,
   LIBRARY_FORMAT, olderRevision, blocksFromCharacter, mergeSphere, catalogueEntryKey,
-  splitAbilityType,
+  splitAbilityType, claimEditedBlocks, standsForPage,
 } from './extensions.js';
 import { parsePaste, readStructured, splitChunk } from './paste-import.js';
 import { SECTION_KINDS, guessTags, readSections } from './pdf-import.js';
@@ -209,6 +209,11 @@ const CSS = `
 .extmgr details.entry { margin-left: 14px; border-top: 1px solid var(--line, #2a2a2a); padding: 2px 0; font-size: 0.84rem; }
 .extmgr details.entry > summary { cursor: pointer; }
 .extmgr details.entry .etext { white-space: pre-wrap; font-size: 0.8rem; line-height: 1.45; padding: 4px 0 8px 14px; max-height: 20rem; overflow: auto; }
+/* The blocks a pack's pages are read into, apart from its own. */
+.extmgr details.readblocks { border-top: 1px solid var(--line, #333); margin-top: 10px; padding: 6px 0 0; }
+.extmgr details.readblocks > summary { cursor: pointer; }
+.extmgr details.readblocks > summary .d { opacity: 0.65; font-size: 0.76rem; }
+.extmgr details.readblocks > .hint { margin: 6px 0 0; }
 /* One line per section of a scraped sphere page: what to do with it, its name,
    and how many entries it holds. */
 .extmgr .secs { display: flex; flex-direction: column; gap: 2px; margin: 5px 0 2px; }
@@ -244,6 +249,9 @@ const CSS = `
 export function mountExtensionManager(dialog, { say = () => {}, currentCharacter = () => null } = {}) {
   let view = 'list';         // 'list' | 'edit'
   let draft = null;          // the pack being edited (normalized document)
+  let readBefore = null;     // its blocks read from its pages, as the edit found them
+  let forPage = () => false; // which of its own blocks stand where a page's would be read
+  let readOpen = false;      // the fold of blocks read from its pages
   let draftIsNew = false;
   let asJson = false;
   let jsonText = '';
@@ -578,6 +586,9 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
     const OWN_SECTION = new Set(['maneuvers', 'spheres']);
     const otherTables = Object.keys(d.provides).filter((k) => !OWN_SECTION.has(k));
     const otherCounts = Object.fromEntries(otherTables.map((k) => [k, s.tables[k]]));
+    // Blocks read from the pack's pages are listed apart from its own.
+    const own = d.blocks.map((b, i) => [b, i]).filter(([b]) => !b.read);
+    const read = d.blocks.map((b, i) => [b, i]).filter(([b]) => b.read);
     return `
       <h2>${draftIsNew ? 'New extension' : `Edit ${esc(d.name)}`}</h2>
       <p class="hint">A pack has a header, shared tables and blocks that a player adds to a
@@ -615,11 +626,16 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
 
         <h3>Blocks</h3>
         <p class="hint">Blocks are added to a character from the ⚙ tab.</p>
-        ${d.blocks.map((b, i) => blockHtml(b, i)).join('') || '<p class="hint">No blocks yet.</p>'}
+        ${own.map(([b, i], n) => blockHtml(b, i, { first: n === 0, last: n === own.length - 1 })).join('') || (read.length ? '' : '<p class="hint">No blocks yet.</p>')}
         <div class="actions" style="margin-top:6px">
           <select data-newkind>${Object.entries(BLOCK_KINDS).map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join('')}</select>
           <button data-action="add-block">+ Add block</button>
         </div>
+        ${read.length ? `<details class="readblocks"${readOpen ? ' open' : ''}>
+          <summary><strong>Read from class pages</strong> <span class="d">${read.length}</span></summary>
+          <p class="hint">Saving the pack reads these from its class pages again. A block you edit is kept as you edited it.</p>
+          ${read.map(([b, i]) => blockHtml(b, i, { read: true })).join('')}
+        </details>` : ''}
       `}
       ${paste ? '' : `<div class="actions">
         <button class="primary" data-action="save">Save</button>
@@ -1258,17 +1274,19 @@ Hit Die: d12.
       </div>`).join('')}`;
   }
 
-  function blockHtml(b, i) {
+  // A block read from a page has no move or remove: saving reads it again, in
+  // its page's place.
+  function blockHtml(b, i, { first = false, last = false, read = false } = {}) {
     const open = openBlocks.has(i);
     const kind = BLOCK_KINDS[b.kind];
     return `<div class="block" data-block="${i}">
       <div class="head">
         <span class="kind">${esc(kind.label)}</span>
         <span class="title">${esc(b.name || '(unnamed)')}</span>
-        <button data-bmove="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''} title="Move up">↑</button>
-        <button data-bmove="${i}" data-dir="1" ${i === draft.blocks.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
+        ${read ? '' : `<button data-bmove="${i}" data-dir="-1" ${first ? 'disabled' : ''} title="Move up">↑</button>
+        <button data-bmove="${i}" data-dir="1" ${last ? 'disabled' : ''} title="Move down">↓</button>`}
         <button data-bopen="${i}" aria-expanded="${open}">${open ? 'Done' : 'Edit'}</button>
-        <button class="danger" data-bremove="${i}" title="Remove this block">×</button>
+        ${read ? '' : `<button class="danger" data-bremove="${i}" title="${forPage(b) ? 'Remove this block. Its class page is read in its place when you save.' : 'Remove this block'}">×</button>`}
       </div>
       ${open ? `<div class="body">${blockFormHtml(b, i)}<div class="land">Adds to: ${esc(kind.lands)}.</div></div>` : ''}
     </div>`;
@@ -1709,7 +1727,11 @@ Hit Die: d12.
     }));
     qa('[data-bmove]').forEach((el) => el.addEventListener('click', () => {
       const i = Number(el.dataset.bmove);
-      const to = i + Number(el.dataset.dir);
+      const dir = Number(el.dataset.dir);
+      // Past the next block shown in the same list: blocks read from pages
+      // are listed apart.
+      let to = i + dir;
+      while (draft.blocks[to]?.read) to += dir;
       if (to < 0 || to >= draft.blocks.length) return;
       const [b] = draft.blocks.splice(i, 1);
       draft.blocks.splice(to, 0, b);
@@ -1780,6 +1802,7 @@ Hit Die: d12.
       dialog.querySelector(`.ent[data-ent="${di}|${disc.entries.length - 1}"] input.nm`)?.focus();
     }));
 
+    q('details.readblocks')?.addEventListener('toggle', (e) => { readOpen = e.target.open; });
     q('[data-action="add-block"]')?.addEventListener('click', () => {
       const kind = q('[data-newkind]').value;
       draft.blocks.push(normalizeBlock({ kind, name: '' }));
@@ -1884,6 +1907,9 @@ Hit Die: d12.
 
   function startEdit(doc, isNew, note = null) {
     draft = normalizeExtension(doc);
+    readBefore = { blocks: structuredClone(draft.blocks.filter((b) => b.read)) };
+    forPage = standsForPage(draft);
+    readOpen = false;
     draftIsNew = isNew;
     asJson = false; jsonText = ''; error = null; notice = note; paste = null;
     openBlocks.clear();
@@ -1899,6 +1925,8 @@ Hit Die: d12.
       try { draft = normalizeExtension(JSON.parse(jsonText)); } catch (err) { error = `The JSON is not valid: ${err.message}.`; render(); return; }
     }
     if (!draft.name.trim()) { error = 'Enter a pack name.'; render(); return; }
+    // A block read from a page and then edited here is kept as edited.
+    draft = claimEditedBlocks(draft, readBefore);
     draft.id = slugId(draft.id) || slugId(draft.name);
     if (!draft.id) { error = 'The name has no letters or digits to make an id from.'; render(); return; }
     if (draftIsNew && runtime.store.list().some((e) => e.id === draft.id)) {

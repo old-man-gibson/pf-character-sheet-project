@@ -25,7 +25,7 @@
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { normalizeExtension, inspectExtension } from '../app/js/extensions.js';
+import { normalizeExtension, inspectExtension, withReadBlocks } from '../app/js/extensions.js';
 import { tidyScrapeResidue } from '../app/js/paste-import.js';
 import { readArgs } from './lib/cli.mjs';
 
@@ -39,6 +39,7 @@ function textFields(ext) {
   };
 
   for (const [i, b] of (ext.blocks || []).entries()) {
+    if (b.read) continue; // read again from its tidied page
     for (const key of ['text', 'optionsInfo']) field(b, key, `block ${i} ${b.name || ''} ${key}`);
     for (const [j, f] of (b.features || []).entries()) field(f, 'text', `block ${i} feature ${j} ${f.name || ''}`);
     for (const [j, o] of (b.options || []).entries()) field(o, 'text', `block ${i} option ${j} ${o.name || ''}`);
@@ -77,8 +78,9 @@ export function tidyPack(doc) {
     f.set(after);
     changes.push({ where: f.where, before, after });
   }
-  if (changes.length) ext.revision = Math.max(1, Number(ext.revision) || 1) + 1;
-  return { ext, changes };
+  if (!changes.length) return { ext, changes };
+  ext.revision = Math.max(1, Number(ext.revision) || 1) + 1;
+  return { ext: withReadBlocks(ext), changes };
 }
 
 /* ---------------- the command ---------------- */

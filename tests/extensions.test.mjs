@@ -11,6 +11,7 @@ import {
   swapKey, parseSwaps, parseStacksWith, archetypeStatus, removeArchetype,
   ruleForLevels, repeatColumns, optionCataloguesFrom, optionCataloguesFromTables, classFeatureTextFromTables, parseOptionReplaces, applyArchetype, swapsMeet,
   castingTableFromText, classTableRows, choiceLevels,
+  withReadBlocks, claimEditedBlocks, needsReading, READER_VERSION, standsForPage,
 } from '../app/js/extensions.js';
 import {
   parseClassFeatures, parseGroupFeatures, parseNamedLines, parseMenuOptions, menuOptionLines,
@@ -258,6 +259,99 @@ console.log('store -- save, list, read, enable, remove; bundled toggles remember
   await reopened.open();
   check('another store reads the same medium', reopened.list().map((e) => e.id), ['pack-b']);
   check('and says where it read from', reopened.medium, 'localStorage');
+}
+
+console.log('written blocks -- a pack\'s class pages are saved read into class blocks');
+{
+  const page = (name, hd) => ({ name, source: 'Book p. 2', fields: [['Hit Die', `d${hd}`]], text: 'Rooted Stance (Ex): She plants her feet.' });
+  const packOf = (id, entries, blocks = [], extra = {}) => normalizeExtension({ format: EXTENSION_FORMAT, id, name: id, blocks, ...extra,
+    provides: { catalogues: { catalogues: [{ kind: 'class', entries }] } } });
+  const strip = ({ extId, extName, index, read, ...b }) => b;
+  const classes = (blocks) => blocks.filter((b) => b.kind === 'class');
+
+  const read = withReadBlocks(packOf('p', [page('Stancer', 10), page('Striker', 8)], [{ kind: 'note', name: 'n' }]));
+  check('each class page is written as a class block marked read, after the pack\'s own, and the pack names the reader',
+    [read.reader, read.blocks.map((b) => [b.kind, b.name, !!b.read])],
+    [READER_VERSION, [['note', 'n', false], ['class', 'Stancer', true], ['class', 'Striker', true]]]);
+  check('read as the sheet reads the page', strip(read.blocks[1]), strip(classes(activeBlocks([packOf('q', [page('Stancer', 10)])]))[0]));
+  check('a class somebody wrote is kept, and its page is not read',
+    withReadBlocks(packOf('p', [page('Stancer', 10), page('Striker', 8)], [{ kind: 'class', name: 'Stancer', hd: 6 }])).blocks.map((b) => [b.name, b.hd, !!b.read]),
+    [['Stancer', 6, false], ['Striker', 8, true]]);
+  check('saved again, a read block is read again from its page',
+    withReadBlocks(packOf('p', [page('Stancer', 12)], [read.blocks[1]], { reader: READER_VERSION })).blocks.map((b) => [b.name, b.hd]), [['Stancer', 12]]);
+  const plain = normalizeExtension({ format: EXTENSION_FORMAT, id: 'plain', name: 'plain', blocks: [{ kind: 'note', name: 'n' }] });
+  ok('a pack with no class pages is left as it is', withReadBlocks(plain) === plain);
+  const gone = withReadBlocks(normalizeExtension({ format: EXTENSION_FORMAT, id: 'g', name: 'g', reader: READER_VERSION, blocks: [read.blocks[1], { kind: 'note', name: 'n' }] }));
+  check('one whose pages are gone loses what was read from them', [gone.reader ?? null, gone.blocks.map((b) => b.name)], [null, ['n']]);
+  check('a pack needs reading until this reader has read it',
+    [needsReading(packOf('x', [page('Stancer', 8)])), needsReading(read), needsReading({ ...read, reader: READER_VERSION + 1 }), needsReading(plain)],
+    [true, false, true, false]);
+  check('its line counts the pages, not the blocks read from them', [summarize(read).blocks, summarize(read).blockCount], [{ note: 1 }, 1]);
+
+  // The sheet takes what the pack wrote when this reader wrote it: a block
+  // that says d6 where its page says d10 is offered at d6.
+  const asWritten = normalizeExtension({ format: EXTENSION_FORMAT, id: 'w', name: 'w', reader: READER_VERSION,
+    blocks: [{ ...strip(read.blocks[1]), hd: 6, read: true }], provides: { catalogues: { catalogues: [{ kind: 'class', entries: [page('Stancer', 10)] }] } } });
+  check('the sheet takes a pack\'s read blocks as written, at their place in the pack',
+    classes(activeBlocks([asWritten])).map((b) => [b.hd, b.index, b.extId]), [[6, 0, 'w']]);
+  check('written by an older reader, it reads the page instead',
+    classes(activeBlocks([{ ...asWritten, reader: READER_VERSION - 1 }])).map((b) => [b.hd, b.index]), [[10, 1]]);
+  check('a class somebody wrote, in any pack, still comes first',
+    classes(activeBlocks([asWritten, packOf('hand', [], [{ kind: 'class', name: 'Stancer', hd: 8 }])])).map((b) => [b.extId, b.hd]), [['hand', 8]]);
+  check('of two packs\' read blocks, the later pack\'s stands',
+    classes(activeBlocks([asWritten, withReadBlocks(packOf('mine', [page('Stancer', 12)]))])).map((b) => [b.extId, b.hd]), [['mine', 12]]);
+
+  // Edited by hand in the pack editor, a read block is somebody's.
+  const edited = structuredClone(read);
+  edited.blocks[1].hd = 6;
+  const claimed = claimEditedBlocks(edited, read);
+  check('an edited read block loses its mark; one left alone keeps it', claimed.blocks.map((b) => [b.name, !!b.read]), [['n', false], ['Stancer', false], ['Striker', true]]);
+  check('and the next save keeps the edit', classes(withReadBlocks(normalizeExtension(claimed)).blocks).map((b) => [b.name, b.hd, !!b.read]),
+    [['Stancer', 6, false], ['Striker', 8, true]]);
+  check('removed, it is read from its page again',
+    classes(withReadBlocks(normalizeExtension(claimEditedBlocks({ ...read, blocks: [read.blocks[0], read.blocks[2]] }, read))).blocks).map((b) => [b.name, !!b.read]),
+    [['Stancer', true], ['Striker', true]]);
+  // The pack editor names the blocks whose removal brings a page's back.
+  const mine = withReadBlocks(packOf('m', [page('Stancer', 10), page('Striker', 8)], [{ kind: 'class', name: 'Stancer', hd: 6 }, { kind: 'class', name: 'Other', hd: 8 }, { kind: 'note', name: 'Striker' }]));
+  const forPage = standsForPage(mine);
+  check('an own block stands for a page when its page would be read as it; a read block does not',
+    mine.blocks.map((b) => [b.kind, b.name, forPage(b)]),
+    [['class', 'Stancer', true], ['class', 'Other', false], ['note', 'Striker', false], ['class', 'Striker', false]]);
+  ok('a pack with no class pages has none', !standsForPage(plain)(plain.blocks[0]));
+
+  // The store reads a pack's pages when it saves it, and saves again the
+  // packs it holds from before, once the sheet is up.
+  const storage = fakeStorage();
+  const store = extensionStore(storage);
+  await store.open();
+  await store.save(packOf('saved', [page('Stancer', 10)]));
+  check('a pack is stored read', [store.read('saved').reader, store.read('saved').blocks.map((b) => b.name)], [READER_VERSION, ['Stancer']]);
+  storage.setItem(extensionKey('old'), JSON.stringify(packOf('old', [page('Striker', 8)])));
+  storage.setItem(extensionKey('off'), JSON.stringify(packOf('off', [page('Striker', 8)])));
+  const index = JSON.parse(storage.getItem(EXTENSIONS_KEY));
+  index.extensions.push({ id: 'old', name: 'old', enabled: true }, { id: 'off', name: 'off', enabled: false });
+  storage.setItem(EXTENSIONS_KEY, JSON.stringify(index));
+  const later = extensionStore(storage);
+  await later.open();
+  const first = await later.readPages();
+  check('a stored pack this reader has not read is saved again, read; one switched off waits; a second pass has nothing to do',
+    [first, later.read('old').reader, later.read('off').reader ?? null, later.list().find((e) => e.id === 'old').enabled, await later.readPages()],
+    [1, READER_VERSION, null, true, 0]);
+  // Each writer reads the index and writes it back whole. On a medium that
+  // takes its time, two at once would each write over the other's row.
+  const held = new Map();
+  const slow = {
+    name: 'slow',
+    all: async () => [...held],
+    commit: async (writes) => {
+      await new Promise((done) => setTimeout(done, 5));
+      for (const [k, v] of writes) { if (v === null) held.delete(k); else held.set(k, v); }
+    },
+  };
+  const turns = extensionStore(slow);
+  await turns.open();
+  await Promise.all([turns.save(packOf('one', [])), turns.save(packOf('two', [])), turns.setEnabled('bundled-x', false, { bundled: true })]);
+  check('writers take turns: two saves and a switch at once all land', [turns.list().map((e) => e.id), [...turns.disabledBundled()]], [['one', 'two'], ['bundled-x']]);
 }
 
 console.log('store -- reads are answered from memory, so a render never waits');
