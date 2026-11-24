@@ -1005,7 +1005,7 @@ function castingClassPanel(model, c, i) {
 
     return `<section class="panel vclass">
       <h3>
-        ${itemText('vancian.classes', i, 'name', c.name, 'Casting class')}
+        ${classPick(model, 'vancian.classes', i, c.name, 'Casting class')}
         <span class="badge">CL ${c.casterLevel ?? 0}</span>${
   forwardedBadge(model, vancianForwardKey(c) || '', { waiting: c.casterLevelWaiting
     ? 'this class has no levels yet, so the bonus is held until its first level' : '' })}
@@ -1172,6 +1172,19 @@ function powerDatalist(c) {
   return nameDatalist(powerListId(c), 'powers', {
     classes: name ? [name] : [], has: powerCatalogue().powers.length > 0,
   });
+}
+
+/**
+ * Which of the character's classes a casting or manifesting block is: a
+ * picker of the Classes table and the Planner, as a training block has. A
+ * name it already holds that is not a class stays, marked. With no classes
+ * yet there is nothing to pick from, so the name is typed.
+ */
+function classPick(model, list, i, name, what) {
+  const names = model.classNames();
+  if (!names.length) return itemText(list, i, 'name', name, what);
+  return itemSelect(list, i, 'name', name, names, '—', null,
+    { attrs: `aria-label="${what}" title="${what}: one of this character’s classes. Its levels in the Planner set the level here."` });
 }
 
 /** The buttons that put a list of spells or powers in order (edit.js sortCastingList). */
@@ -1531,7 +1544,7 @@ function manifestingClassPanel(model, c, i, ctx = {}) {
 
     return `<section class="panel span2">
       <h3>
-        ${itemText('psionics.classes', i, 'name', c.name, 'Manifesting class')}
+        ${classPick(model, 'psionics.classes', i, c.name, 'Manifesting class')}
         <span class="badge">ML ${c.manifesterLevel ?? 0}</span>${
   forwardedBadge(model, manifesterForwardKey(c) || '', { waiting: c.manifesterLevelWaiting
     ? 'this class has no levels yet, so the bonus is held until its first level' : '' })}
