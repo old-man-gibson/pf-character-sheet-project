@@ -2841,6 +2841,8 @@ h3 input.grouptitle:hover { border-color: var(--cs-line); }
    template) is as wide as a name, with its badges beside it. At the global
    `width: 100%` it took the heading's first line and pushed the badges under. */
 .panel > h3 > input[type="text"]:not(.grouptitle) { flex: 1 1 12rem; width: auto; max-width: 21rem; }
+/* The same heading as a picker of the character’s classes. */
+.panel > h3 > select[data-item$="|name"] { flex: 0 1 auto; width: auto; min-width: 9rem; max-width: 21rem; }
 
 /* ---------- hit points ---------- */
 .hpbar {
