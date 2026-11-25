@@ -2042,12 +2042,17 @@ function pageFeatures(text, front = CLASS_FRONT_MATTER, part = null) {
  * own, ending in the row's closing pipe ("+1 level of existing divine
  * spellcasting class |"). That line is passed over rather than read as the
  * end of the table.
+ *
+ * `tabs` reads a run of tab-separated lines as a table too, for the pages that
+ * keep their class table that way ("Level\tBase Attack Bonus\t…").
  */
-function pipeTables(text) {
+function pipeTables(text, { tabs = false } = {}) {
   const lines = str(text).split('\n');
-  const isRow = (l) => /^\s*\|/.test(l);
+  const isPipe = (l) => /^\s*\|/.test(l);
+  const isRow = (l) => isPipe(l) || (tabs && l.includes('\t'));
   const isRest = (l) => /\S\s*\|\s*$/.test(l);
-  const cells = (l) => l.trim().replace(/^\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+  const cells = (l) => (isPipe(l) ? l.trim().replace(/^\|/, '').replace(/\|\s*$/, '').split('|') : l.split('\t'))
+    .map((c) => c.trim());
   const tables = [];
   for (let i = 0; i < lines.length;) {
     if (!isRow(lines[i])) { i++; continue; }
@@ -2471,6 +2476,49 @@ export function castingTablesFromTables(tables) {
     if (kind !== 'class' && kind !== 'prestige class') continue;
     for (const e of arr(cat.entries)) {
       const t = readEntry(e, 'casting table', () => castingTableFromText(classNameOf(e), e?.text));
+      if (t?.name) out.set(lower(t.name), t);
+    }
+  }
+  return [...out.values()];
+}
+
+/** A class table's Essence column. "Essence Capacity" is another column. */
+const ESSENCE_COLUMN = /^essence$/i;
+
+/**
+ * A veilweaving class's essence by class level, read off the Essence column
+ * of the class table on its page (a pipe table, or a tab-separated one):
+ * twenty numbers, null where the table has no entry for a level ("—", or no
+ * row). Null when the page has no Essence column.
+ */
+export function essenceTableFromText(name, text) {
+  for (const { rows } of pipeTables(text, { tabs: true }).tables) {
+    const head = rows.findIndex((r) => /^(?:class )?level$/i.test(r[0]) && r.some((c) => ESSENCE_COLUMN.test(c)));
+    if (head < 0) continue;
+    const col = rows[head].findIndex((c) => ESSENCE_COLUMN.test(c));
+    const essence = Array(20).fill(null);
+    for (const r of rows.slice(head + 1)) {
+      const level = Number(str(r[0]).match(/^(\d{1,2})(?:st|nd|rd|th)?$/i)?.[1]);
+      const n = str(r[col]).replace(/[*†]/g, '').trim().match(/^\+?(\d+)$/);
+      if (level >= 1 && level <= 20 && n) essence[level - 1] = Number(n[1]);
+    }
+    if (essence.some((v) => v !== null)) return { name, essence };
+  }
+  return null;
+}
+
+/**
+ * The essence tables catalogue packs carry inside their class pages, one per
+ * class whose table has an Essence column. Between two packs with the same
+ * class, the later one's stands.
+ */
+export function essenceTablesFromTables(tables) {
+  const out = new Map();
+  for (const cat of arr(tables?.catalogues?.catalogues)) {
+    const kind = lower(cat?.kind);
+    if (kind !== 'class' && kind !== 'prestige class') continue;
+    for (const e of arr(cat.entries)) {
+      const t = readEntry(e, 'essence table', () => essenceTableFromText(classNameOf(e), e?.text));
       if (t?.name) out.set(lower(t.name), t);
     }
   }

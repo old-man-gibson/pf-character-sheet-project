@@ -430,6 +430,8 @@ function placeOf(model, ref) {
     case 'vancianConcentration': return { tab: 'vancian', sel: [set(`vancian.classes.${a}.concentration`)] };
     case 'vancianCasterLevel': return { tab: 'vancian', sel: [set(`vancian.classes.${a}.casterLevelOverride`)] };
     case 'manifesterLevel': return { tab: 'psionics', sel: [set(`psionics.classes.${a}.manifesterLevelOverride`)] };
+    case 'psionicPointsLevel': return { tab: 'psionics', sel: [set(`psionics.classes.${a}.pointsLevelOverride`)] };
+    case 'essenceClass': return { tab: 'akashic', sel: [item('akashic.classes', a, 'essence')] };
     case 'deckManipulations': return deckPlace(set('cardcasting.manipulationsAvailable'), ['deck-manipulations']);
     case 'essence': return { tab: 'akashic', sel: [set(`akashic.essence.${a}`)] };
     case 'maneuverCount': return { tab: 'maneuvers', sel: [a === 'other' ? set(`maneuvers.${b}`) : item('maneuvers.sources', a, b)] };

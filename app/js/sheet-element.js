@@ -111,6 +111,7 @@ import { datalistOptions } from './ui/datalist.js';
 import * as badges from './ui/badges.js';
 import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
+import { OWN_CHOICE_LABEL, ownChoice, rankRows, searchListHtml, searchRowsHtml } from './ui/search-list.js';
 import { formulaDrawerHtml, formulaDrawerResults } from './ui/formula-drawer.js';
 import * as overview from './ui/panels/overview.js';
 import { bindSessionBoard } from './ui/panels/session.js';
@@ -2767,6 +2768,8 @@ export class CharacterSheetElement extends HTMLElement {
 
   #render() {
     if (!this.#model) return;
+    // The picker a search list hangs under is about to be replaced.
+    this.#closeSearchList();
     if (this.#renderOwed) clearTimeout(this.#renderOwed.timer);
     this.#renderOwed = null;
     const bar = this.#barEntries();
@@ -4642,6 +4645,153 @@ export class CharacterSheetElement extends HTMLElement {
     else this.#showUndoToast(`Undid ${r.label}`, { offer: false, redo: true });
   }
 
+  /* ---------------- the search list over a long picker ---------------- */
+
+  #searchList = null;
+  #searchTouch = false;
+  #searchShutFor = null;
+
+  /**
+   * Open the search list under a picker, with `typed` already in its box.
+   *
+   * The choices are read off the picker as it stands, filled first if it was
+   * drawn short. A choice's `title` is its second name; on a picker that
+   * takes a name of the player's own (`data-search="own"`) the title is the
+   * whole word its short label stands for, so the two swap.
+   */
+  #openSearchList(select, typed = '') {
+    this.#closeSearchList();
+    // In the top layer, as the breakdown panel is: the sheet is a containing
+    // block for anything fixed inside it. Without the popover API the
+    // browser's own list is what there is.
+    if (typeof this.showPopover !== 'function') return;
+    this.#fillSelect(select);
+    const own = select.dataset.search === 'own';
+    const rows = [...select.options].filter((o) => !o.disabled && !(own && o.text === OWN_CHOICE_LABEL)).map((o) => {
+      const text = o.text.replace(/ \*$/, '');
+      const title = o.title && o.title !== text ? o.title : '';
+      const group = o.parentElement?.tagName === 'OPTGROUP' ? o.parentElement.label : '';
+      return own && title ? { value: o.value, label: title, side: text, group } : { value: o.value, label: text, side: title, group };
+    });
+    const box = this.ownerDocument.createElement('div');
+    box.className = 'slpop';
+    box.innerHTML = searchListHtml(select.getAttribute('aria-label')
+      || select.closest('label')?.querySelector('span')?.textContent || 'Bonus type');
+    const input = box.querySelector('.sl-input');
+    const list = box.querySelector('.sl-list');
+    const off = new AbortController();
+    const state = { box, select, off, shown: [], own: '', at: 0 };
+    this.#searchList = state;
+
+    const mark = () => {
+      list.querySelectorAll('.sl-row').forEach((row) => row.setAttribute('aria-selected', String(Number(row.dataset.sl) === state.at)));
+      const row = list.querySelector(`[data-sl="${state.at}"]`);
+      if (row) input.setAttribute('aria-activedescendant', row.id);
+      else input.removeAttribute('aria-activedescendant');
+      return row;
+    };
+    const draw = () => {
+      state.shown = rankRows(rows, input.value);
+      state.own = own ? ownChoice(rows, input.value) : '';
+      const held = input.value.trim() ? -1 : state.shown.findIndex((r) => String(r.value) === select.value);
+      state.at = Math.max(0, held);
+      list.innerHTML = searchRowsHtml(state.shown, { typed: input.value, current: select.value, at: state.at, own: state.own });
+      list.scrollTop = 0;
+      const row = mark();
+      if (row && held > 0) list.scrollTop = row.offsetTop - list.clientHeight / 2;
+    };
+    const move = (by) => {
+      const last = state.shown.length + (state.own ? 1 : 0) - 1;
+      state.at = Math.max(0, Math.min(last, state.at + by));
+      mark()?.scrollIntoView({ block: 'nearest' });
+    };
+    const choose = (i) => {
+      const row = state.shown[i];
+      const value = row ? row.value : i === state.shown.length ? state.own : null;
+      if (value === null || (!row && !value)) return;
+      this.#closeSearchList();
+      if (!select.isConnected) return;
+      if (![...select.options].some((o) => o.value === value)) select.add(new Option(value, value));
+      select.focus();
+      if (select.value === value) return;
+      select.value = value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+
+    input.addEventListener('input', draw);
+    input.addEventListener('keydown', (e) => {
+      const page = Math.max(1, Math.floor(list.clientHeight / 30) - 1);
+      switch (e.key) {
+        case 'ArrowDown': e.preventDefault(); move(1); break;
+        case 'ArrowUp': e.preventDefault(); move(-1); break;
+        case 'PageDown': e.preventDefault(); move(page); break;
+        case 'PageUp': e.preventDefault(); move(-page); break;
+        case 'Enter': e.preventDefault(); choose(state.at); break;
+        case 'Escape': e.preventDefault(); e.stopPropagation(); this.#closeSearchList(); select.focus(); break;
+        // Leaves from the picker, so the next stop is the picker's neighbor.
+        case 'Tab': this.#closeSearchList(); select.focus(); break;
+        default: break;
+      }
+    });
+    list.addEventListener('pointermove', (e) => {
+      const row = e.target.closest?.('.sl-row');
+      if (!row || Number(row.dataset.sl) === state.at) return;
+      state.at = Number(row.dataset.sl);
+      mark();
+    });
+    // The press must not take focus from the box, or the list would shut.
+    list.addEventListener('mousedown', (e) => e.preventDefault());
+    list.addEventListener('click', (e) => {
+      const row = e.target.closest?.('.sl-row');
+      if (row) choose(Number(row.dataset.sl));
+    });
+    box.addEventListener('focusout', (e) => {
+      if (this.#searchList === state && !box.contains(e.relatedTarget)) this.#closeSearchList();
+    });
+    const away = (e) => {
+      const path = e.composedPath?.() || [];
+      if (path.includes(box)) return;
+      if (e.type === 'pointerdown' && path.includes(select)) this.#searchShutFor = select;
+      this.#closeSearchList();
+    };
+    const { signal } = off;
+    window.addEventListener('pointerdown', away, { capture: true, signal });
+    window.addEventListener('scroll', away, { capture: true, signal });
+    window.addEventListener('resize', away, { signal });
+
+    this.shadowRoot.append(box);
+    box.popover = 'manual';
+    box.showPopover();
+    // Under the picker, or over it when there is more room there.
+    const r = select.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const width = Math.min(Math.max(r.width, 352), vw - 16);
+    const below = vh - r.bottom - 10;
+    const above = r.top - 10;
+    const up = below < 260 && above > below;
+    box.style.width = `${width}px`;
+    box.style.left = `${Math.max(8, Math.min(r.left, vw - width - 8))}px`;
+    if (up) box.style.bottom = `${vh - r.top + 3}px`;
+    else box.style.top = `${r.bottom + 3}px`;
+    box.style.setProperty('--sl-room', `${Math.max(120, up ? above : below)}px`);
+    box.classList.toggle('up', up);
+    this.#searchShutFor = null;
+
+    input.value = typed;
+    input.focus();
+    draw();
+  }
+
+  #closeSearchList() {
+    const state = this.#searchList;
+    if (!state) return;
+    // Cleared first: taking the box away fires its `focusout`, which comes back here.
+    this.#searchList = null;
+    state.off.abort();
+    state.box.remove();
+  }
+
   /* ---------------- the search palette ---------------- */
 
   /**
@@ -6091,6 +6241,26 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('select[data-fill]').forEach((select) => {
       select.addEventListener('pointerdown', () => this.#fillSelect(select));
       select.addEventListener('focus', () => this.#fillSelect(select));
+    });
+
+    // A long picker opens as a search list (ui/search-list.js) to a mouse or
+    // a key. A finger gets the device's own picker, which is built for one.
+    root.querySelectorAll('select[data-search]').forEach((select) => {
+      select.addEventListener('pointerdown', (e) => { this.#searchTouch = e.pointerType === 'touch'; });
+      select.addEventListener('mousedown', (e) => {
+        if (e.button !== 0 || this.#searchTouch || select.disabled) return;
+        e.preventDefault();
+        // The press that shut the list under this picker does not open it again.
+        if (this.#searchShutFor === select) { this.#searchShutFor = null; select.focus(); return; }
+        this.#openSearchList(select);
+      });
+      select.addEventListener('keydown', (e) => {
+        if (select.disabled || e.ctrlKey || e.metaKey || e.altKey) return;
+        const typed = e.key.length === 1 && e.key !== ' ' ? e.key : '';
+        if (!typed && !['ArrowDown', 'ArrowUp', 'Enter', ' ', 'F4'].includes(e.key)) return;
+        e.preventDefault();
+        this.#openSearchList(select, typed);
+      });
     });
 
     // Generic list-item field -> model path.
