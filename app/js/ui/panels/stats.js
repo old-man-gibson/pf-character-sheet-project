@@ -93,7 +93,7 @@ export function renderStatsPanel(model, ctx) {
 
   return `<div class="grid">
       <div class="band">
-      <section class="panel">
+      <section class="panel fit">
         <h3>Permanent bonuses
           ${BUILD_OPTIONAL_KEYS.map((k) => {
           const label = allCols.find(([key]) => key === k)?.[2] || k;
@@ -173,7 +173,7 @@ export function renderStatsPanel(model, ctx) {
         </p>` : ''}
       </section>
 
-      <section class="panel">
+      <section class="panel fit">
         <h3>Temporary bonuses ${temp.add}</h3>
         <div class="tablewrap">
           <table class="build statcols">

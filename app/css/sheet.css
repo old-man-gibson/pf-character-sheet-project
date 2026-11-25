@@ -1706,12 +1706,13 @@ table.featgrid tr.aligned td.num { color: var(--cs-accent); font-style: italic; 
    its measure. A band can sit in a band: it is as wide as its widest panel,
    its panels stacked, and the panels in it share that width so they line up.
 
-   `.fit` marks a panel of short tables -- saves, initiative, armour class,
-   attack, speed -- that reads no better wider. It keeps the width its tables
-   need and leaves the rest of the row to the panels beside it. Handed a whole
-   row, its table's first column took the spare width: on an 878px window
-   Fortitude sat 400px from its total, and so did Initiative and the attack
-   modes. A band in a band does not grow either, for the same reason. */
+   `.fit` marks a panel of tables that read no better wider -- saves,
+   initiative, armour class, attack, speed, the ability bonuses. It keeps the
+   width its tables need and leaves the rest of the row to the panels beside
+   it. Handed a whole row, its table's first column took the spare width: on
+   an 878px window Fortitude sat 400px from its total, and so did Initiative
+   and the attack modes. A band in a band does not grow either, for the same
+   reason. */
 .band {
   grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start;
 }
