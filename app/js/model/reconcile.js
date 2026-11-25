@@ -10,7 +10,7 @@
  */
 
 import {
-  AC_BONUS_TYPES, BUFF_MOD_KEYS, DERIVED, ESSENCE_SOURCES, FORWARD_BY_DERIVED, SAVE_BONUS_TYPES, bonusColumnName, diceString,
+  ABILITIES, ABILITY_COLUMN_TABLES, ABILITY_LABELS, AC_BONUS_TYPES, BUFF_MOD_KEYS, abilityColumnName, abilityColumns, DERIVED, ESSENCE_SOURCES, FORWARD_BY_DERIVED, SAVE_BONUS_TYPES, bonusColumnName, diceString,
   flatFootedLoss, skillLabel,
 } from '../rules.js';
 import {
@@ -467,6 +467,16 @@ export const FORMULA_FIELDS = [
         formula: d.acBonuses[key], value: d.acBonusesResolved?.[key], error: d.acBonusErrors?.[key],
       }] : []));
     },
+  },
+  {
+    // A cell of a column the player added to one of the ability tables.
+    key: 'abilityCell', source: 'player', where: 'the Stats tab',
+    collect: (model) => ABILITY_COLUMN_TABLES.flatMap((table) => abilityColumns(model.data, table)
+      .flatMap((col, i) => ABILITIES.filter((ab) => stringFormula(col?.[ab])).map((ab) => ({
+        id: `ability-${table}-${i}-${ab}`, place: `abilityCell:${table}:${i}:${ab}`,
+        name: `${ABILITY_LABELS[ab]}: ${abilityColumnName(col)}${table === 'temporary' ? ' (temporary)' : ''}`,
+        formula: col[ab], value: col.resolved?.[ab], error: col.errors?.[ab],
+      })))),
   },
   {
     key: 'speed', source: 'player',

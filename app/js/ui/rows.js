@@ -100,8 +100,24 @@ export function bonusTypeCell(list, i, field, value, options, blank = '\u2014', 
       placeholder="type" aria-label="Bonus type"
       title="A bonus type of your own. Two bonuses of the same type do not stack. Clear it to pick from the list.">`;
   }
-  return itemSelect(list, i, field, value, [...options, [CUSTOM_BONUS_TYPE, OWN_CHOICE_LABEL, 'A bonus type of your own']], blank, null,
+  return itemSelect(list, i, field, value, [...options, OWN_TYPE_CHOICE], blank, null,
     { attrs: `data-search="own"${attrs ? ` ${attrs}` : ''}` });
+}
+
+/** The choice that ends every bonus type list: a type of the player's own. */
+const OWN_TYPE_CHOICE = [CUSTOM_BONUS_TYPE, OWN_CHOICE_LABEL, 'A bonus type of your own'];
+
+/**
+ * A bonus type picker that is not a field, such as the one that adds a
+ * column on the Stats tab: it shows `prompt` until a type is picked, and its
+ * `change` handler reads the type. `options` and the search list are as in
+ * bonusTypeCell, so a name typed that is not a type is offered as the
+ * player's own, and a touch screen picks "Custom\u2026" for one.
+ */
+export function bonusTypePicker(attrs, options, prompt) {
+  const opts = [...options, OWN_TYPE_CHOICE].map(([v, label, hint]) => `<option value="${esc(v)}"${
+    hint ? ` title="${esc(hint)}"` : ''}>${esc(label)}</option>`).join('');
+  return `<select data-search="own" ${attrs}><option value="" disabled selected>${esc(prompt)}</option>${opts}</select>`;
 }
 
 /**

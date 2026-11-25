@@ -386,7 +386,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(campaign|vmc|occupation|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|backgroundSkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|ageCategory|xp|milestones|size|heroPoints|antihero|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(campaign|vmc|occupation|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|abilityColumns|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|backgroundSkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|ageCategory|xp|milestones|size|heroPoints|antihero|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /**
  * The input types a caret can be put back into after a re-render.
@@ -6399,6 +6399,17 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
+    // A column added to one of the Stats tab's ability tables, of the bonus
+    // type picked or typed in its search list. The picker goes back to its
+    // prompt with the redraw.
+    root.querySelectorAll('select[data-abcol-add]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        if (!sel.value) return;
+        this.#model.addAbilityColumn(sel.dataset.abcolAdd, sel.value);
+        this.#render();
+      });
+    });
+
     // The picker beside a card's Dice field, or its damage types: what it
     // picked joins the field -- as a roll, or as one more word in a list.
     root.querySelectorAll('select[data-append]').forEach((sel) => {
@@ -9019,6 +9030,10 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       case 'remove-template-column':
         this.#model.removeTemplateTableColumn(button?.dataset.path, Number(button?.dataset.col));
+        this.#render();
+        break;
+      case 'remove-ability-column':
+        this.#model.removeAbilityColumn(button?.dataset.table, Number(button?.dataset.col));
         this.#render();
         break;
       case 'add-track':

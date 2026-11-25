@@ -136,20 +136,25 @@ export const LEVEL4_LEVELS = [4, 8, 12, 16, 20];
  *
  * `sum` names the field of `resolveAbility()` that the group's own total column
  * reads.
+ *
+ * A column is `[key, short, full, type]`. `type` is the bonus type the column
+ * holds (BONUS_TYPES), where it is one: a bonus of that type settles against
+ * it (typedColumns in model/scope.js), and the Stats tab does not offer the
+ * type again as a column of the player's own (abilityColumnChoices).
  */
 export const BUILD_PERMANENT_GROUPS = [
-  { cols: [['pointBuy', 'PB', 'Point buy'], ['race', 'Race', 'Race']] },
+  { cols: [['pointBuy', 'PB', 'Point buy'], ['race', 'Race', 'Race', 'racial']] },
   {
     label: 'Enhancement',
     hint: `ABP and gear stack up to +${ENHANCEMENT_CAP}. Gear above +${ENHANCEMENT_CAP} counts on its own.`,
-    cols: [['abp', 'ABP', 'Automatic Bonus Progression'], ['gear', 'Gear', 'Gear']],
+    cols: [['abp', 'ABP', 'Automatic Bonus Progression', 'enhancement'], ['gear', 'Gear', 'Gear', 'enhancement']],
     sum: 'enhancement',
     cap: ENHANCEMENT_CAP,
   },
   {
-    cols: [['attunement', 'Att', 'Attuned'], ['inherent', 'Inh', 'Inherent'], ['array', 'Arr', 'Array'],
-      ['level4', 'L/4', 'Level/4'], ['mythic', 'Myth', 'Mythic'], ['age', 'Age', 'Age category'], ['size', 'Size', 'Size'],
-      ['untyped', 'Unt', 'Untyped']],
+    cols: [['attunement', 'Att', 'Attuned'], ['inherent', 'Inh', 'Inherent', 'inherent'], ['array', 'Arr', 'Array'],
+      ['level4', 'L/4', 'Level/4'], ['mythic', 'Myth', 'Mythic'], ['age', 'Age', 'Age category'], ['size', 'Size', 'Size', 'size'],
+      ['untyped', 'Unt', 'Untyped', 'untyped']],
   },
 ];
 
@@ -162,15 +167,16 @@ export const BUILD_OPTIONAL_KEYS = ['inherent'];
 
 /**
  * The temporary parts, which produce the Temp Score. Each column is
- * `[key, short, full]`: the Stats tab heads it with the short label and says
- * the full name on hover, as it does every column.
+ * `[key, short, full, type]`: the Stats tab heads it with the short label and
+ * says the full name on hover, as it does every column. `type` as in
+ * BUILD_PERMANENT_GROUPS.
  */
 export const BUILD_TEMPORARY = [
-  ['alchemical', 'Alch', 'Alchemical'],
-  ['circumstance', 'Circ', 'Circumstance'],
-  ['morale', 'Mor', 'Morale'],
-  ['tempEnhancement', 'Enh', 'Enhancement'],
-  ['tempSize', 'Size', 'Size'],
+  ['alchemical', 'Alch', 'Alchemical', 'alchemical'],
+  ['circumstance', 'Circ', 'Circumstance', 'circumstance'],
+  ['morale', 'Mor', 'Morale', 'morale'],
+  ['tempEnhancement', 'Enh', 'Enhancement', 'enhancement'],
+  ['tempSize', 'Size', 'Size', 'size'],
 ];
 
 /** Keys the player edits directly; these columns come from pick selectors. */
@@ -232,8 +238,15 @@ export function foldPicks(picks, level) {
  * `gearItems` is the largest enhancement bonus the Equipment tab's items give
  * (gearItemBonuses in model/scope.js). Gear is the larger of it and the typed
  * Gear column: two enhancement bonuses do not stack.
+ *
+ * `own` is the columns the player added to the two tables, this ability's
+ * cells: `{ permanent: [{ type, value }], temporary: [...] }`, `type` a
+ * bonus type's key ('' for none). Each stacks with its own table's columns
+ * by type (stackAt): a sacred column and a second sacred column count once,
+ * at the larger; an added enhancement column joins ABP and gear. What they
+ * add is `own` and `ownTemp` on the answer, there only when there are some.
  */
-export function resolveAbility(entry = {}, gearItems = 0) {
+export function resolveAbility(entry = {}, gearItems = 0, own = null) {
   const abp = n(entry.abp);
   const items = n(gearItems);
   const gear = Math.max(n(entry.gear), items);
@@ -248,12 +261,17 @@ export function resolveAbility(entry = {}, gearItems = 0) {
   const tempEnhancement = tempTyped < 0 ? tempTyped
     : abpPairTotal(abp, Math.max(gear, tempTyped), ENHANCEMENT_CAP) - enhancement;
 
+  // The columns the player added, each against its own table's.
+  const columns = buildColumnsByType(entry, items);
+  const ownPermanent = own?.permanent?.length ? stackAt(own.permanent, columns.permanent).total : null;
+  const ownTemporary = own?.temporary?.length ? stackAt(own.temporary, columns.temporary).total : null;
+
   const total = n(entry.pointBuy) + n(entry.race) + enhancement + n(entry.attunement)
     + n(entry.inherent) + n(entry.array) + n(entry.level4) + n(entry.mythic)
-    + n(entry.age) + n(entry.size) + n(entry.untyped);
+    + n(entry.age) + n(entry.size) + n(entry.untyped) + n(ownPermanent);
 
   const temporary = n(entry.alchemical) + n(entry.circumstance) + n(entry.morale)
-    + tempEnhancement + n(entry.tempSize);
+    + tempEnhancement + n(entry.tempSize) + n(ownTemporary);
 
   return {
     enhancement,
@@ -262,10 +280,91 @@ export function resolveAbility(entry = {}, gearItems = 0) {
     // Only when there is some, so a sheet without item bonuses saves as before.
     ...(items ? { gearItems: items } : {}),
     ...(tempTyped !== tempEnhancement ? { tempEnhancement, tempEnhancementWasted: tempTyped - tempEnhancement } : {}),
+    // Only with columns of the player's own, for the same reason.
+    ...(ownPermanent !== null ? { own: ownPermanent } : {}),
+    ...(ownTemporary !== null ? { ownTemp: ownTemporary } : {}),
     total,
     temporary,
     tempTotal: total + temporary,
   };
+}
+
+/**
+ * An ability's two tables by the bonus type each column holds (the `type`
+ * of BUILD_PERMANENT_GROUPS and BUILD_TEMPORARY), as `{ permanent,
+ * temporary }`, each `{type: number}` for stackAt to settle a bonus of that
+ * type against. Types that stack with themselves are left out. Enhancement
+ * is ABP's pair with the gear, and on the temporary table with the larger of
+ * the gear and the temporary enhancement (resolveAbility).
+ */
+export function buildColumnsByType(entry = {}, gearItems = 0) {
+  const gear = Math.max(n(entry.gear), n(gearItems));
+  const table = (cols, enhancement) => {
+    const out = {};
+    for (const [key, , , type] of cols) {
+      if (!type || stacksWithItself(type)) continue;
+      out[type] = type === 'enhancement' ? enhancement : n(entry[key]);
+    }
+    return out;
+  };
+  return {
+    permanent: table(BUILD_PERMANENT_GROUPS.flatMap((g) => g.cols), abpPair(entry.abp, gear, ENHANCEMENT_CAP)),
+    temporary: table(BUILD_TEMPORARY, abpPair(entry.abp, Math.max(gear, n(entry.tempEnhancement)), ENHANCEMENT_CAP)),
+  };
+}
+
+/**
+ * The same columns with the player's own added (`own` as resolveAbility
+ * takes it): each type at the most its table counts of it, for a forwarded
+ * bonus to settle against. An added column of an ABP pair's type joins the
+ * pair's typed half.
+ */
+export function withOwnColumns(columns, own = []) {
+  const out = { ...columns };
+  for (const { type, value } of own || []) {
+    const v = n(value);
+    if (!type || v <= 0 || stacksWithItself(type)) continue;
+    const have = out[type];
+    out[type] = isAbpPair(have) ? { ...have, typed: Math.max(have.typed, v) } : Math.max(n(have), v);
+  }
+  return out;
+}
+
+/*
+ * Columns of the player's own on the Stats tab's two ability tables (see
+ * model/abilities.js): `abilityColumns: { permanent: [...], temporary: [...] }`,
+ * each `{ type, str, dex, con, int, wis, cha }`.
+ */
+
+/** The two tables a column can be added to. */
+export const ABILITY_COLUMN_TABLES = ['permanent', 'temporary'];
+
+/** The columns added to one table, as saved (an empty list when none). */
+export function abilityColumns(data, table) {
+  const list = data?.abilityColumns?.[table];
+  return Array.isArray(list) ? list : [];
+}
+
+/** What a column is called: its bonus type's name, or the player's own. */
+export function abilityColumnName(col) {
+  const type = String(col?.type ?? '').trim();
+  if (!type) return 'Untyped';
+  return isCustomBonusType(type) ? type : bonusColumnName(bonusTypeKey(type));
+}
+
+/**
+ * The bonus types a player may add as a column of one of the Stats tab's two
+ * ability tables (`table` 'permanent' or 'temporary'): every type that can be
+ * a bonus to an ability score (BONUS_TYPES' `scores`), less the ones the
+ * table already has a column for and the ones in `taken`, the types of the
+ * columns already added. As `[key, name, short]`, in BONUS_TYPES' order.
+ */
+export function abilityColumnChoices(table, taken = []) {
+  const cols = table === 'temporary' ? BUILD_TEMPORARY : BUILD_PERMANENT_GROUPS.flatMap((g) => g.cols);
+  const have = new Set([...cols.map(([, , , type]) => type).filter(Boolean), ...taken.map(bonusTypeKey)]);
+  return Object.entries(BONUS_TYPES)
+    .filter(([key, t]) => t.scores !== false && !have.has(key))
+    .map(([key, t]) => [key, t.name, t.short]);
 }
 
 /**
@@ -1314,25 +1413,28 @@ export const MYTHIC_TRADITION_SLOTS = [
  * circumstance, deflection, dodge, insight, luck, morale, profane, and sacred
  * bonuses to AC to its CMD." A *penalty* reaches CMD whatever its type: "Any
  * penalties to a creature's AC also apply to its CMD" -- see cmdBonusTotal.
+ *
+ * `scores: false` marks a type that is never a bonus to an ability score:
+ * the Stats tab does not offer it as a column of the ability tables.
  */
 export const BONUS_TYPES = {
   alchemical: { name: 'Alchemical', short: 'Alch' },
-  armor: { name: 'Armor', short: 'Arm' },
+  armor: { name: 'Armor', short: 'Arm', scores: false },
   circumstance: { name: 'Circumstance', short: 'Circ', stacks: true },
   competence: { name: 'Competence', short: 'Comp' },
-  deflection: { name: 'Deflection', short: 'Defl' },
-  dodge: { name: 'Dodge', short: 'Ddg', stacks: true, ac: { flatFooted: false } },
+  deflection: { name: 'Deflection', short: 'Defl', scores: false },
+  dodge: { name: 'Dodge', short: 'Ddg', stacks: true, scores: false, ac: { flatFooted: false } },
   enhancement: { name: 'Enhancement', short: 'Enh', ac: { touch: false, cmd: false } },
   inherent: { name: 'Inherent', short: 'Inh' },
   insight: { name: 'Insight', short: 'Ins' },
   luck: { name: 'Luck', short: 'Luck' },
   morale: { name: 'Morale', short: 'Mor' },
-  natural: { name: 'Natural Armor', short: 'Nat', ac: { touch: false, cmd: false } },
+  natural: { name: 'Natural Armor', short: 'Nat', scores: false, ac: { touch: false, cmd: false } },
   profane: { name: 'Profane', short: 'Prof' },
   racial: { name: 'Racial', short: 'Rac' },
-  resistance: { name: 'Resistance', short: 'Res' },
+  resistance: { name: 'Resistance', short: 'Res', scores: false },
   sacred: { name: 'Sacred', short: 'Sacr' },
-  shield: { name: 'Shield', short: 'Shld' },
+  shield: { name: 'Shield', short: 'Shld', scores: false },
   // Not the modifier for being Large -- that is already in the formula, the
   // other way round, as the special size modifier. This is a size-typed bonus.
   size: { name: 'Size', short: 'Size', ac: { cmd: false } },
@@ -1608,6 +1710,48 @@ export function abpPairReason(value, have, name) {
   if (v > have.cap) return `${name} above +${have.cap} counts on its own, without ABP`;
   if (have.abp + v > have.cap) return `ABP and ${name} stack up to +${have.cap}`;
   return '';
+}
+
+/**
+ * Stack a list of typed bonuses, `[{ value, type }]`, at one place, as the
+ * rulebook has it. Penalties all count, whatever their type. Untyped, dodge
+ * and circumstance bonuses all count. Any other type counts once, at its
+ * best, and only for what it adds past the place's own column of that type
+ * (`columns`, `{type: number or ABP pair}`; see typedGain). A `temp.` type
+ * reads the column of its own name first, then the bare type's.
+ *
+ * Returns the `total`, the entries that `counts`, and `overlaps`: per entry,
+ * how much of it a column already covered. The one rule for forwarded
+ * bonuses (resolveContributions in inline.js) and the ability score columns
+ * a player adds on the Stats tab (resolveAbility).
+ */
+export function stackAt(list, columns) {
+  let total = 0;
+  const best = new Map();      // type -> the entry holding the largest bonus
+  const counts = new Set();
+  const overlaps = new Map();
+  for (const e of list) {
+    if (e.value < 0 || stacksWithItself(e.type)) { total += e.value; counts.add(e); continue; }
+    const held = best.get(e.type);
+    // First one wins a tie, so the order a rule was written in decides which
+    // of two identical bonuses is shown as the one in force -- arbitrary
+    // either way, but stable, and it never changes under a later edit.
+    if (!held || e.value > held.value) best.set(e.type, e);
+  }
+  for (const e of best.values()) {
+    // A column that is an ABP pair takes the bonus into its typed half, up to
+    // the pair's cap (typedGain); `pair` goes with the overlap for the words.
+    const have = columns?.[e.type] ?? columns?.[baseType(e.type)];
+    const adds = typedGain(e.value, have);
+    const overlap = e.value - adds;
+    if (overlap) {
+      overlaps.set(e, { overlap, column: typedThere(have), ...(isAbpPair(have) ? { pair: have } : {}) });
+    }
+    if (adds <= 0) continue;
+    total += adds;
+    counts.add(e);
+  }
+  return { total, counts, overlaps };
 }
 
 /**

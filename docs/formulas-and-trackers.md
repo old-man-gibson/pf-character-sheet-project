@@ -436,6 +436,7 @@ recompute have anywhere to *put* an arriving bonus:
 | `hp.deathBonus` | how far below zero death is, on top of Constitution |
 | `str.score`, `dex.score`, … | an ability score — which is not a total but the thing a dozen totals are built from, so it cascades through the modifier into attacks, damage, skills, saves, CMD and carrying capacity. `as temp.…` makes it a temporary one |
 | `str.temp`, `dex.temp`, … | the same, said the other way round: the *working* score, which is what a bonus lasting a fight moves. `{str.temp += 2 as size}` and `{str.score += 2 as temp.size}` are the same bonus |
+| `str.sacred`, `str.temp.sacred`, … | an ability score bonus of that type: `{str.sacred += 2}` is `{str.score += 2 as sacred}`, and `{str.temp.sacred += 2}` is `{str.temp += 2 as sacred}`. Every type that can apply to a score works, and so does the type of a column you added to the Stats tab's ability tables. A column of that type shows the bonus |
 | `defenses.sr` | spell resistance |
 | `defenses.dr`, `dr.magic`, `dr.cold_iron`, `dr.none` (for x/—), … | damage reduction, all of it or one bypass — see below |
 | `defenses.resistance`, `resistance.fire`, … | energy resistance, all of it or one energy |

@@ -8,13 +8,15 @@
 
 import {
   ABILITIES, ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL, BUILD_DERIVED_KEYS, MYTHIC_STAT_BONUS,
-  POINT_BUY_COST, abilityKey, abilityMod, abpFollowers, arrayFollowers, foldPicks, pointBuyCost,
-  resolveAbility,
+  ABILITY_COLUMN_TABLES, POINT_BUY_COST, abilityColumnName, abilityColumns, abilityKey, abilityMod, abpFollowers,
+  arrayFollowers, bonusTypeKey, effectiveMythicTier, foldPicks, pointBuyCost, resolveAbility,
 } from '../rules.js';
 import { forwardedSplit, gearItemBonuses } from './scope.js';
 import {
   ageAbilityMods, campaignRules, fitMythicRows, mythicComputedTier, mythicTierOf, prowessPicks, settleTrialTier,
 } from './campaign.js';
+import { evaluateAmount } from './util.js';
+import { markUndo } from './undo.js';
 
 /**
  * Mythic tier derives from level (with a manual override) -- or, under other
@@ -40,6 +42,7 @@ export function applyMythic(model) {
 export function refreshAbilities(model) {
   const build = model.data.statsBuild;
   const applied = new Set();
+  resolveAbilityColumns(model);
   if (build) {
     const level = Number(model.data.identity.level) || 0;
     // Under core ABP (a campaign rule) prowess stops at 18th.
@@ -68,8 +71,10 @@ export function refreshAbilities(model) {
       if (age?.[key]) entry.age = age[key];
       else delete entry.age;
       // An item's enhancement bonus to the score fills the Gear column
-      // (gearColumnTakes), beside whatever is typed there.
-      const r = resolveAbility(entry, Math.max(0, ...gearItemBonuses(model, key).map((g) => g.value)));
+      // (gearColumnTakes), beside whatever is typed there. The columns the
+      // player added stack with the rest by type.
+      const r = resolveAbility(entry, Math.max(0, ...gearItemBonuses(model, key).map((g) => g.value)),
+        ownColumnsOf(model.data, key));
       entry.resolved = r;
       const a = model.data.abilities[key];
       if (a) {
@@ -205,6 +210,88 @@ export function setBuild(model, ability, key, value) {
     v = model.attunementUnlocked && (value === true || v > 0) ? ATTUNEMENT_BONUS : 0;
   }
   entry[key] = v;
+  model.recompute();
+  return model;
+}
+
+/*
+ * Columns of the player's own on the Stats tab's two ability tables: a bonus
+ * type the tables have no column for (profane, sacred, a house type), with a
+ * cell for each ability.
+ *
+ * Saved as `abilityColumns: { permanent: [...], temporary: [...] }`, each
+ * column `{ type, str, dex, con, int, wis, cha }`: the type as a gear row's
+ * bonus type is written (a BONUS_TYPES name, or a name of the player's own),
+ * and each cell a number or a formula. The cells live in the column, so
+ * renaming the type keeps them and removing the column takes them with it.
+ */
+
+/**
+ * Work out every cell of the added columns, into the column's `resolved`
+ * (and `errors`, for a formula that failed). The scores are worked out
+ * before anything else on the sheet, so a formula here reads the level and
+ * the mythic tier and nothing that is built on the scores. A table left with
+ * no columns is taken off the document, so it saves as it did before.
+ */
+function resolveAbilityColumns(model) {
+  const c = model.data;
+  const all = c.abilityColumns;
+  if (!all || typeof all !== 'object') return;
+  const scope = {
+    level: Number(c.identity?.level) || 0,
+    mythic: { tier: effectiveMythicTier(c), baseTier: Number(c.identity?.mythicTier) || 0 },
+  };
+  for (const table of ABILITY_COLUMN_TABLES) {
+    const list = abilityColumns(c, table);
+    if (!list.length) { delete all[table]; continue; }
+    for (const col of list) {
+      if (!col || typeof col !== 'object') continue;
+      col.resolved = {};
+      delete col.errors;
+      for (const ab of ABILITIES) {
+        const { value, error } = evaluateAmount(col[ab], scope);
+        col.resolved[ab] = value;
+        if (error) (col.errors ||= {})[ab] = error;
+      }
+    }
+  }
+  if (!Object.keys(all).length) delete c.abilityColumns;
+}
+
+/**
+ * One ability's cells of the added columns, as resolveAbility takes them:
+ * `{ permanent: [{ type, value }], temporary: [...] }`, `type` the bonus
+ * type's key. Null when no column has been added, or the ability has no
+ * build for them to be part of.
+ */
+export function ownColumnsOf(data, ab) {
+  if (!data?.abilityColumns || !data.statsBuild?.[ab]) return null;
+  // One per column, in the column's place, so an index means the same column.
+  const cells = (table) => abilityColumns(data, table)
+    .map((col) => ({ type: bonusTypeKey(col?.type), value: Number(col?.resolved?.[ab]) || 0 }));
+  return { permanent: cells('permanent'), temporary: cells('temporary') };
+}
+
+/**
+ * Add a column to one of the ability tables. `type` is a bonus type's name,
+ * "Custom" for one of the player's own to be renamed, or '' for none.
+ */
+export function addAbilityColumn(model, table, type = '') {
+  if (!ABILITY_COLUMN_TABLES.includes(table) || !model.data.statsBuild) return null;
+  const col = { type: String(type ?? '').trim() };
+  markUndo(model, `Added ${abilityColumnName(col)} column`);
+  const all = model.data.abilityColumns || (model.data.abilityColumns = {});
+  (Array.isArray(all[table]) ? all[table] : (all[table] = [])).push(col);
+  model.recompute();
+  return col;
+}
+
+/** Take a column, and every cell in it, off one of the ability tables. */
+export function removeAbilityColumn(model, table, index) {
+  const list = abilityColumns(model.data, table);
+  if (!list[index]) return model;
+  markUndo(model, `Removed ${abilityColumnName(list[index])} column`);
+  list.splice(index, 1);
   model.recompute();
   return model;
 }
