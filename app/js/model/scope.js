@@ -130,7 +130,7 @@ export function systemsInUse(model) {
   const on = (tab) => !!used[tab] || tagged.has(tab);
   return {
     power: on('magic'), might: on('martial'), guile: on('guile'), vancian: on('vancian'),
-    psionic: on('psionics'), akashic: on('akashic'), cards: on('cardcasting'),
+    psionic: on('psionics'), akashic: on('akashic'), cards: on('cardcasting'), maneuvers: on('maneuvers'),
   };
 }
 
@@ -514,6 +514,10 @@ export function characterScope(model) {
   if (c.psionics?.classes?.length) {
     s.manifester = levelsOf(c.psionics.classes, manifesterForwardKey, 'manifesterLevel', 'level');
   }
+  // Path of War: the initiator level, the initiation modifier, and the DC a
+  // maneuver adds its level to.
+  const init = c.maneuvers?.calc?.initiator;
+  if (init) s.initiator = { level: init.level, mod: init.mod, dc: init.dc };
 
   // The companions, so a tracker or an ability can read them: familiar.hp,
   // eidolon.hd, animalCompanion.str.mod, eidolon.evoLeft. Each block reads
@@ -817,6 +821,19 @@ function spellSlotFacts(model, key) {
 }
 
 /**
+ * The initiator level or every maneuver DC, as a destination: `target` is the
+ * number from before any bonus to it. Neither moves with its own bonuses, so
+ * the last pass's figures are the ones to read.
+ */
+function initiatorTargetFacts(model, key) {
+  if (key !== 'initiator.level' && key !== 'initiator.dc') return null;
+  const init = model.data.maneuvers?.calc?.initiator || {};
+  return key === 'initiator.level'
+    ? { kind: 'the initiator level', late: false, values: { total: Number(init.base) || 0 } }
+    : { kind: 'a maneuver save DC', late: false, values: { total: Number(init.dcBase) || 0 } };
+}
+
+/**
  * What `target` is for destination key `key`: `{ kind, values, late }`, the
  * shape inline.js reads. `kind` names the destination in words, for error
  * messages.
@@ -840,7 +857,7 @@ export function targetFacts(model, key, scope) {
   }
   const companion = companionTargetFacts(model, key);
   if (companion) return companion;
-  const casting = castingLevelFacts(model, key) || spellSlotFacts(model, key);
+  const casting = castingLevelFacts(model, key) || spellSlotFacts(model, key) || initiatorTargetFacts(model, key);
   if (casting) return casting;
   const branch = TARGET_BRANCHES.find(([test]) => test.test(key));
   if (branch) {
@@ -1072,6 +1089,10 @@ export function forwardTargets(model) {
     add('essence.pool', 'Essence per day', using.akashic ? null : { unused: true });
   }
   if (model.data.psionics) add('pp.pool', 'Power points', using.psionic ? null : { unused: true });
+  if (model.data.maneuvers) {
+    add('initiator.level', 'Initiator level', using.maneuvers ? null : { unused: true });
+    add('initiator.dc', 'Every maneuver save DC', using.maneuvers ? null : { unused: true });
+  }
   if (training.guile) {
     const guile = using.guile ? null : { unused: true };
     add('operative.plans', 'Plans', guile);

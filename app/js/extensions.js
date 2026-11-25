@@ -2409,6 +2409,37 @@ export function classFeatureTextFromTables(tables) {
   return out;
 }
 
+/** "A warlord's initiation modifier is Charisma.", and the same said the other way round. */
+const INITIATION_SAID = [
+  /\binitiat(?:ion|or|ing)\s+(?:modifier|attribute)\s+is\s+(?:his\s+|her\s+|their\s+)?(strength|dexterity|constitution|intelligence|wisdom|charisma)\b/i,
+  /\b(strength|dexterity|constitution|intelligence|wisdom|charisma)\s+is\s+(?:the\s+|his\s+|her\s+|their\s+)?(?:primary\s+)?initiat(?:ion|or|ing)\s+(?:modifier|attribute)\b/i,
+];
+
+/**
+ * The initiator classes catalogue packs carry: a class or prestige class page
+ * whose System field names Maneuver, with the ability its text names as the
+ * initiation modifier (`stat`, '' when it names none). Between two packs with
+ * the same class, the later one's stands.
+ */
+export function initiatorClassesFromTables(tables) {
+  const out = new Map();
+  for (const cat of arr(tables?.catalogues?.catalogues)) {
+    const kind = lower(cat?.kind);
+    if (kind !== 'class' && kind !== 'prestige class') continue;
+    for (const e of arr(cat.entries)) {
+      const found = readEntry(e, 'initiator class', () => {
+        const system = arr(e?.fields).find(([k]) => lower(k) === 'system')?.[1];
+        const name = classNameOf(e);
+        if (!name || !/\bmaneuver/i.test(str(system))) return null;
+        const said = INITIATION_SAID.map((re) => re.exec(str(e?.text))?.[1]).find(Boolean) || '';
+        return { name, stat: said };
+      });
+      if (found) out.set(lower(found.name), found);
+    }
+  }
+  return [...out.values()];
+}
+
 /** A class table column that is a spell level: "0", "1st" … "9th". */
 const SPELL_LEVEL_COLUMN = /^(?:0|0th|[1-9](?:st|nd|rd|th))$/i;
 
