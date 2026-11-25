@@ -6400,7 +6400,8 @@ export class CharacterSheetElement extends HTMLElement {
     });
 
     // A column added to one of the Stats tab's ability tables, of the bonus
-    // type picked. The picker goes back to its prompt with the redraw.
+    // type picked or typed in its search list. The picker goes back to its
+    // prompt with the redraw.
     root.querySelectorAll('select[data-abcol-add]').forEach((sel) => {
       sel.addEventListener('change', () => {
         if (!sel.value) return;

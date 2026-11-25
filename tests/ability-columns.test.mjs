@@ -243,8 +243,19 @@ console.log('\nthe panel');
   check('each column has its ×', (html.match(/data-action="remove-ability-column"/g) || []).length, 2);
   check('the forwarded sacred bonus is in the column',
     /data-item="abilityColumns\.permanent\|0\|str"[\s\S]*?<\/span>\s*<span class="fwd" data-fwd="str\.score"/.test(html), true);
-  check('the add picker leaves out a type already added',
-    /data-abcol-add="permanent"[\s\S]*?<\/select>/.exec(html)[0].includes('value="Sacred"'), false);
+  const addPicker = /<select[^>]*data-abcol-add="permanent"[\s\S]*?<\/select>/.exec(html)[0];
+  check('the add picker leaves out a type already added', addPicker.includes('value="Sacred"'), false);
+  check('the add picker and the header open as search lists, as a gear row’s type does',
+    [/^<select data-search="own" class="addcol"/.test(addPicker), /<select data-item="abilityColumns\.permanent\|0\|type"[^>]*data-search="own"/.test(html)],
+    [true, true]);
+  check('the add picker shows its prompt, which is not a choice, and ends in Custom…',
+    [addPicker.includes('<option value="" disabled selected>+ Bonus type</option>'), /<option value="Custom"[^>]*>Custom…<\/option><\/select>$/.test(addPicker)],
+    [true, true]);
+  check('its choices are short names with the whole name as the title, as on a gear row',
+    addPicker.includes('<option value="Profane" title="Profane">Prof</option>'), true);
+  const typed = m.addAbilityColumn('permanent', 'Fury');
+  check('a name typed in the search list adds a column of that name', [typed?.type, abilityColumnName(typed)], ['Fury', 'Fury']);
+  check('its header is the name of your own', renderStatsPanel(m, {}).includes('class="owntype" value="Fury" data-item="abilityColumns.permanent|1|type"'), true);
   const lines = breakdown(m, 'str').parts || breakdown(m, 'str');
   const sacred = (Array.isArray(lines) ? lines : []).find((p) => p.label === 'Sacred');
   check('the breakdown has a line for it', [sacred?.value, sacred?.place], [2, 'abilityCell:permanent:0:str']);

@@ -13,7 +13,7 @@
 import { esc, abAttr, picksAbility, ABILITY_LABELS_LIST } from '../html.js';
 import { campaignRules, coreAbp, mythicStatTiers } from '../../model/campaign.js';
 import { area, check, roField } from '../fields.js';
-import { bonusTypeCell, exprField, itemCheck, removeAction } from '../rows.js';
+import { bonusTypeCell, bonusTypePicker, exprField, itemCheck, removeAction } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
 import { abilityHarm } from '../../model/abilities.js';
 import { minus } from '../format.js';
@@ -24,7 +24,7 @@ import {
   BUILD_DERIVED_KEYS, BUILD_OPTIONAL_KEYS, BUILD_PERMANENT_GROUPS, BUILD_TEMPORARY,
   CORE_PROWESS_LEVELS, LEGENDARY_GIFTS, MENTAL_PROWESS_LEVELS, abpAttunement,
   PHYSICAL_PROWESS_LEVELS, PROWESS_TRACKS, SAVE_BONUS_TYPES, abilityColumnChoices, abilityColumnName, abilityColumns,
-  abpGroupTotal, abpSourceLevel, bonusColumnName, bonusTypeKey, CUSTOM_BONUS_TYPE, enhancementCapNote, stacksWithItself,
+  abpGroupTotal, abpSourceLevel, bonusColumnName, bonusTypeKey, enhancementCapNote, stacksWithItself,
   tempEnhancementNote,
 } from '../../rules.js';
 
@@ -267,13 +267,10 @@ function ownColumns(model, table) {
   const typeOf = (col) => bonusTypeKey(col.type);
   const takes = (type) => !!type && !stacksWithItself(type);
   const taken = [...new Set(cols.map(typeOf).filter(takes))];
-  const choices = abilityColumnChoices(table, cols.map((col) => col.type));
-  const add = `<select class="addcol" data-abcol-add="${table}" aria-label="Add a bonus type column"
-      title="Add a column for a bonus type.">
-      <option value="">+ Bonus type</option>
-      ${choices.map(([, name]) => `<option value="${esc(name)}">${esc(name)}</option>`).join('')}
-      <option value="${CUSTOM_BONUS_TYPE}" title="A bonus type of your own">Custom…</option>
-    </select>`;
+  // A choice is [name, short name, name], as on a gear row.
+  const choices = (taken) => abilityColumnChoices(table, taken).map(([, name, short]) => [name, short, name]);
+  const add = bonusTypePicker(`class="addcol" data-abcol-add="${table}" aria-label="Add a bonus type column"
+      title="Add a column for a bonus type."`, choices(cols.map((col) => col.type)), '+ Bonus type');
   const badges = (ab, type) => {
     if (!takes(type)) return '';
     const pick = { type };
@@ -287,9 +284,8 @@ function ownColumns(model, table) {
       removeAction('remove-ability-column', { table, col: i }, { what: `the ${abilityColumnName(col)} column`, tiny: true })}</th>`).join(''),
     head: cols.map((col, i) => {
       const others = cols.filter((_, j) => j !== i).map((other) => other.type);
-      const options = abilityColumnChoices(table, others).map(([, name, short]) => [name, short, name]);
       return `<th class="num owncol" title="${esc(abilityColumnName(col))}">${
-        bonusTypeCell(list, i, 'type', col.type ?? '', options, '—', `aria-label="Bonus type of column ${i + 1}"`)}</th>`;
+        bonusTypeCell(list, i, 'type', col.type ?? '', choices(others), '—', `aria-label="Bonus type of column ${i + 1}"`)}</th>`;
     }).join(''),
     cells: (ab) => cols.map((col, i) => `<td class="num owncol">${
       exprField(`data-item="${list}|${i}|${ab}" aria-label="${esc(`${ABILITY_LABELS[ab]}: ${abilityColumnName(col)}`)}"`, col[ab] ?? '', {
