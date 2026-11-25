@@ -482,6 +482,14 @@ export function characterScope(model) {
     const key = slug(name);
     if (s.class[key] === undefined) s.class[key] = { level: model.classLevelCount(name) };
   }
+  // A veilweaving class's essence, as its row on the Akashic tab works it
+  // out: class.vizier.essence. Two rows of one class add.
+  for (const row of c.akashic?.classes || []) {
+    const name = String(row?.name ?? '').trim();
+    if (!name) continue;
+    const into = (s.class[slug(name)] ??= {});
+    into.essence = (Number(into.essence) || 0) + (Number(row.essenceNum) || 0);
+  }
 
   // The three casting systems' levels, under the names a bonus is sent to
   // them by. `spheres.cl` is `caster.level` again, said the way it is
