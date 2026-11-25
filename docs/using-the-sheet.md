@@ -1110,6 +1110,14 @@ inherent, array, Level/4, mythic, size, untyped.
 **Temporary bonuses** — alchemical, circumstance, morale, enhancement, size. These
 feed the Temp Score that every derived stat reads; the permanent Total is untouched.
 
+**+ Bonus type** adds a column to either table for a bonus type it does not have, such
+as sacred, profane or insight, or a name of your own. Each ability gets a cell, which
+takes a number or a formula that reads `level` or `mythic.tier`. Bonuses of the same
+type do not stack: two sacred columns count once, at the larger, and an added
+enhancement column joins ABP and gear. A forwarded bonus of the column's type, such as
+`{str.sacred += 2}`, shows in that column. The picker in the column's header renames
+it, and its × removes it with its cells.
+
 The two tables sit side by side wherever the sheet is at least ~1385 px wide — a 1080p
 screen — and stack below that. **Inherent** is no longer handed out by the server, so
 the column is hidden unless the character actually has one; the button in the panel

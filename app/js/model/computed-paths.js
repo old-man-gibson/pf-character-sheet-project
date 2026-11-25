@@ -30,6 +30,8 @@ const COMPUTED_PATHS = [
   'abilities.*.checkMod', 'abilities.*.workingScore',
   // ABP, the stat array, level-4 and mythic increases follow the picks.
   ...BUILD_DERIVED_KEYS.map((k) => `statsBuild.*.${k}`), 'statsBuild.*.age',
+  // A failed formula in a column the player added (its answers are `resolved`).
+  'abilityColumns.*.*.errors',
   'identity.mythicTier', 'identity.languageSlots.*', 'mythic.computedTier',
   'hp.base', 'hp.total', 'hp.initiative',
   'attack.bab', 'attack.babBase', 'attack.iterative',

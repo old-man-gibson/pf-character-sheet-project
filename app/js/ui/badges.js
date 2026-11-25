@@ -74,17 +74,22 @@ export function sheetBonusField(model, key, width = '4rem') {
  *                      forwarded: a defence box's line as it now stands, the
  *                      temporary hit points still unspent
  * @param opts.note     a sentence about that figure, under the panel's heading
+ * @param opts.pick     only the bonuses of one type, `{ type }`, or of none of
+ *                      some, `{ notTypes }` (forwardedInto): a column the
+ *                      player added to an ability table shows its type's
  */
-export function forwardedBadge(model, name, { tag = '', only = '', waiting = '', shown = '', note = '' } = {}) {
+export function forwardedBadge(model, name, {
+  tag = '', only = '', waiting = '', shown = '', note = '', pick = null,
+} = {}) {
   const names = [].concat(name || []).filter(Boolean);
-  const groups = forwardedGroups(model, names, only);
+  const groups = forwardedGroups(model, names, only, pick);
   if (!groups.some((g) => g.f)) return '';
   const total = groups.reduce((sum, g) => sum + (g.f?.total || 0), 0);
   const many = names.length > 1;
   // What the hover panel needs to ask the model again when it opens, so the
   // list it shows is never a render old -- the same bargain as `data-bd`, and
   // `data-fwdx` is `data-bdx`: what the panel cannot work out for itself.
-  const extra = Object.fromEntries(Object.entries({ only, tag, waiting, shown, note }).filter(([, v]) => v));
+  const extra = Object.fromEntries(Object.entries({ only, tag, waiting, shown, note, pick }).filter(([, v]) => v));
   const pop = ` data-fwd="${esc(names.join(' '))}"${
     Object.keys(extra).length ? ` data-fwdx="${esc(JSON.stringify(extra))}"` : ''}`;
   // A bonus with nothing yet to raise -- a caster level before casting is
@@ -101,8 +106,8 @@ export function forwardedBadge(model, name, { tag = '', only = '', waiting = '',
 }
 
 /** What each destination is receiving, as `[{ name, f }]` -- `f` null where nothing is. */
-function forwardedGroups(model, names, only = '') {
-  return names.map((n) => ({ name: n, f: model.forwardedInto(n, only) }));
+function forwardedGroups(model, names, only = '', pick = null) {
+  return names.map((n) => ({ name: n, f: model.forwardedInto(n, only, pick) }));
 }
 
 /**
@@ -113,7 +118,7 @@ export function forwardedPop(model, names, extra = '') {
   let opts = {};
   try { opts = extra ? JSON.parse(extra) : {}; } catch { opts = {}; }
   const list = String(names || '').split(' ').filter(Boolean);
-  return forwardedPopHtml(forwardedGroups(model, list, opts.only || ''),
+  return forwardedPopHtml(forwardedGroups(model, list, opts.only || '', opts.pick || null),
     { ...opts, goes: (place) => knownPlace(model, place) });
 }
 

@@ -38,8 +38,8 @@ import {
 } from '../rules.js';
 import { freeBackgroundSkills, occupationSkills, specialtyInPlay } from './campaign.js';
 import {
-  applyMythic, attunementUnlocked, pointBuySummary, pointBuyTable, refreshAbilities, setBuild,
-  setMythicPick, setPick,
+  addAbilityColumn, applyMythic, attunementUnlocked, pointBuySummary, pointBuyTable, refreshAbilities,
+  removeAbilityColumn, setBuild, setMythicPick, setPick,
 } from './abilities.js';
 import { breakdown } from './breakdown.js';
 import { shapeLevelUpFeats } from './feats.js';
@@ -677,6 +677,8 @@ export class Character {
   pointBuySummary(...a) { return pointBuySummary(this, ...a); }
   get attunementUnlocked() { return attunementUnlocked(this); }
   setBuild(...a) { return setBuild(this, ...a); }
+  addAbilityColumn(...a) { return addAbilityColumn(this, ...a); }
+  removeAbilityColumn(...a) { return removeAbilityColumn(this, ...a); }
   setPick(...a) { return setPick(this, ...a); }
   setMythicPick(...a) { return setMythicPick(this, ...a); }
 

@@ -11,8 +11,9 @@
 import {
   ABILITIES, AC_BONUS_TYPES, DEFENCE_PART_FAMILIES, FORWARD_FAMILIES, FORWARD_LATE,
   FORWARD_STATS, MANEUVER_FIELDS, SAVE_BONUS_TYPES, SHEET_ALIASES, armorParts, gearBonusToken, skillLabel,
-  ABP_DEFENCE_CAP, ENHANCEMENT_CAP, abpPair, abpPairReason, columnTypes, isClassSkill, statMod,
-  AC_PART_TYPES, acPartReach, acReachOf, acTypeReachesCmd, bonusColumnName,
+  ABP_DEFENCE_CAP, abpPair, abpPairReason, buildColumnsByType, columnTypes, isClassSkill, statMod, withOwnColumns,
+  ABILITY_COLUMN_TABLES, AC_PART_TYPES, BONUS_TYPES, abilityColumns, acPartReach, acReachOf, acTypeReachesCmd,
+  baseType, bonusColumnName, bonusTypeKey,
 } from '../rules.js';
 import { deathThreshold, effectiveMythicTier, fmt, mythicPowerUses, surgeDie } from '../rules.js';
 import {
@@ -34,6 +35,7 @@ import { sphereTableNames, talentsIn } from './spheres.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
 import { tempHpGrant } from './stats/defenses.js';
 import { wealthViewOf } from './stats/wealth.js';
+import { ownColumnsOf } from './abilities.js';
 import { boundScope, essenceScope, veilScope } from './subsystems/akashic.js';
 import { readiedNames } from './subsystems/maneuvers.js';
 import { manipulationName } from './subsystems/cardcasting.js';
@@ -53,6 +55,12 @@ import {
  * makes `{skill.bluff += 4}` free.
  */
 const FORWARD_EARLY = new Set(FORWARD_STATS.map(([name]) => name));
+
+/**
+ * The names a formula reads under each ability (`str.mod`), lower-cased. A
+ * bonus type's destination under an ability (`str.profane`) never takes one.
+ */
+const ABILITY_BRANCH = new Set(['score', 'mod', 'temp', 'tempmod']);
 
 /** The Spheres of Power casting numbers a bonus may be sent to, as `spheres.<suffix>`. */
 const SPHERES_TARGETS = [
@@ -1164,6 +1172,25 @@ export function forwardTargets(model) {
     acPart.set(name, type);
     list.push({ name, label: `${bonusColumnName(type)} bonus to AC`, family: members });
   }
+  // An ability score's bonus by its type, the same way: `{str.profane += 2}`
+  // is a profane bonus to the Strength score, and `{str.temp.profane += 2}`
+  // one to the working score. Every type that can be a bonus to a score, and
+  // the types of the columns the player added (a column of that type takes
+  // it in; see typedColumns). Not listed: the score itself is.
+  const scoreTypes = new Set([
+    ...Object.entries(BONUS_TYPES).filter(([, t]) => t.scores !== false).map(([key]) => key),
+    ...ABILITY_COLUMN_TABLES.flatMap((table) => abilityColumns(model.data, table).map((col) => bonusTypeKey(col?.type))),
+  ]);
+  for (const type of scoreTypes) {
+    if (!/^[a-z]\w*$/.test(type) || ABILITY_BRANCH.has(type)) continue;
+    for (const ab of ABILITIES) {
+      for (const [name, into] of [[`${ab}.${type}`, `${ab}.score`], [`${ab}.temp.${type}`, `${ab}.temp`]]) {
+        if (expand.has(name)) continue;
+        expand.set(name, [into]);
+        acPart.set(name, type);
+      }
+    }
+  }
 
   // Weapons are matched rather than enumerated. "Melee weapons", "axes" and
   // "the guitar axe" are all the same shape of rule -- a condition on which
@@ -1268,8 +1295,9 @@ export function forwardTargets(model) {
     },
     columnsOf: (key) => typedColumns(model, key),
     absorbs: (key, e) => gearColumnTakes(model, key, e),
-    // The type a destination names where the bonus names none: `ac.natural`.
-    // An enhancement bonus sent to the natural armor is the amulet's kind.
+    // The type a destination names where the bonus names none: `ac.natural`,
+    // `str.profane`. An enhancement bonus sent to the natural armor is the
+    // amulet's kind.
     typeOf: (names, written = '') => {
       const part = acPart.get((names || []).map((n) => canonical(n) || n).find((n) => acPart.has(n)));
       if (!part) return '';
@@ -1328,11 +1356,6 @@ export function gearItemBonuses(model, key) {
 const SAVE_COLUMN_TYPES = columnTypes(SAVE_BONUS_TYPES);
 /** The AC row's columns, by type; `natural` is the armour itself. */
 const AC_COLUMN_TYPES = columnTypes(AC_BONUS_TYPES);
-/** An ability score's build columns, by type; `temp.` ones are the temporary table. */
-const ABILITY_COLUMN_TYPES = {
-  enhancement: null, 'temp.enhancement': 'tempEnhancement', size: 'size', 'temp.size': 'tempSize',
-  inherent: 'inherent', racial: 'race', alchemical: 'alchemical', morale: 'morale',
-};
 
 /**
  * A destination's own typed columns, as `{type: value}`, for the stacking in
@@ -1386,18 +1409,21 @@ export function typedColumns(model, key) {
   const ability = /^(str|dex|con|int|wis|cha)\.(score|temp)$/.exec(key);
   if (ability) {
     const b = c.statsBuild?.[ability[1]] || {};
-    // The enhancement is ABP's prowess with the gear, and a temporary one
-    // joins the same pair (resolveAbility).
-    const gear = Math.max(Number(b.gear) || 0, Number(b.resolved?.gearItems) || 0);
-    const tempPair = abpPair(b.abp, Math.max(gear, Number(b.tempEnhancement) || 0), ENHANCEMENT_CAP);
-    const out = {};
-    for (const [type, col] of Object.entries(ABILITY_COLUMN_TYPES)) {
-      out[type] = type === 'temp.enhancement' ? tempPair
-        : col ? Number(b[col]) || 0 : abpPair(b.abp, gear, ENHANCEMENT_CAP);
-    }
+    // The two tables by type (buildColumnsByType): the enhancement is ABP's
+    // prowess with the gear, and a temporary one joins the same pair. The
+    // columns the player added count as their type's column too.
+    const cols = buildColumnsByType(b, b.resolved?.gearItems);
+    const own = ownColumnsOf(c, ability[1]);
+    const temporary = withOwnColumns(cols.temporary, own?.temporary);
     // The working score: an enhancement bonus there is temporary, and joins
-    // the same pair. Its other types still stack as they always did.
-    return ability[2] === 'score' ? out : { enhancement: tempPair };
+    // the same pair. Its other types still stack with the built-in columns
+    // as they always did, and settle against an added column of their type.
+    if (ability[2] === 'temp') return withOwnColumns({ enhancement: cols.temporary.enhancement }, own?.temporary);
+    // The score: a temporary column is `temp.<type>` where the permanent
+    // table has its type too, so the two are told apart.
+    const out = withOwnColumns(cols.permanent, own?.permanent);
+    for (const [type, have] of Object.entries(temporary)) out[type in out ? `temp.${type}` : type] = have;
+    return out;
   }
   return null;
 }
@@ -1430,12 +1456,12 @@ export function forwarded(model, name) {
  * for each. Everywhere else the two are the same number and the split is
  * ignored.
  */
-export function forwardedSplit(model, name) {
+export function forwardedSplit(model, name, pick = null) {
   const counted = model.contributions?.countedAt?.[name];
   const overlaps = model.contributions?.overlapAt?.[name];
   const out = { permanent: 0, temporary: 0, total: 0 };
   for (const e of model.contributions?.by?.[name] || []) {
-    if (e.error || !e.value) continue;
+    if (e.error || !e.value || !picksType(pick, e)) continue;
     if (counted && !counted.has(e)) continue;
     // What a column of the same type already gave is not given twice.
     const value = e.value - (overlaps?.get(e)?.overlap || 0);
@@ -1446,16 +1472,30 @@ export function forwardedSplit(model, name) {
 }
 
 /**
+ * Whether a bonus is one `pick` asks for, by its type (with or without
+ * `temp.`): `{ type }` the bonuses of that type, `{ notTypes }` the bonuses
+ * of none of those. No `pick` is every bonus. A column the player added to
+ * an ability table shows the bonuses of its type, and Fwd the rest.
+ */
+function picksType(pick, e) {
+  if (!pick) return true;
+  const type = baseType(e.type);
+  if (typeof pick.type === 'string') return type === pick.type;
+  return !(pick.notTypes || []).includes(type);
+}
+
+/**
  * What is arriving at one destination, and from where -- the view a number
  * owes its reader when part of it was decided somewhere else entirely.
  *
  * Returns null when nothing is forwarded there, so a caller can leave the
  * display alone rather than render an empty explanation of nothing.
+ * `pick` narrows it by type (picksType).
  */
-export function forwardedInto(model, name, only = '') {
+export function forwardedInto(model, name, only = '', pick = null) {
   const want = only === 'permanent' ? false : only === 'temporary' ? true : null;
-  const split = forwardedSplit(model, name);
-  const total = want === null ? forwarded(model, name)
+  const split = forwardedSplit(model, name, pick);
+  const total = want === null ? (pick ? split.total : forwarded(model, name))
     : (want ? split.temporary : split.permanent);
   const counted = model.contributions?.countedAt?.[name];
   const overlaps = model.contributions?.overlapAt?.[name];
@@ -1464,7 +1504,7 @@ export function forwardedInto(model, name, only = '') {
   // adding to it -- and a reader who cannot see it will write it in again.
   // So does one a column of its type covers, saying how much it covered.
   const from = (model.contributions?.by?.[name] || [])
-    .filter((e) => e.value && (want === null || !!e.temporary === want))
+    .filter((e) => e.value && (want === null || !!e.temporary === want) && picksType(pick, e))
     .map((e) => {
       const o = overlaps?.get(e);
       return {

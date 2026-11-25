@@ -13,7 +13,7 @@
 import { esc, abAttr, picksAbility, ABILITY_LABELS_LIST } from '../html.js';
 import { campaignRules, coreAbp, mythicStatTiers } from '../../model/campaign.js';
 import { area, check, roField } from '../fields.js';
-import { exprField, itemCheck } from '../rows.js';
+import { bonusTypeCell, exprField, itemCheck, removeAction } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
 import { abilityHarm } from '../../model/abilities.js';
 import { minus } from '../format.js';
@@ -23,8 +23,9 @@ import {
   ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL,
   BUILD_DERIVED_KEYS, BUILD_OPTIONAL_KEYS, BUILD_PERMANENT_GROUPS, BUILD_TEMPORARY,
   CORE_PROWESS_LEVELS, LEGENDARY_GIFTS, MENTAL_PROWESS_LEVELS, abpAttunement,
-  PHYSICAL_PROWESS_LEVELS, PROWESS_TRACKS, SAVE_BONUS_TYPES, abpGroupTotal, abpSourceLevel, bonusColumnName,
-  enhancementCapNote, tempEnhancementNote,
+  PHYSICAL_PROWESS_LEVELS, PROWESS_TRACKS, SAVE_BONUS_TYPES, abilityColumnChoices, abilityColumnName, abilityColumns,
+  abpGroupTotal, abpSourceLevel, bonusColumnName, bonusTypeKey, CUSTOM_BONUS_TYPE, enhancementCapNote, stacksWithItself,
+  tempEnhancementNote,
 } from '../../rules.js';
 
 
@@ -87,6 +88,8 @@ export function renderStatsPanel(model, ctx) {
 
   const over = ABILITIES.filter((a) => build[a].resolved?.enhancementWasted > 0);
   const tempOver = ABILITIES.filter((a) => build[a].resolved?.tempEnhancementWasted > 0);
+  const perm = ownColumns(model, 'permanent');
+  const temp = ownColumns(model, 'temporary');
 
   return `<div class="grid">
       <div class="band">
@@ -98,6 +101,7 @@ export function renderStatsPanel(model, ctx) {
           return `<button data-view data-buildcol="${k}" aria-pressed="${on}"
               title="${on ? 'Hide' : 'Show'} the ${esc(label)} column">${on ? 'Hide' : 'Show'} ${esc(label)}</button>`;
         }).join('')}
+          ${perm.add}
         </h3>
         <div class="tablewrap">
           <table class="build statcols">
@@ -108,12 +112,14 @@ export function renderStatsPanel(model, ctx) {
                 ? `<th class="num grouphead" colspan="${g.cols.length + (g.sum ? 1 : 0)}" title="${esc(g.hint || '')}">
                        ${esc(g.label)}${g.cap ? ` <span class="capnote">max +${g.cap}</span>` : ''}</th>`
                 : `<th colspan="${g.cols.length}"></th>`)).join('')}
+                ${perm.remove}
                 <th colspan="2"></th>
               </tr>
               <tr>
                 <th></th>
                 ${groups.map((g) => `${g.cols.map(([, label, full], i) => `<th class="num ${band(g, i)}" title="${esc(full)}">${esc(label)}</th>`).join('')}${
                 g.sum ? '<th class="num grouped groupend" title="What the group adds after its cap.">Used</th>' : ''}`).join('')}
+                ${perm.head}
                 <th class="num" title="Bonuses forwarded here by a rule written somewhere else on the sheet">Fwd</th>
                 <th class="num">Total</th>
               </tr>
@@ -128,7 +134,8 @@ export function renderStatsPanel(model, ctx) {
                       title="${esc(r.enhancementWasted ? enhancementCapNote(r)
     : `${g.cols.map(([k]) => (k === 'gear' ? Math.max(Number(build[ab][k]) || 0, r.gearItems || 0)
       : Number(build[ab][k]) || 0)).join(' + ')} = ${r[g.sum] ?? 0}`)}">${esc(r[g.sum] ?? 0)}</td>` : ''}`).join('')}
-                  <td class="num">${forwardedBadge(model, `${ab}.score`, { only: 'permanent' }) || '—'}</td>
+                  ${perm.cells(ab)}
+                  <td class="num">${forwardedBadge(model, `${ab}.score`, { only: 'permanent', pick: perm.pick }) || '—'}</td>
                   <td class="num total">${c.abilities[ab]?.score ?? r.total ?? 0}</td>
                 </tr>`;
             }).join('')}
@@ -137,6 +144,7 @@ export function renderStatsPanel(model, ctx) {
                 <td class="num">${pb.total}</td>
                 ${permCols.slice(1).map(() => '<td></td>').join('')}
                 ${groups.filter((g) => g.sum).map(() => '<td></td>').join('')}
+                ${perm.cols.map(() => '<td></td>').join('')}
                 <td></td><td></td>
               </tr>
             </tbody>
@@ -159,20 +167,22 @@ export function renderStatsPanel(model, ctx) {
           <strong>Attuned</strong> is a single +${ATTUNEMENT_BONUS}. It unlocks at
           level ${ATTUNEMENT_MIN_LEVEL}${unlocked ? '' : ' (locked)'}.
         </p>
+        ${OWN_COLUMNS_HINT}
         ${over.length ? `<p class="hint warn">
           ${over.map((a) => `<strong>${ABILITY_LABELS[a]}</strong>: ${esc(enhancementCapNote(build[a].resolved))}`).join(' ')}
         </p>` : ''}
       </section>
 
       <section class="panel">
-        <h3>Temporary bonuses</h3>
+        <h3>Temporary bonuses ${temp.add}</h3>
         <div class="tablewrap">
           <table class="build statcols">
             <thead>
-              <tr class="groups"><th colspan="${BUILD_TEMPORARY.length + 7}"></th></tr>
+              <tr class="groups"><th colspan="${BUILD_TEMPORARY.length + 1}"></th>${temp.remove}<th colspan="6"></th></tr>
               <tr>
                 <th></th>
                 ${BUILD_TEMPORARY.map(([, label, full]) => `<th class="num" title="${esc(full)}">${esc(label)}</th>`).join('')}
+                ${temp.head}
                 <th class="num" title="Temporary bonuses forwarded from elsewhere on the sheet, written as {str.temp += 2 as size} or {str.score += 2 as temp.size}.">Fwd</th>
                 <th class="num" title="Total of the temporary columns.">Temp</th>
                 <th class="num" title="Ability drain, entered on the Overview: it lowers the score">Drain</th>
@@ -189,8 +199,9 @@ export function renderStatsPanel(model, ctx) {
               return `<tr>
                   <th scope="row"><span class="abmark" data-ab="${ab}">${ABILITY_LABELS[ab]}</span></th>
                   ${BUILD_TEMPORARY.map(([k]) => cell(ab, k)).join('')}
-                  <td class="num">${`${forwardedBadge(model, `${ab}.score`, { only: 'temporary' })}${
-                    forwardedBadge(model, `${ab}.temp`)}` || '—'}</td>
+                  ${temp.cells(ab)}
+                  <td class="num">${`${forwardedBadge(model, `${ab}.score`, { only: 'temporary', pick: temp.pick })}${
+                    forwardedBadge(model, `${ab}.temp`, { pick: temp.pick })}` || '—'}</td>
                   <td class="num${r.tempEnhancementWasted ? ' over' : ''}"${
                   r.tempEnhancementWasted ? ` title="${esc(tempEnhancementNote(build[ab]))}"` : ''}>${
                   r.temporary || a.forwarded?.temporary || a.forwardedTemp?.total
@@ -229,6 +240,63 @@ export function renderStatsPanel(model, ctx) {
         ${optionalArray ? arrayPicksPanel(model) : ''}
       </div>
     </div>`;
+}
+
+/** Under the permanent table: what the added columns are for. */
+const OWN_COLUMNS_HINT = `<p class="hint">
+          The <strong>+ Bonus type</strong> picker adds a column for a bonus type the table does not have, such
+          as sacred. Bonuses of the same type do not stack. A forwarded bonus of that type, such as
+          <code>{str.sacred += 2}</code>, shows in its column.
+        </p>`;
+
+/** What a cell of an added column takes. */
+const OWN_CELL_TITLE = 'A number or a formula that reads level or mythic.tier, e.g. floor(level / 4).';
+
+/**
+ * The columns the player added to one of the two ability tables (`table`
+ * 'permanent' or 'temporary'), as the pieces the table is drawn from: `add`,
+ * the picker that adds one; `remove`, a × over each; `head`, each one's type
+ * picker; `cells(ab)`, each one's box for an ability, with the bonuses
+ * forwarded as its type beside it; and `pick`, what the Fwd column leaves to
+ * them (forwardedInto). A column of a type that stacks with itself takes no
+ * forwarded bonuses: they add on their own, so they stay in Fwd.
+ */
+function ownColumns(model, table) {
+  const list = `abilityColumns.${table}`;
+  const cols = abilityColumns(model.data, table).map((col) => (col && typeof col === 'object' ? col : {}));
+  const typeOf = (col) => bonusTypeKey(col.type);
+  const takes = (type) => !!type && !stacksWithItself(type);
+  const taken = [...new Set(cols.map(typeOf).filter(takes))];
+  const choices = abilityColumnChoices(table, cols.map((col) => col.type));
+  const add = `<select class="addcol" data-abcol-add="${table}" aria-label="Add a bonus type column"
+      title="Add a column for a bonus type.">
+      <option value="">+ Bonus type</option>
+      ${choices.map(([, name]) => `<option value="${esc(name)}">${esc(name)}</option>`).join('')}
+      <option value="${CUSTOM_BONUS_TYPE}" title="A bonus type of your own">Custom…</option>
+    </select>`;
+  const badges = (ab, type) => {
+    if (!takes(type)) return '';
+    const pick = { type };
+    return table === 'permanent' ? forwardedBadge(model, `${ab}.score`, { only: 'permanent', pick })
+      : `${forwardedBadge(model, `${ab}.score`, { only: 'temporary', pick })}${forwardedBadge(model, `${ab}.temp`, { pick })}`;
+  };
+  return {
+    cols,
+    add,
+    remove: cols.map((col, i) => `<th class="num owncol">${
+      removeAction('remove-ability-column', { table, col: i }, { what: `the ${abilityColumnName(col)} column`, tiny: true })}</th>`).join(''),
+    head: cols.map((col, i) => {
+      const others = cols.filter((_, j) => j !== i).map((other) => other.type);
+      const options = abilityColumnChoices(table, others).map(([, name, short]) => [name, short, name]);
+      return `<th class="num owncol" title="${esc(abilityColumnName(col))}">${
+        bonusTypeCell(list, i, 'type', col.type ?? '', options, '—', `aria-label="Bonus type of column ${i + 1}"`)}</th>`;
+    }).join(''),
+    cells: (ab) => cols.map((col, i) => `<td class="num owncol">${
+      exprField(`data-item="${list}|${i}|${ab}" aria-label="${esc(`${ABILITY_LABELS[ab]}: ${abilityColumnName(col)}`)}"`, col[ab] ?? '', {
+        kind: 'expr-or-null', width: '3.2rem', value: col.resolved?.[ab], error: col.errors?.[ab], title: OWN_CELL_TITLE,
+      })}${badges(ab, typeOf(col))}</td>`).join(''),
+    pick: taken.length ? { notTypes: taken } : null,
+  };
 }
 
 /**

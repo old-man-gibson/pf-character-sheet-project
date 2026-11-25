@@ -42,7 +42,9 @@
  * either.
  */
 
-import { ABILITIES, ABILITY_LABELS, DERIVED, skillLabel } from '../rules.js';
+import {
+  ABILITIES, ABILITY_COLUMN_TABLES, ABILITY_LABELS, DERIVED, abilityColumnName, abilityColumns, skillLabel,
+} from '../rules.js';
 import { skillKey, slug } from './util.js';
 
 /** Where a change shows up, in the order the sheet's tabs run. */
@@ -187,6 +189,16 @@ function addAbilities(out, doc) {
       const partKey = `build.${key}.${field}`;
       entry(out, partKey, 'Stats', `${label} ${word}`, row[field]);
       parts.push(partKey);
+    }
+    // The columns the player added, by place: a column renamed is the same
+    // part, and its cells are what the player moves.
+    for (const table of row ? ABILITY_COLUMN_TABLES : []) {
+      abilityColumns(doc, table).forEach((col, i) => {
+        const partKey = `build.${key}.${table}.${i}`;
+        const word = `${abilityColumnName(col).toLowerCase()}${table === 'temporary' ? ' (temporary)' : ''}`;
+        entry(out, partKey, 'Stats', `${label} ${word}`, col?.[key] ?? null);
+        parts.push(partKey);
+      });
     }
     const forwarded = `ability.${key}.forwarded`;
     entry(out, forwarded, 'Stats', `${label} forwarded bonus`, block.forwarded?.permanent ?? null);

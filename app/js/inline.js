@@ -40,7 +40,7 @@ import {
   parse, evaluateFormula, collectReferences, resolvePath, FormulaError,
 } from './formula.js';
 import { formatNumber } from './formula-format.js';
-import { STACKING_TYPES, baseType, isAbpPair, stacksWithItself, typedGain, typedThere } from './rules.js';
+import { STACKING_TYPES, baseType, stackAt, stacksWithItself } from './rules.js';
 
 const TOKEN_RE = /\{([^{}]*)\}/g;
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_.]*$/;
@@ -854,40 +854,6 @@ export function resolveContributions(contributions, names, baseScope, targets, k
   // at each is remembered there (see forwardTargets), so it shows the amount
   // that arrived rather than one worked out against the sheet a pass later.
   return { totals, entries, errors, by, countedAt, overlapAt, absorbed, targets: targets || null };
-}
-
-/**
- * The bonuses at one destination, stacked: `{ total, counts, overlaps }`.
- * `counts` is the set of entries that add, `overlaps` maps an entry to how
- * much of it a column of its type (`columns`, `{type: value}`) already gave.
- */
-function stackAt(list, columns) {
-  let total = 0;
-  const best = new Map();      // type -> the entry holding the largest bonus
-  const counts = new Set();
-  const overlaps = new Map();
-  for (const e of list) {
-    if (e.value < 0 || stacksWithItself(e.type)) { total += e.value; counts.add(e); continue; }
-    const held = best.get(e.type);
-    // First one wins a tie, so the order a rule was written in decides which
-    // of two identical bonuses is shown as the one in force -- arbitrary
-    // either way, but stable, and it never changes under a later edit.
-    if (!held || e.value > held.value) best.set(e.type, e);
-  }
-  for (const e of best.values()) {
-    // A column that is an ABP pair takes the bonus into its typed half, up to
-    // the pair's cap (typedGain); `pair` goes with the overlap for the words.
-    const have = columns?.[e.type] ?? columns?.[baseType(e.type)];
-    const adds = typedGain(e.value, have);
-    const overlap = e.value - adds;
-    if (overlap) {
-      overlaps.set(e, { overlap, column: typedThere(have), ...(isAbpPair(have) ? { pair: have } : {}) });
-    }
-    if (adds <= 0) continue;
-    total += adds;
-    counts.add(e);
-  }
-  return { total, counts, overlaps };
 }
 
 /**

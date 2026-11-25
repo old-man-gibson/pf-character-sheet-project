@@ -2627,6 +2627,19 @@ table.build.statcols th.num, table.build.statcols td.num, table.build.statcols t
   width: 3.2rem; min-width: 3.2rem; text-align: center;
 }
 table.build.statcols input[type="number"] { width: 100%; box-sizing: border-box; }
+/* A column the player added: its bonus type's picker (or its own name) as the
+   header, its × in the band above, and the picker that adds one beside the
+   panel's heading. */
+table.build.statcols th.owncol, table.build.statcols td.owncol { width: 4.4rem; min-width: 4.4rem; }
+table.build th.owncol select, table.build th.owncol input.owntype {
+  width: 100%; min-width: 0; font-size: 0.7rem; padding: 2px 3px;
+}
+table.build tr.groups th.owncol { height: auto; padding: 0 0 2px; }
+.panel > h3 > select.addcol {
+  flex: none; width: auto; margin-left: auto; padding: 3px 6px;
+  font-size: 0.76rem; letter-spacing: 0; text-transform: none; font-weight: 500;
+}
+.panel > h3 > button + select.addcol { margin-left: 0; }
 
 /* ABP and gear are one bonus type sharing one cap: banded together, with the
    group's own total closing the band. */
