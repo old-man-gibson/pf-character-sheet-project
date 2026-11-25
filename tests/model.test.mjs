@@ -1747,28 +1747,24 @@ console.log('companions -- a casting conjured companion keeps its own spell poin
     [k().casting.cl, k().casting.spellPoints, pool().max], [6, 9 + cha, 9 + cha]);
   check('one pool still', c.trackers.filter((t) => t.pool === 'sp:conjured').length, 1);
 
-  // Its tradition: every drawback is a boon; one not written as a boon is
-  // spell points, on the ladder read at its 9 Hit Dice (2, then 4 in all).
+  // Its tradition: the drawbacks left give spell points by their row of the
+  // tradition table at its 9 Hit Dice -- two drawbacks, row 2: 1 + 9/3 = 4.
   c.listAdd('conjured.0.tradition.drawbacks', 'Somatic Casting');
   c.listAdd('conjured.0.tradition.drawbacks', 'Verbal Casting');
-  check('two drawbacks, no boons written: both as spell points',
-    [k().casting.boons, k().casting.boonSteps, k().casting.boonSP, k().casting.spellPoints, pool().max],
-    [2, 2, 4, 9 + cha + 4, 9 + cha + 4]);
+  check('two drawbacks, no boons written: row 2 as spell points',
+    [k().casting.left, k().casting.traditionSP, k().casting.spellPoints, pool().max],
+    [2, 4, 9 + cha + 4, 9 + cha + 4]);
   c.listAdd('conjured.0.tradition.boons', 'Easy Focus');
-  check('a boon written in the list takes one back', [k().casting.boonSteps, k().casting.boonSP, k().casting.spellPoints], [1, 2, 9 + cha + 2]);
-  c.set('conjured.0.tradition.boonSP', '0');
-  check('the box overrides the default', [k().casting.boonSteps, k().casting.spellPoints], [0, 9 + cha]);
-  c.set('conjured.0.tradition.boonSP', '5');
-  check('and is capped at the boons there are', [k().casting.boonSteps, k().casting.boonSP], [2, 4]);
-  c.set('conjured.0.tradition.boonSP', '');
-  check('blank is the default again', k().casting.boonSteps, 1);
-  // A drawback feat buys off two drawbacks, as on the character's tradition.
-  c.listAdd('conjured.0.tradition.drawbacks', 'Card Casting');
+  check('a boon costs two drawbacks', [k().casting.boons, k().casting.left, k().casting.traditionSP, k().casting.spellPoints],
+    [1, 0, 0, 9 + cha]);
+  c.listAdd('conjured.0.tradition.drawbacks', 'Card Casting x2');
+  check('two more drawbacks: row 2 again', [k().casting.left, k().casting.traditionSP], [2, 4]);
+  // A drawback feat costs two drawbacks too, as on the character's tradition.
   c.listAdd('conjured.0.tradition.boughtOff', 'Rainbow Efficiency [Deck]');
-  check('a drawback feat takes two boons, not one', [k().casting.drawbacks, k().casting.boughtOff, k().casting.boons, k().casting.boonSteps], [3, 1, 1, 0]);
+  check('so does a drawback feat', [k().casting.drawbacks, k().casting.boughtOff, k().casting.left, k().casting.traditionSP], [4, 1, 0, 0]);
   c.listRemove('conjured.0.tradition.boughtOff', 0);
+  check('and gives them back when removed', [k().casting.left, k().casting.traditionSP], [2, 4]);
   c.listRemove('conjured.0.tradition.drawbacks', 2);
-  check('and gives them back when removed', k().casting.boons, 2);
   check('a picture is kept by address', (c.set('conjured.0.image', 'https://example.test/orb.png'), c.toJSON().conjured[0].image), 'https://example.test/orb.png');
   // Back to a bare tradition for the checks below.
   c.listRemove('conjured.0.tradition.boons', 0);
@@ -1809,7 +1805,7 @@ console.log('companions -- a casting conjured companion keeps its own spell poin
 
   // Its own casting tradition: a name, and drawbacks and boons as prose.
   check('a companion starts with no tradition: natural casting', c.data.conjured[0].tradition,
-    { name: '', drawbacks: [], boughtOff: [], boons: [], boonSP: '' });
+    { name: '', drawbacks: [], boughtOff: [], boons: [] });
   const chaBefore = k().scores.cha.total;
   c.set('conjured.0.tradition.name', 'Fey Magic');
   c.listAdd('conjured.0.tradition.drawbacks', 'Verbal Casting');
@@ -1822,10 +1818,12 @@ console.log('companions -- a casting conjured companion keeps its own spell poin
   const saved = JSON.parse(JSON.stringify(c.toJSON()));
   check('saved and reopened, tradition and all',
     new Character(saved).data.conjured[0].tradition,
-    { name: 'Fey Magic', drawbacks: ['Verbal Casting'], boughtOff: [], boons: ['Easy Focus {conjured.cha.score += 2}'], boonSP: '' });
+    { name: 'Fey Magic', drawbacks: ['Verbal Casting'], boughtOff: [], boons: ['Easy Focus {conjured.cha.score += 2}'] });
   delete saved.conjured[0].tradition;
   check('a companion saved before traditions grows an empty one',
-    new Character(saved).data.conjured[0].tradition, { name: '', drawbacks: [], boughtOff: [], boons: [], boonSP: '' });
+    new Character(saved).data.conjured[0].tradition, { name: '', drawbacks: [], boughtOff: [], boons: [] });
+  saved.conjured[0].tradition = { name: '', drawbacks: ['Verbal Casting'], boughtOff: [], boons: [], boonSP: '0' };
+  check('an old split box is dropped on load', 'boonSP' in new Character(saved).data.conjured[0].tradition, false);
   c.set('conjured.0.archetypes.mage', false);
   c.setItem('conjured.0.talents', 0, 'name', 'Not yet chosen');
   check('the tradition goes quiet when the companion stops casting', k().scores.cha.total, chaBefore);
@@ -3277,7 +3275,7 @@ console.log('a bonus raises the essence capacity');
   check('and it goes with the bonuses', [k().totalCap, k().capForwarded, k().overCap], [3, 0, ['Gloves']]);
 }
 
-console.log('the Veilweaving sphere gives essence capacity by character level');
+console.log('a veilweaver has essence capacity by character level');
 {
   const c = new Character(blankDocument({ name: 'Weaver', level: 3 }));
   c.data.classes = [
@@ -3287,19 +3285,20 @@ console.log('the Veilweaving sphere gives essence capacity by character level');
   c.recompute();
   const k = () => c.data.akashic.calc;
   const row = () => c.data.akashic.classes[0];
-  check('without the sphere there is no capacity', [k().sphereCap, k().totalCap], [0, 0]);
+  check('a named veilweaving class has the base capacity without the sphere', [k().baseCap, k().totalCap, row().totalCap], [1, 1, 1]);
+  c.setItem('akashic.classes', 0, 'name', '');
+  check('with no class and no sphere there is no capacity', k().totalCap, 0);
+  c.setItem('akashic.classes', 0, 'name', 'Wizard');
 
   c.listAdd('training.magic.classes', {
     name: 'Wizard', type: 'High', talentsPerLevel: null, mod1: 'Int', mod2: null, classLevelsOverride: 3,
     levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: i === 0 ? 'Veilweaving Sphere' : null, sphere: i === 0 ? 'Veilweaving' : null, notes: null })),
   });
   check('with it, 1 at 3rd level, on the class row too',
-    [k().sphereCap, k().totalCap, row().totalCap, c.scope().essence.cap], [1, 1, 1, 1]);
+    [k().baseCap, k().totalCap, row().totalCap, c.scope().essence.cap], [1, 1, 1, 1]);
   check('a row with no class takes nothing from it', c.data.akashic.classes[1].totalCap, 0);
-  check('the class row says where its cap comes from',
-    subsystemPanels.akashicPanel(c, {}).includes('data-tip="The Veilweaving sphere gives a capacity of 1, plus 1 per 6 character levels."'), true);
   check('1 more at 6th, 12th and 18th level, and no more past 20th',
-    [1, 5, 6, 11, 12, 17, 18, 20, 25].map((level) => { c.set('identity.level', level); return k().sphereCap; }),
+    [1, 5, 6, 11, 12, 17, 18, 20, 25].map((level) => { c.set('identity.level', level); return k().baseCap; }),
     [1, 1, 2, 2, 3, 3, 4, 4, 4]);
 
   c.set('identity.level', 12);
@@ -3312,7 +3311,7 @@ console.log('the Veilweaving sphere gives essence capacity by character level');
   c.setItem('training.magic.classes.0.levels', 2, 'talent', 'Capacity Increase');
   c.setItem('training.magic.classes.0.levels', 2, 'sphere', 'Veilweaving');
   c.setItem('training.magic.classes.0.levels', 2, 'notes', '{essence.cap += 1}');
-  check('a talent raises it', [k().sphereCap, k().capForwarded, k().totalCap], [3, 1, 4]);
+  check('a talent raises it', [k().baseCap, k().capForwarded, k().totalCap], [3, 1, 4]);
   check('reopening keeps it, and saves no cap of its own',
     (() => {
       const saved = JSON.parse(JSON.stringify(c.toJSON()));
@@ -6608,12 +6607,11 @@ console.log('spheres training reproduces the sheet');
   check('angou drawbacks (x2 counts double)', m.drawbackCount, 8);
   check('angou bought off', m.boughtOffCount, 1);
   check('angou effective', m.effectiveDrawbacks, 6);
-  check('angou SP tier', m.spTier, 5);
-  check('angou boons -- every effective drawback is one', m.boons, 6);
-  // Two casting classes, not the workbook's three: its Wizard block has no
-  // Wizard levels, and a class not taken is not a casting class.
-  check('angou tradition SP (2 casting classes)', m.traditionSP, 8);
-  check('angou total SP', m.totalSP, 79);
+  // Five of the six on Expanded Essence Pool, the sixth as spell points at
+  // his 20 levels in casting classes: row 1, 1 + 20/6 = 4. Nothing is
+  // multiplied by his casting classes; the workbook's 12 was 4 x 3.
+  check('angou tradition SP (row 1 at 20 casting levels)', m.traditionSP, 4);
+  check('angou total SP', m.totalSP, 75);
 
   // Bryva: the other internally-consistent workbook.
   const b = new Character(load('bryva'));
@@ -6640,8 +6638,8 @@ console.log('spheres training reproduces the sheet');
   const sp0 = c.data.training.magic.totalSP;
   c.listAdd('training.magic.tradition.boughtOff', 'Somatic Casting');
   check('buying off a drawback costs 2 effective', c.data.training.magic.effectiveDrawbacks, 4);
-  check('which drops the boons with it', c.data.training.magic.boons, 4);
-  check('and the tradition SP', c.data.training.magic.totalSP, sp0 - 8);
+  check('all four left go to Expanded Essence Pool', c.data.training.magic.essenceDrawbacks, 4);
+  check('so the tradition SP is gone', c.data.training.magic.totalSP, sp0 - 4);
   c.listRemove('training.magic.tradition.boughtOff', 1);
   check('restored', c.data.training.magic.totalSP, sp0);
 }
@@ -7682,11 +7680,11 @@ console.log('training values reach the formula scope');
   const c = new Character(load('angou'));
   const scope = c.scope();
   check('caster.level', scope.caster.level, 20);
-  check('caster.sp', scope.caster.sp, 79);
+  check('caster.sp', scope.caster.sp, 75);
   check('practitioner.dc', scope.practitioner.dc, 36);
   check('unarmed.talents', scope.unarmed.talents, 19);
   const t = c.addTracker({ name: 'SP Pool', maxFormula: 'caster.sp' });
-  check('tracker can read SP', t.max, 79);
+  check('tracker can read SP', t.max, 75);
 }
 
 console.log('gestalt classes drive save bases');
@@ -11763,7 +11761,7 @@ console.log('blended training -- one class, one pool, two progressions');
   // None of the per-side numbers move: they are still computed off the block
   // sitting on that side, which is why the pair is kept rather than merged.
   check('caster level unmoved', a.data.training.magic.globalCL, 20);
-  check('spell points unmoved', a.data.training.magic.totalSP, 79);
+  check('spell points unmoved', a.data.training.magic.totalSP, 75);
   check('practitioner DC unmoved', a.data.training.combat.practitionerDC, 36);
   check('bryva too', [new Character(load('bryva')).blendedClasses().map((p) => p.name)],
     [['Blacksmith']]);
@@ -12036,30 +12034,21 @@ console.log('blended guile training -- a pool that reaches skill talents, and a 
     [lay().toggles, lay().focus], [false, 'any']);
 }
 
-console.log('tradition boons -- one pool of steps, split between points and essence');
+console.log('tradition essence on the Akashic tab -- the Essence Boon cell');
 {
-  // Every effective drawback is a boon, and they are one pool on one ladder:
-  // step n is worth what it adds to the n-1 below it, and the ladder tops out
-  // at five, so a sixth step adds nothing.
+  // The tradition's own rules are in tradition-rules.test.mjs. Angou's six
+  // drawbacks left: five on Expanded Essence Pool (row 5 at 20 levels in
+  // casting classes, 20 essence), one as spell points (row 1, 4).
   const c = new Character(load('angou'));
   const m = () => c.data.training.magic;
-  check('six effective drawbacks are six boons', [m().effectiveDrawbacks, m().boons], [6, 6]);
-  check('worth the ladder, which caps at five steps', m().boonPoints, 20);
-  check('split by default the way the sheets were written -- the ones past the '
-    + 'fifth as points, the rest as essence',
-  m().traditionPools.map((p) => [p.label, p.spSteps, p.sp, p.essenceSteps, p.essence]),
-  [['Boons 6', 1, 8, 5, 16]]);
-  // His sheet cached 12 and 83: it counted a Wizard block he has no levels
-  // in as a third casting class.
-  check("which is 4 short of the 12 tradition SP his sheet cached, and of its total",
-    [m().traditionSP, m().totalSP, m().sheet.totalSP], [8, 79, 83]);
-  // His workbook reads the ladder twice -- 20 as the Akashic tab's Essence Boon
-  // *and* 4 x 3 classes as spell points, 32 points from a 20-point ladder. One
-  // pool can only read it once, so the essence is 4 short of what he wrote.
+  check('his tradition: 4 spell points and 20 essence', [m().traditionSP, m().traditionEssence], [4, 20]);
+  // His sheet cached 12 and 83: 4 spell points for each of three casting
+  // classes, one of them a Wizard block with no levels.
+  check('the workbook counted the spell points three times', [m().totalSP, m().sheet.totalSP], [75, 83]);
   check('the essence reaches the akashic tab',
-    [c.data.akashic.calc.traditionBoon, c.data.akashic.calc.sources], [16, 16]);
-  check('and the shortfall against his typed pool is flagged, not hidden',
-    c.data.akashic.calc.sourcesShort, 16 - c.data.akashic.calc.pool);
+    [c.data.akashic.calc.traditionBoon, c.data.akashic.calc.sources], [20, 20]);
+  check('and matches his typed pool',
+    c.data.akashic.calc.sourcesShort, 20 - c.data.akashic.calc.pool);
   {
     // The Essence Boon cell: blank is the tradition's essence, and a number or
     // a formula typed there stands instead. The workbook's own 20 never
@@ -12067,13 +12056,13 @@ console.log('tradition boons -- one pool of steps, split between points and esse
     const k = () => c.data.akashic.calc;
     check("the workbook's own figure is cleared", [c.data.akashic.essence.boon, k().boonAuto], [0, true]);
     c.set('akashic.essence.boon', 30);
-    check("a typed boon stands in place of the tradition's", [k().typed.boon.value, k().sources, k().traditionBoon], [30, 30, 16]);
+    check("a typed boon stands in place of the tradition's", [k().typed.boon.value, k().sources, k().traditionBoon], [30, 30, 20]);
     const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
     check('and is kept on reopen', [again.data.akashic.essence.boon, again.data.akashic.calc.sources], [30, 30]);
     c.set('akashic.essence.boon', 'level * 2 + 1');
     check('or a formula', [k().typed.boon.value, k().sources], [c.data.identity.level * 2 + 1, c.data.identity.level * 2 + 1]);
     c.set('akashic.essence.boon', null);
-    check("blank is the tradition's again", [k().typed.boon.value, k().sources], [16, 16]);
+    check("blank is the tradition's again", [k().typed.boon.value, k().sources], [20, 20]);
   }
   {
     // A casting class's caster level takes a formula: a prestige class that
@@ -12097,42 +12086,6 @@ console.log('tradition boons -- one pool of steps, split between points and esse
     check('its own caster level in the box is the Planner’s count', settled(), [want, want, want, want]);
     v.setItem('vancian.classes', at, 'casterLevelOverride', 'min(level, vancian.cl + 2)');
     check('and so is every class’s, where this one is the highest', settled(), [want, want, want, want]);
-  }
-
-  // The split moves a step at a time, and the halves always add back up.
-  c.set('training.magic.tradition.boonSP', 6);
-  check('all of it as spell points, multiplied per casting class',
-    [m().traditionSP, m().traditionEssence], [40, 0]);
-  c.set('training.magic.tradition.boonSP', 0);
-  check('all of it as essence, unmultiplied', [m().traditionSP, m().traditionEssence], [0, 20]);
-  c.set('training.magic.tradition.boonSP', 3);
-  const p = () => m().traditionPools[0];
-  check('a middling split splits the steps, not the points',
-    [p().spSteps, p().essenceSteps], [3, 3]);
-  check('and the two halves still come to the ladder',
-    p().sp / m().castingClassCount + p().essence, m().boonPoints);
-  c.set('training.magic.tradition.boonSP', 1);
-  check('restored', [m().totalSP, m().traditionEssence], [79, 16]);
-
-  // Buying a drawback off drops the count for a moment. The split is clamped
-  // to what is left, but the number the player wrote survives the dip.
-  c.set('training.magic.tradition.boonSP', 5);
-  check('five of six as spell points', m().traditionSP, 40);
-  c.listAdd('training.magic.tradition.boughtOff', 'Somatic Casting');
-  check('buying one off leaves four to split, and clamps to them',
-    [m().boons, m().traditionPools[0].spSteps, m().traditionSP], [4, 4, 28]);
-  c.listRemove('training.magic.tradition.boughtOff', 1);
-  check('and the fifth comes back when the boon does',
-    [m().boons, m().traditionPools[0].spSteps, m().traditionSP], [6, 5, 40]);
-  c.set('training.magic.tradition.boonSP', 1);
-
-  for (const [id, boons, sp, essence] of [
-    ['angou', 6, 8, 16], ['narockro', 6, 2, 9], ['saburo', 8, 5, 4],
-    ['nico', 4, 0, 11], ['bryva', 0, 0, 0],
-  ]) {
-    const x = new Character(load(id)).data.training.magic;
-    check(`${id}: ${boons} boons -> ${sp} SP and ${essence} essence`,
-      [x.boons, x.traditionSP, x.traditionEssence], [boons, sp, essence]);
   }
 }
 

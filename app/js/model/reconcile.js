@@ -508,6 +508,17 @@ export const FORMULA_FIELDS = [
     },
   },
   {
+    // The casting tradition's drawbacks on Expanded Essence Pool.
+    key: 'essenceDrawbacks', source: 'player', where: 'the Magic Spheres tab',
+    collect: (model) => {
+      const m = model.data.training?.magic;
+      return stringFormula(m?.tradition?.essenceDrawbacks) ? [{
+        id: 'tradition-essence-drawbacks', place: 'essenceDrawbacks', name: 'Drawbacks on Expanded Essence Pool',
+        formula: m.tradition.essenceDrawbacks, value: m.essenceDrawbacksNum, error: m.essenceDrawbacksError,
+      }] : [];
+    },
+  },
+  {
     // Bonus skill points per level, which may read only `level`.
     key: 'skillBudget', source: 'skill', where: 'the Skills tab',
     collect: (model) => {

@@ -58,9 +58,10 @@ const COMPUTED_PATHS = [
   'training.combat.practitionerDC',
   'training.magic.msb', 'training.magic.msd', 'training.magic.globalCL', 'training.magic.globalDC',
   'training.magic.concentration', 'training.magic.totalSP', 'training.magic.availableSP',
-  'training.magic.classSP.*.sp', 'training.magic.boonPoints', 'training.magic.traditionEssence',
-  'training.magic.traditionSP', 'training.magic.traditionPools.*.essence',
-  'training.magic.traditionPools.*.points', 'training.magic.traditionPools.*.sp',
+  'training.magic.classSP.*.sp', 'training.magic.traditionEssence', 'training.magic.traditionSP',
+  'training.magic.castingLevels', 'training.magic.traditionLevels', 'training.magic.essenceDrawbacks',
+  'training.magic.essenceDrawbacksAuto', 'training.magic.essenceDrawbacksNum', 'training.magic.essenceDrawbacksError',
+  'training.magic.spDrawbacks', 'training.magic.unusedDrawbacks',
 ].map((p) => p.split('.'));
 
 /**

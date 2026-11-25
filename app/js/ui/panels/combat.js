@@ -27,7 +27,7 @@ import {
   TEMPLATE_TYPES, sphereForwardKey, sphereNames, trackSphereNames, trackTalentSide, TRAINING_SIDES, sideSphereNames,
 } from '../../model.js';
 import {
-  COMBAT_SPHERES, SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule,
+  COMBAT_SPHERES, SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRADITION_ROWS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule,
 } from '../../rules.js';
 import { check, field, linkField, roField, select, text } from '../fields.js';
 import {
@@ -360,21 +360,14 @@ function magicTraditionPanel(model, m) {
         The card table charges it on each cast; elsewhere, apply it yourself.
         Drawback Freedom (Terrain Casting), as a mythic path ability or a feat, turns it off.</p>`) : ''}
 
-      <h4 class="subhead">Bought off with drawback feats <span class="badge">${m.boughtOffCount ?? 0}</span></h4>
+      <h4 class="subhead">Boons <span class="badge">${m.boughtOffCount ?? 0}</span></h4>
       ${textList(blist, tr.boughtOff || [])}
-      <div>${addButton(blist, 'Add bought-off drawback', '')}</div>
+      <div>${addButton(blist, 'Add boon', '')}</div>
+      <p class="hint">Each boon costs 2 drawbacks. A drawback feat taken as a boon goes here too.</p>
 
-      <div class="statline" style="margin-top:8px"><span class="label">Effective drawbacks</span>
+      <div class="statline" style="margin-top:8px"><span class="label">Drawbacks left</span>
         <span class="value">${m.drawbackCount ?? 0} − 2×${m.boughtOffCount ?? 0} = ${m.effectiveDrawbacks ?? 0}</span></div>
-      ${line('Boons', m.boons ?? 0, true)}
-      ${boonSplit(m)}
-      <p class="hint">
-        The ladder is 1 → 1+level/6, 2 → 1+level/3, 3 → level/2, 4 → 1+level/1.5,
-        5 → level. It stops at 5. Each boon grants the difference between its step and
-        the one below it. Spell points are granted per casting class
-        (${m.castingClassCount ?? 0}). Essence is one pool and appears on the Akashic
-        tab as the Essence Boon.
-      </p>
+      ${traditionSpendLines(m)}
       <div class="statline"><span class="label">Advanced Magic Training</span>
         <span class="value">${check('training.magic.amt', m.amt)}</span></div>
       <div class="statline"><span class="label">Mythic AMT</span>
@@ -383,43 +376,32 @@ function magicTraditionPanel(model, m) {
   }
 
   /**
-   * How each tradition pool was spent: so many of its steps as spell points,
-   * the rest as essence. Two fields rather than a choice per step, because
-   * what a step is worth depends only on how many are taken, not on which.
+   * What the drawbacks left come to: the ones on Expanded Essence Pool as
+   * essence, the rest as spell points, each by its own row of the table.
    */
-function boonSplit(m) {
-    const pools = m.traditionPools || [];
-    if (!pools.length) {
-      return `${line('Tradition SP granted', 0, true)}
-        <p class="hint">Nothing to spend yet. A tradition grants one boon per drawback not
-          bought off by drawback feats.</p>`;
-    }
-    // The pool's label closes the key only so that two pools of one size are
-    // two controls when focus is put back after a render; the handler reads
-    // the first three parts.
-    const steps = (p, value, kind) => `<input type="number" min="0" max="${p.steps}"
-      value="${value}" data-split="training.magic.tradition.boonSP|${p.steps}|${kind}|${esc(p.label)}"
-      aria-label="${esc(p.label)}: steps as ${kind === 'sp' ? 'spell points' : 'essence'}">`;
-
-    // Each split is a steps box with what it comes to straight beside it, the
-    // pair under one heading; see table.build.boonsplit in sheet.css.
-    return `<h4 class="subhead">Granted, and how it was spent</h4>
-      <div class="tablewrap"><table class="build compact boonsplit">
-        <thead><tr><th scope="col">Pool</th>
-          <th scope="colgroup" colspan="2" class="splithead">As spell points</th>
-          <th scope="colgroup" colspan="2" class="splithead">As essence</th></tr></thead>
-        <tbody>${pools.map((p) => `<tr>
-          <th scope="row">${esc(p.label)} <span class="badge" title="Total of this pool's ${p.steps} steps.">${p.points}</span></th>
-          <td class="steps">${steps(p, p.spSteps, 'sp')}</td>
-          <td class="gives total">${p.sp} SP</td>
-          <td class="steps">${steps(p, p.essenceSteps, 'essence')}</td>
-          <td class="gives total">${p.essence}</td>
-        </tr>`).join('')}</tbody>
-      </table></div>
-      <p class="hint">These are steps, not points. Each pool's steps add up to its ladder
-        however they are split.</p>
-      ${line('Tradition SP granted', m.traditionSP ?? 0, true)}
-      ${line('Essence granted', m.traditionEssence ?? 0, true)}`;
+function traditionSpendLines(m) {
+    const tr = m.tradition || {};
+    const reads = m.traditionLevels || { sp: 0, essence: 0 };
+    const spRow = Math.min(TRADITION_ROWS, m.spDrawbacks ?? 0);
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    return `${line('Levels in casting classes', m.castingLevels ?? 0)}
+      ${field('Drawbacks on Expanded Essence Pool', exprField('data-set="training.magic.tradition.essenceDrawbacks"',
+    tr.essenceDrawbacks ?? '', {
+      kind: 'expr-or-null',
+      width: '4.2rem',
+      value: m.essenceDrawbacksNum,
+      error: m.essenceDrawbacksError,
+      placeholder: String(m.essenceDrawbacksAuto ?? 0),
+      title: 'Blank is up to 5 for a character who weaves veils, otherwise 0. Or enter a number or a formula.',
+    }))}
+      ${line(`Essence: ${plural(m.essenceDrawbacks ?? 0, 'drawback')} at ${plural(reads.essence, 'level')}`, m.traditionEssence ?? 0, true)}
+      ${line(`Spell points: ${plural(spRow, 'drawback')} at ${plural(reads.sp, 'level')}`, m.traditionSP ?? 0, true)}
+      ${m.unusedDrawbacks ? `<p class="hint warn">${plural(m.unusedDrawbacks, 'drawback')} past the fifth ${m.unusedDrawbacks === 1 ? 'gives' : 'give'} nothing.</p>` : ''}
+      <p class="hint">Drawbacks give spell points, or essence on Expanded Essence Pool, by this table:
+        1 → 1 + 1 per 6 levels, 2 → 1 + 1 per 3 levels, 3 → 1 per odd level,
+        4 → 1 + 1 per 1.5 levels, 5 → 1 per level. Levels are levels in casting classes.
+        With Advanced Magic Training, every level counts for spell points and half the other
+        levels count for essence. Essence appears on the Akashic tab as the Essence Boon.</p>`;
   }
 
 
