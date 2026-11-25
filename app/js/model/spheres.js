@@ -2177,7 +2177,6 @@ export function recomputeSphereRows(model) {
   const t = model.data.training;
   if (!t) return;
   const c = model.data;
-  const level = Number(c.identity.level) || 0;
   const bab = Number(c.attack.bab) || 0;
   // The stored row for a sphere, or the blank one the table shows for it.
   const rowsOf = (sideKey, blank) => {
@@ -2232,7 +2231,9 @@ export function recomputeSphereRows(model) {
         dcBonusError: dcPlus.error,
         babForwarded,
         dcForwarded,
-        attack: Math.min(Math.floor(attackBase + rank.value + babForwarded), level),
+        // No ceiling: a BAB+ or a forwarded bonus adds even where the base
+        // already equals the character's level.
+        attack: Math.floor(attackBase + rank.value + babForwarded),
         dc: dc + dcPlus.value + dcForwarded,
       };
     });

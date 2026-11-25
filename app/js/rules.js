@@ -1266,6 +1266,16 @@ export const MYTHIC_TIER_LEVEL = (() => {
   return out;
 })();
 
+/**
+ * The trials the core rules ask to reach `tier` from the one below: half the
+ * tier, rounded up (2nd 1, 3rd 2, 4th 2, 5th 3 … 10th 5), carried on past
+ * 10th the same way. The 1st tier is gained at ascension and takes none.
+ */
+export function coreTrialsForTier(tier) {
+  const t = Math.floor(Number(tier) || 0);
+  return t <= 1 ? 0 : Math.ceil(t / 2);
+}
+
 export const MYTHIC_TRADITION_SLOTS = [
   { key: 'drawback1', label: 'Drawback 1', kind: 'drawback', mandatory: true, unlocks: 'boon1' },
   { key: 'drawback2', label: 'Drawback 2', kind: 'drawback', unlocks: 'boon2' },
