@@ -23,6 +23,7 @@ import { forwardedBadge } from '../badges.js';
 import { countsTowardLine } from '../counts-toward.js';
 import { fillNotesButton, noteField, talentCell, talentLegend } from '../talents.js';
 import { rollButton } from '../roll.js';
+import { abilityNote } from '../ability-note.js';
 import {
   TEMPLATE_TYPES, sphereForwardKey, sphereNames, trackSphereNames, trackTalentSide, TRAINING_SIDES, sideSphereNames,
 } from '../../model.js';
@@ -144,6 +145,7 @@ function trainingSide(model, sideKey, side) {
           ${blendTicks([sideKey], sideKey, ci, null, !!String(cls.name || '').trim())}
           ${removeButton(list, ci, { what: 'class' })}
         </div>
+        ${sideKey === 'combat' ? abilityNote(model, 'practitioner', ci) : ''}
         ${singleLadderTable(model, `${list}.${ci}.levels`, cls, spheres)}
       </div>`;
       }).join('')}

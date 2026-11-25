@@ -7,6 +7,7 @@
  * from here and import nothing from each other.
  */
 import { esc } from '../html.js';
+import { abilityNote } from '../ability-note.js';
 import { isAhead, rowLevel } from '../../model/feats.js';
 import { fromLevelField, fromLevelHead, plannedRow } from '../from-level.js';
 import { talentCell, foldingNote } from '../talents.js';
@@ -615,6 +616,7 @@ export function blendedPanel(model, pairs) {
           ${blendTicks(systems, owner.side, owner.index, counts,
     !!String(cls.name || '').trim())}
         </div>
+        ${systems.includes('combat') && martial ? abilityNote(model, 'practitioner', martial.index) : ''}
         ${skill ? ladderStack(model, list, owner.index, cls, systems, spheres)
     : singleLadderTable(model, `${list}.${owner.index}.levels`, cls, spheres, systems)}
       </div>`;

@@ -38,6 +38,7 @@ export * from './model/rest.js';
 export * from './model/templates.js';
 export * from './model/traits.js';
 export * from './model/spheres.js';
+export * from './model/class-abilities.js';
 export * from './model/note-fill.js';
 export * from './model/stats/saves.js';
 export * from './model/stats/defenses.js';

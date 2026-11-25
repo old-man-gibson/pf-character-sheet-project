@@ -14,6 +14,7 @@
 import { esc, val } from '../html.js';
 import { itemArea, prose, renderedProse } from '../prose.js';
 import { fillNotesButton, talentLegend, talentMark, foldingNote, markedName, noteFillAttrs } from '../talents.js';
+import { abilityNote } from '../ability-note.js';
 import { forwardedBadge } from '../badges.js';
 import { D20_ICON, rollButton } from '../roll.js';
 import { DEFAULT_ROLL_FORMAT, rollText } from '../../roll20.js';
@@ -230,7 +231,7 @@ export function akashicPanel(model, ctx) {
       ${veilDatalists(a)}
       <div class="flow span2">
         ${essencePanel(ctx, model, a)}
-        ${akashicClassesPanel(a)}
+        ${akashicClassesPanel(model, a)}
       </div>
       ${akashicSlotsPanel(model, ctx, a)}
       ${akashicKheshigPanel(model, ctx, a)}
@@ -319,7 +320,7 @@ function essFig(v, k, sub = '', badge = '') {
    * The sources add into the pool, and the caps come off the class blocks, so
    * the two belong on one row rather than in a narrow column each.
    */
-function akashicClassesPanel(a) {
+function akashicClassesPanel(model, a) {
     const list = 'akashic.classes';
     // Only the filled class blocks are worth a row; the template's six leave
     // five empty ones behind on most sheets. A row added here is shown from
@@ -362,6 +363,7 @@ function akashicClassesPanel(a) {
               ${rowRemove(list, i)}
             </tr>`).join('') || `<tr><td colspan="8" class="empty">No veilweaving class.</td></tr>`}
           </tbody></table>
+          ${rows.map(({ i }) => abilityNote(model, 'veilweaving', i)).join('')}
           <div class="pair" style="margin-top:6px">
             ${addButton(list, 'Add class', {
     name: '', mod: null, levelOverride: null, essence: null, essenceCap: 0, bonusCap: 0, added: true,

@@ -13,6 +13,11 @@ export const ABILITY_LABELS = {
   str: 'Str', dex: 'Dex', con: 'Con', int: 'Int', wis: 'Wis', cha: 'Cha',
 };
 
+export const ABILITY_NAMES = {
+  str: 'Strength', dex: 'Dexterity', con: 'Constitution',
+  int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma',
+};
+
 /** Ability score -> modifier. The single most-used rule in the system. */
 export const abilityMod = (score) => Math.floor((Number(score || 0) - 10) / 2);
 

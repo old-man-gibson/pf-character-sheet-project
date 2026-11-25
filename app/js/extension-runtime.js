@@ -16,11 +16,11 @@
  */
 
 import * as model from './model.js';
-import { setClassEssenceTables, setOptionCatalogues } from './model.js';
+import { setClassAbilities, setClassEssenceTables, setOptionCatalogues } from './model.js';
 import {
   TABLES, extensionStore, loadBundledExtensions, activeExtensions, activeBlocks, mergeTables, registerTables,
   optionCataloguesFrom, optionCataloguesFromTables, classFeatureTextFromTables, namedTextFrom, companionArchetypesFrom,
-  castingTablesFromTables, essenceTablesFromTables,
+  castingTablesFromTables, essenceTablesFromTables, classAbilitiesFromPacks,
   isPackKey, packsWorthMoving,
 } from './extensions.js';
 // Straight from the module rather than through model.js, which does not
@@ -58,6 +58,14 @@ export function registerPacks(packs) {
   } catch (err) {
     failed.push({ name: 'essenceTablesFromTables', error: err?.message || String(err) });
     setClassEssenceTables([]);
+  }
+  // The veilweaving and practitioner ability each class's and archetype's
+  // pages name, for the note beside a pick that differs.
+  try {
+    setClassAbilities(classAbilitiesFromPacks(packs));
+  } catch (err) {
+    failed.push({ name: 'classAbilitiesFromPacks', error: err?.message || String(err) });
+    setClassAbilities([]);
   }
   // The option menus a pack carries as blocks, so a feature column pointing
   // at one by name finds it as soon as its pack is switched on.

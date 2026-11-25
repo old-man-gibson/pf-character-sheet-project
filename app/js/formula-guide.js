@@ -23,7 +23,7 @@
  */
 
 import { SCOPE_INFO, resolvePath } from './formula.js';
-import { isSheetAlias } from './rules.js';
+import { ABILITY_NAMES, isSheetAlias } from './rules.js';
 import { COMPANION_KINDS, companionHeading } from './companions.js';
 import {
   highlight, highlightAgainst, highlightFlagging, workings, formatNumber, contextualNote,
@@ -50,10 +50,6 @@ import { linkedText } from './ui/links.js';
  * ------------------------------------------------------------------ */
 
 const ABILITY_KEYS = new Set(['str', 'dex', 'con', 'int', 'wis', 'cha']);
-const ABILITY_NAMES = {
-  str: 'Strength', dex: 'Dexterity', con: 'Constitution',
-  int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma',
-};
 const ABILITY_ORDER = Object.fromEntries(Object.keys(ABILITY_NAMES).map((k, i) => [k, i]));
 const SAVE_NAMES = { fortitude: 'Fortitude', reflex: 'Reflex', will: 'Will' };
 // A companion's id: the kind's name, or the kind with a number appended for

@@ -2280,6 +2280,22 @@ const splitBracket = (s) => {
 const ARCHETYPE_ADVICE = /^(?:the following|these)\b[^.]*?\b(?:complement|are (?:recommended|suggested|good choices))/i;
 
 /**
+ * An archetype entry's name and the classes it is for: its Class field, or the
+ * bracket after its name ("Scout (Rogue)"). The bracket is dropped from the
+ * name only when it is the class. Familiar and companion archetypes name no
+ * class here.
+ */
+function archetypeClassesOf(entry) {
+  const full = str(entry?.name).trim();
+  if (!full) return { name: '', classes: [] };
+  const { name: bare, inner } = splitBracket(full);
+  const stated = fieldMap(entry).get('class') || '';
+  const classes = (stated ? stated.split(/\s*,\s*/) : [inner]).map((c) => c.trim()).filter(Boolean)
+    .filter((c) => !COMPANION_ARCHETYPE_KINDS.some((k) => k.cls.test(c)));
+  return { name: inner && classes.some((c) => lower(c) === lower(inner)) ? bare : full, classes };
+}
+
+/**
  * The archetypes a catalogue pack carries as reference entries, as the blocks
  * a player adds: one per class the entry names (its Class field, or the
  * bracket after its name, "Scout (Rogue)"). Every labelled paragraph is a
@@ -2288,15 +2304,8 @@ const ARCHETYPE_ADVICE = /^(?:the following|these)\b[^.]*?\b(?:complement|are (?
  * companion sums.
  */
 export function archetypeBlocksFromEntry(entry) {
-  const full = str(entry?.name).trim();
-  if (!full) return [];
-  const { name: bare, inner } = splitBracket(full);
-  const stated = fieldMap(entry).get('class') || '';
-  const classes = (stated ? stated.split(/\s*,\s*/) : [inner]).map((c) => c.trim()).filter(Boolean)
-    .filter((c) => !COMPANION_ARCHETYPE_KINDS.some((k) => k.cls.test(c)));
+  const { name, classes } = archetypeClassesOf(entry);
   if (!classes.length) return [];
-  // The bracket is dropped from the name only when it is the class.
-  const name = inner && classes.some((c) => lower(c) === lower(inner)) ? bare : full;
   const text = str(entry.text);
   const all = pageFeatures(text);
   const features = all.filter((f) => !ARCHETYPE_ADVICE.test(f.text))
@@ -2523,6 +2532,150 @@ export function essenceTablesFromTables(tables) {
     }
   }
   return [...out.values()];
+}
+
+/** An ability as a class page writes it, long or short. */
+const ABILITY_WORD = '(strength|dexterity|constitution|intelligence|wisdom|charisma|str|dex|con|int|wis|cha)';
+const THEIR = '(?:their|his|her|its)';
+const abilityKey = (word) => lower(word).slice(0, 3);
+
+/**
+ * The sentences that say which ability a page's veilweaving or practitioner
+ * modifier is, built once per side. `whole` is the modifier given for all of
+ * the class's veils, not "as their veilweaving modifier for their lumen
+ * veils"; `as` also takes "as both their practitioner modifier and …".
+ */
+const ABILITY_SENTENCES = Object.fromEntries(['veilweaving', 'practitioner'].map((side) => {
+  const other = side === 'veilweaving' ? 'practitioner' : 'veilweaving';
+  const as = `(?:as|to determine) (?:both )?${THEIR}`;
+  const whole = `${side}(?: ability)?(?: and \\w+)? modifiers?\\b(?!\\s+(?:for|when)\\b)`;
+  const dc = (what) => `\\bDCs?\\b[^.]*?\\bveils?\\b[^.]*?\\+\\s*(?:the [^+.]{1,40}?['’]s?|his|her|their|your|its)\\s+${what} modifier`;
+  return [side, {
+    about: side === 'veilweaving' ? /veilweaving|\bveils?\b/i : /practitioner/i,
+    choice: [
+      new RegExp(`choos\\w*\\b[^.]*?\\b${ABILITY_WORD}\\b[^.]*?\\b${ABILITY_WORD}\\b[^.]*?\\b${side}`, 'i'),
+      new RegExp(`higher of ${THEIR} ${ABILITY_WORD}[^.]*? or ${ABILITY_WORD}[^.]*? as ${THEIR} ${side}`, 'i'),
+      new RegExp(`\\b${side}\\b[^.]{0,60}\\bdetermined by\\b`, 'i'),
+      // Another modifier stands for it ("the regent's initiation modifier"):
+      // no ability to compare a pick with.
+      new RegExp(`\\b(?:operative|initiation|starcalling|${other})(?: ability)? modifier ${as} ${whole}`, 'i'),
+      ...(side === 'veilweaving' ? [new RegExp(dc('(?:initiation|casting ability)'), 'i')] : []),
+    ],
+    named: [
+      new RegExp(`\\b${ABILITY_WORD}(?: modifier| score)? ${as} ${whole}`, 'gi'),
+      new RegExp(`\\b${side} (?:ability )?modifier is ${ABILITY_WORD}\\b`, 'gi'),
+      ...(side === 'veilweaving' ? [new RegExp(dc(ABILITY_WORD), 'gi')] : []),
+    ],
+    casting: new RegExp(`\\b(?:casting|spellcasting) ability(?: modifier| score)? ${as} ${whole}`, 'i'),
+  }];
+}));
+const ABILITY_SWAP = new RegExp(`\\buses? ${THEIR} (casting ability|spellcasting ability|${ABILITY_WORD})(?: modifier| score)? (?:in place of|instead of) ${THEIR} ${ABILITY_WORD}\\b[^.]*\\bclass features\\b`, 'i');
+/**
+ * A page that never mentions veils or practitioners is passed over unread:
+ * most pages. Of the rest, only the sentences that name one, or swap an
+ * ability for the class features, are read.
+ */
+const ABILITY_PAGE = /veilweaving|\bveils?\b|practitioner/i;
+const abilitySentence = (s) => ABILITY_PAGE.test(s) || (/class features/i.test(s) && /in place of|instead of/i.test(s));
+
+/** Sentences of a page: each line, and each sentence on it. */
+const sentencesOf = (text) => str(text).split(/\n+|(?<=[.!?])\s+(?=[A-Z*_])/);
+
+/**
+ * Which ability a class's or an archetype's page names for its veilweaving
+ * and practitioner modifiers:
+ *
+ *   "The shardweaver uses their Wisdom as their veilweaving modifier"
+ *   "… is 10 + the number of points of essence invested in the veil + the shardweaver's Wisdom modifier"
+ *   "Lanternguards … use Wisdom as their practitioner modifier"
+ *   "Thornbinders use their casting ability modifier as their practitioner modifier"
+ *
+ * Each side is an ability key ('wis'), 'casting' (the class's casting
+ * ability), or 'choice' where the page leaves it to the player ("chooses
+ * whether they use their Intelligence, Wisdom, or Charisma", "the higher of
+ * their Charisma or Intelligence"), names another modifier, or names two. A
+ * side the page says nothing about is left out. A sentence starting "If" is a
+ * condition and is passed over, and so is a modifier given only for some veils
+ * ("as their veilweaving modifier for their lumen veils").
+ *
+ * `swap` is an archetype's "uses their casting ability modifier in place of
+ * their Wisdom modifier for all of their shardweaver class features": `{ from:
+ * 'wis', to: 'casting' }`.
+ */
+export function classAbilitiesFromText(text) {
+  const out = {};
+  if (!ABILITY_PAGE.test(str(text))) return out;
+  const sentences = sentencesOf(text).filter((s) => abilitySentence(s) && !/^\W*if\b/i.test(s));
+  for (const [side, re] of Object.entries(ABILITY_SENTENCES)) {
+    const named = new Set();
+    let choice = false;
+    for (const s of sentences) {
+      if (!re.about.test(s)) continue;
+      if (re.choice.some((r) => r.test(s))) {
+        choice = true;
+        continue;
+      }
+      for (const r of re.named) for (const m of s.matchAll(r)) named.add(abilityKey(m[1]));
+      if (re.casting.test(s)) named.add('casting');
+    }
+    if (choice || named.size > 1) out[side] = 'choice';
+    else if (named.size === 1) out[side] = [...named][0];
+  }
+  for (const s of sentences) {
+    const m = s.match(ABILITY_SWAP);
+    if (m) {
+      out.swap = { from: abilityKey(m[3]), to: /casting/i.test(m[1]) ? 'casting' : abilityKey(m[1]) };
+      break;
+    }
+  }
+  return out;
+}
+
+/** What a class or archetype block says, for the reading below. */
+const blockText = (b) => [str(b?.text), ...arr(b?.features).map((f) => str(f?.text))].join('\n');
+
+/**
+ * The veilweaving and practitioner abilities the active packs' classes and
+ * archetypes name (classAbilitiesFromText), for the note beside a pick that
+ * differs. Read from catalogue entries and from class and archetype blocks a
+ * pack writes, so either kind of pack gives the same answer. A written block
+ * stands over a catalogue entry of the same name, and between two packs the
+ * later one's stands. An archetype is listed once per class it is for.
+ *
+ * `[{ kind: 'class' | 'archetype', name, class?, veilweaving?, practitioner?, swap? }]`,
+ * only where the page names something.
+ */
+export function classAbilitiesFromPacks(packs) {
+  const written = new Map();
+  const derived = new Map();
+  const add = (into, kind, name, classes, read) => {
+    if (!read.veilweaving && !read.practitioner && !read.swap) return;
+    for (const cls of kind === 'class' ? [''] : classes) {
+      into.set(`${kind}|${lower(name)}|${lower(cls)}`, { kind, name, ...(cls ? { class: cls } : {}), ...read });
+    }
+  };
+  for (const ext of arr(packs)) {
+    for (const cat of arr(ext?.provides?.catalogues?.catalogues)) {
+      const kind = lower(cat?.kind);
+      const isClass = kind === 'class' || kind === 'prestige class';
+      if (!isClass && kind !== 'archetype') continue;
+      for (const e of arr(cat.entries)) {
+        const read = readEntry(e, 'class abilities', () => classAbilitiesFromText(e?.text));
+        if (isClass) add(derived, 'class', classNameOf(e), [], read);
+        else {
+          const { name, classes } = archetypeClassesOf(e);
+          add(derived, 'archetype', name, classes, read);
+        }
+      }
+    }
+    for (const b of arr(ext?.blocks)) {
+      if (b?.kind !== 'class' && b?.kind !== 'archetype') continue;
+      const read = readEntry(b, 'class abilities', () => classAbilitiesFromText(blockText(b)));
+      add(written, b.kind, str(b.name).trim(), [str(b.class).trim()].filter(Boolean), read);
+    }
+  }
+  for (const [key, v] of written) derived.set(key, v);
+  return [...derived.values()];
 }
 
 /**
