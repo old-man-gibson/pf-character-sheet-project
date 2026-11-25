@@ -14593,7 +14593,7 @@ console.log('\nthe sphere tables -- a place to send a bonus');
   drop = note('Athletic focus {sphere.athletics.bab += 3} and {sphere.athletics.dc += 2}.');
   check('a combat sphere takes an attack bonus and a DC bonus',
     [combat().babForwarded, combat().attack, combat().dcForwarded, combat().dc],
-    [3, Math.min(before.attack + 3, 8), 2, before.cdc + 2]);
+    [3, before.attack + 3, 2, before.cdc + 2]);
   drop();
 
   // Guile: the DC lands after the skills; the ranks land before them and

@@ -24,7 +24,8 @@
  * against.
  */
 import {
-  CORE_PROWESS_LEVELS, MAX_LEVEL, MYTHIC_TIER_LEVEL, attunedBonuses, isBackgroundSkill, mythicTierGrant, tierAtLevel,
+  CORE_PROWESS_LEVELS, MAX_LEVEL, MYTHIC_TIER_LEVEL, attunedBonuses, coreTrialsForTier, isBackgroundSkill, mythicTierGrant,
+  tierAtLevel,
 } from '../rules.js';
 import { skillKey } from './util.js';
 
@@ -49,8 +50,12 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
    * `awarded`, a tier the GM hands out, typed on Feats & Mythic.
    */
   mythicTier: 'level',
-  /** Trials a tier takes, unless `mythicTrialSteps` names one tier's own. */
-  mythicTrialRate: 1,
+  /**
+   * Trials a tier takes, unless `mythicTrialSteps` names one tier's own. None
+   * (null) is the core rules' table (`coreTrialsForTier`). A rate saved before
+   * that table became the default, 1 included, was typed by someone and stays.
+   */
+  mythicTrialRate: null,
   /**
    * Gestalt: each level takes the best of the classes present on it, on two
    * or more Planner tracks. Off, one class a level -- the Planner's first
@@ -693,11 +698,14 @@ export function mythicLevels(d) {
   return Array.from({ length: campaignRules(d).maxTier + 1 }, (_, t) => (t ? own[t] ?? MYTHIC_TIER_LEVEL[t] ?? null : null));
 }
 
-/** The trials each tier takes from the one before, `[, t1, …]`. */
+/**
+ * The trials each tier takes from the one before, `[, t1, …]`: a tier's own,
+ * else the campaign's rate, else the core rules' table.
+ */
 export function mythicTrialSteps(d) {
   const { mythicTrialRate: rate, maxTier } = campaignRules(d);
   const own = steps(d?.campaign?.mythicTrialSteps);
-  return Array.from({ length: maxTier + 1 }, (_, t) => (t ? own[t] ?? rate : null));
+  return Array.from({ length: maxTier + 1 }, (_, t) => (t ? own[t] ?? rate ?? coreTrialsForTier(t) : null));
 }
 
 /** The XP each level takes in all, `[, l1, …]`: the chosen table, with the campaign's own. */
@@ -722,10 +730,15 @@ function tierOnLadder(ladder, level) {
   return tier;
 }
 
-/** The tier `trials` completed buy, with the trials each tier takes. */
+/**
+ * The tier `trials` completed buy, with the trials each tier takes. No trials
+ * buy no tier, not even one that takes none (the core 1st, gained at
+ * ascension): that one waits for Tier up.
+ */
 function tierFromTrials(perTier, trials) {
   let tier = 0;
   let spent = 0;
+  if (!trials) return 0;
   while (tier < perTier.length - 1 && trials >= spent + perTier[tier + 1]) {
     spent += perTier[tier + 1];
     tier += 1;
@@ -843,6 +856,8 @@ export function mythicTierReached(d, tier) {
   if (rules.mythicTier === 'trials') {
     const per = mythicTrialSteps(d);
     const total = per.slice(1, tier + 1).reduce((a, b) => a + b, 0);
+    // A tier that takes no trials (the core 1st) is blank, not a 0.
+    if (!total) return { head: 'Trials', value: '', title: tier === 1 ? 'Tier 1 at ascension, with no trials' : `Tier ${tier} with no trials` };
     return { head: 'Trials', value: total, title: `Tier ${tier} after ${total} trial${total === 1 ? '' : 's'} in total (${per[tier]} for this tier)` };
   }
   return { head: 'Level', value: '', title: 'Awarded by the GM' };

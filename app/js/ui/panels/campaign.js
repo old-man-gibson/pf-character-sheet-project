@@ -22,7 +22,7 @@ import { collapsible, collapsibleSub, stepGrid } from '../rows.js';
 import {
   MAX_TIER, TIER_CEILING, XP_TRACKS, campaignChanges, campaignRules, followsShared, mythicFeatTiers,
 } from '../../model/campaign.js';
-import { MAX_LEVEL, MYTHIC_TIER_LEVEL } from '../../rules.js';
+import { MAX_LEVEL, MYTHIC_TIER_LEVEL, coreTrialsForTier } from '../../rules.js';
 
 /** The anchor the ⋯ menu and the search scroll to. */
 export const CAMPAIGN_PANEL_ID = 'campaign-rules';
@@ -36,10 +36,14 @@ function ruleSelect(key, value, options, label, disabled = false) {
     </select>`;
 }
 
-/** A small number box for a count a rule is measured in. */
-function ruleCount(key, value, label, unit) {
-  return `<span class="pair"><input type="number" min="0" max="99" value="${esc(value)}" data-set="campaign.${key}"
-      data-kind="number" aria-label="${esc(label)}" style="width:4.2rem"> ${esc(unit)}</span>`;
+/**
+ * A small number box for a count a rule is measured in. With a `placeholder`
+ * the box may be left blank (null), and the placeholder says what blank means.
+ */
+function ruleCount(key, value, label, unit, placeholder = '') {
+  return `<span class="pair"><input type="number" min="0" max="99" value="${esc(value ?? '')}" data-set="campaign.${key}"
+      data-kind="${placeholder ? 'number-or-null' : 'number'}" aria-label="${esc(label)}"${
+  placeholder ? ` placeholder="${esc(placeholder)}"` : ''} style="width:4.2rem"> ${esc(unit)}</span>`;
 }
 
 /** A box for the lowest or highest level, or the highest tier; no ceiling where it is null. */
@@ -145,7 +149,8 @@ export function campaignPanel(model, ctx = {}) {
   const tierHint = {
     level: `Tier is set by character level (default: 1 at 8th, 2 at 10th, 3 at 12th, 4 at 14th, then +1 per
       level to 10 at 20th).${rules.maxTier > MAX_TIER ? ' Set levels for tiers above 10 below.' : ''}`,
-    trials: `Tier is set by completed trials (${rules.mythicTrialRate} per tier). Tier up appears at each threshold.`,
+    trials: `Tier is set by completed trials (${rules.mythicTrialRate === null
+      ? 'tier 1 at ascension, then half the tier, rounded up' : `${rules.mythicTrialRate} per tier`}). Tier up appears at each threshold.`,
     awarded: 'Tier is entered manually on <strong>Feats &amp; Mythic</strong>.',
   }[rules.mythicTier];
   const tierMore = !rules.mythic ? ''
@@ -154,10 +159,11 @@ export function campaignPanel(model, ctx = {}) {
         (t) => MYTHIC_TIER_LEVEL[t] ?? '', (t) => `Level for tier ${t}`)}
         <p class="campnote">Blank uses the default.</p>`, '', true)
       : rules.mythicTier === 'trials'
-        ? `<div class="pair">${ruleCount('mythicTrialRate', rules.mythicTrialRate, 'Trials per tier', 'per tier')}</div>
+        ? `<div class="pair">${ruleCount('mythicTrialRate', rules.mythicTrialRate, 'Trials per tier', 'per tier', 'Core')}</div>
         ${collapsibleSub(model, 'campaign-trial-steps', 'Trials per tier', `${campaignSteps(d, 'mythicTrialSteps', 1, rules.maxTier,
-    () => rules.mythicTrialRate, (t) => `Trials for tier ${t}`)}
-        <p class="campnote">Blank uses the rate.</p>`, '', true)}`
+    // The core 1st tier takes no trials: its box is blank, not a 0.
+    (t) => rules.mythicTrialRate ?? (coreTrialsForTier(t) || ''), (t) => `Trials for tier ${t}`)}
+        <p class="campnote">Blank uses ${rules.mythicTrialRate === null ? 'the core table' : 'the rate'}.</p>`, '', true)}`
         : '';
 
   /* The tiers a mythic feat comes at. */
