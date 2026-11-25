@@ -512,8 +512,12 @@ function sphereBonusPanel(model, sideKey, side) {
       error: r.clBaseError,
       title: 'A number or a formula, e.g. class.shifter.level. Blank uses the character\u2019s caster level.',
     });
+    // A DC the sphere works out from skill ranks (Alchemy, Beastmastery), one
+    // line each under its name.
+    const skillDCs = (r) => (r.skillDCs || []).map((d) => `<div class="hint" title="${
+      esc(`This DC uses ranks in ${d.skill} in place of BAB.`)}">${esc(d.label)}: DC ${d.dc}</div>`).join('');
     const render = (r) => `<tr>
-        <td>${esc(r.sphere)}</td>
+        <td>${esc(r.sphere)}${skillDCs(r)}</td>
         <td class="num">${r.talents || ''}</td>
         ${isMagic ? `<td class="num">${own(r)}</td>` : ''}
         <td class="num">${bonus(r, rankField, 'floor(level / 4)', TRAINING_SIDES[sideKey].rankInto)}</td>
@@ -525,14 +529,12 @@ function sphereBonusPanel(model, sideKey, side) {
       <div class="tablewrap"><table>
         <thead><tr><th>Sphere</th><th class="num">Talents</th>
           ${/* BAB+, not Rank+: the column adds to the sphere's attack bonus,
-                which is BAB for every sphere but the two that key off skill
-                ranks, and those are named in the hint under the table. The
-                skill spheres' Rank+ is on the Guile tab, where ranks are the
-                thing being added to. */''}
+                which is BAB for every combat sphere. The skill spheres' Rank+
+                is on the Guile tab, where ranks are the thing being added to. */''}
           ${isMagic ? '<th class="num" title="This sphere\u2019s caster level in place of the character\u2019s. CL+ still adds to it.">CL =</th>' : ''}
           <th class="num" title="${esc(isMagic
     ? 'A bonus to this sphere’s caster level only'
-    : 'A bonus to this sphere’s attack bonus only (its BAB, or the skill ranks Alchemy and Beastmastery use).')}">${
+    : 'A bonus to this sphere’s BAB only')}">${
   rankLabel}</th>
           <th class="num" title="A bonus to this sphere’s save DC only">DC+</th>
           <th class="num">${TRAINING_SIDES[sideKey].totalLabel}</th></tr></thead>
@@ -542,7 +544,7 @@ function sphereBonusPanel(model, sideKey, side) {
       <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">All spheres (${rows.length - active.length})</summary>
         <div class="tablewrap"><table><tbody>${rows.filter((r) => !active.includes(r)).map(render).join('')}</tbody></table></div>
       </details>
-      ${!isMagic ? '<p class="hint">Alchemy keys off Craft (alchemy) ranks; Beastmastery off Handle Animal / Ride.</p>' : ''}
+      ${!isMagic ? '<p class="hint">Alchemy formulae and poison, and Beastmastery (handle animal) and (ride) talents, use skill ranks in place of BAB for their DC.</p>' : ''}
     </section>`;
   }
 

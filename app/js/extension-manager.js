@@ -38,6 +38,7 @@ import { SECTION_KINDS, guessTags, readSections } from './pdf-import.js';
 import { MANEUVER_FIELDS } from './rules.js';
 
 import { esc } from './html-escape.js';
+import { markPicks, setPicks, showPickCount } from './ui/picks.js';
 
 const lower = (s) => String(s ?? '').trim().toLowerCase();
 
@@ -455,26 +456,14 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
   function syncPicks() {
     if (!picking) return;
     for (const box of dialog.querySelectorAll('[data-pick]')) box.checked = picked.has(box.dataset.pick);
-    const mark = (box, ids) => {
-      const n = ids.filter((id) => picked.has(id)).length;
-      box.checked = ids.length > 0 && n === ids.length;
-      box.indeterminate = n > 0 && n < ids.length;
-      box.disabled = !ids.length;
-    };
     for (const g of dialog.querySelectorAll('details.packgroup')) {
       const box = g.querySelector('[data-pick-group]');
-      if (box) mark(box, shownIds(g));
+      if (box) markPicks(box, shownIds(g), picked);
     }
     const all = dialog.querySelector('[data-pick-all]');
     const scope = dialog.querySelector('[data-pick-scope]');
-    if (all && scope) mark(all, shownIds(scope));
-    const n = picked.size;
-    const count = dialog.querySelector('[data-pick-count]');
-    if (count) count.textContent = `${n} selected`;
-    for (const span of dialog.querySelectorAll('[data-pick-n]')) {
-      span.textContent = `${n} pack${n === 1 ? '' : 's'}`;
-      span.closest('button').disabled = !n;
-    }
+    if (all && scope) markPicks(all, shownIds(scope), picked);
+    showPickCount(dialog, picked.size, ['pack', 'packs']);
   }
 
   /**
@@ -1490,10 +1479,7 @@ Hit Die: d12.
         if (box.checked) picked.add(box.dataset.pick); else picked.delete(box.dataset.pick);
         syncPicks();
       }));
-      const pickShown = (box, scope) => {
-        for (const id of shownIds(scope)) { if (box.checked) picked.add(id); else picked.delete(id); }
-        syncPicks();
-      };
+      const pickShown = (box, scope) => { setPicks(picked, shownIds(scope), box.checked); syncPicks(); };
       qa('[data-pick-group]').forEach((box) => box.addEventListener('change', () => pickShown(box, box.closest('details.packgroup'))));
       q('[data-pick-all]')?.addEventListener('change', (e) => pickShown(e.target, q('[data-pick-scope]')));
       q('[data-pick-remove]')?.addEventListener('click', () => { confirmPick = true; render(); });

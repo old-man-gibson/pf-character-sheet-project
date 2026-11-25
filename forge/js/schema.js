@@ -234,3 +234,51 @@ export function sortEntries(entries, nameOf) {
     return a.name.localeCompare(b.name);
   });
 }
+
+/** An entry's cells as one string, for searching. */
+export const fieldText = (e) => Object.values(e.fields || {}).join(' ');
+
+/**
+ * The entries the list shows for a type filter (`'all'` or a type), a tag
+ * ('' for any) and a search, in the order given.
+ */
+export function shownEntries(sorted, { filter = 'all', tag = '', q = '' } = {}) {
+  const words = q.trim().toLowerCase();
+  const t = tag.toLowerCase();
+  return sorted.filter((e) => (filter === 'all' || e.type === filter)
+    && (!t || (e.tags || []).some((x) => x.toLowerCase() === t))
+    && (!words || `${e.name} ${(e.tags || []).join(' ')} ${e.body} ${fieldText(e)}`.toLowerCase().includes(words)));
+}
+
+/**
+ * The list as a tree. An entry is shown under its container when that is in
+ * the list too; failing that, under a container in the list whose name it has
+ * as a tag (`resolveName` turns a name into an id). `kidsOf` maps an id to
+ * what is shown under it, `under` an id to its container, and `roots` is what
+ * stands at the top level.
+ */
+export function listTree(items, resolveName = () => null) {
+  const byId = new Map(items.map((e) => [e.id, e]));
+  const kidsOf = new Map();
+  const under = new Map();
+  const file = (e, host) => { if (!kidsOf.has(host)) kidsOf.set(host, []); kidsOf.get(host).push(e); under.set(e.id, host); };
+  for (const e of items) if (e.parent && byId.has(e.parent)) file(e, e.parent);
+  // Then the tagged ones, after a container's own children.
+  for (const e of items) {
+    if (under.has(e.id)) continue;
+    const host = (e.tags || []).map((t) => resolveName(t)).find((id) => id && id !== e.id && TYPES[byId.get(id)?.type]?.children);
+    if (host) file(e, host);
+  }
+  return { kidsOf, under, roots: items.filter((e) => !under.has(e.id)) };
+}
+
+/** The ids of everything shown under `id` in a `listTree`, however deep. */
+export function treeBelow(tree, id) {
+  const out = [];
+  const seen = new Set([id]);
+  const walk = (at) => {
+    for (const k of tree.kidsOf.get(at) || []) if (!seen.has(k.id)) { seen.add(k.id); out.push(k.id); walk(k.id); }
+  };
+  walk(id);
+  return out;
+}

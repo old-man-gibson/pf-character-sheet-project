@@ -35,7 +35,7 @@
  */
 
 import { MANEUVER_FIELDS } from './rules.js';
-import { veilDetails } from './model/subsystems/akashic.js';
+import { classEssenceTable, veilDetails } from './model/subsystems/akashic.js';
 import { disciplineEntries, maneuverDetails, noteKeyOf } from './model/subsystems/maneuvers.js';
 import { featDetails, powerDetails, spellDetails } from './model/subsystems/catalogues.js';
 import { castingTable } from './model/subsystems/vancian.js';
@@ -171,10 +171,11 @@ function publishCatalogueRows(doc, report) {
 }
 
 /**
- * The numbers a pack's tables supply: each Vancian class's casting-table row
- * and each manifesting class's power-point curve, as `cited` on the class.
- * Without them a reader with no casting packs saw no spell slots and no power
- * points. The model reads them only where no pack here answers.
+ * The numbers a pack's tables supply: each Vancian class's casting-table row,
+ * each manifesting class's power-point curve and each veilweaving class's
+ * essence by level, as `cited` on the class. Without them a reader with no
+ * casting packs saw no spell slots, no power points and no class essence. The
+ * model reads them only where no pack here answers.
  */
 function publishTables(doc, report) {
   for (const c of doc.vancian?.classes || []) {
@@ -188,6 +189,12 @@ function publishTables(doc, report) {
     if (!curve) continue;
     c.cited = { ...(c.cited || {}), curve: clone(curve) };
     carry(report, 'power-point curve');
+  }
+  for (const c of doc.akashic?.classes || []) {
+    const table = c && String(c.name ?? '').trim() ? classEssenceTable(c.name) : null;
+    if (!table) continue;
+    c.cited = { ...(c.cited || {}), essence: clone(table.essence) };
+    carry(report, 'essence table');
   }
 }
 

@@ -573,16 +573,23 @@ export const FORMULA_FIELDS = [
     },
   },
   {
-    // The essence pool and its sources.
+    // The essence pool, its sources, and each class row's essence.
     key: 'essence', source: 'player', where: 'the Akashic tab',
     collect: (model) => {
       const a = model.data.akashic;
-      return [['pool', 'Essence pool'], ...ESSENCE_SOURCES]
-        .filter(([key]) => stringFormula(a?.essence?.[key]))
-        .map(([key, label]) => ({
-          id: `essence-${key}`, place: `essence:${key}`, name: /^essence/i.test(label) ? label : `${label} essence`,
-          formula: a.essence[key], value: a.calc?.typed?.[key]?.value, error: a.calc?.typed?.[key]?.error,
-        }));
+      return [
+        ...[['pool', 'Essence pool'], ...ESSENCE_SOURCES]
+          .filter(([key]) => stringFormula(a?.essence?.[key]))
+          .map(([key, label]) => ({
+            id: `essence-${key}`, place: `essence:${key}`, name: /^essence/i.test(label) ? label : `${label} essence`,
+            formula: a.essence[key], value: a.calc?.typed?.[key]?.value, error: a.calc?.typed?.[key]?.error,
+          })),
+        ...(a?.classes || []).flatMap((c, i) => (c && stringFormula(c.essence) ? [{
+          id: `essence-class-${i}`, place: `essenceClass:${i}`,
+          name: `${String(c.name || 'Veilweaving class').trim()} essence`,
+          formula: c.essence, value: c.essenceNum, error: c.essenceError,
+        }] : [])),
+      ];
     },
   },
   {
@@ -646,12 +653,22 @@ export const FORMULA_FIELDS = [
     }),
   },
   {
+    // A manifesting class's manifester level, and the level its power points
+    // are read at.
     key: 'manifesterLevel', source: 'player', where: 'the Psionics tab',
-    collect: (model) => (model.data.psionics?.classes || []).flatMap((c, i) => (stringFormula(c.manifesterLevelOverride) ? [{
-      id: `psionic-${i}-manifester-level`, place: `manifesterLevel:${i}`,
-      name: `${String(c.name || 'Manifesting class').trim()} manifester level`,
-      formula: c.manifesterLevelOverride, value: c.manifesterLevelBase, error: c.manifesterLevelError,
-    }] : [])),
+    collect: (model) => (model.data.psionics?.classes || []).flatMap((c, i) => {
+      const name = String(c.name || 'Manifesting class').trim();
+      return [
+        ...(stringFormula(c.manifesterLevelOverride) ? [{
+          id: `psionic-${i}-manifester-level`, place: `manifesterLevel:${i}`, name: `${name} manifester level`,
+          formula: c.manifesterLevelOverride, value: c.manifesterLevelBase, error: c.manifesterLevelError,
+        }] : []),
+        ...(stringFormula(c.pointsLevelOverride) ? [{
+          id: `psionic-${i}-points-level`, place: `psionicPointsLevel:${i}`, name: `${name} power points level`,
+          formula: c.pointsLevelOverride, value: c.pointsLevel, error: c.pointsLevelError,
+        }] : []),
+      ];
+    }),
   },
   {
     // A buff's six dials and its extra bonuses, each a number or a rule.

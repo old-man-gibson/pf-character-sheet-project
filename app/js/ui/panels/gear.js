@@ -563,7 +563,7 @@ export function targetChoices(model, value, { all = true } = {}) {
 function targetSelect(model, list, i, bi, value, error) {
     const v = String(value ?? '').trim();
     return `<select class="target${error ? ' invalid' : ''}" data-item="${list}|${i}|bonuses.${bi}.target" data-kind="text"
-        data-fill="targets"
+        data-fill="targets" data-search aria-label="Where the bonus applies"
         title="${esc(error || (v ? `Forwarded to ${v}` : 'Where the bonus applies, such as AC, a save, a skill or an ability score.'))}">
         ${targetChoices(model, v, { all: false })}
       </select>`;

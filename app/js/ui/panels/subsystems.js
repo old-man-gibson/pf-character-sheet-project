@@ -326,7 +326,8 @@ function akashicClassesPanel(a) {
     // the start (`added`), so it can be filled in or removed.
     const rows = (a.classes || [])
       .map((c, i) => ({ c, i }))
-      .filter(({ c }) => c.added || c.name || c.mod || c.level || c.essenceCap || c.bonusCap);
+      .filter(({ c }) => c.added || c.name || c.mod || c.level || c.essenceCap || c.bonusCap
+        || (c.essence !== null && c.essence !== undefined && c.essence !== ''));
     const vw = a.veilweaving || {};
     const levelTitle = vw.sphere
       ? 'Levels in casting and veilweaving classes, each level counted once (Veilweaving sphere). Type a number to override it.'
@@ -336,8 +337,8 @@ function akashicClassesPanel(a) {
       <div class="akashic-head">
         <div class="ak-classes tablewrap">
           <table class="build"><thead><tr>
-            <th>Class</th><th>Mod</th><th class="num">Lvl</th>
-            <th class="num">Ess.</th><th class="num">Bonus</th><th class="num">Cap</th><th></th>
+            <th>Class</th><th>Mod</th><th class="num">Lvl</th><th class="num">Essence</th>
+            <th class="num">Ess. cap</th><th class="num">Bonus</th><th class="num">Cap</th><th></th>
           </tr></thead><tbody>
             ${rows.map(({ c, i }) => `<tr>
               <td>${itemText(list, i, 'name', c.name, 'Class')}</td>
@@ -346,17 +347,24 @@ function akashicClassesPanel(a) {
     auto: true, placeholder: c.levelAuto ?? 0, width: '3.2rem', title: levelTitle,
     label: `Veilweaving level of ${c.name || 'this class'}`,
   })}</td>
+              <td class="num">${exprField(`data-item="${list}|${i}|essence"`, c.essence ?? '', {
+    kind: 'expr-or-null', width: '3.6rem', value: c.essenceNum, error: c.essenceError,
+    placeholder: String(c.essenceAuto ?? 0),
+    title: c.essenceTable
+      ? `Blank uses the essence the class table gives at level ${c.essenceLevel ?? 0}. Or enter a number or a formula.`
+      : 'No loaded pack has an Essence column for this class, so blank adds 0. Or enter a number or a formula.',
+  })}</td>
               <td class="num">${itemNum(list, i, 'essenceCap', c.essenceCap)}</td>
               <td class="num">${itemNum(list, i, 'bonusCap', c.bonusCap)}</td>
               <td class="num total">${(a.calc?.sphereCap || 0) > (Number(c.essenceCap) || 0)
     ? `<span tabindex="0" data-tip="The Veilweaving sphere gives a capacity of 1, plus 1 per 6 character levels.">${c.totalCap ?? 0}</span>`
     : c.totalCap ?? 0}</td>
               ${rowRemove(list, i)}
-            </tr>`).join('') || `<tr><td colspan="7" class="empty">No veilweaving class.</td></tr>`}
+            </tr>`).join('') || `<tr><td colspan="8" class="empty">No veilweaving class.</td></tr>`}
           </tbody></table>
           <div class="pair" style="margin-top:6px">
             ${addButton(list, 'Add class', {
-    name: '', mod: null, levelOverride: null, essenceCap: 0, bonusCap: 0, added: true,
+    name: '', mod: null, levelOverride: null, essence: null, essenceCap: 0, bonusCap: 0, added: true,
   })}
             <label class="minifield">Base DC
               ${autoNum('data-set="akashic.baseDCOverride"', a.baseDCOverride, {
@@ -379,6 +387,8 @@ function akashicClassesPanel(a) {
           <table class="build"><tbody>
             <tr><th scope="row">Pool</th>
               <td class="num">${essenceCell(a, 'pool')}</td></tr>
+            <tr><th scope="row">Class essence</th>
+              <td class="num">${a.calc?.classEssence ?? 0}</td></tr>
             ${ESSENCE_SOURCES.map(([key, label]) => `<tr>
               <th scope="row">${esc(label)}</th>
               <td class="num">${essenceCell(a, key)}</td>
@@ -1592,7 +1602,7 @@ export function psionicsPanel(model, ctx) {
 
       <section class="panel span2">
         ${addButton('psionics.classes', 'Add manifesting class', {
-    name: '', stat: '', stat2: '', curveTotal: 0, manifesterLevelOverride: null, powers: [],
+    name: '', stat: '', stat2: '', curveTotal: 0, manifesterLevelOverride: null, pointsLevelOverride: null, powers: [],
   })}
       </section>
       ${systemExtrasPanel(model, p, 'psionics', 'Psionics')}
@@ -1639,6 +1649,14 @@ function manifestingClassPanel(model, c, i, ctx = {}) {
     placeholder: String(c.plannerLevel ?? 0),
     title: `Blank uses the ${c.plannerLevel ?? 0} level(s) of this class in the Planner. `
       + 'Or enter a number or a formula, e.g. class.psion.level + class.cerebremancer.level',
+  }))}
+        ${field('Power points as level', exprField(`data-set="${base}.pointsLevelOverride"`, c.pointsLevelOverride ?? '', {
+    kind: 'expr-or-null',
+    width: '4.2rem',
+    value: c.pointsLevel,
+    error: c.pointsLevelError,
+    placeholder: String(c.manifesterLevelBase ?? 0),
+    title: 'Blank uses the manifester level. Or enter a number or a formula, e.g. floor(level / 2)',
   }))}
       </div>
       ${line('From the curve', c.basePoints === null ? '—' : c.basePoints)}

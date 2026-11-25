@@ -16,7 +16,7 @@
  * what each sphere is owed; `recomputeGuileSpheres` runs after it, once the
  * skill rows know their real totals, and reads the DCs and ranges off them.
  * It is the same two-step the martial side already needs for Alchemy and
- * Beastmastery, which key off Craft and Handle Animal rather than off BAB.
+ * Beastmastery, some of whose DCs read Craft, Handle Animal or Ride ranks.
  *
  * Four more idiosyncrasies the other two sides have no place for:
  *

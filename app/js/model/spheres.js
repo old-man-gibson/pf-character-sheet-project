@@ -2170,14 +2170,13 @@ export function setSphereBonus(model, sideKey, sphere, field, value) {
 
 /**
  * Per-sphere attack/DC rows, one for every sphere on the table -- see
- * sphereTableNames. Runs after skills because two spheres (Alchemy,
- * Beastmastery) key off skill ranks instead of BAB.
+ * sphereTableNames. Runs after skills because some talents in two spheres
+ * (Alchemy, Beastmastery) work out their DC from skill ranks instead of BAB.
  */
 export function recomputeSphereRows(model) {
   const t = model.data.training;
   if (!t) return;
   const c = model.data;
-  const level = Number(c.identity.level) || 0;
   const bab = Number(c.attack.bab) || 0;
   // The stored row for a sphere, or the blank one the table shows for it.
   const rowsOf = (sideKey, blank) => {
@@ -2203,18 +2202,31 @@ export function recomputeSphereRows(model) {
   if (t.combat) {
     const dcBase = t.combat.practitionerDC;
     const bestMod = dcBase - 10 - Math.floor(bab / 2);
-    t.combat.sphereRows = rowsOf('combat', { rankBonus: 0, dcBonus: 0 }).map((row) => {
-      let attackBase = bab;
-      let dc = dcBase;
-      if (row.sphere === 'Alchemy') {
-        const r = ranksOf('Craft', /alchem/i);
-        attackBase = r;
-        dc = 10 + Math.floor(r / 2) + bestMod;
-      } else if (row.sphere === 'Beastmastery') {
-        const r = Math.max(ranksOf('Handle Animal'), ranksOf('Ride'));
-        attackBase = r;
-        dc = 10 + Math.floor(ranksOf('Handle Animal') / 2) + bestMod;
+    // Every combat sphere's BAB and DC is the character's. Two spheres put
+    // skill ranks in place of BAB for some DCs only: Alchemy's formulae and
+    // poison use Craft (alchemy) ranks, and Beastmastery's (handle animal)
+    // and (ride) talents use those ranks. Their other talents use the
+    // sphere's DC like any other. Every Beastmastery practitioner has one of
+    // its two packages; where the sheet can see which (the sphere skill rows
+    // have worked that out), only that one's DC shows, and both show where it
+    // cannot.
+    const packageState = (skill) => (model.trainingSkillRanks || [])
+      .find((r) => r.skill === skill)?.state || 'unknown';
+    const skillDCsOf = (sphere) => {
+      if (sphere === 'Alchemy') {
+        return [{ label: 'Formulae and poison', skill: 'Craft (alchemy)', ranks: ranksOf('Craft', /alchem/i) }];
       }
+      if (sphere === 'Beastmastery') {
+        const both = [
+          { label: '(handle animal) talents', skill: 'Handle Animal', ranks: ranksOf('Handle Animal') },
+          { label: '(ride) talents', skill: 'Ride', ranks: ranksOf('Ride') },
+        ];
+        const taken = both.filter((d) => packageState(d.skill) !== 'unmet');
+        return taken.length ? taken : both;
+      }
+      return [];
+    };
+    t.combat.sphereRows = rowsOf('combat', { rankBonus: 0, dcBonus: 0 }).map((row) => {
       const rank = amount(row.rankBonus);
       const dcPlus = amount(row.dcBonus);
       // A bonus forwarded here from elsewhere on the sheet is kept beside
@@ -2223,6 +2235,11 @@ export function recomputeSphereRows(model) {
       const key = sphereForwardKey(row.sphere);
       const babForwarded = key ? forwarded(model, `${key}.bab`) : 0;
       const dcForwarded = key ? forwarded(model, `${key}.dc`) : 0;
+      // A sphere's DC+ and forwarded DC raise every DC it has.
+      const dcAdded = dcPlus.value + dcForwarded;
+      const skillDCs = skillDCsOf(row.sphere).map((d) => ({
+        ...d, dc: 10 + Math.floor(d.ranks / 2) + bestMod + dcAdded,
+      }));
       return {
         ...row,
         talents: talentsIn(t.combat.tally, row.sphere),
@@ -2232,8 +2249,11 @@ export function recomputeSphereRows(model) {
         dcBonusError: dcPlus.error,
         babForwarded,
         dcForwarded,
-        attack: Math.min(Math.floor(attackBase + rank.value + babForwarded), level),
-        dc: dc + dcPlus.value + dcForwarded,
+        // No ceiling: a BAB+ or a forwarded bonus adds even where the base
+        // already equals the character's level.
+        attack: Math.floor(bab + rank.value + babForwarded),
+        dc: dcBase + dcAdded,
+        ...(skillDCs.length ? { skillDCs } : {}),
       };
     });
   }
