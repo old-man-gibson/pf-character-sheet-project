@@ -1736,9 +1736,9 @@ console.log('\na casting or manifesting block picks one of the character’s cla
   c.listAdd('vancian.classes', { name: '', slotType: 'Wizard' });
   c.listAdd('psionics.classes', { name: '', stat: 'Int', stat2: '', curveTotal: 343, manifesterLevelOverride: null, powers: [] });
   const pick = (html, list) => (html.split(`<select data-item="${list}|0|name"`)[1] || '').split('</select>')[0];
-  const typed = (html, list) => html.includes(`data-item="${list}|0|name"`) && !pick(html, list);
-  ok('with no classes yet the name is typed',
-    typed(subsystems.vancianPanel(c, {}), 'vancian.classes') && typed(subsystems.psionicsPanel(c, {}), 'psionics.classes'));
+  const blankOnly = (html, list) => [...pick(html, list).matchAll(/<option value="([^"]*)"/g)].map((x) => x[1]).join() === '';
+  ok('with no classes yet the picker offers only the blank, as every class picker does',
+    blankOnly(subsystems.vancianPanel(c, {}), 'vancian.classes') && blankOnly(subsystems.psionicsPanel(c, {}), 'psionics.classes'));
   c.set('classes', [{ name: 'Wizard', levelsOverride: 4 }, { name: 'Psion', levelsOverride: 2 }]);
   c.setItem('psionics.classes', 0, 'name', 'Wilder');
   const v = pick(subsystems.vancianPanel(c, {}), 'vancian.classes');

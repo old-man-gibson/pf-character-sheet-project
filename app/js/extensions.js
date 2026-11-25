@@ -2420,10 +2420,58 @@ const INITIATION_SAID = [
   /\b(strength|dexterity|constitution|intelligence|wisdom|charisma)\s+is\s+(?:the\s+|his\s+|her\s+|their\s+)?(?:primary\s+)?initiat(?:ion|or|ing)\s+(?:modifier|attribute)\b/i,
 ];
 
+/** A Path of War class table's three columns: maneuvers known, readied, stances known. */
+const MANEUVER_COLUMNS = {
+  known: /^(?:maneuvers?\s+)?known$/i,
+  readied: /^(?:maneuvers?\s+)?readied\b/i,
+  stances: /^stances(?:\s+known)?$/i,
+};
+
+/**
+ * A class page's maneuver progression: maneuvers known, maneuvers readied and
+ * stances known at each class level, from the first table with a Level column
+ * and any of those columns. A column the table lacks is null. "5 (2)" is 5,
+ * a dash is 0, and past the table's last row its last figure holds.
+ *
+ * A base class writes totals (6, 7, 8 …); most prestige classes write what
+ * each level gains (0, 1, 0, 1 …). A table whose figures ever go down is the
+ * second kind, and is added up into totals here.
+ */
+export function maneuverTableFromText(text) {
+  for (const { rows } of pipeTables(text, { tabs: true }).tables) {
+    const head = rows.findIndex((r) => /^(?:class )?level$/i.test(r[0])
+      && r.some((c) => Object.values(MANEUVER_COLUMNS).some((re) => re.test(c))));
+    if (head < 0) continue;
+    const cols = Object.fromEntries(Object.entries(MANEUVER_COLUMNS).map(([k, re]) => [k, rows[head].findIndex((c) => re.test(c))]));
+    const byLevel = [];
+    for (const r of rows.slice(head + 1)) {
+      const level = Number(str(r[0]).match(/^(\d{1,2})(?:st|nd|rd|th)?$/i)?.[1]);
+      if (!(level >= 1 && level <= 20)) continue;
+      byLevel[level - 1] = Object.fromEntries(Object.entries(cols).map(([k, c]) => [k, c < 0 ? null
+        : Number(str(r[c]).replace(/[*†]/g, '').trim().match(/^\+?(\d+)/)?.[1] ?? 0)]));
+    }
+    if (!byLevel.length) continue;
+    const keys = Object.keys(cols).filter((k) => cols[k] >= 0);
+    const read = byLevel.filter(Boolean);
+    const gains = keys.some((k) => read.some((row, i) => i > 0 && row[k] < read[i - 1][k]));
+    const out = {};
+    for (const k of Object.keys(cols)) {
+      if (cols[k] < 0) { out[k] = null; continue; }
+      // A level the table skips gains nothing, or holds the total before it.
+      let sum = 0;
+      let last = 0;
+      out[k] = Array.from(byLevel, (row) => (gains ? (sum += row?.[k] ?? 0) : (last = row?.[k] ?? last)));
+    }
+    return out;
+  }
+  return null;
+}
+
 /**
  * The initiator classes catalogue packs carry: a class or prestige class page
  * whose System field names Maneuver, with the ability its text names as the
- * initiation modifier (`stat`, '' when it names none). Between two packs with
+ * initiation modifier (`stat`, '' when it names none) and its maneuver
+ * progression (`table`, see maneuverTableFromText). Between two packs with
  * the same class, the later one's stands.
  */
 export function initiatorClassesFromTables(tables) {
@@ -2437,7 +2485,7 @@ export function initiatorClassesFromTables(tables) {
         const name = classNameOf(e);
         if (!name || !/\bmaneuver/i.test(str(system))) return null;
         const said = INITIATION_SAID.map((re) => re.exec(str(e?.text))?.[1]).find(Boolean) || '';
-        return { name, stat: said };
+        return { name, stat: said, table: maneuverTableFromText(e?.text) };
       });
       if (found) out.set(lower(found.name), found);
     }

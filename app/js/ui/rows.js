@@ -150,7 +150,8 @@ export function itemExpr(list, i, field, obj, { width = '5rem', placeholder = ''
 }
 
 /**
- * Options are `value`, `[value, label]` or `[value, label, tooltip]`.
+ * Options are `value`, `[value, label]` or `[value, label, tooltip]`, or
+ * `{ group, options }` for a heading with options of those shapes under it.
  *
  * `abOf` colours a picker whose choices are not themselves ability names:
  * given a choice, it answers which ability that choice runs on. Each option
@@ -158,16 +159,22 @@ export function itemExpr(list, i, field, obj, { width = '5rem', placeholder = ''
  * repaint from the option it lands on.
  */
 export function itemSelect(list, i, field, value, options, blank = '—', abOf = null, { kind = 'text', attrs = '' } = {}) {
-  const pairs = options.map((o) => (Array.isArray(o) ? o : [o, o]));
-  const ab = picksAbility(pairs.map(([v]) => v));
-  if (value && !pairs.some(([v]) => String(v) === String(value))) {
+  const pairOf = (o) => (Array.isArray(o) ? o : [o, o]);
+  // `{ group, options }` draws its options under a heading; an empty group is left out.
+  const groups = options.filter((o) => o && typeof o === 'object' && !Array.isArray(o));
+  const pairs = options.filter((o) => !groups.includes(o)).map(pairOf);
+  const grouped = groups.map((g) => ({ label: String(g.group || ''), pairs: (g.options || []).map(pairOf) }))
+    .filter((g) => g.pairs.length);
+  const every = [...pairs, ...grouped.flatMap((g) => g.pairs)];
+  const ab = picksAbility(every.map(([v]) => v));
+  if (value && !every.some(([v]) => String(v) === String(value))) {
     pairs.push([value, `${value} *`]);
   }
   const mark = (v) => (abOf ? abKeyAttr(abOf(v)) : abAttr(ab, v));
-  const opts = (blank === null ? pairs : [['', blank], ...pairs])
-    .map(([v, label, hint]) => `<option value="${esc(v)}"${hint ? ` title="${esc(hint)}"` : ''}${mark(v)}${
-      String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
-    .join('');
+  const option = ([v, label, hint]) => `<option value="${esc(v)}"${hint ? ` title="${esc(hint)}"` : ''}${mark(v)}${
+    String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`;
+  const opts = (blank === null ? pairs : [['', blank], ...pairs]).map(option).join('')
+    + grouped.map((g) => `<optgroup label="${esc(g.label)}">${g.pairs.map(option).join('')}</optgroup>`).join('');
   return `<select data-item="${list}|${i}|${field}" data-kind="${kind}"${mark(value)}${attrs ? ` ${attrs}` : ''}>${opts}</select>`;
 }
 

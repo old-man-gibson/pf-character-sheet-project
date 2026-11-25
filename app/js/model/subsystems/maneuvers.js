@@ -229,7 +229,7 @@ export const MANEUVER_DERIVED = [
   // file on every recompute. Saving it would put back the 206 rows this was
   // meant to get rid of.
   { path: 'disciplines', keys: ['knownManeuvers', 'knownStances', 'readiedManeuvers', 'entries', 'inCatalogue'] },
-  { path: 'sources', keys: SOURCE_COUNTS.flatMap((k) => [`${k}Num`, `${k}Error`]) },
+  { path: 'sources', keys: [...SOURCE_COUNTS.flatMap((k) => [`${k}Num`, `${k}Error`]), 'tableCounts'] },
 ];
 
 /**
@@ -262,17 +262,45 @@ const INITIATOR_NAMES = new Set(['warlord', 'warder', 'stalker', 'mystic', 'harb
 
 /**
  * What the loaded packs say about initiator classes, by class name: a class
- * page whose System field names Maneuver is one, and `stat` is the ability its
- * text names as the initiation modifier ('Cha'), or ''.
+ * page whose System field names Maneuver is one, `stat` is the ability its
+ * text names as the initiation modifier ('Cha') or '', and `table` is its
+ * maneuvers known, readied and stances known by class level, or null.
  */
 let INITIATOR_CLASSES = new Map();
 
-/** Register the packs' initiator classes: `[{ name, stat }]`. */
+/** One column of a pack's maneuver table as whole numbers, or null. */
+const tableColumn = (col) => (Array.isArray(col) && col.length ? col.map((v) => Math.max(0, Math.floor(Number(v) || 0))) : null);
+
+/** Register the packs' initiator classes: `[{ name, stat, table }]`. */
 export function setInitiatorClasses(list) {
   INITIATOR_CLASSES = new Map(packRows(list)
     .filter((x) => x?.name)
-    .map((x) => [initiatorKey(x.name), { name: String(x.name), stat: ABILITY_LABELS[abilityOf(x.stat)] || '' }]));
+    .map((x) => {
+      const table = x.table && typeof x.table === 'object'
+        ? Object.fromEntries(SOURCE_COUNTS.map((k) => [k, tableColumn(x.table[k])])) : null;
+      return [initiatorKey(x.name), {
+        name: String(x.name),
+        stat: ABILITY_LABELS[abilityOf(x.stat)] || '',
+        table: table && SOURCE_COUNTS.some((k) => table[k]) ? table : null,
+      }];
+    }));
 }
+
+/**
+ * What a source row's class gives at its level, from a loaded pack's class
+ * table: `{ level, known, readied, stances }`, a count the table has no column
+ * for being 0. Null when no loaded pack has a maneuver table for that name.
+ */
+export function sourceTableCounts(model, name) {
+  const table = initiatorPackClass(name)?.table;
+  if (!table) return null;
+  const level = Math.max(0, Number(model.classLevelCount(String(name || '').trim())) || 0);
+  const at = (col) => (col && level >= 1 ? col[Math.min(level, col.length) - 1] : 0);
+  return { level, known: at(table.known), readied: at(table.readied), stances: at(table.stances) };
+}
+
+/** A source count the class table fills: blank, or the 0 a new row starts with. */
+export const countFromTable = (v) => ['', '0'].includes(String(v ?? '').trim());
 
 /** A class name as the packs' list is keyed: brackets after it and case do not count. */
 const initiatorKey = (name) => normalizeName(splitTags(name).name);
@@ -435,13 +463,17 @@ export function recomputeManeuvers(model) {
   }
 
   // How many the character may know, ready and hold as stances: each source
-  // (a class, a feat) its own row, a number or a formula, and the two boxes
-  // the tab always had as the rest.
+  // (a class, a template, a feat) its own row, a number or a formula, and the
+  // two boxes the tab always had as the rest. A class with a table in a loaded
+  // pack fills its own blank or 0 counts at its level.
   const scope = lazyScope(model);
   const from = { known: 0, readied: 0, stances: 0 };
   for (const s of m.sources || []) {
+    const table = sourceTableCounts(model, s.name);
+    if (table) s.tableCounts = table;
+    else delete s.tableCounts;
     for (const k of SOURCE_COUNTS) {
-      const worked = evaluateAmount(s[k], scope);
+      const worked = table && countFromTable(s[k]) ? { value: table[k], error: null } : evaluateAmount(s[k], scope);
       s[`${k}Num`] = worked.value;
       s[`${k}Error`] = worked.error;
       from[k] += worked.error ? 0 : Math.max(0, worked.value);

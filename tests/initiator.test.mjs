@@ -6,7 +6,7 @@ import { blankDocument } from '../app/js/convert.js';
 import {
   Character, initiatorClasses, isInitiatorClass, maneuverDc, maneuverDcText, setInitiatorClasses,
 } from '../app/js/model.js';
-import { initiatorClassesFromTables } from '../app/js/extensions.js';
+import { initiatorClassesFromTables, maneuverTableFromText } from '../app/js/extensions.js';
 import { FORMULA_FIELDS } from '../app/js/model/reconcile.js';
 import { formulaPlace } from '../app/js/ui/formula-places.js';
 import { targetGroups } from '../app/js/formula-guide.js';
@@ -63,7 +63,7 @@ console.log('a pack marks a class as an initiator and names its modifier');
   };
   const read = initiatorClassesFromTables(tables);
   check('classes and prestige classes whose System names Maneuver, with the stated ability',
-    read, [{ name: 'Bladesong Adept', stat: 'Intelligence' }, { name: 'Grove Keeper', stat: 'Wisdom' }, { name: 'Edge Walker', stat: '' }]);
+    read, [{ name: 'Bladesong Adept', stat: 'Intelligence', table: null }, { name: 'Grove Keeper', stat: 'Wisdom', table: null }, { name: 'Edge Walker', stat: '', table: null }]);
   setInitiatorClasses(read);
   check('a class row of that name is an initiator class', [isInitiatorClass({ name: 'Bladesong Adept' }), isInitiatorClass({ name: 'Plain Fighter' })], [true, false]);
 
@@ -187,6 +187,74 @@ console.log('the Formulas tab lists the two boxes');
   check('each formula with what it came to', rows.map((r) => [r.name, r.place, r.value, r.error]),
     [['Initiator level', 'initiator:initiatorLevelOverride', 16, null], ['Maneuver DC bonus', 'initiator:dcBonus', 0, null]]);
   check('and goes to the box on the Maneuvers tab', formulaPlace(c, rows[0].place)?.tab, 'maneuvers');
+}
+
+console.log('a class table gives maneuvers known, readied and stances');
+{
+  const row = (lvl, k, r, st) => `| ${lvl} | +1 | +2 | +0 | +0 | Something | ${k} | ${r} | ${st} |`;
+  const head = '| Level | Base Attack Bonus | Fort Save | Ref Save | Will Save | Special | Known | Readied | Stances |';
+  const totals = [head, row('1st', 6, 4, 1), row('2nd', 7, 5, 2), row('3rd', 8, '5 (2)', 2)].join('\n');
+  check('a base class writes totals; "5 (2)" is 5', maneuverTableFromText(`Intro.\n\n${totals}\n\nMore.`),
+    { known: [6, 7, 8], readied: [4, 5, 5], stances: [1, 2, 2] });
+  const gains = [head, row('1st', 0, 0, 0), row('2nd', 1, 0, 0), row('3rd', 0, 1, 0), row('4th', 1, 0, 1)].join('\n');
+  check('a prestige class writes gains, added up here', maneuverTableFromText(gains),
+    { known: [0, 1, 1, 2], readied: [0, 0, 1, 1], stances: [0, 0, 0, 1] });
+  const rising = [head, row('1st', '—', '—', '—'), row('2nd', 1, '—', '—'), row('3rd', 1, 1, '—'), row('4th', 2, 1, 1)].join('\n');
+  check('a prestige class that writes totals stays totals; a dash is 0', maneuverTableFromText(rising),
+    { known: [0, 1, 1, 2], readied: [0, 0, 1, 1], stances: [0, 0, 0, 1] });
+  const readiedOnly = ['| Level | Base Attack Bonus | Special | Readied |', '| 1st | +0 | A | 3 |', '| 2nd | +1 | B | 3 |'].join('\n');
+  check('a column the table lacks is null', maneuverTableFromText(readiedOnly), { known: null, readied: [3, 3], stances: null });
+  check('no such table: null', maneuverTableFromText('| Level | Special |\n| 1st | A |'), null);
+
+  const tables = { catalogues: { catalogues: [{ kind: 'class', entries: [{ name: 'Edge Walker', fields: [['System', 'Maneuver']], text: totals }] }] } };
+  check('the pack reading carries the table', initiatorClassesFromTables(tables)[0].table, { known: [6, 7, 8], readied: [4, 5, 5], stances: [1, 2, 2] });
+}
+
+console.log('a source row names a class and fills its counts from the class table');
+{
+  const table = { known: [6, 7, 8, 8, 9], readied: [4, 5, 5, 5, 6], stances: [1, 2, 2, 2, 3] };
+  setInitiatorClasses([{ name: 'Warlord', stat: 'Charisma', table }, { name: 'Battle Templar', stat: '', table: { known: [0, 1], readied: null, stances: [0, 0] } }]);
+  const c = character(7, [['Warlord', 3], ['Fighter', 4]]);
+  const k = () => c.data.maneuvers.calc;
+  const src = (i) => c.data.maneuvers.sources[i];
+  c.listAdd('maneuvers.sources', { name: 'Warlord', known: '', readied: '', stances: '' });
+  check('blank counts: the table at the class level', [k().possibleManeuvers, k().possibleReadied, k().possibleStances], [8, 5, 2]);
+  check('the row says where they came from', src(0).tableCounts, { level: 3, known: 8, readied: 5, stances: 2 });
+  c.setItem('maneuvers.sources', 0, 'known', 0);
+  check('a 0 reads as blank', k().possibleManeuvers, 8);
+  c.setItem('maneuvers.sources', 0, 'known', 10);
+  c.setItem('maneuvers.sources', 0, 'readied', 'level - 1');
+  check('a number or a formula stands instead', [k().possibleManeuvers, k().possibleReadied], [10, 6]);
+  c.listAdd('maneuvers.sources', { name: 'Martial Training', known: 1, readied: '', stances: 0 });
+  check('a row with no table is what it says', [k().possibleManeuvers, k().possibleReadied, k().possibleStances, 'tableCounts' in src(1)], [11, 6, 2, false]);
+  c.setItem('classes', 0, 'levelsOverride', 7);
+  c.setItem('maneuvers.sources', 0, 'known', '');
+  check('past the table, its last row holds', src(0).tableCounts, { level: 7, known: 9, readied: 6, stances: 3 });
+  c.listAdd('maneuvers.sources', { name: 'Battle Templar', known: '', readied: '', stances: '' });
+  check('a class the character does not have gives 0', src(2).tableCounts, { level: 0, known: 0, readied: 0, stances: 0 });
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  check('saved: the typed counts, never the table\'s', saved.maneuvers.sources.map((x) => Object.keys(x).sort().join()),
+    ['known,name,readied,stances', 'known,name,readied,stances', 'known,name,readied,stances']);
+
+  const html = maneuversPanel(c, {});
+  const cell = html.match(/<select data-item="maneuvers\.sources\|0\|name"[^>]*>[\s\S]*?<\/select>/)?.[0] || '';
+  check('the source cell is the class picker',
+    [cell.includes('aria-label="Allowed from"'), /<option value="Warlord"[^>]* selected>Warlord<\/option>/.test(cell), cell.includes('>Fighter<')], [true, true, true]);
+  const box = html.match(/data-item="maneuvers\.sources\|0\|known"[^>]*>/)?.[0] || '';
+  check('a blank count shows the table figure as its placeholder', /placeholder="9"/.test(box), true);
+  check('a typed count shows what it is', /value="level - 1"[^>]*data-item="maneuvers\.sources\|0\|readied"|data-item="maneuvers\.sources\|0\|readied"[^>]*value="level - 1"/.test(html), true);
+  setInitiatorClasses([]);
+}
+
+console.log('a new source row starts on the next class with a table');
+{
+  setInitiatorClasses([{ name: 'Warlord', stat: '', table: { known: [6], readied: [4], stances: [1] } }]);
+  const c = character(1, [['Warlord', 1]]);
+  const add = () => maneuversPanel(c, {}).match(/<button[^>]*data-add="maneuvers\.sources"[^>]*>/)?.[0] || '';
+  check('the first row is that class', add().includes('Warlord'), true);
+  c.listAdd('maneuvers.sources', { name: 'Warlord', known: '', readied: '', stances: '' });
+  check('once it has a row, a new row is blank', add().includes('Warlord'), false);
+  setInitiatorClasses([]);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
