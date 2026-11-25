@@ -34,14 +34,14 @@ console.log('a combat sphere\'s attack bonus has no ceiling');
   c.listAdd('notes', { title: 'Focus', body: 'Focus {sphere.athletics.bab += 1}' });
   check('and a forwarded bonus adds on top', [row('Athletics').babForwarded, row('Athletics').attack], [1, 12]);
   check('formulas read the same figure', c.scope().sphere.athletics.bab, 12);
-  // Alchemy keys off Craft (alchemy) ranks, not BAB; its BAB+ adds the same way.
+  // Alchemy follows BAB like every other sphere; its BAB+ adds the same way.
   c.listAdd('training.combat.sphereBonuses', { sphere: 'Alchemy', rankBonus: 12, dcBonus: 0 });
-  check('a skill-based sphere has no ceiling either', row('Alchemy').attack, 12);
+  check('Alchemy has no ceiling either', row('Alchemy').attack, 22);
   const again = reopen(c);
   check('reopened, nothing moves',
     [again.data.training.combat.sphereRows.find((r) => r.sphere === 'Athletics').attack,
       again.data.training.combat.sphereRows.find((r) => r.sphere === 'Alchemy').attack, again.diffFromSource()],
-    [12, 12, []]);
+    [12, 22, []]);
 }
 
 console.log('\nthe core rules\' trials per tier are the default');
