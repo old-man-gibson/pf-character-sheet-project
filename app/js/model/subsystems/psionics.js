@@ -10,7 +10,7 @@ import { statKeys, statMod } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { levelFollowingPin } from '../progression.js';
 import { forwarded } from '../scope.js';
-import { closestName, evaluateAmount, manifesterForwardKey } from '../util.js';
+import { closestName, evaluateAmount, isPinned, manifesterForwardKey } from '../util.js';
 
 let PSIONIC_TABLES = { powerLevels: [], curves: [], classes: [] };
 
@@ -89,7 +89,7 @@ export const PSIONIC_DERIVED = [
   {
     path: 'classes',
     keys: ['plannerLevel', 'manifesterLevel', 'manifesterLevelBase', 'manifesterLevelError', 'manifesterLevelForwarded',
-      'manifesterLevelWaiting', 'levelClass', 'curveKnown', 'basePoints',
+      'manifesterLevelWaiting', 'levelClass', 'pointsLevel', 'pointsLevelError', 'curveKnown', 'basePoints',
       'abilityPoints', 'points', 'powerCount'],
   },
 ];
@@ -203,9 +203,12 @@ export function importPsionics(tab, identity = {}) {
  *
  * One pool, fed by every manifesting class the character has:
  *
- *   class points = curve[manifester level]
- *                + floor(ability mod x manifester level / 2), per named ability
+ *   class points = curve[points level]
+ *                + floor(ability mod x points level / 2), per named ability
  *   pool         = the sum of those, plus a hand-entered bonus
+ *
+ * where the points level is the manifester level unless the block's "Power
+ * points as level" box sets another (see pointsLevelOf).
  *
  * A class picks its curve by the total that curve reaches at level 20, not by
  * name -- so a homebrew manifesting class works by choosing the curve it runs
@@ -229,6 +232,39 @@ function scopeBeforePin(model, block, blocks) {
     ...scope,
     manifester: { ...scope.manifester, ...(own ? { [own]: { level: planner } } : {}), level: Math.max(planner, ...others) },
   };
+}
+
+/**
+ * The scope a "Power points as level" box's formula reads: the sheet's, with
+ * this class's own manifester level as this recompute worked it out, bonuses
+ * included, so `floor(manifester.psion.level / 2)` follows it at once.
+ */
+function pointsScope(model, block) {
+  const scope = model.scope();
+  const own = manifesterForwardKey(block)?.split('.')[1];
+  if (!own) return scope;
+  return { ...scope, manifester: { ...scope.manifester, [own]: { ...scope.manifester?.[own], level: block.manifesterLevel } } };
+}
+
+/**
+ * The level a class's power points are read at: the "Power points as level"
+ * box, a number or a formula, held to 0-20; blank, or a formula that does not
+ * work out, is `level`, the manifester level before any bonus to it. A simple
+ * class template gains power points as its class of half its Hit Dice while
+ * manifesting at its Hit Dice, so the two are set apart.
+ */
+function pointsLevelOf(model, block, level) {
+  block.pointsLevelError = null;
+  const raw = block.pointsLevelOverride;
+  if (!isPinned(raw)) return level;
+  let n = Number(raw);
+  if (typeof raw === 'string' && !Number.isFinite(n)) {
+    const worked = evaluateAmount(raw, () => pointsScope(model, block));
+    block.pointsLevelError = worked.error;
+    if (worked.error) return level;
+    n = worked.value;
+  }
+  return Math.max(0, Math.min(20, Math.floor(n) || 0));
 }
 
 export function recomputePsionics(model) {
@@ -267,6 +303,10 @@ export function recomputePsionics(model) {
     // first level (`manifesterLevelWaiting`).
     c.manifesterLevelWaiting = counted.waiting;
     c.manifesterLevel = counted.level;
+    // The curve and the ability share are read at the power points level,
+    // which is the manifester level unless the block's box says otherwise.
+    const pointsLevel = pointsLevelOf(model, c, level);
+    c.pointsLevel = pointsLevel;
 
     // A select writes its option as text; the curve is a number, and stays one.
     // Blank is no curve chosen, which is not the curve that reaches 0.
@@ -277,7 +317,7 @@ export function recomputePsionics(model) {
     const cited = c.cited?.curve && Number(c.cited.curve.total) === c.curveTotal
       && Array.isArray(c.cited.curve.points) ? c.cited.curve : null;
     const curve = psionicCurve(c.curveTotal) || cited;
-    const base = curve && level >= 1 && level <= curve.points.length ? curve.points[level - 1] : null;
+    const base = curve && pointsLevel >= 1 && pointsLevel <= curve.points.length ? curve.points[pointsLevel - 1] : null;
     c.curveKnown = curve !== null;
     c.basePoints = base;
     // No curve, or no level on it, means the class manifests nothing at all --
@@ -288,7 +328,7 @@ export function recomputePsionics(model) {
     // same ability in both slots counts once (statKeys), as a slot is read
     // everywhere else: Int and Int is Int, not twice its bonus points.
     c.abilityPoints = base === null ? 0
-      : statKeys(c.stat, c.stat2).reduce((n, k) => n + Math.floor((oneStat(k) * level) / 2), 0);
+      : statKeys(c.stat, c.stat2).reduce((n, k) => n + Math.floor((oneStat(k) * pointsLevel) / 2), 0);
     c.points = base === null ? 0 : Math.max(0, base + c.abilityPoints);
     c.powerCount = (c.powers || []).filter((x) => x.name).length;
     pool += c.points;

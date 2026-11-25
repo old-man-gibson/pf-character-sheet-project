@@ -19,10 +19,53 @@ import { closestName, evaluateAmount, normalizeName, slug, splitTags } from '../
 // in the `…Override` beside each (see applyVeilweaving).
 export const AKASHIC_DERIVED = [
   'calc', 'veilweaving', 'baseDC', 'steadyVeilDC',
-  { path: 'classes', keys: ['totalCap', 'level', 'levelAuto', 'modAbility', 'modValue'] },
+  {
+    path: 'classes',
+    keys: ['totalCap', 'level', 'levelAuto', 'modAbility', 'modValue',
+      'essenceLevel', 'essenceTable', 'essenceAuto', 'essenceNum', 'essenceError'],
+  },
   { path: 'slots', list: 'veils', keys: ['dc'] },
   { path: 'kheshig', list: 'veils', keys: ['dc'] },
 ];
+
+/**
+ * Each veilweaving class's essence by class level, from the Essence column of
+ * the class tables the loaded packs carry (extension-runtime.js reads them).
+ * A class row's blank Essence cell takes its figure from here.
+ */
+let CLASS_ESSENCE = new Map();
+
+/** Register the essence tables: `[{ name, essence: [20 numbers or null] }]`. */
+export function setClassEssenceTables(list) {
+  CLASS_ESSENCE = new Map();
+  for (const t of Array.isArray(list) ? list : []) {
+    const key = normalizeName(t?.name);
+    if (!key || !Array.isArray(t.essence)) continue;
+    CLASS_ESSENCE.set(key, {
+      name: String(t.name).trim(),
+      essence: t.essence.slice(0, 20).map((v) => (v === null || v === undefined || v === '' ? null : Number(v) || 0)),
+    });
+  }
+}
+
+/** One class's essence table by name, however it is capitalized, or null. */
+export function classEssenceTable(name) {
+  return CLASS_ESSENCE.get(normalizeName(name)) || null;
+}
+
+/**
+ * The essence a table gives at a class level: that level's entry, or the last
+ * one before it where the table has none (a prestige class's ten rows, a
+ * "—"), and 0 below the first.
+ */
+export function essenceAtLevel(essence, level) {
+  const list = Array.isArray(essence) ? essence : [];
+  for (let l = Math.min(Math.floor(Number(level) || 0), list.length); l >= 1; l--) {
+    const v = list[l - 1];
+    if (v !== null && v !== undefined && v !== '') return Number(v) || 0;
+  }
+  return 0;
+}
 
 /**
  * The Veilweaving sphere's (tradition) talents, and the class list each opens.
@@ -350,10 +393,15 @@ function applyVeilweaving(model, a) {
 
   for (const c of a.classes || []) {
     const named = !!String(c?.name ?? '').trim();
-    const auto = !named ? 0 : sphere ? combined : levelsOf([tableClass(c.name)]);
+    const own = named ? levelsOf([tableClass(c.name)]) : 0;
+    const auto = !named ? 0 : sphere ? combined : own;
     if (c.levelOverride === undefined) c.levelOverride = pin(c.level, auto, named);
     c.levelAuto = auto;
     c.level = c.levelOverride == null ? auto : Number(c.levelOverride) || 0;
+    // The class's essence is a class feature, read at the class's own levels:
+    // the sphere's combined count is a veilweaving level, not a class level.
+    // A typed level pins this too.
+    c.essenceLevel = c.levelOverride == null ? own : c.level;
     const ability = c.mod || (sphere && named ? caster(c.name)?.mod1 : null) || null;
     c.modAbility = ability;
     c.modValue = ability ? statMod(d, ability, null) : 0;
@@ -412,7 +460,10 @@ export function recomputeAkashic(model) {
     }
   }
 
-  // The pool and its sources, each a number or a formula.
+  // Each class row's essence, then the pool and its other sources, each a
+  // number or a formula. The class rows come first, so a pool cell reading
+  // `class.<name>.essence` gets this recompute's figure.
+  const classEssence = classEssences(model, a);
   const radiantDawn = radiantDawnEssence(model);
   const typed = essenceCells(model, a.essence, radiantDawn.essence);
 
@@ -425,7 +476,9 @@ export function recomputeAkashic(model) {
   if (model.oldBoonCell && traditionBoon && typeof a.essence?.boon === 'number') a.essence.boon = 0;
   const boonAuto = essenceCellBlank(a.essence?.boon);
   if (boonAuto) typed.boon = { value: traditionBoon, error: null };
-  const sources = ESSENCE_SOURCES.reduce((t, [key]) => t + typed[key].value, 0);
+  // The class rows' essence adds in with the rest: the essence of two
+  // gestalt veilweaving classes adds.
+  const sources = classEssence + ESSENCE_SOURCES.reduce((t, [key]) => t + typed[key].value, 0);
   // A blank or 0 Pool is the sources added up, for a character who weaves
   // veils: a named veilweaving class or the Veilweaving sphere. (A tradition's
   // boons count essence for any sphere caster.) A typed pool is checked
@@ -465,6 +518,7 @@ export function recomputeAkashic(model) {
     weaves,
     poolForwarded,
     sources,
+    classEssence,
     traditionBoon,
     boonAuto,
     // What each pool cell came to ({ value, error }), and what the Radiant
@@ -531,6 +585,42 @@ function essenceCells(model, essence = {}, radiantDawn = 0) {
     key === 'radiantDawn' && essenceCellBlank(essence?.[key])
       ? { value: radiantDawn, error: null }
       : evaluateAmount(essence?.[key], own)]));
+}
+
+/**
+ * Each class row's essence, added up. A blank cell is the Essence column of
+ * the class's table at the row's essence level (applyVeilweaving), from a
+ * loaded pack or, on a published sheet, the copy it carries (`cited`); 0 when
+ * neither has one. A number or a formula typed in the cell stands instead, 0
+ * included. In the cell's formula `class.<name>.essence` reads 0, and the pool
+ * totals too, for the reason essenceCells gives.
+ */
+function classEssences(model, a) {
+  const rows = a.classes || [];
+  const scope = scopeIfFormulas(model, rows.map((c) => c?.essence));
+  const own = scope && {
+    ...scope,
+    essence: { ...scope.essence, pool: 0, total: 0, free: 0 },
+    class: Object.fromEntries(Object.entries(scope.class || {}).map(([k, v]) => [k, { ...v, essence: 0 }])),
+  };
+  let total = 0;
+  for (const c of rows) {
+    const named = !!String(c?.name ?? '').trim();
+    const table = named ? classEssenceTable(c.name)?.essence : null;
+    const cited = named && !table && Array.isArray(c.cited?.essence) ? c.cited.essence : null;
+    c.essenceTable = !!(table || cited);
+    c.essenceAuto = c.essenceTable ? essenceAtLevel(table || cited, c.essenceLevel) : 0;
+    if (c.essence === null || c.essence === undefined || (typeof c.essence === 'string' && c.essence.trim() === '')) {
+      c.essenceNum = c.essenceAuto;
+      c.essenceError = null;
+    } else {
+      const worked = evaluateAmount(c.essence, own);
+      c.essenceNum = worked.value;
+      c.essenceError = worked.error;
+    }
+    total += c.essenceNum;
+  }
+  return total;
 }
 
 /**
