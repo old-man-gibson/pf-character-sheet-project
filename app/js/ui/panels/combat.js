@@ -366,7 +366,7 @@ function magicTraditionPanel(model, m) {
         <span class="value">${check('training.magic.amt', m.amt)}</span></div>
       <div class="statline"><span class="label">Mythic AMT</span>
         <span class="value">${check('training.magic.mythicAmt', m.mythicAmt)}</span></div>
-      ${traditionSplit(r, tr, path, { amt: m.amt || m.mythicAmt })}
+      ${traditionSplit(r, tr, path, { amt: m.mythicAmt ? 'mythic' : !!m.amt })}
       ${perClass ? `<div style="margin-top:8px">${addButton(EXTRA_TRADITIONS, 'Add tradition', blankTradition())}</div>
       <p class="hint">A casting class may have its own tradition. Its drawbacks give spell points to that class.
         This tradition covers the other casting classes.</p>` : ''}
@@ -425,17 +425,18 @@ function traditionLists(model, path, tr, r) {
    * A tradition's drawbacks left, invested side by side. Spell points take
    * what Expanded Essence Pool does not, each side up to the table's fifth
    * row, and any more stay uninvested. Each side reads its own row at its own
-   * levels. `n` numbers an extra tradition; `amt` is Advanced Magic
-   * Training, which only the first tradition reads.
+   * levels, once per spell pool. `n` numbers an extra tradition; `amt` is
+   * Advanced Magic Training ('mythic' for the mythic feat), which only the
+   * first tradition reads.
    */
 function traditionSplit(r, tr, path, { amt = false, n = 0 } = {}) {
-    const reads = r.traditionLevels || { sp: 0, essence: 0 };
-    const pools = reads.spPools || [reads.sp];
+    const reads = r.traditionLevels || {};
+    const pools = (list) => (list?.length ? list : [0]).join(' + ');
     const levelsTip = [
-      amt
-        ? 'Advanced Magic Training counts every level for spell points and half the other levels for essence.'
-        : 'Levels in casting classes, each character level counted once.',
-      pools.length > 1 ? 'Spell points are counted for each spell pool, one per gestalt side with a casting class.' : '',
+      amt === 'mythic' ? 'Mythic AMT counts every level in other classes, for spell points and essence.'
+        : amt ? 'Advanced Magic Training counts levels in other classes for spell points, and half of them for essence.'
+          : 'Levels in casting classes, each character level counted once.',
+      reads.sp?.length > 1 ? 'Each spell pool is counted on its own, one per gestalt side.' : '',
     ].filter(Boolean).join(' ');
     const which = n ? `, tradition ${n}` : '';
     return `<div class="tablewrap" style="margin-top:8px"><table class="build compact boonsplit">
@@ -453,7 +454,7 @@ function traditionSplit(r, tr, path, { amt = false, n = 0 } = {}) {
       title: 'Drawbacks on Expanded Essence Pool, 0 to 5. Enter a number or a formula.',
     })}</td></tr>
           <tr><th scope="row" title="${esc(levelsTip)}">Levels counted</th>
-            <td class="num">${pools.join(' + ')}</td><td class="num">${reads.essence}</td></tr>
+            <td class="num">${pools(reads.sp)}</td><td class="num">${pools(reads.essence)}</td></tr>
           <tr><th scope="row">Gives</th>
             <td class="num total">${r.traditionSP ?? 0}</td><td class="num total">${r.traditionEssence ?? 0}</td></tr>
         </tbody></table></div>
@@ -464,9 +465,10 @@ function traditionSplit(r, tr, path, { amt = false, n = 0 } = {}) {
         4 → 1 + 1 per 1.5 levels, 5 → 1 per level. Each side takes up to 5 drawbacks, and the rest
         stay uninvested. Levels are levels in casting classes.
         A gestalt character with a casting class on both sides has two spell pools and gets the
-        spell points for each.
-        With Advanced Magic Training, every level counts for spell points and half the other
-        levels count for essence. Essence appears on the Akashic tab as the Essence Boon.</p>`;
+        spell points and essence for each.
+        Advanced Magic Training counts other classes as casting classes. Their levels count for
+        spell points, and half of them for essence (all of them with Mythic AMT).
+        Essence appears on the Akashic tab as the Essence Boon.</p>`;
   }
 
 

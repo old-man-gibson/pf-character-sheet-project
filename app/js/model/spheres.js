@@ -18,7 +18,7 @@ import { isBackgroundSkill } from '../rules.js';
 import { campaignRules, freeBackgroundSkills } from './campaign.js';
 import { castingTraditions } from './traditions.js';
 import { emit } from './events.js';
-import { classGainsAt, ownLevelCount } from './progression.js';
+import { classGainsAt, ownLevelCount, tableSpelling } from './progression.js';
 import { forwarded, lazyScope } from './scope.js';
 import { recomputeUnarmed } from './stats/attacks.js';
 import { altTrainingFor, altTrainingTalents, grantCount } from './subsystems/alt-training.js';
@@ -1949,30 +1949,41 @@ export function recomputeTraining(model) {
     //
     // Levels in casting classes are the character levels at which one of
     // those classes is present, each counted once however many gestalt sides
-    // have one -- as the veilweaving level is counted. The spell points are
-    // counted per spell pool, though: a gestalt character with a casting
-    // class on two sides has two, and the gestalt rules give each the
-    // tradition's spell points at its own levels (castingPools).
+    // have one -- as the veilweaving level is counted. Spell points and
+    // essence are counted per spell pool, though: a gestalt character with a
+    // casting class on two sides has two, and the gestalt rules give each the
+    // tradition's spell points at its own levels (castingPools); the campaign
+    // rules essence the same way.
+    //
+    // Advanced Magic Training treats the other classes as casting classes
+    // for the first tradition: each class on the Planner's row that is not a
+    // casting class counts, so a gestalt Fighter // Barbarian with it has two
+    // spell pools.
     const gestalt = campaignRules(c).gestalt;
     const amt = !!(m.amt || m.mythicAmt);
     const traditions = castingTraditions(c);
     const sameClass = (a, b) => classKey(a) === classKey(b);
     const ownerOf = (x) => traditions.find((t) => t.extra >= 0 && sameClass(t.tr.className, x.name)) || traditions[0];
+    // Classes, not blocks: two blocks naming one class count it once.
+    const presentAt = (blocks, l) => new Set(blocks
+      .filter((x) => classGainsAt(model, x.name, l, x.classLevelsOverride ?? null) > 0)
+      .map((x) => classKey(x.name))).size;
+    // A name not on the Classes table is no class (a workbook's "Class 4" on
+    // a track not taken up), but every level has one, so a row naming none
+    // is one class.
+    const plannerRows = c.progression?.levels || [];
+    const otherAt = (l) => Math.max(0, Math.max(1, (plannerRows[l - 1]?.classes || [])
+      .filter((x) => String(x ?? '').trim() && tableSpelling(model, x)).length) - presentAt(acquired, l));
     m.traditionResults = traditions.map((t) => {
       const own = acquired.filter((x) => ownerOf(x) === t);
-      const perLevel = [];
-      for (let l = 1; l <= level; l++) {
-        // Classes, not blocks: two blocks naming one class count it once.
-        perLevel.push(new Set(own.filter((x) => classGainsAt(model, x.name, l, x.classLevelsOverride ?? null) > 0)
-          .map((x) => classKey(x.name))).size);
-      }
-      const castingLevels = perLevel.filter((n) => n > 0).length;
-      const pools = castingPools(perLevel, gestalt);
       const withAmt = t.extra < 0 && amt;
-      const reads = traditionLevels({ level, castingLevels, amt: withAmt });
-      const spPools = pools.length > 1
-        ? pools.map((n) => traditionLevels({ level, castingLevels: n, amt: withAmt }).sp)
-        : [reads.sp];
+      const perLevel = [];
+      for (let l = 1; l <= level; l++) perLevel.push({ casting: presentAt(own, l), other: withAmt ? otherAt(l) : 0 });
+      const castingLevels = perLevel.filter((n) => n.casting > 0).length;
+      const pools = castingPools(perLevel, gestalt).map((p) => traditionLevels({
+        castingLevels: p.casting, otherLevels: p.other, mythic: withAmt && !!m.mythicAmt,
+      }));
+      const reads = { sp: pools.map((p) => p.sp), essence: pools.map((p) => p.essence) };
       const drawbacks = weight(t.tr);
       const boughtOff = (t.tr.boughtOff || []).length;
       const box = isBlank(t.tr.essenceDrawbacks) ? null : evaluateAmount(t.tr.essenceDrawbacks, magicScope);
@@ -1980,7 +1991,7 @@ export function recomputeTraining(model) {
         drawbacks,
         boons: boughtOff,
         essenceDrawbacks: box ? box.value : 0,
-        spLevels: spPools,
+        spLevels: reads.sp,
         essenceLevels: reads.essence,
       });
       // No tradition until the character casts, and none for a tradition
@@ -2000,7 +2011,7 @@ export function recomputeTraining(model) {
         boughtOffCount: boughtOff,
         effectiveDrawbacks: Math.max(0, drawbacks - 2 * boughtOff),
         castingLevels,
-        traditionLevels: { ...reads, spPools },
+        traditionLevels: reads,
         essenceDrawbacksNum: box ? box.value : null,
         essenceDrawbacksError: box?.error || null,
         essenceDrawbacks: spend.essenceDrawbacks,

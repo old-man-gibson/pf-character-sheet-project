@@ -166,12 +166,16 @@ the Expanded Essence Pool boon, by the tradition table:
   casting class, each counted once however many gestalt sides have one.
 - **Spell pools.** A gestalt character with a casting class on both sides has two spell
   pools, and each gets the tradition's spell points at its own levels, as the gestalt
-  rules say ("twice the number of bonus spell points"). The second pool's levels are the
-  ones at which both sides have a casting class. The spell points column's *Levels
-  counted* shows both, as `10 + 10`. Essence is counted once. With gestalt off, or with
-  one casting side, there is one pool.
-- **Advanced Magic Training** counts every level for the spell points, and half the
-  other levels (rounded down, minimum 1) for Expanded Essence Pool.
+  rules say ("twice the number of bonus spell points"). Essence is counted the same way
+  (the campaign's ruling). The second pool's levels are the ones at which both sides
+  have a casting class. Both columns' *Levels counted* show each pool, as `10 + 10`.
+  With gestalt off, or with one casting side, there is one pool.
+- **Advanced Magic Training** counts the other classes as casting classes. Their levels
+  count for the spell points, and half of them (rounded down, minimum 1) for Expanded
+  Essence Pool. With *Mythic AMT* all of them count for essence too (the campaign's
+  ruling). Each gestalt side counts, so a Fighter // Barbarian with it has two pools: at
+  20th level, five drawbacks on each column give 40 spell points, and 20 essence (40
+  with Mythic AMT).
 - A character with no casting class level yet, and no Advanced Magic Training, gets
   nothing from the tradition.
 - The essence appears on the Akashic tab as the *Essence Boon*. A number or a formula

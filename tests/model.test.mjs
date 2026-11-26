@@ -12040,18 +12040,18 @@ console.log('tradition essence on the Akashic tab -- the Essence Boon cell');
 {
   // The tradition's own rules are in tradition-rules.test.mjs. Angou's six
   // drawbacks left: five on Expanded Essence Pool (row 5 at 20 levels in
-  // casting classes, 20 essence), one as spell points (row 1, 4, for each of
-  // his two spell pools).
+  // casting classes, 20 essence), one as spell points (row 1, 4), each for
+  // both of his spell pools.
   const c = new Character(load('angou'));
   const m = () => c.data.training.magic;
-  check('his tradition: 8 spell points and 20 essence', [m().traditionSP, m().traditionEssence], [8, 20]);
+  check('his tradition: 8 spell points and 40 essence', [m().traditionSP, m().traditionEssence], [8, 40]);
   // His sheet cached 12 and 83: 4 spell points for each of three casting
   // classes, one of them a Wizard block with no levels.
   check('the workbook counted the spell points three times', [m().totalSP, m().sheet.totalSP], [79, 83]);
   check('the essence reaches the akashic tab',
-    [c.data.akashic.calc.traditionBoon, c.data.akashic.calc.sources], [20, 20]);
-  check('and matches his typed pool',
-    c.data.akashic.calc.sourcesShort, 20 - c.data.akashic.calc.pool);
+    [c.data.akashic.calc.traditionBoon, c.data.akashic.calc.sources], [40, 40]);
+  check('and passes the 20 his typed pool holds',
+    [c.data.akashic.calc.sourcesShort, c.data.akashic.calc.pool], [20, 20]);
   {
     // The Essence Boon cell: blank is the tradition's essence, and a number or
     // a formula typed there stands instead. The workbook's own 20 never
@@ -12059,13 +12059,13 @@ console.log('tradition essence on the Akashic tab -- the Essence Boon cell');
     const k = () => c.data.akashic.calc;
     check("the workbook's own figure is cleared", [c.data.akashic.essence.boon, k().boonAuto], [0, true]);
     c.set('akashic.essence.boon', 30);
-    check("a typed boon stands in place of the tradition's", [k().typed.boon.value, k().sources, k().traditionBoon], [30, 30, 20]);
+    check("a typed boon stands in place of the tradition's", [k().typed.boon.value, k().sources, k().traditionBoon], [30, 30, 40]);
     const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
     check('and is kept on reopen', [again.data.akashic.essence.boon, again.data.akashic.calc.sources], [30, 30]);
     c.set('akashic.essence.boon', 'level * 2 + 1');
     check('or a formula', [k().typed.boon.value, k().sources], [c.data.identity.level * 2 + 1, c.data.identity.level * 2 + 1]);
     c.set('akashic.essence.boon', null);
-    check("blank is the tradition's again", [k().typed.boon.value, k().sources], [20, 20]);
+    check("blank is the tradition's again", [k().typed.boon.value, k().sources], [40, 40]);
   }
   {
     // A casting class's caster level takes a formula: a prestige class that
