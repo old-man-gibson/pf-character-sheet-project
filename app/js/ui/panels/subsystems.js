@@ -80,7 +80,7 @@ import {
   wearsBarding,
 } from '../../companions.js';
 import { hasTokens } from '../../inline.js';
-import { getPath, vancianSlotKey } from '../../model/util.js';
+import { classForwardKey, getPath, vancianSlotKey } from '../../model/util.js';
 import { speedTable } from '../speeds.js';
 import { countsTowardLine } from '../counts-toward.js';
 import { squareLayout } from '../../tracker-style.js';
@@ -1100,6 +1100,9 @@ export function vancianPanel(model, ctx = {}) {
           from the block's name (for example, an archetype). Slots per day, spells known and save
           DC come from the table, the caster level from the Planner, and the casting stats. Type
           into any of them to override it.</p>
+        ${prestigeLevelHint(v.classes || [], {
+    box: 'Caster level', act: 'casting', own: 'Wizard', prc: 'mystic_theurge',
+  })}
         ${unknown.length ? `<p class="hint warn">No casting table for
           ${unknown.map((n) => `<strong>${esc(n)}</strong>`).join(', ')}. Enter those blocks'
           numbers by hand.</p>` : ''}
@@ -1311,6 +1314,22 @@ function powerDatalist(c) {
 function classPick(model, list, i, name, what) {
   return classSelect(model, list, i, 'name', name,
     { attrs: `aria-label="${what}" title="${what}: one of this character’s classes. Its levels in the Planner set the level here."` });
+}
+
+/**
+ * How a prestige class adds to a casting or manifesting class: a formula in
+ * that class's level box. The example names the tab's first block, so it reads
+ * as the player's own class. Aligned classes already count in
+ * `class.<name>.level`, so the box stays blank for those. Kept under the
+ * sheet's 180-character fold (sheet-element.js HELP_LENGTH) so it shows
+ * rather than folding into a Help button.
+ */
+function prestigeLevelHint(classes, { box, act, own, prc }) {
+  if (!classes.length) return '';
+  const first = classes.map((c) => String(c.levelClass || c.name || '').trim()).find(Boolean);
+  const formula = `${classForwardKey(first || own)} + class.${prc}.level`;
+  return `<p class="hint">To add a prestige class's levels to a class's ${act}, enter
+    <code>${esc(formula)}</code> in its ${box}. Aligned classes already count.</p>`;
 }
 
 /** The buttons that put a list of spells or powers in order (edit.js sortCastingList). */
@@ -1636,6 +1655,9 @@ export function psionicsPanel(model, ctx) {
         <p class="hint">The pool is the points from every manifesting class plus the bonus from
           feats or items. Formulas can read <code>pp.pool</code>, <code>pp.left</code> and
           <code>pp.spent</code>.</p>
+        ${prestigeLevelHint(p.classes || [], {
+    box: 'Manifester level', act: 'manifesting', own: 'Psion', prc: 'cerebremancer',
+  })}
         ${unknown.length ? `<p class="hint warn">No power point curve for
           ${unknown.map((n) => `<strong>${esc(n)}</strong>`).join(', ')}. These classes add no
           points until a curve is picked.</p>` : ''}
