@@ -178,6 +178,8 @@ rest of the character can spend.
 
 **Casting numbers**: global CL, DC (10 + CL/2 + best casting mod), MSB, MSD (MSB+11),
 concentration, per-class SP (class levels + casting mod), each with its bonus field.
+The CL, DC, MSB, MSD and Bonus SP fields each take a number or a formula, and a formula
+is listed on the Formulas tab.
 Concentration carries a **d20** that copies the check for Roll20, as does each
 prepared-casting class's own on the Vancian tab (see
 [Rolling it at the table](using-the-sheet.md#rolling-it-at-the-table)).

@@ -15,7 +15,7 @@
  */
 import { esc } from '../html.js';
 import {
-  collapsible, addButton, editLine, exprField, foldButton, itemCheck, itemSelect, itemText, line, lineHtml,
+  collapsible, addButton, exprField, exprLine, foldButton, itemCheck, itemSelect, itemText, line, lineHtml,
   proseList, removeAction, removeButton, removeControl, rowTools,
 } from '../rows.js';
 import { itemArea, prose } from '../prose.js';
@@ -27,7 +27,7 @@ import {
   TEMPLATE_TYPES, sphereForwardKey, sphereNames, trackSphereNames, trackTalentSide, TRAINING_SIDES, sideSphereNames,
 } from '../../model.js';
 import {
-  COMBAT_SPHERES, SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRADITION_ROWS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule,
+  COMBAT_SPHERES, MAGIC_BONUS_BOXES, SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRADITION_ROWS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule,
 } from '../../rules.js';
 import { check, field, linkField, roField, select, text } from '../fields.js';
 import {
@@ -414,12 +414,16 @@ function magicGlobalsPanel(model, m) {
       ? `<button class="badge err sheetfig" data-action="forget-sheet-casting"
           title="${esc(`The imported workbook had ${sheet}. Press to stop comparing the casting numbers with the workbook's.`)}">sheet: ${esc(sheet)} ×</button>` : '');
     const s = m.sheet || {};
+    const labels = Object.fromEntries(MAGIC_BONUS_BOXES);
+    const bonusLine = (key) => exprLine(labels[key], `training.magic.${key}`, m[key], {
+      value: m[`${key}Num`], error: m[`${key}Error`],
+    });
     return `<section class="panel">
       <h3>Casting numbers</h3>
       <div class="statline"><span class="label">Caster level</span>
         <span class="value big">${m.globalCL} ${hint(m.globalCL, s.totalCL)}${forwardedBadge(model, 'spheres.cl', {
     waiting: m.castingUnlocked === false ? 'no casting class has a level yet' : '' })}</span></div>
-      ${editLine('CL bonus', 'training.magic.clBonus', m.clBonus)}
+      ${bonusLine('clBonus')}
       ${countsTowardLine(model, 'spheres.cl')}
       ${m.clWaiting ? `<p class="hint">No casting class has a level yet, so ${fmt(m.clWaiting)} caster level
         is not applied until one does.</p>` : ''}
@@ -428,17 +432,17 @@ function magicGlobalsPanel(model, m) {
         level of ${esc(x.name)}.</p>`).join('')}
       <div class="statline"><span class="label">Global DC</span>
         <span class="value big">${m.globalDC} ${hint(m.globalDC, s.totalDC)}${forwardedBadge(model, 'spheres.dc')}</span></div>
-      ${editLine('DC bonus', 'training.magic.dcBonus', m.dcBonus)}
+      ${bonusLine('dcBonus')}
       <div class="statline"><span class="label">MSB</span><span class="value">${m.msb} ${hint(m.msb, s.totalMSB)}${forwardedBadge(model, 'spheres.msb')}</span></div>
-      ${editLine('MSB bonus', 'training.magic.msbBonus', m.msbBonus)}
+      ${bonusLine('msbBonus')}
       <div class="statline"><span class="label">MSD</span><span class="value">${m.msd} ${hint(m.msd, s.totalMSD)}${forwardedBadge(model, 'spheres.msd')}</span></div>
-      ${editLine('MSD bonus', 'training.magic.msdBonus', m.msdBonus)}
+      ${bonusLine('msdBonus')}
       ${lineHtml('Concentration', `<span class="rollpair">d20+${m.concentration}${
         rollButton(model, 'concentration', 'magic', 'a concentration check')}</span>`)}
 
       <h4 class="subhead">Spell points</h4>
       ${(m.classSP || []).map((x) => line(`${x.name}`, x.sp)).join('')}
-      ${editLine('Bonus SP', 'training.magic.bonusSP', m.bonusSP)}
+      ${bonusLine('bonusSP')}
       ${line('Tradition SP', m.traditionSP ?? 0)}
       <div class="statline"><span class="label">Total SP</span>
         <span class="value big">${m.totalSP} ${hint(m.totalSP, s.totalSP)}${forwardedBadge(model, 'spheres.sp')}</span></div>

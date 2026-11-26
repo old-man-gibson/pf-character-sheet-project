@@ -1119,6 +1119,15 @@ export function skillLabel(name, spec) {
   return variant ? `${base} (${variant})` : base;
 }
 
+/**
+ * The typed bonuses on the Magic Spheres tab's Casting numbers panel, each a
+ * number or a formula: field and label.
+ */
+export const MAGIC_BONUS_BOXES = [
+  ['clBonus', 'CL bonus'], ['dcBonus', 'DC bonus'], ['msbBonus', 'MSB bonus'], ['msdBonus', 'MSD bonus'],
+  ['bonusSP', 'Bonus SP'],
+];
+
 /** The casting tradition table's rows: 1 to 5 drawbacks. More read the fifth. */
 export const TRADITION_ROWS = 5;
 

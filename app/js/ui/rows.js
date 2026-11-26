@@ -524,6 +524,19 @@ export function editLine(label, path, value) {
 }
 
 /**
+ * The same line for a number that may be written as a formula. The model puts
+ * a formula's answer in `value` and a bad formula's message in `error`.
+ */
+export function exprLine(label, path, raw, { value = null, error = null } = {}) {
+  return `<div class="statline">
+      <span class="label">${esc(label)}</span>
+      <span class="value">${exprField(`data-set="${path}" aria-label="${esc(label)}"`, raw, {
+    width: '4.2rem', placeholder: '0', value, error,
+  })}</span>
+    </div>`;
+}
+
+/**
  * A panel that can be folded down to its heading.
  *
  * The button is spliced into the panel's own <h3> rather than wrapped around

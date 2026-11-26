@@ -10,7 +10,7 @@
 import {
   CASTING_TYPES, COMBAT_SPHERES, EXPERTISE_CUSTOM, EXPERTISE_TIERS, GUILE_SPHERES, MAGIC_SPHERES,
   RANKS_PER_TALENT, SPHERE_SKILL_RANKS, TALENTS_TO_TYPE, TALENT_RATES, TRACK_SPHERE_SIDES,
-  PRACTITIONER_TYPES, TRADITION_ROWS, TYPE_RATES, TYPE_TO_TALENTS, drawbackWeight, isBasePick, normalizeTalentTracks,
+  MAGIC_BONUS_BOXES, PRACTITIONER_TYPES, TRADITION_ROWS, TYPE_RATES, TYPE_TO_TALENTS, drawbackWeight, isBasePick, normalizeTalentTracks,
   expertiseTalents, isGuileSphere, ladderGrants, parseLadderRule, sphereSide, sphereSkillLabel, sphereSkillRequirement, sphereSkillSpheres,
   statMod, tempEssenceCost, trackCount, traditionLevels, traditionSpend, weavesVeils, DEFAULT_TALENT_TRACKS,
 } from '../rules.js';
@@ -26,7 +26,7 @@ import { techniqueTalents } from './subsystems/techniques.js';
 import { veilGrantedSpheres, veilsNamedIn } from './subsystems/akashic.js';
 import { markUndo, rowLabel } from './undo.js';
 import {
-  classForwardKey, evaluateAmount, isPinned, normalizeName, splitTags, packRows, packWords, slug, sphereForwardKey,
+  classForwardKey, evaluateAmount, isFormulaText, isPinned, normalizeName, splitTags, packRows, packWords, slug, sphereForwardKey,
 } from './util.js';
 import { isAhead, rowLevel } from './feats.js';
 
@@ -1876,14 +1876,27 @@ export function recomputeTraining(model) {
       (x) => Math.floor(effectiveLevels(x) * (TYPE_RATES[x.effectiveType] ?? 0)),
     ));
     m.castingUnlocked = amtFloor > 0 || acquired.length > 0;
-    const clPlus = (Number(m.clBonus) || 0) + m.clForwarded;
+    // The typed bonuses take a number or a formula (`floor(level / 4)`). A
+    // formula's answer and any error sit beside it for the box and the
+    // Formulas tab; a number leaves nothing beside it.
+    const magicScope = lazyScope(model);
+    const bonus = Object.fromEntries(MAGIC_BONUS_BOXES.map(([key]) => {
+      if (!isFormulaText(m[key])) {
+        delete m[`${key}Num`];
+        delete m[`${key}Error`];
+        return [key, Number(m[key]) || 0];
+      }
+      const box = evaluateAmount(m[key], magicScope);
+      m[`${key}Num`] = box.value;
+      m[`${key}Error`] = box.error;
+      return [key, box.value];
+    }));
+    const clPlus = bonus.clBonus + m.clForwarded;
     m.clWaiting = m.castingUnlocked ? 0 : clPlus;
     m.globalCL = baseCL + (m.castingUnlocked ? clPlus : 0);
-    m.globalDC = 10 + Math.floor(m.globalCL / 2) + bestMod + (Number(m.dcBonus) || 0)
-      + m.dcForwarded;
-    m.msb = Math.max(0, ...casters.map(effectiveLevels))
-      + (Number(m.msbBonus) || 0) + m.msbForwarded;
-    m.msd = m.msb + 11 + (Number(m.msdBonus) || 0) + m.msdForwarded;
+    m.globalDC = 10 + Math.floor(m.globalCL / 2) + bestMod + bonus.dcBonus + m.dcForwarded;
+    m.msb = Math.max(0, ...casters.map(effectiveLevels)) + bonus.msbBonus + m.msbForwarded;
+    m.msd = m.msb + 11 + bonus.msdBonus + m.msdForwarded;
     m.concentration = m.globalCL + bestMod;
 
     // Tradition drawbacks -> boons, spell points and essence.
@@ -1930,7 +1943,7 @@ export function recomputeTraining(model) {
     // that dips while a boon is added keeps what the player wrote.
     const typed = tr.essenceDrawbacks;
     const blank = typed === undefined || typed === null || (typeof typed === 'string' && typed.trim() === '');
-    const box = blank ? null : evaluateAmount(typed, lazyScope(model));
+    const box = blank ? null : evaluateAmount(typed, magicScope);
     m.essenceDrawbacksAuto = weavesVeils(c) ? Math.min(TRADITION_ROWS, m.effectiveDrawbacks) : 0;
     m.essenceDrawbacksNum = box ? box.value : null;
     m.essenceDrawbacksError = box?.error || null;
@@ -1961,7 +1974,7 @@ export function recomputeTraining(model) {
     });
     // A bonus sent to `spheres.sp` lands beside Bonus SP.
     m.totalSP = m.classSP.reduce((s, x) => s + x.sp, 0)
-      + (Number(m.bonusSP) || 0) + forwarded(model, 'spheres.sp') + m.traditionSP;
+      + bonus.bonusSP + forwarded(model, 'spheres.sp') + m.traditionSP;
 
     // Points condensed into temporary essence on the Akashic tab are spent
     // for the day: they are held against the pool here so what is left reads

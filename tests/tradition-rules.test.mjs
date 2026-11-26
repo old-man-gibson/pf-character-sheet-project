@@ -1,7 +1,8 @@
 /** Tests for the casting tradition's spell points and essence: the tradition
  *  table, levels in casting classes (gestalt and Advanced Magic Training),
  *  Expanded Essence Pool, the Veilweaving sphere's Essence Conversion cap,
- *  and a veilweaver's base essence capacity. Every character is built here.
+ *  a veilweaver's base essence capacity, and the Casting numbers bonus boxes.
+ *  Every character is built here.
  *  Run: node tests/tradition-rules.test.mjs */
 import { blankDocument } from '../app/js/convert.js';
 import { Character } from '../app/js/model.js';
@@ -262,6 +263,45 @@ console.log('a veilweaver has the base essence capacity');
   c.setItem('akashic.classes', 0, 'name', 'Old Name');
   check('a name not on the sheet is kept and marked',
     subsystems.akashicPanel(c, {}).includes('<option value="Old Name" selected>Old Name *</option>'), true);
+}
+
+console.log('the Casting numbers bonuses take a number or a formula');
+{
+  const c = build({ rows: rowsOf(8, () => ['Wizard']), casters: ['Wizard'] });
+  const m = () => c.data.training.magic;
+  const saved = () => Object.keys(JSON.parse(JSON.stringify(c.toJSON())).training.magic).sort();
+  const keys = saved();
+  const [cl, dc, msb, totalSP] = [m().globalCL, m().globalDC, m().msb, m().totalSP];
+  c.set('training.magic.clBonus', 1);
+  check('a number adds as before', m().globalCL, cl + 1);
+  check('and saves nothing beside it', saved(), keys);
+  c.set('training.magic.clBonus', 'floor(level / 4)');
+  c.set('training.magic.dcBonus', '1 + 1');
+  c.set('training.magic.msbBonus', 'floor(level / 8)');
+  c.set('training.magic.msdBonus', '3');
+  c.set('training.magic.bonusSP', 'level');
+  check('each formula is worked out', ['clBonus', 'dcBonus', 'msbBonus', 'msdBonus', 'bonusSP'].map((k) => m()[`${k}Num`]),
+    [2, 2, 1, 3, 8]);
+  check('and added where its number would be', [m().globalCL, m().globalDC, m().msb, m().msd, m().totalSP],
+    [cl + 2, dc - Math.floor(cl / 2) + Math.floor((cl + 2) / 2) + 2, msb + 1, msb + 1 + 11 + 3, totalSP + 8]);
+  const rows = c.audit().filter((r) => r.id.startsWith('magic-'));
+  check('each is audited, with a place on the Magic Spheres tab',
+    rows.map((r) => [r.name, r.status, r.value, formulaPlace(c, r.place)?.tab]),
+    [['CL bonus', 'ok', 2, 'magic'], ['DC bonus', 'ok', 2, 'magic'], ['MSB bonus', 'ok', 1, 'magic'],
+      ['MSD bonus', 'ok', 3, 'magic'], ['Bonus SP', 'ok', 8, 'magic']]);
+  const html = combat.renderMagicPanel(c);
+  const box = (k) => {
+    const at = html.indexOf(`data-set="training.magic.${k}"`);
+    return at < 0 ? '' : html.slice(html.lastIndexOf('<span class="xf', at), html.indexOf('</span>', at) + 7);
+  };
+  check('the boxes are formula boxes showing what they come to',
+    ['clBonus', 'bonusSP'].map((k) => [/data-kind="expr"/.test(box(k)), /class="xf-view"[^>]*>(\d+)</.exec(box(k))?.[1]]),
+    [[true, '2'], [true, '8']]);
+  check('no number spinners left on the panel', /type="number"[^>]*data-set="training\.magic\./.test(html), false);
+  c.set('training.magic.msdBonus', 'no.such.name +');
+  check('a broken formula is flagged and counts 0', [typeof m().msdBonusError, m().msd], ['string', m().msb + 11]);
+  c.set('training.magic.bonusSP', 2);
+  check('a number again leaves nothing beside it', ['bonusSPNum' in m(), m().totalSP], [false, totalSP + 2]);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
