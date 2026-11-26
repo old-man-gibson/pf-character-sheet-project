@@ -34,6 +34,8 @@ import {
   abilityField, blendTicks, blendedSection, bonusTalentTable, classLevelsField, singleLadderTable, traditionTable,
 } from './training.js';
 import { classSelect } from '../class-select.js';
+import { campaignRules } from '../../model/campaign.js';
+import { EXTRA_TRADITIONS, blankTradition, idleTraditions, traditionFold } from '../../model/traditions.js';
 
 /** What a template feature's type means, on the dropdown that sets it. */
 const TEMPLATE_TYPE_HINTS = {
@@ -105,6 +107,8 @@ export function renderMagicPanel(model) {
       <div class="foldstrip">${groups}</div>
       <div class="band sidepanels">
         ${wrap('magic-tradition', magicTraditionPanel(model, magic))}
+        ${(magic.traditionResults || []).filter((r) => r.extra >= 0)
+    .map((r) => wrap(traditionFold(r.extra), extraTraditionPanel(model, magic, r))).join('')}
         ${wrap('magic-globals', magicGlobalsPanel(model, magic))}
         ${wrap('magic-spheres', sphereBonusPanel(model, 'magic', magic))}
       </div>
@@ -342,76 +346,118 @@ function bonusTalentPanel(model, sideKey, side) {
 
 function magicTraditionPanel(model, m) {
     const tr = m.tradition || {};
-    const dlist = 'training.magic.tradition.drawbacks';
-    const blist = 'training.magic.tradition.boughtOff';
-    const textList = (lst, items) => proseList(model, lst, items, 'drawback');
+    const r = m.traditionResults?.[0] || m;
+    const path = 'training.magic.tradition';
+    const perClass = campaignRules(model.data).traditionPerClass;
+    const extras = (m.traditionResults || []).filter((x) => x.extra >= 0);
+    const idle = idleTraditions(model.data);
     return `<section class="panel wide">
       <h3>Casting tradition</h3>
-      <label class="fld"><span>Tradition</span>${text('training.magic.tradition.name', tr.name)}</label>
-
-      <h4 class="subhead">Drawbacks <span class="badge">${m.drawbackCount ?? 0} total</span></h4>
-      ${textList(dlist, tr.drawbacks || [])}
-      <div>${addButton(dlist, 'Add drawback', '')}</div>
-      <p class="hint">Write “… x2” on a drawback taken twice. It then counts double.
-        Formulas work here too, for example “Expensive Locus ({locus = 22500} mana)”.</p>
+      <label class="fld"><span>Tradition</span>${text(`${path}.name`, tr.name)}</label>
+      ${extras.length ? line('Classes', r.covers?.length ? r.covers.join(', ') : 'None') : ''}
+      ${traditionLists(model, path, tr, r)}
       ${model.terrainCasting() ? (model.terrainFreedom()
     ? `<p class="hint standing"><b>Terrain Casting is on the tradition, and ${esc(model.terrainFreedom())} ignores it.</b> No sphere effect pays it.</p>`
     : `<p class="hint standing"><b>Terrain Casting is active.</b> Every sphere talent or ability costs one more spell point,
         one casting-time step, or blights your square and the eight around it (dead magic for you for about a year).
         The card table charges it on each cast; elsewhere, apply it yourself.
         Drawback Freedom (Terrain Casting), as a mythic path ability or a feat, turns it off.</p>`) : ''}
+      <div class="statline"><span class="label">Advanced Magic Training</span>
+        <span class="value">${check('training.magic.amt', m.amt)}</span></div>
+      <div class="statline"><span class="label">Mythic AMT</span>
+        <span class="value">${check('training.magic.mythicAmt', m.mythicAmt)}</span></div>
+      ${traditionSplit(r, tr, path, { amt: m.amt || m.mythicAmt })}
+      ${perClass ? `<div style="margin-top:8px">${addButton(EXTRA_TRADITIONS, 'Add tradition', blankTradition())}</div>
+      <p class="hint">A casting class may have its own tradition. Its drawbacks give spell points to that class.
+        This tradition covers the other casting classes.</p>` : ''}
+      ${idle ? `<p class="hint">${idle} more tradition${idle === 1 ? ' is' : 's are'} saved but not counted.
+        The Tradition per class campaign rule is off.</p>` : ''}
+    </section>`;
+  }
 
-      <h4 class="subhead">Boons <span class="badge">${m.boughtOffCount ?? 0}</span></h4>
+  /** An extra casting tradition (campaign rule `traditionPerClass`), for the class it names. */
+function extraTraditionPanel(model, m, r) {
+    const tr = m.extraTraditions?.[r.extra] || {};
+    const path = `${EXTRA_TRADITIONS}.${r.extra}`;
+    const n = r.extra + 2;
+    const named = String(tr.className ?? '').trim();
+    const casters = [...new Set((m.classes || []).map((x) => String(x?.name ?? '').trim()).filter(Boolean))];
+    const waiting = {
+      pick: 'Pick the casting class this tradition is for.',
+      taken: `${named} already has a tradition.`,
+      none: `${named} has no casting level yet.`,
+    }[r.waiting];
+    return `<section class="panel wide">
+      <h3>Casting tradition ${n}</h3>
+      <div class="pair">
+        <label class="fld"><span>Tradition</span>${text(`${path}.name`, tr.name)}</label>
+        <label class="fld"><span>Class</span>${select(`${path}.className`, tr.className, casters, '—',
+    { attrs: `aria-label="Class for casting tradition ${n}"` })}</label>
+      </div>
+      ${waiting ? `<p class="hint">${esc(waiting)}</p>` : ''}
+      ${traditionLists(model, path, tr, r)}
+      ${traditionSplit(r, tr, path, { n })}
+      <div style="margin-top:8px">${removeButton(EXTRA_TRADITIONS, r.extra, { text: 'Remove tradition', what: `casting tradition ${n}` })}</div>
+    </section>`;
+  }
+
+  /** A tradition's drawbacks and boons, and how many drawbacks are left. */
+function traditionLists(model, path, tr, r) {
+    const dlist = `${path}.drawbacks`;
+    const blist = `${path}.boughtOff`;
+    const textList = (lst, items) => proseList(model, lst, items, 'drawback');
+    return `<h4 class="subhead">Drawbacks <span class="badge">${r.drawbackCount ?? 0} total</span></h4>
+      ${textList(dlist, tr.drawbacks || [])}
+      <div>${addButton(dlist, 'Add drawback', '')}</div>
+      <p class="hint">Write “… x2” on a drawback taken twice. It then counts double.
+        Formulas work here too, for example “Expensive Locus ({locus = 22500} mana)”.</p>
+
+      <h4 class="subhead">Boons <span class="badge">${r.boughtOffCount ?? 0}</span></h4>
       ${textList(blist, tr.boughtOff || [])}
       <div>${addButton(blist, 'Add boon', '')}</div>
       <p class="hint">Each boon costs 2 drawbacks. A drawback feat taken as a boon goes here too.</p>
 
       <div class="statline" style="margin-top:8px"><span class="label">Drawbacks left</span>
-        <span class="value">${m.drawbackCount ?? 0} − 2×${m.boughtOffCount ?? 0} = ${m.effectiveDrawbacks ?? 0}</span></div>
-      <div class="statline"><span class="label">Advanced Magic Training</span>
-        <span class="value">${check('training.magic.amt', m.amt)}</span></div>
-      <div class="statline"><span class="label">Mythic AMT</span>
-        <span class="value">${check('training.magic.mythicAmt', m.mythicAmt)}</span></div>
-      ${traditionSplit(m)}
-    </section>`;
+        <span class="value">${r.drawbackCount ?? 0} − 2×${r.boughtOffCount ?? 0} = ${r.effectiveDrawbacks ?? 0}</span></div>`;
   }
 
   /**
-   * The drawbacks left, invested side by side. Spell points take what
-   * Expanded Essence Pool does not, each side up to the table's fifth row,
-   * and any more stay uninvested. Each side reads its own row at its own
-   * levels.
+   * A tradition's drawbacks left, invested side by side. Spell points take
+   * what Expanded Essence Pool does not, each side up to the table's fifth
+   * row, and any more stay uninvested. Each side reads its own row at its own
+   * levels. `n` numbers an extra tradition; `amt` is Advanced Magic
+   * Training, which only the first tradition reads.
    */
-function traditionSplit(m) {
-    const tr = m.tradition || {};
-    const reads = m.traditionLevels || { sp: 0, essence: 0 };
+function traditionSplit(r, tr, path, { amt = false, n = 0 } = {}) {
+    const reads = r.traditionLevels || { sp: 0, essence: 0 };
     const pools = reads.spPools || [reads.sp];
     const levelsTip = [
-      m.amt || m.mythicAmt
+      amt
         ? 'Advanced Magic Training counts every level for spell points and half the other levels for essence.'
         : 'Levels in casting classes, each character level counted once.',
       pools.length > 1 ? 'Spell points are counted for each spell pool, one per gestalt side with a casting class.' : '',
     ].filter(Boolean).join(' ');
+    const which = n ? `, tradition ${n}` : '';
     return `<div class="tablewrap" style="margin-top:8px"><table class="build compact boonsplit">
         <thead><tr><th></th><th scope="col" class="num">As spell points</th><th scope="col" class="num">As essence</th></tr></thead>
         <tbody>
           <tr><th scope="row">Drawbacks</th>
-            <td class="num">${m.spDrawbacks ?? 0}</td>
-            <td class="num">${exprField('data-set="training.magic.tradition.essenceDrawbacks" aria-label="Drawbacks on Expanded Essence Pool"',
+            <td class="num">${r.spDrawbacks ?? 0}</td>
+            <td class="num">${exprField(`data-set="${path}.essenceDrawbacks" aria-label="Drawbacks on Expanded Essence Pool${which}"`,
     tr.essenceDrawbacks ?? '', {
       kind: 'expr-or-null',
       width: '4.2rem',
-      value: m.essenceDrawbacksNum,
-      error: m.essenceDrawbacksError,
+      value: r.essenceDrawbacksNum,
+      error: r.essenceDrawbacksError,
       placeholder: '0',
       title: 'Drawbacks on Expanded Essence Pool, 0 to 5. Enter a number or a formula.',
     })}</td></tr>
           <tr><th scope="row" title="${esc(levelsTip)}">Levels counted</th>
             <td class="num">${pools.join(' + ')}</td><td class="num">${reads.essence}</td></tr>
           <tr><th scope="row">Gives</th>
-            <td class="num total">${m.traditionSP ?? 0}</td><td class="num total">${m.traditionEssence ?? 0}</td></tr>
+            <td class="num total">${r.traditionSP ?? 0}</td><td class="num total">${r.traditionEssence ?? 0}</td></tr>
         </tbody></table></div>
-      ${m.unusedDrawbacks ? line('Uninvested boons', m.unusedDrawbacks) : ''}
+      ${r.unusedDrawbacks ? line('Uninvested boons', r.unusedDrawbacks) : ''}
       <p class="hint">Drawbacks left go to spell points unless some are typed under essence.</p>
       <p class="hint">Drawbacks give spell points, or essence on Expanded Essence Pool, by this table:
         1 → 1 + 1 per 6 levels, 2 → 1 + 1 per 3 levels, 3 → 1 per odd level,
@@ -461,7 +507,12 @@ function magicGlobalsPanel(model, m) {
       <h4 class="subhead">Spell points</h4>
       ${(m.classSP || []).map((x) => line(`${x.name}`, x.sp)).join('')}
       ${bonusLine('bonusSP')}
-      ${line('Tradition SP', m.traditionSP ?? 0)}
+      ${(m.traditionResults || []).length > 1
+    ? m.traditionResults.map((r) => {
+      const name = String((r.extra < 0 ? m.tradition : m.extraTraditions?.[r.extra])?.name ?? '').trim();
+      return line(`${name || `Tradition ${r.extra + 2}`} SP`, r.traditionSP);
+    }).join('')
+    : line('Tradition SP', m.traditionSP ?? 0)}
       <div class="statline"><span class="label">Total SP</span>
         <span class="value big">${m.totalSP} ${hint(m.totalSP, s.totalSP)}${forwardedBadge(model, 'spheres.sp')}</span></div>
       ${m.spOnEssence ? `

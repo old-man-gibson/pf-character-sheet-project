@@ -254,7 +254,9 @@ export function campaignPanel(model, ctx = {}) {
           row('archetypePackages', 'Archetype packages', check('archetypePackages', 'Archetype packages'),
     'A class may give up one of its archetype packages for another on <strong>Progression</strong>.'),
           row('altTraining', 'Alternate Training', check('altTraining', 'Alternate Training'),
-    'Enables Alternate Training techniques.'))}
+    'Enables Alternate Training techniques.'),
+          row('traditionPerClass', 'Tradition per class', check('traditionPerClass', 'Tradition per class'),
+    'Each casting class may have its own casting tradition, added on <strong>Magic Spheres</strong>.'))}
         ${group('Hero points',
           row('heroPoints', 'Hero points', check('heroPoints', 'Hero points'),
     'Hero points are tracked on <strong>Details</strong> and as a <strong>Trackers</strong> pool.'),

@@ -167,6 +167,12 @@ export const CAMPAIGN_DEFAULTS = Object.freeze({
    */
   occupations: false,
   /**
+   * A casting tradition for each casting class, as the gestalt rules allow
+   * with the GM's permission: the Magic Spheres tab can add one per class,
+   * and each gives spell points to its own class's pool.
+   */
+  traditionPerClass: false,
+  /**
    * Traits a character picks without a drawback, and how many drawbacks buy
    * one more each. The sheet has five trait slots and two drawback slots; a
    * trait past them goes in an Additional row.
@@ -288,6 +294,7 @@ export function campaignRules(d) {
     vmc: bool('vmc'),
     archetypePackages: bool('archetypePackages'),
     occupations: bool('occupations'),
+    traditionPerClass: bool('traditionPerClass'),
     traits: Math.min(TRAIT_KEYS.length, count(c.traits, CAMPAIGN_DEFAULTS.traits)),
     drawbackTraits: Math.min(DRAWBACK_KEYS.length, count(c.drawbackTraits, CAMPAIGN_DEFAULTS.drawbackTraits)),
     mythicFloorLevels: count(c.mythicFloorLevels, CAMPAIGN_DEFAULTS.mythicFloorLevels),
@@ -538,6 +545,7 @@ export const RULE_TITLES = Object.freeze({
   vmc: 'Variant multiclassing',
   archetypePackages: 'Archetype packages',
   occupations: 'Occupations',
+  traditionPerClass: 'Tradition per class',
   traits: 'Traits',
   drawbackTraits: 'Traits from drawbacks',
   mythicFloorLevels: 'Lowest mythic tier',

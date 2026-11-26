@@ -12,6 +12,8 @@ import {
 import * as combat from '../app/js/ui/panels/combat.js';
 import * as subsystems from '../app/js/ui/panels/subsystems.js';
 import { formulaPlace } from '../app/js/ui/formula-places.js';
+import { blankTradition, idleTraditions } from '../app/js/model/traditions.js';
+import { deckFeatNames } from '../app/js/model/subsystems/cardcasting.js';
 
 let pass = 0;
 let fail = 0;
@@ -156,6 +158,82 @@ console.log('spell pools: each gestalt side that casts gets the spell points');
   check('four once neither side casts past 4th', [m().castingLevels, m().traditionSP], [4, 2 + 2]);
   c.set('campaign.gestalt', false);
   check('gestalt off: one pool', [m().traditionLevels.spPools, m().traditionSP], [[4], 2]);
+}
+
+console.log('a tradition per casting class (campaign rule)');
+{
+  const c = build({
+    rows: rowsOf(10, () => ['Wizard', 'Incanter']), casters: ['Wizard', 'Incanter'], drawbacks: ['A', 'B', 'C'], weaver: 'Wizard',
+  });
+  const m = () => c.data.training.magic;
+  const sp = () => m().traditionResults.map((r) => r.traditionSP);
+  check('one tradition, two pools: row 3 at 10 levels, twice', m().traditionSP, 10);
+  c.listAdd('training.magic.extraTraditions', { ...blankTradition(), className: 'Incanter', drawbacks: ['D', 'E'] });
+  check('rule off: the extra is kept but not counted', [m().traditionResults.length, m().traditionSP, idleTraditions(c.data)], [1, 10, 1]);
+  check('and the panel says so', /1 more tradition is saved but not counted/.test(combat.renderMagicPanel(c)), true);
+  check('the campaign rule starts off', c.data.campaign?.traditionPerClass ?? false, false);
+
+  c.set('campaign.traditionPerClass', true);
+  check('rule on: each tradition reads its own class', m().traditionResults.map((r) => r.covers), [['Wizard'], ['Incanter']]);
+  check('each gives its own class spell points: row 3 at 10, row 2 at 10', sp(), [5, 4]);
+  check('the total adds them', [m().traditionSP, m().totalSP], [9, m().classSP.reduce((n, x) => n + x.sp, 0) + 9]);
+  check('the first tradition\'s figures stay on the side', [m().spDrawbacks, m().traditionLevels.spPools], [3, [10]]);
+  const html = combat.renderMagicPanel(c);
+  check('a panel for the extra, with its class picker and its own essence box',
+    ['Casting tradition 2', 'data-set="training.magic.extraTraditions.0.className"',
+      'data-set="training.magic.extraTraditions.0.essenceDrawbacks"', 'Classes'].map((x) => html.includes(x)), [true, true, true, true]);
+  check('the Casting numbers list each tradition\'s spell points', /Tradition 1 SP[\s\S]*Tradition 2 SP/.test(html), true);
+
+  c.set('training.magic.extraTraditions.0.essenceDrawbacks', 1);
+  c.set('training.magic.tradition.essenceDrawbacks', 2);
+  check('essence from every tradition goes into the one pool: row 2 and row 1 at 10',
+    [m().traditionEssence, c.data.akashic.calc.traditionBoon], [4 + 2, 4 + 2]);
+  c.set('training.magic.extraTraditions.0.essenceDrawbacks', 'floor(level / 10)');
+  const row = c.audit().find((r) => r.id === 'tradition-essence-drawbacks-2');
+  check('an extra\'s essence formula is audited, with a place to go to',
+    [row?.status, row?.value, formulaPlace(c, row?.place)?.tab], ['ok', 1, 'magic']);
+
+  c.listAdd('training.magic.extraTraditions', { ...blankTradition(), className: 'Incanter', drawbacks: ['F'] });
+  c.listAdd('training.magic.extraTraditions', blankTradition());
+  check('a second for the same class, and one with no class, give nothing and say why',
+    [sp().slice(2), m().traditionResults.slice(2).map((r) => r.waiting)], [[0, 0], ['taken', 'pick']]);
+  c.listRemove('training.magic.extraTraditions', 2);
+  c.listRemove('training.magic.extraTraditions', 1);
+
+  c.listAdd('training.magic.extraTraditions.0.drawbacks', 'Terrain Casting');
+  check('a drawback on an extra tradition is in force', c.terrainCasting(), true);
+  c.listAdd('training.magic.extraTraditions.0.boughtOff', 'Card Shark [Deck]');
+  check('and its boons count as feats', deckFeatNames(c.data), ['Card Shark [Deck]']);
+
+  c.set('training.magic.amt', true);
+  check('Advanced Magic Training is read by the first tradition only',
+    m().traditionResults.map((r) => r.traditionLevels.sp), [10, 10]);
+  c.set('training.magic.amt', false);
+
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('a reload gives the same', [back.data.training.magic.traditionSP, back.data.training.magic.traditionEssence],
+    [m().traditionSP, m().traditionEssence]);
+
+  c.set('campaign.traditionPerClass', false);
+  check('rule off again: the first tradition covers both pools', [m().traditionResults.length, m().traditionSP], [1, 2 * traditionBonus(1, 10)]);
+}
+
+console.log('two blocks for one class count it once');
+{
+  // A workbook's level 21-40 page names a class again: an extended block
+  // with no rows of its own, beside the class's own block.
+  const c = build({
+    rows: rowsOf(20, () => ['Monk', 'Kineticist', 'Wizard']), casters: ['Monk', 'Wizard'], drawbacks: ['A', 'B', 'C', 'D', 'E'],
+  });
+  c.listAdd('training.magic.classes', { ...castingClass('Wizard'), mod1: null, levels: [], extended: true });
+  const m = () => c.data.training.magic;
+  check('one spell point line per class', m().classSP.map((x) => x.name), ['Monk', 'Wizard']);
+  check('two spell pools, not three', [m().traditionLevels.spPools, m().traditionSP], [[20, 20], 40]);
+  check('the tradition covers each class once', m().traditionResults[0].covers, ['Monk', 'Wizard']);
+  c.set('campaign.traditionPerClass', true);
+  c.listAdd('training.magic.extraTraditions', { ...blankTradition(), className: 'Wizard', drawbacks: ['F', 'G'] });
+  check('a tradition for that class takes both blocks: row 5 and row 2 at 20',
+    [m().traditionResults.map((r) => r.covers), m().traditionResults.map((r) => r.traditionSP)], [[['Monk'], ['Wizard']], [20, 7]]);
 }
 
 console.log('one casting class on each of two sides, in turn');

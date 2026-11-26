@@ -36,6 +36,7 @@
  */
 import { COMPANION_KINDS } from '../companions.js';
 import { manipulationFoldKey } from '../model/subsystems/cardcasting.js';
+import { EXTRA_TRADITIONS, traditionFold } from '../model/traditions.js';
 
 /** A training side's tab: the sphere systems are named for what they train. */
 const SIDE_TABS = { combat: 'martial', magic: 'magic', guile: 'guile' };
@@ -347,6 +348,11 @@ function placeOf(model, ref) {
         ? trainingPlace(model, a, `training.magic.tradition.${head === 'drawback' ? 'drawbacks' : 'boughtOff'}`,
           b, 'self', (s) => `${s}-tradition`)
         : (SIDE_TABS[a] ? { tab: SIDE_TABS[a] } : null);
+    // An extra casting tradition's drawback or boon: `tradDrawback:<extra>:<i>`.
+    case 'tradDrawback':
+    case 'tradBoon':
+      return trainingPlace(model, 'magic', `${EXTRA_TRADITIONS}.${a}.${head === 'tradDrawback' ? 'drawbacks' : 'boughtOff'}`,
+        b, 'self', () => traditionFold(Number(a)));
     // A veil, numbered across the chakra slots and then the kheshig's. A slot
     // folds under its name; a veil the catalogue knows shows its words until
     // Edit is pressed.
@@ -399,7 +405,9 @@ function placeOf(model, ref) {
     case 'skillMisc': return skillPlace(a, 'offset');
     case 'skillBudget': return { tab: 'skills', sel: [set('skillBudget.bonusPerLevel')] };
     case 'essenceDrawbacks':
-      return { tab: 'magic', sel: [set('training.magic.tradition.essenceDrawbacks')], ...folded(['magic-tradition']) };
+      return a === undefined
+        ? { tab: 'magic', sel: [set('training.magic.tradition.essenceDrawbacks')], ...folded(['magic-tradition']) }
+        : { tab: 'magic', sel: [set(`${EXTRA_TRADITIONS}.${a}.essenceDrawbacks`)], ...folded([traditionFold(Number(a))]) };
     case 'magicBonus': return { tab: 'magic', sel: [set(`training.magic.${a}`)], ...folded(['magic-globals']) };
     case 'weaponMisc': return weaponPlace(model, a, 'miscDamage');
     // The Other columns, the hit-point parts and the language slots are all on
