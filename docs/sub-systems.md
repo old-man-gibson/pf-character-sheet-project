@@ -141,35 +141,42 @@ is drawn.
 > *customization* is now read as what it is: the block goes and the class it names gets a
 > track, waiting for its two rules.
 
-**Traditions.** Martial: name + granted talents with spheres. Casting: drawbacks and
-bought-off lists ("… x2" counts double; each drawback feat buys off two), with the
-boon math computed live: `effective = drawbacks − 2×feats`, SP tier = min(effective, 5),
-boons = the excess, and the boon ladder by the sheet's progression (1 boon → 1+level/6
-… 5 → level). Verified: Angou 8 drawbacks − 2 = 6 → tier 5, 1 boon, 12 SP, total 83 SP
-— matching his sheet exactly.
+**Traditions.** Martial: name + granted talents with spheres. Casting: a **Drawbacks**
+list ("… x2" counts double) and a **Boons** list. Each boon costs 2 drawbacks, a drawback
+feat taken as a boon included. The drawbacks left give spell points, or essence through
+the Expanded Essence Pool boon, by the tradition table:
 
-**Every effective drawback is a boon, and boons are spent** rather than merely counted.
-The sheet separated the first five as a "spell-point tier" and the rest as "boons", and
-granted nothing at all for the tier — so a character below six effective drawbacks got
-nothing. They are one count on one ladder here: step *n* is worth what it adds to the
-step below it, the ladder tops out at five, and the steps sum back to it exactly.
+| Drawbacks | Spell points or essence |
+| --- | --- |
+| 1 | +1, +1 per 6 levels in casting classes |
+| 2 | +1, +1 per 3 levels |
+| 3 | +1 per odd level |
+| 4 | +1, +1 per 1.5 levels (2, 3, 5, 6, …) |
+| 5 | +1 per level |
 
-Each pool is split with **two number fields**: how many steps become spell points, how
-many become essence. Spell points are multiplied by the number of casting classes, the
-way the sheet totals them; essence is one pool, and replaces the Akashic tab's typed
-*Essence Boon* — which is where every one of these sheets recorded exactly this number
-(Angou 20 at 20th, Narockro 11 at 11th, Saburō 9 at 9th, each the ladder at five steps;
-Bryva, at zero, has none). The default split is the one the sheets were written with:
-the boons past the fifth as points, the rest as essence, which reproduces Angou's cached
-12 tradition SP and 83 total.
+- The drawbacks left are shown in two columns, **As spell points** and **As essence**,
+  with how many go to each, the levels each reads and what each gives.
+- The essence column's box is the drawbacks on Expanded Essence Pool, a number or a
+  formula from 0 to 5. Blank is 0: the boon is not taken. Those drawbacks give essence by
+  their row; the rest give spell points by theirs. Each reads its own row, so neither is
+  a share of the other.
+- Each column takes up to 5 drawbacks. Any more are held as *uninvested boons*, and the
+  panel says how many.
+- **Levels in casting classes** are the character levels at which the character has a
+  casting class, each counted once however many gestalt sides have one. Nothing is
+  multiplied by the number of casting classes.
+- **Advanced Magic Training** counts every level for the spell points, and half the
+  other levels (rounded down, minimum 1) for Expanded Essence Pool.
+- A character with no casting class level yet, and no Advanced Magic Training, gets
+  nothing from the tradition.
+- The essence appears on the Akashic tab as the *Essence Boon*. A number or a formula
+  typed there stands instead.
 
-> The three sheets that have an Essence Boon all read the ladder **twice** — Angou takes
-> 20 as essence *and* 4 × 3 casting classes as spell points, 32 points' worth out of a
-> 20-point ladder, and Narockro and Saburō do the same. Granting the tier and the boons
-> both looks like a slip in a workbook assembled by hand over many weekends, so the app
-> reads the ladder once and Angou's essence comes to 16 where he wrote 20. His spell
-> points are untouched. The Akashic panel flags the gap against his typed pool with a
-> "≠ pool" badge rather than hiding it, which is what that badge is for.
+A sheet saved while a blank box meant "up to 5 for a character who weaves veils" keeps
+that split: on its first open, up to 5 is written into the box for a veilweaver, so its
+numbers stay where they were. A sheet saved with the older split ("so many drawbacks as
+spell points, the rest as essence") opens with the rest, up to 5, in the box. Both happen
+once (the `tradition-essence-split` correction), and a box cleared after that is 0.
 
 Every tradition cell reads
 `{…}` too: *Expensive Locus ({locus = 22500} mana)* is a drawback and a number the
@@ -177,6 +184,8 @@ rest of the character can spend.
 
 **Casting numbers**: global CL, DC (10 + CL/2 + best casting mod), MSB, MSD (MSB+11),
 concentration, per-class SP (class levels + casting mod), each with its bonus field.
+The CL, DC, MSB, MSD and Bonus SP fields each take a number or a formula, and a formula
+is listed on the Formulas tab.
 Concentration carries a **d20** that copies the check for Roll20, as does each
 prepared-casting class's own on the Vancian tab (see
 [Rolling it at the table](using-the-sheet.md#rolling-it-at-the-table)).
@@ -444,7 +453,9 @@ veil DC = veilweaving base DC + essence invested in that veil
 That held for every shaped veil across the workbooks, so only the essence is saved
 and the DC is recomputed — about forty cells a sheet that no longer round-trip.
 Angou's essence reads 20/20 against the sheet's own *Used/Total*, and the per-veil
-**Total Cap** is essence cap + bonus cap rather than a stored number. The two
+**Total Cap** is essence cap + bonus cap rather than a stored number. A class row's
+class is picked from the character's classes, and its essence cap is 1, plus 1 per 6
+character levels, unless a higher number is typed in it. The two
 **Kheshig** receptacles name the slot they use instead of occupying one.
 
 The day's essence reads as a **gauge** rather than a row of chips: what moves during
@@ -522,9 +533,9 @@ to put "Classes Available" and appended it to the foot of the text instead.
 ### Spell points into essence
 
 A veilweaver with the **Veilweaving sphere** condenses **2 spell points into 1
-temporary essence** for the day. The exchange sits at the end of the essence strip:
-type how many temporary essence to make and the bar widens by that much — the
-temporary part of the capacity is tinted, since it is borrowed rather than granted.
+essence** for the day. The exchange sits at the end of the essence strip:
+type how many to make and the bar widens by that much — the
+condensed part of the capacity is tinted, since it is borrowed rather than granted.
 
 The points are spent whether or not the essence is ever invested, so they come off
 the caster's own pool: **Magic Spheres** keeps *Total SP* as the character's total
@@ -532,6 +543,10 @@ and adds *Condensed to essence* and *Available to cast with* under it. Asking fo
 more essence than the pool can pay for is **flagged rather than clamped** — both tabs
 say how many points short it falls and the number you typed is kept, so it can be
 corrected instead of being silently rewritten.
+
+The most it can make is the sphere's Maximum Essence Conversion at its caster level
+(1.5 per level rounded down to 20th, then 2 per level), less the Essence Boon. More than
+that, or any without the sphere, is flagged the same way.
 
 The condensed essence is a **layer** on the gauge rather than a bigger pool, so the
 part of the day's capacity that was bought with spell points stays visible whichever
@@ -1074,12 +1089,10 @@ other tab; the *level* badge's working says which source it read and what the
 master-level penalty took off.
 
 **A conjured companion's casting tradition** follows the character's rule once it casts
-(the Magical Companion talent or the mage archetype): every drawback is a boon ("x2"
-counts two), each drawback feat buys off two of them (the **Bought off with drawback feats**
-list, as on your own tradition), and a boon taken as spell points is worth its step on the boon ladder, read
-at the companion's Hit Dice, and added to its pool. **Boons as spell points** sets how
-many; blank means every drawback without a boon written in the list. The boons written
-are kept as written, and a line can forward what it grants.
+(the Magical Companion talent or the mage archetype): each drawback feat and each boon
+costs 2 drawbacks ("x2" counts two), and the drawbacks left give spell points by the
+tradition table at the companion's Hit Dice, added to its pool. The boons written are
+kept as written, and a line can forward what it grants.
 
 **Portraits.** Every companion kind has a **Portrait URL** field on its head panel; the
 picture shows beside the identity fields, the way the character's own portrait does.

@@ -10,9 +10,9 @@
 import {
   CASTING_TYPES, COMBAT_SPHERES, EXPERTISE_CUSTOM, EXPERTISE_TIERS, GUILE_SPHERES, MAGIC_SPHERES,
   RANKS_PER_TALENT, SPHERE_SKILL_RANKS, TALENTS_TO_TYPE, TALENT_RATES, TRACK_SPHERE_SIDES,
-  PRACTITIONER_TYPES, TYPE_RATES, TYPE_TO_TALENTS, boonStep, drawbackWeight, isBasePick, normalizeTalentTracks,
-  expertiseTalents, isGuileSphere, ladderGrants, parseLadderRule, spBoonPoints, sphereSide, sphereSkillLabel, sphereSkillRequirement, sphereSkillSpheres,
-  statMod, tempEssenceCost, trackCount, DEFAULT_TALENT_TRACKS,
+  MAGIC_BONUS_BOXES, PRACTITIONER_TYPES, TRADITION_ROWS, TYPE_RATES, TYPE_TO_TALENTS, drawbackWeight, isBasePick, normalizeTalentTracks,
+  expertiseTalents, isGuileSphere, ladderGrants, parseLadderRule, sphereSide, sphereSkillLabel, sphereSkillRequirement, sphereSkillSpheres,
+  statMod, tempEssenceCost, trackCount, traditionLevels, traditionSpend, weavesVeils, DEFAULT_TALENT_TRACKS,
 } from '../rules.js';
 import { isBackgroundSkill } from '../rules.js';
 import { campaignRules, freeBackgroundSkills } from './campaign.js';
@@ -26,7 +26,7 @@ import { techniqueTalents } from './subsystems/techniques.js';
 import { veilGrantedSpheres, veilsNamedIn } from './subsystems/akashic.js';
 import { markUndo, rowLabel } from './undo.js';
 import {
-  classForwardKey, evaluateAmount, isPinned, normalizeName, splitTags, packRows, packWords, slug, sphereForwardKey,
+  classForwardKey, evaluateAmount, isFormulaText, isPinned, normalizeName, splitTags, packRows, packWords, slug, sphereForwardKey,
 } from './util.js';
 import { isAhead, rowLevel } from './feats.js';
 
@@ -1876,101 +1876,96 @@ export function recomputeTraining(model) {
       (x) => Math.floor(effectiveLevels(x) * (TYPE_RATES[x.effectiveType] ?? 0)),
     ));
     m.castingUnlocked = amtFloor > 0 || acquired.length > 0;
-    const clPlus = (Number(m.clBonus) || 0) + m.clForwarded;
+    // The typed bonuses take a number or a formula (`floor(level / 4)`). A
+    // formula's answer and any error sit beside it for the box and the
+    // Formulas tab; a number leaves nothing beside it.
+    const magicScope = lazyScope(model);
+    const bonus = Object.fromEntries(MAGIC_BONUS_BOXES.map(([key]) => {
+      if (!isFormulaText(m[key])) {
+        delete m[`${key}Num`];
+        delete m[`${key}Error`];
+        return [key, Number(m[key]) || 0];
+      }
+      const box = evaluateAmount(m[key], magicScope);
+      m[`${key}Num`] = box.value;
+      m[`${key}Error`] = box.error;
+      return [key, box.value];
+    }));
+    const clPlus = bonus.clBonus + m.clForwarded;
     m.clWaiting = m.castingUnlocked ? 0 : clPlus;
     m.globalCL = baseCL + (m.castingUnlocked ? clPlus : 0);
-    m.globalDC = 10 + Math.floor(m.globalCL / 2) + bestMod + (Number(m.dcBonus) || 0)
-      + m.dcForwarded;
-    m.msb = Math.max(0, ...casters.map(effectiveLevels))
-      + (Number(m.msbBonus) || 0) + m.msbForwarded;
-    m.msd = m.msb + 11 + (Number(m.msdBonus) || 0) + m.msdForwarded;
+    m.globalDC = 10 + Math.floor(m.globalCL / 2) + bestMod + bonus.dcBonus + m.dcForwarded;
+    m.msb = Math.max(0, ...casters.map(effectiveLevels)) + bonus.msbBonus + m.msbForwarded;
+    m.msd = m.msb + 11 + bonus.msdBonus + m.msdForwarded;
     m.concentration = m.globalCL + bestMod;
 
-    // Tradition drawbacks -> spell points and boons.
-    // "x2" entries count double; each drawback feat buys off two drawbacks.
+    // Tradition drawbacks -> boons, spell points and essence.
+    //
+    // "x2" entries count double, and each boon in the list (a drawback feat
+    // taken as a boon included) costs two drawbacks. Of the drawbacks left,
+    // the ones spent on Expanded Essence Pool give essence by their row of
+    // the tradition table and the rest give spell points by theirs. Each
+    // reads its own row at levels in casting classes, so neither is a share
+    // of the other, and nothing is multiplied by the number of casting
+    // classes. Past the fifth row a drawback gives nothing.
     const tr = m.tradition || {};
     const drawbacks = (tr.drawbacks || []).reduce((n, d) => n + drawbackWeight(d), 0);
     const boughtOff = (tr.boughtOff || []).length;
-    const effective = Math.max(0, drawbacks - 2 * boughtOff);
     m.drawbackCount = drawbacks;
     m.boughtOffCount = boughtOff;
-    m.effectiveDrawbacks = effective;
-    // Every drawback past what the feats bought off is a boon. The sheet
-    // separated the first five as a "spell-point tier" and the rest as
-    // "boons", but a boon is a boon: they are one count and one ladder.
-    m.spTier = Math.min(5, effective);
-    m.boons = effective;
+    m.effectiveDrawbacks = Math.max(0, drawbacks - 2 * boughtOff);
 
-    // A tradition grants two pools, and each is spent one way or the other.
-    //
-    // The spell-point tier grants the ladder read at the tier itself, which
-    // is where every one of these sheets put its Essence Boon: Angou's 20 at
-    // 20th, Narockro's 11 at 11th, Saburo's 9 at 9th, all exactly the ladder
-    // at tier 5, and Bryva -- the one at tier 0 -- has no Essence Boon at
-    // all. So essence is what this pool defaults to. It is one pool and is
-    // not multiplied.
-    //
-    // Boons past the tier grant spell points instead, per casting class, the
-    // way the sheet totals them: Angou's 1 boon is 4 × 3 classes = the 12 his
-    // workbook cached. Taken a step at a time -- boon n is worth what it adds
-    // on top of the n-1 below it -- so the steps add back up to the ladder
-    // however they are split.
-    const castingClassCount = new Set(acquired.map((x) => x.name)).size;
+    // Levels in casting classes: the character levels at which a casting
+    // class the character has is present, each counted once however many
+    // gestalt sides have one -- as the veilweaving level is counted.
+    let castingLevels = 0;
+    for (let l = 1; l <= level; l++) {
+      if (acquired.some((x) => classGainsAt(model, x.name, l, x.classLevelsOverride ?? null) > 0)) castingLevels++;
+    }
+    const amt = !!(m.amt || m.mythicAmt);
+    const reads = traditionLevels({ level, castingLevels, amt });
+    m.castingLevels = castingLevels;
+    m.traditionLevels = reads;
 
-    /**
-     * A pool, split step by step between the two things it can become.
-     *
-     * The ladder is quoted for a whole number of steps, so one step is worth
-     * what it adds to the step below it -- which keeps any split summing back
-     * to the ladder exactly. Steps are spent from the bottom up: the first
-     * `spSteps` of them are the spell points, the rest are essence.
-     */
-    const poolSplit = (key, label, steps, spSteps) => {
-      const each = Array.from({ length: steps }, (_, i) => boonStep(i + 1, level));
-      const k = Math.max(0, Math.min(steps, Math.floor(Number(spSteps) || 0)));
-      const sum = (xs) => xs.reduce((n, x) => n + x, 0);
-      return {
-        key,
-        label,
-        steps,
-        spSteps: k,
-        essenceSteps: steps - k,
-        points: sum(each),
-        sp: sum(each.slice(0, k)) * castingClassCount,
-        essence: sum(each.slice(k)),
-      };
-    };
-
-    // Carried over from the two-pool shape and its either/or choice.
-    for (const [old, kept] of [['tierUse', 'tierSP'], ['boonUses', 'boonSP']]) {
-      if (tr[old] === undefined) continue;
-      if (tr[kept] === undefined) {
-        tr[kept] = old === 'tierUse'
-          ? (tr[old] === 'sp' ? m.spTier : 0)
-          : tr[old].filter((u) => u !== 'essence').length;
+    // Blank is 0: the boon is not taken until the player types how many
+    // drawbacks go on it, and the drawbacks left give spell points. A number
+    // or a formula stands; it is clamped on the way in, so a count that dips
+    // while a boon is added keeps what the player wrote.
+    const isBlank = (v) => v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
+    // A sheet saved before keeps the split it showed, written into the box
+    // once, against the count at the time: up to five for a character who
+    // weaves veils, or what was left after a split saved as "so many
+    // drawbacks as spell points" before the box existed.
+    if (model.oldEssenceSplit) {
+      model.oldEssenceSplit = false;
+      const legacySP = tr.boonSP ?? tr.tierSP ?? null;
+      if (!isBlank(legacySP)) {
+        tr.essenceDrawbacks ??= Math.max(0, Math.min(TRADITION_ROWS, m.effectiveDrawbacks - (Math.floor(Number(legacySP)) || 0)));
+      } else if (isBlank(tr.essenceDrawbacks) && weavesVeils(c) && m.effectiveDrawbacks > 0) {
+        tr.essenceDrawbacks = Math.min(TRADITION_ROWS, m.effectiveDrawbacks);
       }
-      delete tr[old];
     }
-    if (tr.tierSP !== undefined) {
-      if (tr.boonSP === undefined) tr.boonSP = tr.tierSP;
-      delete tr.tierSP;
-    }
-
-    // What the player asked for is kept as they wrote it and clamped only on
-    // the way in: buying off a drawback drops the count for a moment, and a
-    // split written back then would be a nought outliving its reason.
-    //
-    // The default is the split the sheets were written with -- the boons past
-    // the fifth as spell points, everything up to it as essence, which is
-    // where each of these characters' Essence Boon came from.
-    const want = tr.boonSP ?? Math.max(0, m.boons - 5);
-    const boonSP = Math.max(0, Math.min(m.boons, Math.floor(Number(want) || 0)));
-
-    m.traditionPools = m.boons ? [poolSplit('boons', `Boons ${m.boons}`, m.boons, boonSP)] : [];
-    m.boonPoints = spBoonPoints(m.boons, level);
-    m.traditionSP = m.traditionPools.reduce((n, p) => n + p.sp, 0);
-    m.traditionEssence = m.traditionPools.reduce((n, p) => n + p.essence, 0);
-    m.castingClassCount = castingClassCount;
+    for (const old of ['boonSP', 'tierSP', 'boonUses', 'tierUse']) delete tr[old];
+    const typed = tr.essenceDrawbacks;
+    const blank = isBlank(typed);
+    const box = blank ? null : evaluateAmount(typed, magicScope);
+    m.essenceDrawbacksNum = box ? box.value : null;
+    m.essenceDrawbacksError = box?.error || null;
+    const spend = traditionSpend({
+      drawbacks,
+      boons: boughtOff,
+      essenceDrawbacks: box ? box.value : 0,
+      spLevels: reads.sp,
+      essenceLevels: reads.essence,
+    });
+    // No tradition until the character casts.
+    const casting = m.castingUnlocked;
+    m.essenceDrawbacks = spend.essenceDrawbacks;
+    m.spDrawbacks = spend.spDrawbacks;
+    m.unusedDrawbacks = spend.unused;
+    m.traditionSP = casting ? spend.sp : 0;
+    m.traditionEssence = casting ? spend.essence : 0;
+    for (const old of ['spTier', 'boons', 'traditionPools', 'boonPoints', 'castingClassCount', 'essenceDrawbacksAuto']) delete m[old];
 
     // A class's spell points are its levels so far plus its casting modifier:
     // the levels the character has now, not the ones planned (Wizard 1-5,
@@ -1983,7 +1978,7 @@ export function recomputeTraining(model) {
     });
     // A bonus sent to `spheres.sp` lands beside Bonus SP.
     m.totalSP = m.classSP.reduce((s, x) => s + x.sp, 0)
-      + (Number(m.bonusSP) || 0) + forwarded(model, 'spheres.sp') + m.traditionSP;
+      + bonus.bonusSP + forwarded(model, 'spheres.sp') + m.traditionSP;
 
     // Points condensed into temporary essence on the Akashic tab are spent
     // for the day: they are held against the pool here so what is left reads

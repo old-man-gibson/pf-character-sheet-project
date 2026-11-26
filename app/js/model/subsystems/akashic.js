@@ -6,13 +6,13 @@
  */
 
 import {
-  ESSENCE_SOURCES, KHESHIG_VEILS, essenceInvested, sphereEssenceCapacity, statMod, tempEssence, tempEssenceCost,
-  veilDC,
+  ESSENCE_SOURCES, KHESHIG_VEILS, baseEssenceCapacity, essenceInvested, maxEssenceConversion, statMod, tempEssence,
+  tempEssenceCost, veilDC, weavesVeils,
 } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { classPresence, tableSpelling } from '../progression.js';
 import { forwarded, scopeIfFormulas } from '../scope.js';
-import { sphereTalent, sphereTalentKnowledge } from '../spheres.js';
+import { sameSphere, sphereTalent, sphereTalentKnowledge } from '../spheres.js';
 import { closestName, evaluateAmount, normalizeName, slug, splitTags } from '../util.js';
 
 // The level and the two DCs are worked out now; what a player pins is kept
@@ -438,17 +438,20 @@ export function recomputeAkashic(model) {
 
   applyVeilweaving(model, a);
   const base = Number(a.baseDC) || 0;
-  // The Veilweaving sphere gives a capacity by character level, and a class
-  // row reads it when its own Ess. is lower. A bonus sent to `essence.cap`
+  // Every veilweaver has a capacity of 1 + 1 per 6 character levels, and a
+  // class row reads it when its own Ess. is lower. With the Veilweaving
+  // sphere it is the character's capacity even with no class row. Two rows
+  // (or two gestalt sides) take the better one. A bonus sent to `essence.cap`
   // ({essence.cap += 1} in a Capacity Increase talent) adds to the best of
   // them, and the veils are checked against the raised figure.
-  const sphereCap = a.veilweaving?.sphere ? sphereEssenceCapacity(model.data.identity?.level) : 0;
+  const baseCap = baseEssenceCapacity(model.data.identity?.level);
   const capForwarded = forwarded(model, 'essence.cap');
   for (const c of a.classes || []) {
     const own = Number(c.essenceCap) || 0;
-    c.totalCap = (String(c?.name ?? '').trim() ? Math.max(own, sphereCap) : own) + (Number(c.bonusCap) || 0);
+    c.totalCap = (String(c?.name ?? '').trim() ? Math.max(own, baseCap) : own) + (Number(c.bonusCap) || 0);
   }
-  const cap = (a.classes || []).reduce((m, c) => Math.max(m, c.totalCap), sphereCap) + capForwarded;
+  const cap = (a.classes || []).reduce((m, c) => Math.max(m, c.totalCap), a.veilweaving?.sphere ? baseCap : 0)
+    + capForwarded;
 
   const over = [];
   for (const holder of [...(a.slots || []), ...(a.kheshig || [])]) {
@@ -484,7 +487,7 @@ export function recomputeAkashic(model) {
   // boons count essence for any sphere caster.) A typed pool is checked
   // against the sources. A bonus sent to `essence.pool` ({essence.pool += 1}
   // on a feat) adds to either.
-  const weaves = !!a.veilweaving?.sphere || (a.classes || []).some((c) => String(c?.name ?? '').trim());
+  const weaves = weavesVeils(model.data);
   const poolAuto = essenceCellBlank(a.essence?.pool);
   if (poolAuto) typed.pool = { value: weaves ? sources : 0, error: null };
   const typedPool = typed.pool.value;
@@ -498,9 +501,20 @@ export function recomputeAkashic(model) {
   // It rides on top of the daily pool rather than inside it -- the pool is
   // what the veilweaving classes grant -- and the points it costs come off
   // the caster's own total, which #recomputeTraining has already worked out.
+  //
+  // It is the sphere's alone, and capped by the Maximum Essence Conversion at
+  // the sphere's caster level. The Essence Boon counts toward that cap (on
+  // its own it may pass it). Asking for more, or for any without the sphere,
+  // is flagged rather than clamped: the number typed is kept.
   const temp = tempEssence(a);
   const spSpent = tempEssenceCost(a);
-  const spPool = Number(model.data.training?.magic?.totalSP) || 0;
+  const magic = model.data.training?.magic;
+  const spPool = Number(magic?.totalSP) || 0;
+  const sphere = !!a.veilweaving?.sphere;
+  const veilweavingCL = sphere
+    ? Number((magic?.sphereRows || []).find((r) => sameSphere(r.sphere, 'Veilweaving'))?.cl ?? magic?.globalCL) || 0
+    : 0;
+  const conversionMax = sphere ? Math.max(0, maxEssenceConversion(veilweavingCL) - Math.max(0, typed.boon.value)) : 0;
 
   // A (tradition) talent hands over a whole class's veil list, so the veil
   // catalogue narrows by it exactly as it does for someone with levels in
@@ -511,7 +525,7 @@ export function recomputeAkashic(model) {
     base,
     traditions,
     totalCap: cap,
-    sphereCap,
+    baseCap,
     capForwarded,
     pool,
     poolAuto,
@@ -532,6 +546,10 @@ export function recomputeAkashic(model) {
     spSpent,
     spPool,
     spShort: Math.max(0, spSpent - spPool),
+    veilweavingCL,
+    conversionMax,
+    tempWithoutSphere: !sphere && temp > 0,
+    tempOver: sphere ? Math.max(0, temp - conversionMax) : 0,
     total: pool + temp,
     used,
     free: pool + temp - used,

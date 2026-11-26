@@ -69,7 +69,7 @@ import { andList, round } from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, CASTING_SOURCES, ESSENCE_SOURCES, MANEUVER_FIELDS,
   PREP_STYLES, SIZE_MODIFIERS,
-  SP_PER_TEMP_ESSENCE, VEIL_SLOTS, WIKI_BASE, castingNoun, fmt, prepStyle,
+  SP_PER_TEMP_ESSENCE, VEIL_SLOTS, WIKI_BASE, castingNoun, fmt, maxEssenceConversion, prepStyle,
   skillLabel, wikiUrl,
 } from '../../rules.js';
 import {
@@ -268,6 +268,8 @@ function essencePanel(ctx, model, a) {
       <h3>Essence
         ${over ? `<span class="badge err" title="${esc((k.overCap || []).join(', '))}">${over} over cap</span>` : ''}
         ${k.spShort ? `<span class="badge err" title="Condensing this much essence costs ${k.spSpent} spell points; the character has ${k.spPool}.">${k.spShort} SP short</span>` : ''}
+        ${k.tempWithoutSphere ? '<span class="badge err" title="Only the Veilweaving sphere turns spell points into essence.">no Veilweaving sphere</span>' : ''}
+        ${k.tempOver ? `<span class="badge err" title="${esc(conversionText(k))}">${k.tempOver} over the maximum</span>` : ''}
         ${meterStyleButton(ctx, 'essence')}
       </h3>
       ${meterStyleEditor(model, ctx, 'essence')}
@@ -292,21 +294,29 @@ function essencePanel(ctx, model, a) {
           ${essFig(k.shaped ?? 0, 'Shaped', `${slots} slot${slots === 1 ? '' : 's'}`)}
         </div>
 
-        <div class="ess-sp${k.spShort ? ' is-over' : ''}">
+        <div class="ess-sp${k.spShort || k.tempOver || k.tempWithoutSphere ? ' is-over' : ''}">
           <div class="ess-sp-k">Spell points → essence</div>
           <label class="minifield">Temporary essence
             ${num('akashic.essence.spTemp', e.spTemp, 'min="0" step="1" style="width:3.2rem"')}</label>
           <div class="ess-sp-cost">
             ${temp
     ? `${k.spSpent} SP spent &middot; ${spLeft} of ${k.spPool ?? 0} left`
-    : `${SP_PER_TEMP_ESSENCE} SP each &middot; ${k.spPool ?? 0} SP available`}
+    : `${SP_PER_TEMP_ESSENCE} SP each &middot; ${k.spPool ?? 0} SP available`}${a.veilweaving?.sphere
+    ? ` &middot; up to ${k.conversionMax ?? 0}` : ''}
           </div>
         </div>
       </div>
       <p class="hint">The Veilweaving sphere turns ${SP_PER_TEMP_ESSENCE} spell points into
-        1 temporary essence for the day. The points are spent whether or not the essence is
-        invested, and come off the total on <strong>Magic Spheres</strong>.</p>
+        1 essence for the day. The points are spent whether or not the essence is
+        invested, and come off the total on <strong>Magic Spheres</strong>.
+        ${a.veilweaving?.sphere ? esc(conversionText(k)) : ''}</p>
     </section>`;
+  }
+
+  /** The Essence Conversion maximum, in words. */
+function conversionText(k) {
+    return `The maximum at Veilweaving caster level ${k.veilweavingCL ?? 0} is ${maxEssenceConversion(k.veilweavingCL)}`
+      + `${k.typed?.boon?.value ? `, less ${k.typed.boon.value} from the Essence Boon` : ''}: ${k.conversionMax ?? 0}.`;
   }
 
   /** One fixed reading beside the gauge: the number first, then what it is. `badge` is markup after the number. */
@@ -320,7 +330,10 @@ function essFig(v, k, sub = '', badge = '') {
    * The essence pool beside the classes that grant it.
    *
    * The sources add into the pool, and the caps come off the class blocks, so
-   * the two belong on one row rather than in a narrow column each.
+   * the two belong on one row rather than in a narrow column each. A row's
+   * class is picked from the character's own classes, as the training blocks
+   * pick theirs, so its levels are found by the same name. A row's Ess. box
+   * shows the base capacity when nothing higher is typed in it.
    */
 function akashicClassesPanel(model, a) {
     const list = 'akashic.classes';
@@ -357,11 +370,13 @@ function akashicClassesPanel(model, a) {
       ? `Blank uses the essence the class table gives at level ${c.essenceLevel ?? 0}. Or enter a number or a formula.`
       : 'No loaded pack has an Essence column for this class, so blank adds 0. Or enter a number or a formula.',
   })}</td>
-              <td class="num">${itemNum(list, i, 'essenceCap', c.essenceCap)}</td>
+              <td class="num">${autoNum(`data-item="${list}|${i}|essenceCap"`, Number(c.essenceCap) || null, {
+    auto: true, placeholder: c.name ? a.calc?.baseCap ?? 0 : 0, width: '3.2rem',
+    title: 'A veilweaving class has a capacity of 1, plus 1 per 6 character levels. Type a higher number to replace it.',
+    label: `Essence capacity of ${c.name || 'this class'}`,
+  })}</td>
               <td class="num">${itemNum(list, i, 'bonusCap', c.bonusCap)}</td>
-              <td class="num total">${(a.calc?.sphereCap || 0) > (Number(c.essenceCap) || 0)
-    ? `<span tabindex="0" data-tip="The Veilweaving sphere gives a capacity of 1, plus 1 per 6 character levels.">${c.totalCap ?? 0}</span>`
-    : c.totalCap ?? 0}</td>
+              <td class="num total">${c.totalCap ?? 0}</td>
               ${rowRemove(list, i)}
             </tr>`).join('') || `<tr><td colspan="8" class="empty">No veilweaving class.</td></tr>`}
           </tbody></table>
@@ -2361,7 +2376,7 @@ function conjuredCastingPanel(model, cc) {
     return `<section class="panel">
       <h3>Casting <span class="badge">CL ${cast.cl}</span><span class="badge">${cast.spellPoints} sp</span></h3>
       ${line('Caster level', cast.cl)}
-      ${cast.boonSP ? `${line('Spell points, base', cast.base)}${line(`Boons as spell points (${cast.boonSteps})`, `+${cast.boonSP}`)}` : ''}
+      ${cast.traditionSP ? `${line('Spell points, base', cast.base)}${line('Tradition spell points', `+${cast.traditionSP}`)}` : ''}
       ${line('Spell points', cast.spellPoints)}
       ${pool ? trackerLine(pool) : ''}
       <p class="hint">${cast.mage
@@ -2382,19 +2397,18 @@ function conjuredCastingPanel(model, cc) {
       <h4 class="subhead">Bought off with drawback feats${(tr.boughtOff || []).length ? ` <span class="badge">${cast.boughtOff}</span>` : ''}</h4>
       ${proseList(model, olist, tr.boughtOff || [], 'bought-off drawback')}
       <div>${addButton(olist, 'Add bought-off drawback', '')}</div>
-      ${cast.boughtOff ? `<div class="statline"><span class="label">Effective drawbacks</span>
-        <span class="value">${cast.drawbacks} − 2×${cast.boughtOff} = ${cast.boons}</span></div>` : ''}
       <h4 class="subhead">Boons${(tr.boons || []).length ? ` <span class="badge">${tr.boons.length}</span>` : ''}</h4>
       ${proseList(model, blist, tr.boons || [], 'boon')}
       <div>${addButton(blist, 'Add boon', '')}</div>
-      ${cast.boons ? `<label class="fld"><span>Boons as spell points</span>${text(`${p}.tradition.boonSP`, tr.boonSP ?? '', String(cast.boonsDefault))}</label>
-      ${line('Boons', `${cast.boons} (one per drawback${cast.boughtOff ? ', two off per drawback feat' : ''})`)}
-      ${line(`${cast.boonSteps} as spell points at ${k.hd ?? 0} HD`, `+${cast.boonSP} sp`)}` : ''}
-      <p class="hint">Blank means natural casting. Each drawback gives one boon (“x2” counts two), and
-        each drawback feat removes two drawbacks, as for your own tradition. Boons taken as spell points
-        add their boon ladder value at this companion’s Hit Dice to the pool above. A blank Boons as
-        spell points box counts every drawback with no boon listed. A line can add a bonus like any
-        note: <code>{${esc(sn)}.cha.score += 2}</code>.</p>
+      ${cast.drawbacks ? `<div class="statline"><span class="label">Drawbacks left</span>
+        <span class="value">${cast.drawbacks} − 2×${cast.boughtOff + cast.boons} = ${cast.left}</span></div>
+      ${line(`Spell points at ${k.hd ?? 0} HD`, `+${cast.traditionSP}`)}
+      ${cast.unused ? `<p class="hint warn">${cast.unused} drawback${cast.unused === 1 ? '' : 's'} past the fifth ${
+    cast.unused === 1 ? 'gives' : 'give'} nothing.</p>` : ''}` : ''}
+      <p class="hint">Blank means natural casting. Each drawback feat and each boon costs 2 drawbacks
+        (“x2” counts two). The drawbacks left add spell points by the tradition table at this
+        companion’s Hit Dice. A line can add a bonus like any note:
+        <code>{${esc(sn)}.cha.score += 2}</code>.</p>
     </section>`;
   }
 

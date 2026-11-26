@@ -11,7 +11,7 @@
 
 import {
   ABILITIES, ABILITY_COLUMN_TABLES, ABILITY_LABELS, AC_BONUS_TYPES, BUFF_MOD_KEYS, abilityColumnName, abilityColumns, DERIVED, ESSENCE_SOURCES, FORWARD_BY_DERIVED, SAVE_BONUS_TYPES, bonusColumnName, diceString,
-  flatFootedLoss, skillLabel,
+  MAGIC_BONUS_BOXES, flatFootedLoss, skillLabel,
 } from '../rules.js';
 import {
   COMPANION_KINDS, COMPANION_LABELS, PLAIN_NUMBER, companionFormulaBoxes, companionHeading,
@@ -515,6 +515,28 @@ export const FORMULA_FIELDS = [
             formula: row[field], value: row[`${field}Num`], error: row[`${field}Error`],
           };
         })));
+    },
+  },
+  {
+    // The casting tradition's drawbacks on Expanded Essence Pool.
+    key: 'essenceDrawbacks', source: 'player', where: 'the Magic Spheres tab',
+    collect: (model) => {
+      const m = model.data.training?.magic;
+      return stringFormula(m?.tradition?.essenceDrawbacks) ? [{
+        id: 'tradition-essence-drawbacks', place: 'essenceDrawbacks', name: 'Drawbacks on Expanded Essence Pool',
+        formula: m.tradition.essenceDrawbacks, value: m.essenceDrawbacksNum, error: m.essenceDrawbacksError,
+      }] : [];
+    },
+  },
+  {
+    // The typed bonuses on the Casting numbers panel.
+    key: 'magicBonus', source: 'player', where: 'the Magic Spheres tab',
+    collect: (model) => {
+      const m = model.data.training?.magic;
+      return MAGIC_BONUS_BOXES.filter(([key]) => stringFormula(m?.[key])).map(([key, name]) => ({
+        id: `magic-${key}`, place: `magicBonus:${key}`, name,
+        formula: m[key], value: m[`${key}Num`], error: m[`${key}Error`],
+      }));
     },
   },
   {

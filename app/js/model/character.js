@@ -190,6 +190,11 @@ export class Character {
     // worked out, that number is cleared (see recomputeAkashic), so the pool
     // opens where it was. A formula there was typed to be used, and is kept.
     this.oldBoonCell = savedBefore(data, 'essence-boon-cell');
+    // A document saved while a blank Expanded Essence Pool box meant "up to 5
+    // for a character who weaves veils" keeps that split: the first training
+    // pass writes it into the box (see recomputeTraining), once the sphere
+    // tally it depends on is known.
+    this.oldEssenceSplit = savedBefore(data, 'tradition-essence-split');
     // A document saved while a typed bonus to "all armour classes" reached
     // all three (a natural armor bonus on touch AC) holds totals worked out
     // that way, so its offsets are measured that way and the sheet is worked

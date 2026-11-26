@@ -15,7 +15,7 @@
  */
 import { esc } from '../html.js';
 import {
-  collapsible, addButton, editLine, exprField, foldButton, itemCheck, itemSelect, itemText, line, lineHtml,
+  collapsible, addButton, exprField, exprLine, foldButton, itemCheck, itemSelect, itemText, line, lineHtml,
   proseList, removeAction, removeButton, removeControl, rowTools,
 } from '../rows.js';
 import { itemArea, prose } from '../prose.js';
@@ -27,7 +27,7 @@ import {
   TEMPLATE_TYPES, sphereForwardKey, sphereNames, trackSphereNames, trackTalentSide, TRAINING_SIDES, sideSphereNames,
 } from '../../model.js';
 import {
-  COMBAT_SPHERES, SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule,
+  COMBAT_SPHERES, MAGIC_BONUS_BOXES, SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule,
 } from '../../rules.js';
 import { check, field, linkField, roField, select, text } from '../fields.js';
 import {
@@ -361,66 +361,60 @@ function magicTraditionPanel(model, m) {
         The card table charges it on each cast; elsewhere, apply it yourself.
         Drawback Freedom (Terrain Casting), as a mythic path ability or a feat, turns it off.</p>`) : ''}
 
-      <h4 class="subhead">Bought off with drawback feats <span class="badge">${m.boughtOffCount ?? 0}</span></h4>
+      <h4 class="subhead">Boons <span class="badge">${m.boughtOffCount ?? 0}</span></h4>
       ${textList(blist, tr.boughtOff || [])}
-      <div>${addButton(blist, 'Add bought-off drawback', '')}</div>
+      <div>${addButton(blist, 'Add boon', '')}</div>
+      <p class="hint">Each boon costs 2 drawbacks. A drawback feat taken as a boon goes here too.</p>
 
-      <div class="statline" style="margin-top:8px"><span class="label">Effective drawbacks</span>
+      <div class="statline" style="margin-top:8px"><span class="label">Drawbacks left</span>
         <span class="value">${m.drawbackCount ?? 0} − 2×${m.boughtOffCount ?? 0} = ${m.effectiveDrawbacks ?? 0}</span></div>
-      ${line('Boons', m.boons ?? 0, true)}
-      ${boonSplit(m)}
-      <p class="hint">
-        The ladder is 1 → 1+level/6, 2 → 1+level/3, 3 → level/2, 4 → 1+level/1.5,
-        5 → level. It stops at 5. Each boon grants the difference between its step and
-        the one below it. Spell points are granted per casting class
-        (${m.castingClassCount ?? 0}). Essence is one pool and appears on the Akashic
-        tab as the Essence Boon.
-      </p>
       <div class="statline"><span class="label">Advanced Magic Training</span>
         <span class="value">${check('training.magic.amt', m.amt)}</span></div>
       <div class="statline"><span class="label">Mythic AMT</span>
         <span class="value">${check('training.magic.mythicAmt', m.mythicAmt)}</span></div>
+      ${traditionSplit(m)}
     </section>`;
   }
 
   /**
-   * How each tradition pool was spent: so many of its steps as spell points,
-   * the rest as essence. Two fields rather than a choice per step, because
-   * what a step is worth depends only on how many are taken, not on which.
+   * The drawbacks left, invested side by side. Spell points take what
+   * Expanded Essence Pool does not, each side up to the table's fifth row,
+   * and any more stay uninvested. Each side reads its own row at its own
+   * levels.
    */
-function boonSplit(m) {
-    const pools = m.traditionPools || [];
-    if (!pools.length) {
-      return `${line('Tradition SP granted', 0, true)}
-        <p class="hint">Nothing to spend yet. A tradition grants one boon per drawback not
-          bought off by drawback feats.</p>`;
-    }
-    // The pool's label closes the key only so that two pools of one size are
-    // two controls when focus is put back after a render; the handler reads
-    // the first three parts.
-    const steps = (p, value, kind) => `<input type="number" min="0" max="${p.steps}"
-      value="${value}" data-split="training.magic.tradition.boonSP|${p.steps}|${kind}|${esc(p.label)}"
-      aria-label="${esc(p.label)}: steps as ${kind === 'sp' ? 'spell points' : 'essence'}">`;
-
-    // Each split is a steps box with what it comes to straight beside it, the
-    // pair under one heading; see table.build.boonsplit in sheet.css.
-    return `<h4 class="subhead">Granted, and how it was spent</h4>
-      <div class="tablewrap"><table class="build compact boonsplit">
-        <thead><tr><th scope="col">Pool</th>
-          <th scope="colgroup" colspan="2" class="splithead">As spell points</th>
-          <th scope="colgroup" colspan="2" class="splithead">As essence</th></tr></thead>
-        <tbody>${pools.map((p) => `<tr>
-          <th scope="row">${esc(p.label)} <span class="badge" title="Total of this pool's ${p.steps} steps.">${p.points}</span></th>
-          <td class="steps">${steps(p, p.spSteps, 'sp')}</td>
-          <td class="gives total">${p.sp} SP</td>
-          <td class="steps">${steps(p, p.essenceSteps, 'essence')}</td>
-          <td class="gives total">${p.essence}</td>
-        </tr>`).join('')}</tbody>
-      </table></div>
-      <p class="hint">These are steps, not points. Each pool's steps add up to its ladder
-        however they are split.</p>
-      ${line('Tradition SP granted', m.traditionSP ?? 0, true)}
-      ${line('Essence granted', m.traditionEssence ?? 0, true)}`;
+function traditionSplit(m) {
+    const tr = m.tradition || {};
+    const reads = m.traditionLevels || { sp: 0, essence: 0 };
+    const levelsTip = m.amt || m.mythicAmt
+      ? 'Advanced Magic Training counts every level for spell points and half the other levels for essence.'
+      : 'Levels in casting classes, each character level counted once.';
+    return `<div class="tablewrap" style="margin-top:8px"><table class="build compact boonsplit">
+        <thead><tr><th></th><th scope="col" class="num">As spell points</th><th scope="col" class="num">As essence</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Drawbacks</th>
+            <td class="num">${m.spDrawbacks ?? 0}</td>
+            <td class="num">${exprField('data-set="training.magic.tradition.essenceDrawbacks" aria-label="Drawbacks on Expanded Essence Pool"',
+    tr.essenceDrawbacks ?? '', {
+      kind: 'expr-or-null',
+      width: '4.2rem',
+      value: m.essenceDrawbacksNum,
+      error: m.essenceDrawbacksError,
+      placeholder: '0',
+      title: 'Drawbacks on Expanded Essence Pool, 0 to 5. Enter a number or a formula.',
+    })}</td></tr>
+          <tr><th scope="row" title="${esc(levelsTip)}">Levels counted</th>
+            <td class="num">${reads.sp}</td><td class="num">${reads.essence}</td></tr>
+          <tr><th scope="row">Gives</th>
+            <td class="num total">${m.traditionSP ?? 0}</td><td class="num total">${m.traditionEssence ?? 0}</td></tr>
+        </tbody></table></div>
+      ${m.unusedDrawbacks ? line('Uninvested boons', m.unusedDrawbacks) : ''}
+      <p class="hint">Drawbacks left go to spell points unless some are typed under essence.</p>
+      <p class="hint">Drawbacks give spell points, or essence on Expanded Essence Pool, by this table:
+        1 → 1 + 1 per 6 levels, 2 → 1 + 1 per 3 levels, 3 → 1 per odd level,
+        4 → 1 + 1 per 1.5 levels, 5 → 1 per level. Each side takes up to 5 drawbacks, and the rest
+        stay uninvested. Levels are levels in casting classes.
+        With Advanced Magic Training, every level counts for spell points and half the other
+        levels count for essence. Essence appears on the Akashic tab as the Essence Boon.</p>`;
   }
 
 
@@ -432,12 +426,16 @@ function magicGlobalsPanel(model, m) {
       ? `<button class="badge err sheetfig" data-action="forget-sheet-casting"
           title="${esc(`The imported workbook had ${sheet}. Press to stop comparing the casting numbers with the workbook's.`)}">sheet: ${esc(sheet)} ×</button>` : '');
     const s = m.sheet || {};
+    const labels = Object.fromEntries(MAGIC_BONUS_BOXES);
+    const bonusLine = (key) => exprLine(labels[key], `training.magic.${key}`, m[key], {
+      value: m[`${key}Num`], error: m[`${key}Error`],
+    });
     return `<section class="panel">
       <h3>Casting numbers</h3>
       <div class="statline"><span class="label">Caster level</span>
         <span class="value big">${m.globalCL} ${hint(m.globalCL, s.totalCL)}${forwardedBadge(model, 'spheres.cl', {
     waiting: m.castingUnlocked === false ? 'no casting class has a level yet' : '' })}</span></div>
-      ${editLine('CL bonus', 'training.magic.clBonus', m.clBonus)}
+      ${bonusLine('clBonus')}
       ${countsTowardLine(model, 'spheres.cl')}
       ${m.clWaiting ? `<p class="hint">No casting class has a level yet, so ${fmt(m.clWaiting)} caster level
         is not applied until one does.</p>` : ''}
@@ -446,17 +444,17 @@ function magicGlobalsPanel(model, m) {
         level of ${esc(x.name)}.</p>`).join('')}
       <div class="statline"><span class="label">Global DC</span>
         <span class="value big">${m.globalDC} ${hint(m.globalDC, s.totalDC)}${forwardedBadge(model, 'spheres.dc')}</span></div>
-      ${editLine('DC bonus', 'training.magic.dcBonus', m.dcBonus)}
+      ${bonusLine('dcBonus')}
       <div class="statline"><span class="label">MSB</span><span class="value">${m.msb} ${hint(m.msb, s.totalMSB)}${forwardedBadge(model, 'spheres.msb')}</span></div>
-      ${editLine('MSB bonus', 'training.magic.msbBonus', m.msbBonus)}
+      ${bonusLine('msbBonus')}
       <div class="statline"><span class="label">MSD</span><span class="value">${m.msd} ${hint(m.msd, s.totalMSD)}${forwardedBadge(model, 'spheres.msd')}</span></div>
-      ${editLine('MSD bonus', 'training.magic.msdBonus', m.msdBonus)}
+      ${bonusLine('msdBonus')}
       ${lineHtml('Concentration', `<span class="rollpair">d20+${m.concentration}${
         rollButton(model, 'concentration', 'magic', 'a concentration check')}</span>`)}
 
       <h4 class="subhead">Spell points</h4>
       ${(m.classSP || []).map((x) => line(`${x.name}`, x.sp)).join('')}
-      ${editLine('Bonus SP', 'training.magic.bonusSP', m.bonusSP)}
+      ${bonusLine('bonusSP')}
       ${line('Tradition SP', m.traditionSP ?? 0)}
       <div class="statline"><span class="label">Total SP</span>
         <span class="value big">${m.totalSP} ${hint(m.totalSP, s.totalSP)}${forwardedBadge(model, 'spheres.sp')}</span></div>

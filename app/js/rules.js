@@ -1120,15 +1120,35 @@ export function skillLabel(name, spec) {
 }
 
 /**
- * Bonus spell points from tradition drawbacks (the sheet's V44 progression),
- * multiplied by the number of distinct casting classes.
+ * The typed bonuses on the Magic Spheres tab's Casting numbers panel, each a
+ * number or a formula: field and label.
  */
-export function spBoonPoints(tier, level) {
-  const t = Math.min(5, Math.max(0, Math.floor(tier)));
-  const L = Math.max(0, Number(level) || 0);
-  switch (t) {
+export const MAGIC_BONUS_BOXES = [
+  ['clBonus', 'CL bonus'], ['dcBonus', 'DC bonus'], ['msbBonus', 'MSB bonus'], ['msdBonus', 'MSD bonus'],
+  ['bonusSP', 'Bonus SP'],
+];
+
+/** The casting tradition table's rows: 1 to 5 drawbacks. More read the fifth. */
+export const TRADITION_ROWS = 5;
+
+/** What one boon costs in general drawbacks. */
+export const DRAWBACKS_PER_BOON = 2;
+
+/**
+ * The casting tradition table: what `drawbacks` general drawbacks grant at
+ * `levels` levels in casting classes. Drawbacks not spent on a boon give this
+ * many spell points; drawbacks spent on Expanded Essence Pool give this much
+ * essence. Each reads its own row, and nothing is multiplied.
+ *
+ *   1: +1, +1 per 6 levels    2: +1, +1 per 3 levels    3: +1 per odd level
+ *   4: +1, +1 per 1.5 levels (2, 3, 5, 6, ...)          5: +1 per level
+ */
+export function traditionBonus(drawbacks, levels) {
+  const row = Math.min(TRADITION_ROWS, Math.max(0, Math.floor(Number(drawbacks) || 0)));
+  const L = Math.max(0, Math.floor(Number(levels) || 0));
+  switch (row) {
     case 5: return L;
-    case 4: return 1 + Math.floor(L / 1.5);
+    case 4: return 1 + Math.floor((2 * L) / 3);
     case 3: return Math.ceil(L / 2);
     case 2: return 1 + Math.floor(L / 3);
     case 1: return 1 + Math.floor(L / 6);
@@ -1137,14 +1157,43 @@ export function spBoonPoints(tier, level) {
 }
 
 /**
- * What the `n`th boon adds on its own.
+ * The levels each half of a tradition reads.
  *
- * The ladder is quoted for a whole number of boons, so one boon's worth is the
- * step it adds to the one below it -- which keeps the steps summing back to the
- * ladder exactly, however they are split between spell points and essence.
+ * `castingLevels` are the character levels at which the character has a
+ * casting class, each counted once however many gestalt sides have one.
+ * Advanced Magic Training treats every other level as a casting class level
+ * for spell points from drawbacks, and half of them (rounded down, minimum 1)
+ * for Expanded Essence Pool.
  */
-export function boonStep(n, level) {
-  return spBoonPoints(n, level) - spBoonPoints(n - 1, level);
+export function traditionLevels({ level, castingLevels, amt }) {
+  const casting = Math.max(0, Math.floor(Number(castingLevels) || 0));
+  const other = Math.max(0, Math.floor(Number(level) || 0) - casting);
+  return {
+    sp: amt ? casting + other : casting,
+    essence: casting + (amt && other > 0 ? Math.max(1, Math.floor(other / 2)) : 0),
+  };
+}
+
+/**
+ * How a tradition's drawbacks are spent.
+ *
+ * `drawbacks` is the weighted count ("x2" counts two) and `boons` the boons
+ * bought, at 2 drawbacks each. Of what is left, `essenceDrawbacks` (clamped to
+ * 0-5 and to what is left) go to Expanded Essence Pool and the rest give spell
+ * points, up to the fifth row; any more stay uninvested (`unused`).
+ */
+export function traditionSpend({ drawbacks, boons = 0, essenceDrawbacks = 0, spLevels = 0, essenceLevels = 0 }) {
+  const left = Math.max(0, (Number(drawbacks) || 0) - DRAWBACKS_PER_BOON * (Number(boons) || 0));
+  const essence = Math.max(0, Math.min(TRADITION_ROWS, left, Math.floor(Number(essenceDrawbacks) || 0)));
+  const sp = Math.min(TRADITION_ROWS, left - essence);
+  return {
+    left,
+    essenceDrawbacks: essence,
+    spDrawbacks: sp,
+    unused: left - essence - sp,
+    sp: traditionBonus(sp, spLevels),
+    essence: traditionBonus(essence, essenceLevels),
+  };
 }
 
 /** "Somatic Casting x2" (or "Somatic Casting 2") counts as two drawbacks. */
@@ -2264,7 +2313,7 @@ export function ladderDice(ladder, level) {
  */
 export const RULE_CORRECTIONS = ['attack-size-sign', 'poor-save-thirds', 'monster-crit-range', 'hp-meter-fill', 'load-penalties',
   'nonproficiency-penalty', 'weapon-crit-shift', 'pack-notes', 'bonus-order', 'essence-boon-cell', 'blank-cmd-deflection',
-  'typed-ac-reach', 'ac-penalty-cmd', 'blank-hp-other'];
+  'typed-ac-reach', 'ac-penalty-cmd', 'blank-hp-other', 'tradition-essence-split'];
 
 /**
  * What a new character's hit points once started at for each level, before it
@@ -2688,11 +2737,30 @@ export function tempEssenceCost(akashic) {
 }
 
 /**
- * The Veilweaving sphere's essence capacity by character level: 1, and 1 more
- * at 6th, 12th and 18th level. The table ends at 20th.
+ * Any veilweaver's essence capacity by Hit Dice: 1, and 1 more at 6th, 12th
+ * and 18th. The table ends at 20th.
  */
-export function sphereEssenceCapacity(level) {
+export function baseEssenceCapacity(level) {
   return 1 + Math.floor(Math.min(20, Math.max(0, Math.trunc(Number(level) || 0))) / 6);
+}
+
+/**
+ * The most essence the Veilweaving sphere's Essence Conversion can give, by
+ * the sphere's caster level: 1, 3, 4, 6, ... 30 at 20th (1.5 per level,
+ * rounded down), then 2 more per caster level past 20.
+ */
+export function maxEssenceConversion(casterLevel) {
+  const cl = Math.max(0, Math.trunc(Number(casterLevel) || 0));
+  return cl <= 20 ? Math.floor((3 * cl) / 2) : 30 + 2 * (cl - 20);
+}
+
+/**
+ * Whether the character weaves veils: a named veilweaving class on the
+ * Akashic tab, or the Veilweaving sphere.
+ */
+export function weavesVeils(data) {
+  return (Number(data?.training?.magic?.tally?.Veilweaving) || 0) > 0
+    || (data?.akashic?.classes || []).some((c) => String(c?.name ?? '').trim());
 }
 
 /** A veil's save DC is the veilweaver's base plus the essence invested in it. */

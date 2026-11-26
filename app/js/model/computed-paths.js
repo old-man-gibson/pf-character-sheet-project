@@ -16,7 +16,7 @@
  * here -- add the path here when it does.
  */
 
-import { BUILD_DERIVED_KEYS } from '../rules.js';
+import { BUILD_DERIVED_KEYS, MAGIC_BONUS_BOXES } from '../rules.js';
 
 /** Keys whose value, and everything under it, is always worked out. */
 const COMPUTED_KEYS = new Set(['calc', 'resolved', 'forwarded']);
@@ -60,9 +60,11 @@ const COMPUTED_PATHS = [
   'training.combat.practitionerDC',
   'training.magic.msb', 'training.magic.msd', 'training.magic.globalCL', 'training.magic.globalDC',
   'training.magic.concentration', 'training.magic.totalSP', 'training.magic.availableSP',
-  'training.magic.classSP.*.sp', 'training.magic.boonPoints', 'training.magic.traditionEssence',
-  'training.magic.traditionSP', 'training.magic.traditionPools.*.essence',
-  'training.magic.traditionPools.*.points', 'training.magic.traditionPools.*.sp',
+  'training.magic.classSP.*.sp', 'training.magic.traditionEssence', 'training.magic.traditionSP',
+  'training.magic.castingLevels', 'training.magic.traditionLevels', 'training.magic.essenceDrawbacks',
+  'training.magic.essenceDrawbacksNum', 'training.magic.essenceDrawbacksError',
+  'training.magic.spDrawbacks', 'training.magic.unusedDrawbacks',
+  ...MAGIC_BONUS_BOXES.flatMap(([key]) => [`training.magic.${key}Num`, `training.magic.${key}Error`]),
 ].map((p) => p.split('.'));
 
 /**

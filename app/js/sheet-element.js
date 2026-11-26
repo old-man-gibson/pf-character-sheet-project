@@ -6804,17 +6804,6 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
-    // The two halves of a tradition pool always add up to its steps, so typing
-    // into either one is really moving the boundary between them.
-    root.querySelectorAll('[data-split]').forEach((input) => {
-      input.addEventListener('change', () => {
-        const [target, total, kind] = input.dataset.split.split('|');
-        const n = Math.max(0, Math.min(Number(total), Math.floor(Number(input.value) || 0)));
-        this.#model.set(target, kind === 'sp' ? n : Number(total) - n);
-        this.#rerender(input);
-      });
-    });
-
     // A "counts as" tick: which kinds of talent a class's pool reaches. It may
     // add or drop the class's block on another side, and it moves the class
     // into or out of the blended group, so the whole tab is redrawn rather
