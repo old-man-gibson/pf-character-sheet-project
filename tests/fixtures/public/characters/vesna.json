@@ -3553,7 +3553,10 @@
    "castingLevels": 0,
    "traditionLevels": {
     "sp": 0,
-    "essence": 0
+    "essence": 0,
+    "spPools": [
+     0
+    ]
    },
    "essenceDrawbacksNum": null,
    "essenceDrawbacksError": null,

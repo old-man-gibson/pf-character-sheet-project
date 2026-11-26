@@ -12,7 +12,7 @@ import {
   RANKS_PER_TALENT, SPHERE_SKILL_RANKS, TALENTS_TO_TYPE, TALENT_RATES, TRACK_SPHERE_SIDES,
   MAGIC_BONUS_BOXES, PRACTITIONER_TYPES, TRADITION_ROWS, TYPE_RATES, TYPE_TO_TALENTS, drawbackWeight, isBasePick, normalizeTalentTracks,
   expertiseTalents, isGuileSphere, ladderGrants, parseLadderRule, sphereSide, sphereSkillLabel, sphereSkillRequirement, sphereSkillSpheres,
-  statMod, tempEssenceCost, trackCount, traditionLevels, traditionSpend, weavesVeils, DEFAULT_TALENT_TRACKS,
+  castingPools, statMod, tempEssenceCost, trackCount, traditionLevels, traditionSpend, weavesVeils, DEFAULT_TALENT_TRACKS,
 } from '../rules.js';
 import { isBackgroundSkill } from '../rules.js';
 import { campaignRules, freeBackgroundSkills } from './campaign.js';
@@ -1906,8 +1906,9 @@ export function recomputeTraining(model) {
     // the ones spent on Expanded Essence Pool give essence by their row of
     // the tradition table and the rest give spell points by theirs. Each
     // reads its own row at levels in casting classes, so neither is a share
-    // of the other, and nothing is multiplied by the number of casting
-    // classes. Past the fifth row a drawback gives nothing.
+    // of the other. The spell points are given once per spell pool, which is
+    // twice for a gestalt character casting on both sides, not once per
+    // casting class. Past the fifth row a drawback gives nothing.
     const tr = m.tradition || {};
     const drawbacks = (tr.drawbacks || []).reduce((n, d) => n + drawbackWeight(d), 0);
     const boughtOff = (tr.boughtOff || []).length;
@@ -1917,15 +1918,23 @@ export function recomputeTraining(model) {
 
     // Levels in casting classes: the character levels at which a casting
     // class the character has is present, each counted once however many
-    // gestalt sides have one -- as the veilweaving level is counted.
-    let castingLevels = 0;
+    // gestalt sides have one -- as the veilweaving level is counted. The
+    // spell points are counted per spell pool, though: a gestalt character
+    // with a casting class on two sides has two, and the gestalt rules give
+    // each the tradition's spell points at its own levels (castingPools).
+    const perLevel = [];
     for (let l = 1; l <= level; l++) {
-      if (acquired.some((x) => classGainsAt(model, x.name, l, x.classLevelsOverride ?? null) > 0)) castingLevels++;
+      perLevel.push(acquired.filter((x) => classGainsAt(model, x.name, l, x.classLevelsOverride ?? null) > 0).length);
     }
+    const castingLevels = perLevel.filter((n) => n > 0).length;
+    const pools = castingPools(perLevel, campaignRules(c).gestalt);
     const amt = !!(m.amt || m.mythicAmt);
     const reads = traditionLevels({ level, castingLevels, amt });
+    const spPools = pools.length > 1
+      ? pools.map((n) => traditionLevels({ level, castingLevels: n, amt }).sp)
+      : [reads.sp];
     m.castingLevels = castingLevels;
-    m.traditionLevels = reads;
+    m.traditionLevels = { ...reads, spPools };
 
     // Blank is 0: the boon is not taken until the player types how many
     // drawbacks go on it, and the drawbacks left give spell points. A number
@@ -1955,7 +1964,7 @@ export function recomputeTraining(model) {
       drawbacks,
       boons: boughtOff,
       essenceDrawbacks: box ? box.value : 0,
-      spLevels: reads.sp,
+      spLevels: spPools,
       essenceLevels: reads.essence,
     });
     // No tradition until the character casts.

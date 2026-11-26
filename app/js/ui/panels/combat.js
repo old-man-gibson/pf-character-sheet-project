@@ -385,9 +385,13 @@ function magicTraditionPanel(model, m) {
 function traditionSplit(m) {
     const tr = m.tradition || {};
     const reads = m.traditionLevels || { sp: 0, essence: 0 };
-    const levelsTip = m.amt || m.mythicAmt
-      ? 'Advanced Magic Training counts every level for spell points and half the other levels for essence.'
-      : 'Levels in casting classes, each character level counted once.';
+    const pools = reads.spPools || [reads.sp];
+    const levelsTip = [
+      m.amt || m.mythicAmt
+        ? 'Advanced Magic Training counts every level for spell points and half the other levels for essence.'
+        : 'Levels in casting classes, each character level counted once.',
+      pools.length > 1 ? 'Spell points are counted for each spell pool, one per gestalt side with a casting class.' : '',
+    ].filter(Boolean).join(' ');
     return `<div class="tablewrap" style="margin-top:8px"><table class="build compact boonsplit">
         <thead><tr><th></th><th scope="col" class="num">As spell points</th><th scope="col" class="num">As essence</th></tr></thead>
         <tbody>
@@ -403,7 +407,7 @@ function traditionSplit(m) {
       title: 'Drawbacks on Expanded Essence Pool, 0 to 5. Enter a number or a formula.',
     })}</td></tr>
           <tr><th scope="row" title="${esc(levelsTip)}">Levels counted</th>
-            <td class="num">${reads.sp}</td><td class="num">${reads.essence}</td></tr>
+            <td class="num">${pools.join(' + ')}</td><td class="num">${reads.essence}</td></tr>
           <tr><th scope="row">Gives</th>
             <td class="num total">${m.traditionSP ?? 0}</td><td class="num total">${m.traditionEssence ?? 0}</td></tr>
         </tbody></table></div>
@@ -413,6 +417,8 @@ function traditionSplit(m) {
         1 → 1 + 1 per 6 levels, 2 → 1 + 1 per 3 levels, 3 → 1 per odd level,
         4 → 1 + 1 per 1.5 levels, 5 → 1 per level. Each side takes up to 5 drawbacks, and the rest
         stay uninvested. Levels are levels in casting classes.
+        A gestalt character with a casting class on both sides has two spell pools and gets the
+        spell points for each.
         With Advanced Magic Training, every level counts for spell points and half the other
         levels count for essence. Essence appears on the Akashic tab as the Essence Boon.</p>`;
   }
