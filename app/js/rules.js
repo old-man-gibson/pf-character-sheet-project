@@ -1157,6 +1157,22 @@ export function traditionBonus(drawbacks, levels) {
 }
 
 /**
+ * The levels in casting classes of each spell pool.
+ *
+ * `perLevel` lists, for each character level, how many casting classes the
+ * character has at it. A gestalt character with a casting class on two sides
+ * has two spell pools, and the gestalt rules give each the tradition's spell
+ * points: pool n holds the levels at which at least n casting classes are
+ * present. Without gestalt there is one pool, the levels at which any is.
+ * A character with no casting class level has none.
+ */
+export function castingPools(perLevel, gestalt) {
+  const counts = (perLevel || []).map((n) => Math.max(0, Math.floor(Number(n) || 0)));
+  const most = gestalt ? Math.max(0, ...counts) : Math.min(1, Math.max(0, ...counts));
+  return Array.from({ length: most }, (_, i) => counts.filter((n) => n > i).length);
+}
+
+/**
  * The levels each half of a tradition reads.
  *
  * `castingLevels` are the character levels at which the character has a
@@ -1181,6 +1197,8 @@ export function traditionLevels({ level, castingLevels, amt }) {
  * bought, at 2 drawbacks each. Of what is left, `essenceDrawbacks` (clamped to
  * 0-5 and to what is left) go to Expanded Essence Pool and the rest give spell
  * points, up to the fifth row; any more stay uninvested (`unused`).
+ * `spLevels` is one spell pool's levels or a list of them, one per pool, and
+ * each pool gets the spell points at its own levels.
  */
 export function traditionSpend({ drawbacks, boons = 0, essenceDrawbacks = 0, spLevels = 0, essenceLevels = 0 }) {
   const left = Math.max(0, (Number(drawbacks) || 0) - DRAWBACKS_PER_BOON * (Number(boons) || 0));
@@ -1191,7 +1209,7 @@ export function traditionSpend({ drawbacks, boons = 0, essenceDrawbacks = 0, spL
     essenceDrawbacks: essence,
     spDrawbacks: sp,
     unused: left - essence - sp,
-    sp: traditionBonus(sp, spLevels),
+    sp: [].concat(spLevels).reduce((total, levels) => total + traditionBonus(sp, levels), 0),
     essence: traditionBonus(essence, essenceLevels),
   };
 }

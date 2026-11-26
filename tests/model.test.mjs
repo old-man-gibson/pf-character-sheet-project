@@ -6609,10 +6609,11 @@ console.log('spheres training reproduces the sheet');
   check('angou bought off', m.boughtOffCount, 1);
   check('angou effective', m.effectiveDrawbacks, 6);
   // Five of the six on Expanded Essence Pool, the sixth as spell points at
-  // his 20 levels in casting classes: row 1, 1 + 20/6 = 4. Nothing is
-  // multiplied by his casting classes; the workbook's 12 was 4 x 3.
-  check('angou tradition SP (row 1 at 20 casting levels)', m.traditionSP, 4);
-  check('angou total SP', m.totalSP, 75);
+  // his 20 levels in casting classes: row 1, 1 + 20/6 = 4, for each of his
+  // two spell pools (he casts on both gestalt sides). The workbook's 12 was
+  // 4 x 3, counting a Wizard block with no levels.
+  check('angou tradition SP (row 1 at 20 casting levels, two pools)', m.traditionSP, 8);
+  check('angou total SP', m.totalSP, 79);
 
   // Bryva: the other internally-consistent workbook.
   const b = new Character(load('bryva'));
@@ -6640,7 +6641,7 @@ console.log('spheres training reproduces the sheet');
   c.listAdd('training.magic.tradition.boughtOff', 'Somatic Casting');
   check('buying off a drawback costs 2 effective', c.data.training.magic.effectiveDrawbacks, 4);
   check('all four left go to Expanded Essence Pool', c.data.training.magic.essenceDrawbacks, 4);
-  check('so the tradition SP is gone', c.data.training.magic.totalSP, sp0 - 4);
+  check('so the tradition SP is gone', c.data.training.magic.totalSP, sp0 - 8);
   c.listRemove('training.magic.tradition.boughtOff', 1);
   check('restored', c.data.training.magic.totalSP, sp0);
 }
@@ -7681,11 +7682,11 @@ console.log('training values reach the formula scope');
   const c = new Character(load('angou'));
   const scope = c.scope();
   check('caster.level', scope.caster.level, 20);
-  check('caster.sp', scope.caster.sp, 75);
+  check('caster.sp', scope.caster.sp, 79);
   check('practitioner.dc', scope.practitioner.dc, 36);
   check('unarmed.talents', scope.unarmed.talents, 19);
   const t = c.addTracker({ name: 'SP Pool', maxFormula: 'caster.sp' });
-  check('tracker can read SP', t.max, 75);
+  check('tracker can read SP', t.max, 79);
 }
 
 console.log('gestalt classes drive save bases');
@@ -11762,7 +11763,7 @@ console.log('blended training -- one class, one pool, two progressions');
   // None of the per-side numbers move: they are still computed off the block
   // sitting on that side, which is why the pair is kept rather than merged.
   check('caster level unmoved', a.data.training.magic.globalCL, 20);
-  check('spell points unmoved', a.data.training.magic.totalSP, 75);
+  check('spell points unmoved', a.data.training.magic.totalSP, 79);
   check('practitioner DC unmoved', a.data.training.combat.practitionerDC, 36);
   check('bryva too', [new Character(load('bryva')).blendedClasses().map((p) => p.name)],
     [['Blacksmith']]);
@@ -12039,13 +12040,14 @@ console.log('tradition essence on the Akashic tab -- the Essence Boon cell');
 {
   // The tradition's own rules are in tradition-rules.test.mjs. Angou's six
   // drawbacks left: five on Expanded Essence Pool (row 5 at 20 levels in
-  // casting classes, 20 essence), one as spell points (row 1, 4).
+  // casting classes, 20 essence), one as spell points (row 1, 4, for each of
+  // his two spell pools).
   const c = new Character(load('angou'));
   const m = () => c.data.training.magic;
-  check('his tradition: 4 spell points and 20 essence', [m().traditionSP, m().traditionEssence], [4, 20]);
+  check('his tradition: 8 spell points and 20 essence', [m().traditionSP, m().traditionEssence], [8, 20]);
   // His sheet cached 12 and 83: 4 spell points for each of three casting
   // classes, one of them a Wizard block with no levels.
-  check('the workbook counted the spell points three times', [m().totalSP, m().sheet.totalSP], [75, 83]);
+  check('the workbook counted the spell points three times', [m().totalSP, m().sheet.totalSP], [79, 83]);
   check('the essence reaches the akashic tab',
     [c.data.akashic.calc.traditionBoon, c.data.akashic.calc.sources], [20, 20]);
   check('and matches his typed pool',

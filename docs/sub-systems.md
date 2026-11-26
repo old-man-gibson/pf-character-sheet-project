@@ -163,8 +163,13 @@ the Expanded Essence Pool boon, by the tradition table:
 - Each column takes up to 5 drawbacks. Any more are held as *uninvested boons*, and the
   panel says how many.
 - **Levels in casting classes** are the character levels at which the character has a
-  casting class, each counted once however many gestalt sides have one. Nothing is
-  multiplied by the number of casting classes.
+  casting class, each counted once however many gestalt sides have one.
+- **Spell pools.** A gestalt character with a casting class on both sides has two spell
+  pools, and each gets the tradition's spell points at its own levels, as the gestalt
+  rules say ("twice the number of bonus spell points"). The second pool's levels are the
+  ones at which both sides have a casting class. The spell points column's *Levels
+  counted* shows both, as `10 + 10`. Essence is counted once. With gestalt off, or with
+  one casting side, there is one pool.
 - **Advanced Magic Training** counts every level for the spell points, and half the
   other levels (rounded down, minimum 1) for Expanded Essence Pool.
 - A character with no casting class level yet, and no Advanced Magic Training, gets
