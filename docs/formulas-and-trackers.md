@@ -423,6 +423,8 @@ recompute have anywhere to *put* an arriving bonus:
 | `manifester.<class>.level`, `manifester.level` | one manifesting class's manifester level, or every one. Not the power points, for the same reason |
 | `spheres.sp` | Spheres of Power spell points. Added beside Bonus SP |
 | `pp.pool` | the power point pool. Added beside Bonus points |
+| `initiator.level` | the Path of War initiator level, on top of the worked-out level or the number typed in its box |
+| `initiator.dc` | every maneuver save DC. Added beside the DC bonus box on the Maneuvers tab |
 | `essence.cap` | essence capacity, the most essence a veil can hold. Added to the highest cap in the Veilweaving class table |
 | `essence.pool` | essence per day. Added to the typed pool |
 | `operative.plans`, `operative.utilityPlans`, `operative.leverage` | the operative's plans, utility plans and skill leverage uses. Leverage counts only once a sphere unlocks it |
@@ -1005,8 +1007,9 @@ takes the result as it takes `dice()`; a flat `1` rolls as itself.
 
 Readable values include `level`, `bab`, `hp.total`, `mythic.tier`, `initiative`,
 `str.score` / `str.mod` / `str.temp` / `str.tempMod` (and the other five abilities),
-`saves.*`, `ac.*`, `attack.*`, `skill.<name>` (and its `.ranks` and `.classSkill`), and
-every tracker (below). The Formulas
+`saves.*`, `ac.*`, `attack.*`, `skill.<name>` (and its `.ranks` and `.classSkill`),
+`initiator.level`, `initiator.mod` and `initiator.dc` (10 + the initiation modifier + DC
+bonuses, which a maneuver's level adds to), and every tracker (below). The Formulas
 tab lists every available name with its current value, searchable; the Trackers tab
 lists them too, beside the box you are typing into.
 

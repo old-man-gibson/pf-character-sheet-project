@@ -124,7 +124,7 @@ import {
   conditionInfo, conditionTotals, fmt, prepStyle, skillConditionDelta, skillLabel, statModDelta,
 } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
-import { abilityCollapse, abilityHarm, blankClassRow, maneuverDetails } from '../../model.js';
+import { abilityCollapse, abilityHarm, blankClassRow, maneuverDcText, maneuverDetails } from '../../model.js';
 import { colorControl } from '../color-control.js';
 import { AGE_CATEGORIES, campaignRules, isAntihero, levelProgress, specialtyInPlay, traitPlan } from '../../model/campaign.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
@@ -1035,8 +1035,9 @@ function dashManeuversCard(model) {
     const row = (d, e) => {
       const entry = maneuverDetails(d, e.name, e);
       // A save of "None" is a cell the player answered, not a fact worth a
-      // line here; a DC without one still is.
-      const save = [entry.save === 'None' ? '' : entry.save, entry.dc.trim() ? `DC ${entry.dc}` : '']
+      // line here; a DC without one still is, typed or worked out.
+      const dc = maneuverDcText(m, entry, e.level);
+      const save = [entry.save === 'None' ? '' : entry.save, dc ? `DC ${dc}` : '']
         .filter(Boolean).join(' ');
       const head = ['action', 'range', 'target', 'duration']
         .map((k) => entry[k].trim()).concat(save).filter(Boolean);

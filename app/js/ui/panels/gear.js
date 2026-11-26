@@ -42,6 +42,7 @@ import { craftCrafter, craftCrafters, craftSkills } from '../../model/subsystems
 import { rollButton } from '../roll.js';
 import { weaponNow } from '../weapon-now.js';
 import { systemExtrasPanel } from './subsystems.js';
+import { classSelectAt } from '../class-select.js';
 import { itemArea, prose } from '../prose.js';
 
 export function renderGearPanel(model, ctx) {
@@ -116,14 +117,13 @@ function unarmedFold(model) {
 function nativeUnarmedBlock(model, u, n, base) {
     const list = `${base}.native.ladder`;
     const ladder = n.ladder || [];
-    const classes = model.classNames();
     const rungs = ladder.map((r, i) => `<tr>
         <td>${itemNum(list, i, 'from', r.from)}</td>
         <td>${itemText(list, i, 'dice', r.dice, '1d6')}</td>
         ${rowRemove(list, i)}
       </tr>`).join('');
     return `<div class="unarmed-native">
-      ${field('Class', select(`${base}.native.className`, n.className || '', classes, '— character level —'))}
+      ${field('Class', classSelectAt(model, `${base}.native.className`, n.className || '', { blank: '— character level —' }))}
       <table class="grid-table">
         <thead><tr><th style="width:5rem">From</th><th>Dice</th><th></th></tr></thead>
         <tbody>${rungs || '<tr><td colspan="3" class="hint">No rungs yet. Add the class’s table.</td></tr>'}</tbody>

@@ -87,6 +87,7 @@ import { breakdownHtml, forwardedPopHtml, placeAt } from '../app/js/ui/breakdown
 import { movedInline, working, workingTitle } from '../app/js/ui/rows.js';
 import * as combatPanels from '../app/js/ui/panels/combat.js';
 import * as trainingPanels from '../app/js/ui/panels/training.js';
+import * as classSelectUi from '../app/js/ui/class-select.js';
 import * as guilePanels from '../app/js/ui/panels/guile.js';
 import * as overviewPanels from '../app/js/ui/panels/overview.js';
 import * as subsystemPanels from '../app/js/ui/panels/subsystems.js';
@@ -4167,7 +4168,7 @@ console.log('the training class picker offers the Planner’s classes');
   const c = new Character(blankDocument({ name: 'Planned' }));
   c.set('identity.level', 3);
   c.setProgressionClass(1, 0, 'Incanter');
-  check('a class only on the Planner can be picked', trainingPanels.classNames(c).includes('Incanter'), true);
+  check('a class only on the Planner can be picked', classSelectUi.classNames(c).includes('Incanter'), true);
 }
 
 console.log('a training side is in use by one rule');

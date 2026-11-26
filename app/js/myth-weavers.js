@@ -32,6 +32,7 @@
  */
 
 import { abpGroupTotal, critMultOf, isClassSkill, threatText, fmt } from './rules.js';
+import { initiatorClasses } from './model/subsystems/maneuvers.js';
 import { hasTokens, formatValue } from './inline.js';
 import { eachShown } from './ui/prose.js';
 
@@ -723,14 +724,14 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
     add(g, lv, desc && fits(`${g.code}00z ${long}`, MW_CELLS.spell) ? long : short, v.essence ? `${v.essence} ess` : '', 'veil');
   }
   // Maneuvers: under the initiator class -- the one tagged path-of-war, else
-  // one named as an initiator. The app keeps each maneuver's level, not when
-  // it was learned, so NN is the first initiator level that can learn it
-  // (2 x maneuver level - 1).
+  // another the model counts as one (isInitiatorClass). The app keeps each
+  // maneuver's level, not when it was learned, so NN is the first initiator
+  // level that can learn it (2 x maneuver level - 1).
   const disciplines = (c.maneuvers?.disciplines || []).filter((x) => (x.known || []).length);
   if (disciplines.length) {
-    const tagged = (c.classes || []).find((k) => (k.systems || []).includes('path-of-war'));
+    const initiators = initiatorClasses(c.classes);
+    const tagged = initiators.find((k) => (k.systems || []).includes('path-of-war')) || initiators[0];
     const g = (tagged && classGroups.find((x) => x.className === tagged.name))
-      || classGroups.find((x) => /warlord|warder|stalker|mystic|harbinger|zealot/i.test(x.name))
       || classGroups.find((x) => x.features.some((f) => / maneuver| initiat/.test(f.text))) || classGroups[0];
     for (const dsc of disciplines) {
       for (const name of dsc.known) {

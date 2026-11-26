@@ -5,11 +5,13 @@
  * and has readied is on the sheet, and the two are matched by name.
  */
 
-import { MANEUVER_FIELDS } from '../../rules.js';
+import { ABILITY_LABELS, MANEUVER_FIELDS, abilityOf, statMod } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { emit } from '../events.js';
-import { lazyScope } from '../scope.js';
-import { evaluateAmount, getPath, normalizeName, packRows } from '../util.js';
+import { forwarded, lazyScope } from '../scope.js';
+import {
+  evaluateAmount, getPath, isPinned, normalizeName, packRows, splitTags,
+} from '../util.js';
 
 let MANEUVER_CATALOGUE = { disciplines: [] };
 
@@ -227,7 +229,7 @@ export const MANEUVER_DERIVED = [
   // file on every recompute. Saving it would put back the 206 rows this was
   // meant to get rid of.
   { path: 'disciplines', keys: ['knownManeuvers', 'knownStances', 'readiedManeuvers', 'entries', 'inCatalogue'] },
-  { path: 'sources', keys: SOURCE_COUNTS.flatMap((k) => [`${k}Num`, `${k}Error`]) },
+  { path: 'sources', keys: [...SOURCE_COUNTS.flatMap((k) => [`${k}Num`, `${k}Error`]), 'tableCounts'] },
 ];
 
 /**
@@ -242,6 +244,167 @@ export function readiedNames(d) {
   const has = new Set(known.map(maneuverKey));
   const stances = (d.readiedStances || []).filter((n) => has.has(maneuverKey(n)));
   return [...d.readied.filter((n) => has.has(maneuverKey(n))), ...stances];
+}
+
+/* ------------------------------------------------------------------ *
+ * Initiator level, initiation modifier and maneuver save DCs.
+ *
+ * Path of War: an initiator class's levels count in full, every other level
+ * counts half, at most one initiator level a character level. It is worked
+ * out per class (Harbinger 10 / Wizard 10 is initiator 15, and so is
+ * Harbinger 10 / Warder 10), so each initiator class gets its own, and the
+ * character's is the highest of them. A save DC is 10 + the maneuver's level
+ * + the initiation modifier.
+ * ------------------------------------------------------------------ */
+
+/** The Path of War classes by name, for a class nothing else marks. */
+const INITIATOR_NAMES = new Set(['warlord', 'warder', 'stalker', 'mystic', 'harbinger', 'zealot']);
+
+/**
+ * What the loaded packs say about initiator classes, by class name: a class
+ * page whose System field names Maneuver is one, `stat` is the ability its
+ * text names as the initiation modifier ('Cha') or '', and `table` is its
+ * maneuvers known, readied and stances known by class level, or null.
+ */
+let INITIATOR_CLASSES = new Map();
+
+/** One column of a pack's maneuver table as whole numbers, or null. */
+const tableColumn = (col) => (Array.isArray(col) && col.length ? col.map((v) => Math.max(0, Math.floor(Number(v) || 0))) : null);
+
+/** Register the packs' initiator classes: `[{ name, stat, table }]`. */
+export function setInitiatorClasses(list) {
+  INITIATOR_CLASSES = new Map(packRows(list)
+    .filter((x) => x?.name)
+    .map((x) => {
+      const table = x.table && typeof x.table === 'object'
+        ? Object.fromEntries(SOURCE_COUNTS.map((k) => [k, tableColumn(x.table[k])])) : null;
+      return [initiatorKey(x.name), {
+        name: String(x.name),
+        stat: ABILITY_LABELS[abilityOf(x.stat)] || '',
+        table: table && SOURCE_COUNTS.some((k) => table[k]) ? table : null,
+      }];
+    }));
+}
+
+/**
+ * What a source row's class gives at its level, from a loaded pack's class
+ * table: `{ level, known, readied, stances }`, a count the table has no column
+ * for being 0. Null when no loaded pack has a maneuver table for that name.
+ */
+export function sourceTableCounts(model, name) {
+  const table = initiatorPackClass(name)?.table;
+  if (!table) return null;
+  const level = Math.max(0, Number(model.classLevelCount(String(name || '').trim())) || 0);
+  const at = (col) => (col && level >= 1 ? col[Math.min(level, col.length) - 1] : 0);
+  return { level, known: at(table.known), readied: at(table.readied), stances: at(table.stances) };
+}
+
+/** A source count the class table fills: blank, or the 0 a new row starts with. */
+export const countFromTable = (v) => ['', '0'].includes(String(v ?? '').trim());
+
+/** A class name as the packs' list is keyed: brackets after it and case do not count. */
+const initiatorKey = (name) => normalizeName(splitTags(name).name);
+
+/** What a loaded pack says about one class, or null. */
+export const initiatorPackClass = (name) => INITIATOR_CLASSES.get(initiatorKey(name)) || null;
+
+/**
+ * Whether a class row is an initiator class: marked with the Path of War
+ * system, a loaded pack says so, or it is named as one of the Path of War
+ * classes. The one test; the Myth-Weavers export asks it too.
+ */
+export function isInitiatorClass(cls) {
+  if (!cls?.name) return false;
+  if ((cls.systems || []).includes('path-of-war')) return true;
+  return !!initiatorPackClass(cls.name) || INITIATOR_NAMES.has(initiatorKey(cls.name));
+}
+
+/** The initiator classes on a Classes table, in its order. */
+export const initiatorClasses = (classes) => (classes || []).filter(isInitiatorClass);
+
+/**
+ * Each initiator class's initiator level, and the character's: its levels
+ * (as every rule about a class reads them) plus half the character's other
+ * levels, rounded down. With no initiator class, half the character's level.
+ */
+export function initiatorLevels(model) {
+  const level = Math.max(0, Number(model.data.identity?.level) || 0);
+  const classes = initiatorClasses(model.data.classes).map((cls) => {
+    const own = Math.min(level, Math.max(0, model.classLevelCount(cls.name)));
+    return { name: cls.name, levels: own, level: own + Math.floor((level - own) / 2) };
+  }).filter((x) => x.levels > 0);
+  const best = classes.reduce((a, b) => (b.level > a.level ? b : a), { name: '', levels: 0, level: Math.floor(level / 2) });
+  return { classes, level: best.level, from: best.name };
+}
+
+/** A maneuver's save DC, or null for one whose level is not known. */
+export function maneuverDc(m, level) {
+  const base = m?.calc?.initiator?.dc;
+  const lvl = Number(level) || 0;
+  return Number.isFinite(base) && lvl >= 1 ? base + lvl : null;
+}
+
+/**
+ * A maneuver's DC as a card shows it: the DC cell where one was written, else
+ * the DC worked out from its level, else ''.
+ */
+export function maneuverDcText(m, entry, level) {
+  const typed = String(entry?.dc ?? '').trim();
+  if (typed) return typed;
+  const dc = maneuverDc(m, level);
+  return dc === null ? '' : String(dc);
+}
+
+/**
+ * The initiator numbers, worked out for `m.calc.initiator`.
+ *
+ * The level box is a number or a formula; blank follows the classes. In its
+ * formula `initiator.level` is the level from before the box, so
+ * `initiator.level + 2` does not climb two a recalculation. A bonus sent to
+ * `initiator.level` adds to either. The modifier is the ability picked, else
+ * the one a loaded pack names for the initiator class with the most levels.
+ * The DC bonus box and the bonuses sent to `initiator.dc` add to every DC.
+ */
+function initiatorFacts(model, m) {
+  const counted = initiatorLevels(model);
+  const own = String(m.initiationStat || '').trim();
+  const main = [...counted.classes].sort((a, b) => b.levels - a.levels)
+    .find((x) => initiatorPackClass(x.name)?.stat);
+  const stat = own || (main ? initiatorPackClass(main.name).stat : '');
+  const mod = stat ? statMod(model.data, stat) : 0;
+  const scope = lazyScope(model);
+  const before = (level, dc) => () => ({ ...scope(), initiator: { level, mod, dc } });
+
+  let base = counted.level;
+  let levelError = null;
+  const pin = m.initiatorLevelOverride;
+  if (isPinned(pin)) {
+    const worked = evaluateAmount(pin, before(counted.level, 10 + mod));
+    levelError = worked.error;
+    if (!worked.error) base = Math.max(0, worked.value);
+  }
+  const levelForwarded = forwarded(model, 'initiator.level');
+  const level = Math.max(0, base + levelForwarded);
+
+  const bonus = evaluateAmount(m.dcBonus, before(level, 10 + mod));
+  const dcForwarded = forwarded(model, 'initiator.dc');
+  const dcBase = 10 + mod + (bonus.error ? 0 : bonus.value);
+  return {
+    counted: counted.level,
+    from: counted.from,
+    classes: counted.classes,
+    base,
+    levelError,
+    levelForwarded,
+    level,
+    stat,
+    statFrom: own ? 'picked' : stat ? main.name : '',
+    mod,
+    dcBonus: bonus,
+    dcBase,
+    dcForwarded,
+    dc: dcBase + dcForwarded,
+  };
 }
 
 /**
@@ -300,13 +463,17 @@ export function recomputeManeuvers(model) {
   }
 
   // How many the character may know, ready and hold as stances: each source
-  // (a class, a feat) its own row, a number or a formula, and the two boxes
-  // the tab always had as the rest.
+  // (a class, a template, a feat) its own row, a number or a formula, and the
+  // two boxes the tab always had as the rest. A class with a table in a loaded
+  // pack fills its own blank or 0 counts at its level.
   const scope = lazyScope(model);
   const from = { known: 0, readied: 0, stances: 0 };
   for (const s of m.sources || []) {
+    const table = sourceTableCounts(model, s.name);
+    if (table) s.tableCounts = table;
+    else delete s.tableCounts;
     for (const k of SOURCE_COUNTS) {
-      const worked = evaluateAmount(s[k], scope);
+      const worked = table && countFromTable(s[k]) ? { value: table[k], error: null } : evaluateAmount(s[k], scope);
       s[`${k}Num`] = worked.value;
       s[`${k}Error`] = worked.error;
       from[k] += worked.error ? 0 : Math.max(0, worked.value);
@@ -339,6 +506,8 @@ export function recomputeManeuvers(model) {
     over,
     // The sheet's "Not Legal" flag: more picked than the class allows.
     legal: !over.known && !over.stances && !over.readied,
+    // Initiator level, initiation modifier and the DC a maneuver's level adds to.
+    initiator: initiatorFacts(model, m),
   };
 }
 

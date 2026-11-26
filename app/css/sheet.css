@@ -1900,6 +1900,12 @@ button.mname {
   color: var(--cs-muted); opacity: 0.75; padding-top: 2px;
 }
 .mrow .mtype.is-stance { color: var(--cs-accent); opacity: 1; }
+/* The save DC, in the type's small print but at full strength: it is read
+   at the table. */
+.mrow .mdc {
+  flex: none; font-size: 0.62rem; letter-spacing: 0.04em; font-variant-numeric: tabular-nums;
+  color: var(--cs-muted); padding-top: 2px; white-space: nowrap;
+}
 /* Hovering the name underlines it, the way anything you can click into does. */
 .mrow:hover .mname, button.mname:focus-visible {
   text-decoration: underline dotted; text-underline-offset: 2px;
@@ -2753,6 +2759,8 @@ label.fld.tall textarea { min-height: 58px; }
 .vcast .xf:focus-within input.xf-src {
   position: relative; z-index: 5; width: 16rem; margin-left: calc(var(--xf-w) - 16rem);
 }
+/* The initiator level is the first box in its row, so it opens rightward. */
+.vcast.initiator .vcast-row > label.fld:first-child .xf:focus-within input.xf-src { margin-left: 0; }
 .vcast .fld.vstat { display: flex; flex-direction: column; gap: 3px; }
 .vcast .fld.vstat > span:first-child, .vcast .vstat2 {
   font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted);

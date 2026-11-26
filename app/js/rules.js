@@ -2750,7 +2750,7 @@ export const MANEUVER_FIELDS = [
   { key: 'target', label: 'Target', hint: 'One creature', line: 2 },
   { key: 'duration', label: 'Duration', hint: 'Instantaneous', line: 2 },
   { key: 'save', label: 'Saving throw', options: MANEUVER_SAVES, line: 3 },
-  { key: 'dc', label: 'DC', hint: '{= 10 + 1 + wis.mod}', line: 3 },
+  { key: 'dc', label: 'DC', hint: '{= initiator.dc + 1}', line: 3 },
   { key: 'text', label: 'Description', lines: 4, line: 4 },
 ];
 

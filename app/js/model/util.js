@@ -178,6 +178,7 @@ export const FORWARD_KEY_FAMILIES = [
   { prefix: 'manifester', keyOf: manifesterForwardKey, early: true },
   { prefix: 'essence', keyOf: null, early: true },
   { prefix: 'pp', keyOf: null, early: true },
+  { prefix: 'initiator', keyOf: null, early: true },
   { prefix: 'operative', keyOf: null, early: true },
   { prefix: 'unarmed', keyOf: null, early: true },
   { prefix: 'tracker', keyOf: trackerForwardKey, early: false },

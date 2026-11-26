@@ -623,6 +623,20 @@ export const FORMULA_FIELDS = [
     },
   },
   {
+    // The initiator level box and the maneuver DC bonus box.
+    key: 'initiator', source: 'player', where: 'the Maneuvers tab',
+    collect: (model) => {
+      const m = model.data.maneuvers;
+      const init = m?.calc?.initiator || {};
+      return [
+        ['initiatorLevelOverride', 'Initiator level', init.base, init.levelError],
+        ['dcBonus', 'Maneuver DC bonus', init.dcBonus?.value, init.dcBonus?.error],
+      ].filter(([field]) => stringFormula(m?.[field])).map(([field, name, value, error]) => ({
+        id: `initiator-${field}`, place: `initiator:${field}`, name, formula: m[field], value, error,
+      }));
+    },
+  },
+  {
     key: 'deckManipulations', source: 'player',
     collect: (model) => {
       const cc = model.data.cardcasting;

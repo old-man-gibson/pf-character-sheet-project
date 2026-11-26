@@ -122,7 +122,7 @@ import { appendDiceText, appendListText } from './model/subsystems/cardcasting.j
 import { castPickArg, followCastPick } from './ui/cast-pick.js';
 import * as combat from './ui/panels/combat.js';
 import * as guile from './ui/panels/guile.js';
-import * as trainingPanels from './ui/panels/training.js';
+import { classNames } from './ui/class-select.js';
 import * as monster from './monster/sheet.js';   // the monster tool's hooks; see docs/monsters.md
 import * as subsystems from './ui/panels/subsystems.js';
 import * as lore from './ui/panels/lore.js';
@@ -3955,7 +3955,7 @@ export class CharacterSheetElement extends HTMLElement {
   #templatePanel() { return combat.renderTemplatePanel(this.#model, this.#ctx()); }
 
   /** The class names, which the action dispatcher needs when adding a track. */
-  #classNames(...a) { return trainingPanels.classNames(this.#model, ...a); }
+  #classNames(...a) { return classNames(this.#model, ...a); }
 
   /* ---------------- feats & mythic ---------------- */
 

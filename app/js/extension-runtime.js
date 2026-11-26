@@ -16,11 +16,11 @@
  */
 
 import * as model from './model.js';
-import { setClassEssenceTables, setOptionCatalogues } from './model.js';
+import { setClassEssenceTables, setInitiatorClasses, setOptionCatalogues } from './model.js';
 import {
   TABLES, extensionStore, loadBundledExtensions, activeExtensions, activeBlocks, mergeTables, registerTables,
   optionCataloguesFrom, optionCataloguesFromTables, classFeatureTextFromTables, namedTextFrom, companionArchetypesFrom,
-  castingTablesFromTables, essenceTablesFromTables,
+  castingTablesFromTables, essenceTablesFromTables, initiatorClassesFromTables,
   isPackKey, packsWorthMoving,
 } from './extensions.js';
 // Straight from the module rather than through model.js, which does not
@@ -71,6 +71,13 @@ export function registerPacks(packs) {
   } catch (err) {
     failed.push({ name: 'setOptionCatalogues', error: err?.message || String(err) });
     setOptionCatalogues([]);
+  }
+  // The initiator classes catalogue packs carry, and their initiation modifiers.
+  try {
+    setInitiatorClasses(initiatorClassesFromTables(tables));
+  } catch (err) {
+    failed.push({ name: 'setInitiatorClasses', error: err?.message || String(err) });
+    setInitiatorClasses([]);
   }
   // And the rules text behind a companion ability the table grants by name.
   try {

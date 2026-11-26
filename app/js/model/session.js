@@ -1,6 +1,6 @@
 import { evaluateFormula } from '../formula.js';
 import { forwarded } from './scope.js';
-import { maneuverDetails, readiedNames } from './subsystems/maneuvers.js';
+import { maneuverDcText, maneuverDetails, maneuverKey, readiedNames } from './subsystems/maneuvers.js';
 import { veilDetails } from './subsystems/akashic.js';
 
 // A maneuver's catalogue "Action" as the session's action type. Anything else
@@ -185,9 +185,11 @@ export function sessionShortcuts(model) {
     for (const name of readiedNames(discipline)) {
       const entry = maneuverDetails(discipline, name);
       const action = String(entry.action || '').trim();
+      const level = (discipline.entries || []).find((e) => maneuverKey(e.name) === maneuverKey(name))?.level;
+      const dc = maneuverDcText(model.data.maneuvers, entry, level);
       add('maneuver', name, entry.text || 'See the Maneuvers tab for the full rules.', {
         range: entry.range, targets: entry.target, duration: entry.duration,
-        save: [entry.save, entry.dc && `DC ${entry.dc}`].filter(Boolean).join(' · '),
+        save: [entry.save, dc && `DC ${dc}`].filter(Boolean).join(' · '),
         actionType: maneuverActionType(action),
         detail: [entry.type, action && `${action} action`, discipline.name].filter(Boolean).join(' · '),
       });
