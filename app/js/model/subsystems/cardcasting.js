@@ -18,6 +18,7 @@ import { splitVeilName } from './akashic.js';
 import { clampTracker, poolTracker } from '../trackers.js';
 import { companionById, companionEntries } from '../../companions.js';
 import { featNames } from '../feats.js';
+import { castingTraditions, traditionBoons } from '../traditions.js';
 
 /** The five mana colours, in the order the deck tab lists them. */
 export const CARD_COLORS = [
@@ -151,8 +152,8 @@ export function deckFeatNames(d) {
   // Feats arrive keyed by group and are normalised into `featGroups`; a
   // document may be at either stage when this is asked, and featNames reads both.
   const out = featNames(d, { granted: false }).filter((name) => /\[[^\]]*deck/i.test(name));
-  for (const x of d?.training?.magic?.tradition?.boughtOff || []) {
-    if (/\[[^\]]*deck/i.test(String(x || ''))) out.push(String(x));
+  for (const x of traditionBoons(d)) {
+    if (/\[[^\]]*deck/i.test(x)) out.push(x);
   }
   return out;
 }
@@ -929,7 +930,7 @@ export function recomputeCardcasting(model) {
     .reduce((n, m) => n + m.count, 0);
   // Available: one per deck feat, two for Card Shark -- unless a number or
   // a formula is written over it.
-  const autoAvailable = manipulationsGranted(deckFeats, [...featNames(c, { granted: false }), ...(c.training?.magic?.tradition?.boughtOff || []).map((x) => String(x || ''))]);
+  const autoAvailable = manipulationsGranted(deckFeats, [...featNames(c, { granted: false }), ...traditionBoons(c)]);
   const written = p.manipulationsAvailable !== null && p.manipulationsAvailable !== undefined
     && String(p.manipulationsAvailable).trim() !== '';
   const typed = written ? evaluateAmount(p.manipulationsAvailable, model.scope()) : null;
@@ -1518,11 +1519,10 @@ export function tableCard(model, id) {
  * drawback off for every cast, and the table says so instead of charging.
  * ------------------------------------------------------------------ */
 
-/** Whether the tradition carries a drawback, and has not bought it off. */
+/** Whether a casting tradition carries a drawback, and has not bought it off. */
 export function hasTraditionDrawback(c, re) {
-  const tr = c?.training?.magic?.tradition || {};
   const named = (list) => (list || []).some((x) => re.test(String(x || '').trim()));
-  return named(tr.drawbacks) && !named(tr.boughtOff);
+  return castingTraditions(c).some(({ tr }) => named(tr.drawbacks) && !named(tr.boughtOff));
 }
 
 /** Terrain Casting is in force: on the tradition, not bought off. */

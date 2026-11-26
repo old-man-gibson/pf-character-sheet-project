@@ -43,6 +43,7 @@ import { trackerFacts, trackerShown } from './trackers.js';
 import { featLevel, featNames, isAhead, rowLevel } from './feats.js';
 import { MONSTER_PROSE_FIELDS } from '../monster/block.js';
 import { transparencySources } from './transparency.js';
+import { castingTraditions, traditionBoons } from './traditions.js';
 import {
   classForwardKey, flatNames, isFormulaText, manifesterForwardKey, skillForwardKey, skillRanksNamed, slug,
   inEarlyFamily, speedForwardKey, sphereForwardKey, trackerForwardKey, vancianForwardKey, vancianSlotKey,
@@ -2025,6 +2026,13 @@ export function proseSources(model) {
     (t?.tradition?.drawbacks || []).forEach((x, xi) => push(`drawback:${side}:${xi}`, x));
     (t?.tradition?.boughtOff || []).forEach((x, xi) => push(`boughtOff:${side}:${xi}`, x));
   }
+  // An extra casting tradition's drawbacks and boons read the same way,
+  // while the campaign allows them.
+  for (const { tr, extra } of castingTraditions(d)) {
+    if (extra < 0) continue;
+    (tr.drawbacks || []).forEach((x, xi) => push(`tradDrawback:${extra}:${xi}`, x));
+    (tr.boughtOff || []).forEach((x, xi) => push(`tradBoon:${extra}:${xi}`, x));
+  }
   // A customized weapon's talents are prose like any other talent, but only
   // the drawn weapon's: a stowed weapon's talents are not live, so neither is
   // what they say.
@@ -2177,7 +2185,10 @@ export function proseText(model, text, local = null) {
  */
 export function tagCounts(d) {
   const names = featNames(d);
-  for (const side of Object.values(d?.training || {})) names.push(...(side?.tradition?.boughtOff || []));
+  for (const [key, side] of Object.entries(d?.training || {})) {
+    if (key !== 'magic') names.push(...(side?.tradition?.boughtOff || []));
+  }
+  names.push(...traditionBoons(d));
 
   const counts = {};
   for (const name of names) {

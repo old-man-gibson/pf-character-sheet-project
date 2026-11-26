@@ -33,6 +33,7 @@
 
 import { abpGroupTotal, critMultOf, isClassSkill, threatText, fmt } from './rules.js';
 import { initiatorClasses } from './model/subsystems/maneuvers.js';
+import { castingTraditions } from './model/traditions.js';
 import { hasTokens, formatValue } from './inline.js';
 import { eachShown } from './ui/prose.js';
 
@@ -651,17 +652,23 @@ export function mythWeaversBackup(model, { publishedUrl = null } = {}) {
     if (!t) continue;
     const taught = (t.classes || []).filter((k) => k.name && (k.levels || []).some((l) => l.talent && !l.future));
     const owner = taught.map((k) => findClass(k.name)).find(Boolean) || classGroups[0];
+    // A magic side may have a tradition per casting class (a campaign rule);
+    // each extra one sits under the class it names.
     const trad = t.tradition || {};
     const tOwner = (trad.name && findClass(trad.name)) || owner;
-    const tradEntries = (trad.entries || []).filter((e) => e.talent);
-    const drawbacks = trad.drawbacks || [];
-    if (trad.name && (tradEntries.length || drawbacks.length)) add(tOwner, 1, `${side} tradition: ${trad.name}`, '', 'tradition');
-    tradEntries.forEach((e) => items(plain(e.talent)).forEach((x) => add(tOwner, 1, x, castTag(e.sphere), 'tradition')));
-    if (drawbacks.length && tOwner) {
-      const room = [MW_CELLS.spell[0] - textWidth(`${tOwner.code}01z `), MW_CELLS.spell[1]];
-      const lines = flow(drawbacks.map((x) => trimProse(plain(x))), room);
-      if (fits(`Drawbacks: ${lines[0]}`, room)) lines[0] = `Drawbacks: ${lines[0]}`; else lines.unshift('Drawbacks:');
-      lines.forEach((l) => add(tOwner, 1, l, '', 'tradition'));
+    const traditions = side === 'Magic' ? castingTraditions(c) : [{ tr: trad, extra: -1 }];
+    for (const { tr: one, extra } of traditions) {
+      const g = extra < 0 ? tOwner : (one.className && findClass(one.className)) || (one.name && findClass(one.name)) || owner;
+      const tradEntries = (one.entries || []).filter((e) => e.talent);
+      const drawbacks = one.drawbacks || [];
+      if (one.name && (tradEntries.length || drawbacks.length)) add(g, 1, `${side} tradition: ${one.name}`, '', 'tradition');
+      tradEntries.forEach((e) => items(plain(e.talent)).forEach((x) => add(g, 1, x, castTag(e.sphere), 'tradition')));
+      if (drawbacks.length && g) {
+        const room = [MW_CELLS.spell[0] - textWidth(`${g.code}01z `), MW_CELLS.spell[1]];
+        const lines = flow(drawbacks.map((x) => trimProse(plain(x))), room);
+        if (fits(`Drawbacks: ${lines[0]}`, room)) lines[0] = `Drawbacks: ${lines[0]}`; else lines.unshift('Drawbacks:');
+        lines.forEach((l) => add(g, 1, l, '', 'tradition'));
+      }
     }
     for (const k of taught) {
       const g = findClass(k.name) || newGroup(k.name);

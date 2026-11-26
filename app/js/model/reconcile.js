@@ -22,6 +22,7 @@ import { contextualNote } from '../formula-format.js';
 import { applyMythic, refreshAbilities } from './abilities.js';
 import { applyCorrections } from './corrections.js';
 import { TRAINING_SIDES } from './spheres.js';
+import { castingTraditions } from './traditions.js';
 import { emit } from './events.js';
 import { markUndo } from './undo.js';
 import { applyGestalt } from './progression.js';
@@ -162,6 +163,8 @@ export function describeSource(path, d = null) {
     case 'tradition': return `${a} tradition`;
     case 'drawback': return `${a} drawback`;
     case 'boughtOff': return `${a} drawback bought off`;
+    case 'tradDrawback': return `casting tradition ${Number(a) + 2} drawback`;
+    case 'tradBoon': return `casting tradition ${Number(a) + 2} boon`;
     case 'veil': return parts[3] === 'name' ? 'a veil’s name' : 'a veil’s description';
     case 'spellNote': return `prepared spell ${nth(a)}, its note`;
     case 'sessionCard': return `session card ${nth(a)}, its ${b === 'note' ? 'notes' : b}`;
@@ -521,11 +524,17 @@ export const FORMULA_FIELDS = [
     // The casting tradition's drawbacks on Expanded Essence Pool.
     key: 'essenceDrawbacks', source: 'player', where: 'the Magic Spheres tab',
     collect: (model) => {
-      const m = model.data.training?.magic;
-      return stringFormula(m?.tradition?.essenceDrawbacks) ? [{
-        id: 'tradition-essence-drawbacks', place: 'essenceDrawbacks', name: 'Drawbacks on Expanded Essence Pool',
-        formula: m.tradition.essenceDrawbacks, value: m.essenceDrawbacksNum, error: m.essenceDrawbacksError,
-      }] : [];
+      // Each tradition in force has its own box; the first keeps its old id.
+      const results = model.data.training?.magic?.traditionResults || [];
+      return castingTraditions(model.data).filter(({ tr }) => stringFormula(tr.essenceDrawbacks)).map(({ tr, extra }) => {
+        const at = results.find((x) => x.extra === extra) || {};
+        return {
+          id: extra < 0 ? 'tradition-essence-drawbacks' : `tradition-essence-drawbacks-${extra + 2}`,
+          place: extra < 0 ? 'essenceDrawbacks' : `essenceDrawbacks:${extra}`,
+          name: extra < 0 ? 'Drawbacks on Expanded Essence Pool' : `Drawbacks on Expanded Essence Pool, tradition ${extra + 2}`,
+          formula: tr.essenceDrawbacks, value: at.essenceDrawbacksNum ?? null, error: at.essenceDrawbacksError ?? null,
+        };
+      });
     },
   },
   {

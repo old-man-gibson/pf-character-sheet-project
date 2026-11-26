@@ -3547,6 +3547,31 @@
    "msb": 0,
    "msd": 11,
    "concentration": 0,
+   "traditionResults": [
+    {
+     "extra": -1,
+     "covers": [],
+     "waiting": "",
+     "drawbackCount": 0,
+     "boughtOffCount": 0,
+     "effectiveDrawbacks": 0,
+     "castingLevels": 0,
+     "traditionLevels": {
+      "sp": 0,
+      "essence": 0,
+      "spPools": [
+       0
+      ]
+     },
+     "essenceDrawbacksNum": null,
+     "essenceDrawbacksError": null,
+     "essenceDrawbacks": 0,
+     "spDrawbacks": 0,
+     "unusedDrawbacks": 0,
+     "traditionSP": 0,
+     "traditionEssence": 0
+    }
+   ],
    "drawbackCount": 0,
    "boughtOffCount": 0,
    "effectiveDrawbacks": 0,

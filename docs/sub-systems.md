@@ -177,6 +177,23 @@ the Expanded Essence Pool boon, by the tradition table:
 - The essence appears on the Akashic tab as the *Essence Boon*. A number or a formula
   typed there stands instead.
 
+**A tradition per class.** With the *Tradition per class* campaign rule on (it starts
+off), **Add tradition** under the first tradition adds another, with its own name,
+drawbacks, boons and essence box, and a **Class** picker. As the gestalt rules allow with
+the GM's permission, each extra tradition is for one casting class:
+
+- Its drawbacks give spell points to that class's pool, at that class's levels. The
+  first tradition covers the casting classes no extra one has, and only it reads
+  Advanced Magic Training.
+- An extra with no class picked, a class another tradition already has, or a class with
+  no casting level yet gives nothing, and its panel says which.
+- Every tradition's essence goes into the one essence pool.
+- Casting numbers lists each tradition's spell points, and the total adds them.
+- A drawback or boon on any tradition counts where the first tradition's would (Terrain
+  Casting, deck feats, formulas in the text).
+- With the rule turned off, the extra traditions are kept but not counted, and the first
+  tradition's panel says how many.
+
 A sheet saved while a blank box meant "up to 5 for a character who weaves veils" keeps
 that split: on its first open, up to 5 is written into the box for a veilweaver, so its
 numbers stay where they were. A sheet saved with the older split ("so many drawbacks as

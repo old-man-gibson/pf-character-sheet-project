@@ -16,6 +16,7 @@ import {
 } from '../rules.js';
 import { isBackgroundSkill } from '../rules.js';
 import { campaignRules, freeBackgroundSkills } from './campaign.js';
+import { castingTraditions } from './traditions.js';
 import { emit } from './events.js';
 import { classGainsAt, ownLevelCount } from './progression.js';
 import { forwarded, lazyScope } from './scope.js';
@@ -1909,71 +1910,105 @@ export function recomputeTraining(model) {
     // of the other. The spell points are given once per spell pool, which is
     // twice for a gestalt character casting on both sides, not once per
     // casting class. Past the fifth row a drawback gives nothing.
-    const tr = m.tradition || {};
-    const drawbacks = (tr.drawbacks || []).reduce((n, d) => n + drawbackWeight(d), 0);
-    const boughtOff = (tr.boughtOff || []).length;
-    m.drawbackCount = drawbacks;
-    m.boughtOffCount = boughtOff;
-    m.effectiveDrawbacks = Math.max(0, drawbacks - 2 * boughtOff);
-
-    // Levels in casting classes: the character levels at which a casting
-    // class the character has is present, each counted once however many
-    // gestalt sides have one -- as the veilweaving level is counted. The
-    // spell points are counted per spell pool, though: a gestalt character
-    // with a casting class on two sides has two, and the gestalt rules give
-    // each the tradition's spell points at its own levels (castingPools).
-    const perLevel = [];
-    for (let l = 1; l <= level; l++) {
-      perLevel.push(acquired.filter((x) => classGainsAt(model, x.name, l, x.classLevelsOverride ?? null) > 0).length);
-    }
-    const castingLevels = perLevel.filter((n) => n > 0).length;
-    const pools = castingPools(perLevel, campaignRules(c).gestalt);
-    const amt = !!(m.amt || m.mythicAmt);
-    const reads = traditionLevels({ level, castingLevels, amt });
-    const spPools = pools.length > 1
-      ? pools.map((n) => traditionLevels({ level, castingLevels: n, amt }).sp)
-      : [reads.sp];
-    m.castingLevels = castingLevels;
-    m.traditionLevels = { ...reads, spPools };
-
-    // Blank is 0: the boon is not taken until the player types how many
-    // drawbacks go on it, and the drawbacks left give spell points. A number
-    // or a formula stands; it is clamped on the way in, so a count that dips
-    // while a boon is added keeps what the player wrote.
+    //
+    // Blank on Expanded Essence Pool is 0: the boon is not taken until the
+    // player types how many drawbacks go on it, and the drawbacks left give
+    // spell points. A number or a formula stands; it is clamped on the way
+    // in, so a count that dips while a boon is added keeps what was written.
     const isBlank = (v) => v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
+    const weight = (tr) => (tr.drawbacks || []).reduce((n, d) => n + drawbackWeight(d), 0);
+    const tr = m.tradition || {};
     // A sheet saved before keeps the split it showed, written into the box
     // once, against the count at the time: up to five for a character who
     // weaves veils, or what was left after a split saved as "so many
     // drawbacks as spell points" before the box existed.
     if (model.oldEssenceSplit) {
       model.oldEssenceSplit = false;
+      const left = Math.max(0, weight(tr) - 2 * (tr.boughtOff || []).length);
       const legacySP = tr.boonSP ?? tr.tierSP ?? null;
       if (!isBlank(legacySP)) {
-        tr.essenceDrawbacks ??= Math.max(0, Math.min(TRADITION_ROWS, m.effectiveDrawbacks - (Math.floor(Number(legacySP)) || 0)));
-      } else if (isBlank(tr.essenceDrawbacks) && weavesVeils(c) && m.effectiveDrawbacks > 0) {
-        tr.essenceDrawbacks = Math.min(TRADITION_ROWS, m.effectiveDrawbacks);
+        tr.essenceDrawbacks ??= Math.max(0, Math.min(TRADITION_ROWS, left - (Math.floor(Number(legacySP)) || 0)));
+      } else if (isBlank(tr.essenceDrawbacks) && weavesVeils(c) && left > 0) {
+        tr.essenceDrawbacks = Math.min(TRADITION_ROWS, left);
       }
     }
     for (const old of ['boonSP', 'tierSP', 'boonUses', 'tierUse']) delete tr[old];
-    const typed = tr.essenceDrawbacks;
-    const blank = isBlank(typed);
-    const box = blank ? null : evaluateAmount(typed, magicScope);
-    m.essenceDrawbacksNum = box ? box.value : null;
-    m.essenceDrawbacksError = box?.error || null;
-    const spend = traditionSpend({
-      drawbacks,
-      boons: boughtOff,
-      essenceDrawbacks: box ? box.value : 0,
-      spLevels: spPools,
-      essenceLevels: reads.essence,
+
+    // Each tradition reads its own casting classes. An extra one (the
+    // campaign rule `traditionPerClass`) reads the class it names, once the
+    // character has a level of it; two naming one class, the first. The
+    // first tradition reads every casting class no extra has, and Advanced
+    // Magic Training's levels.
+    //
+    // Levels in casting classes are the character levels at which one of
+    // those classes is present, each counted once however many gestalt sides
+    // have one -- as the veilweaving level is counted. The spell points are
+    // counted per spell pool, though: a gestalt character with a casting
+    // class on two sides has two, and the gestalt rules give each the
+    // tradition's spell points at its own levels (castingPools).
+    const gestalt = campaignRules(c).gestalt;
+    const amt = !!(m.amt || m.mythicAmt);
+    const traditions = castingTraditions(c);
+    const sameClass = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+    const ownerOf = (x) => traditions.find((t) => t.extra >= 0 && sameClass(t.tr.className, x.name)) || traditions[0];
+    m.traditionResults = traditions.map((t) => {
+      const own = acquired.filter((x) => ownerOf(x) === t);
+      const perLevel = [];
+      for (let l = 1; l <= level; l++) {
+        perLevel.push(own.filter((x) => classGainsAt(model, x.name, l, x.classLevelsOverride ?? null) > 0).length);
+      }
+      const castingLevels = perLevel.filter((n) => n > 0).length;
+      const pools = castingPools(perLevel, gestalt);
+      const withAmt = t.extra < 0 && amt;
+      const reads = traditionLevels({ level, castingLevels, amt: withAmt });
+      const spPools = pools.length > 1
+        ? pools.map((n) => traditionLevels({ level, castingLevels: n, amt: withAmt }).sp)
+        : [reads.sp];
+      const drawbacks = weight(t.tr);
+      const boughtOff = (t.tr.boughtOff || []).length;
+      const box = isBlank(t.tr.essenceDrawbacks) ? null : evaluateAmount(t.tr.essenceDrawbacks, magicScope);
+      const spend = traditionSpend({
+        drawbacks,
+        boons: boughtOff,
+        essenceDrawbacks: box ? box.value : 0,
+        spLevels: spPools,
+        essenceLevels: reads.essence,
+      });
+      // No tradition until the character casts, and none for a tradition
+      // with no casting class of its own (nor Advanced Magic Training).
+      const live = m.castingUnlocked && (own.length > 0 || withAmt);
+      // Why an extra tradition gives nothing: no class picked, a class
+      // another tradition has, or one with no casting level yet.
+      const named = String(t.tr.className ?? '').trim();
+      const waiting = live || t.extra < 0 ? ''
+        : !named ? 'pick'
+          : acquired.some((x) => sameClass(x.name, named)) ? 'taken' : 'none';
+      return {
+        extra: t.extra,
+        covers: own.map((x) => x.name),
+        waiting,
+        drawbackCount: drawbacks,
+        boughtOffCount: boughtOff,
+        effectiveDrawbacks: Math.max(0, drawbacks - 2 * boughtOff),
+        castingLevels,
+        traditionLevels: { ...reads, spPools },
+        essenceDrawbacksNum: box ? box.value : null,
+        essenceDrawbacksError: box?.error || null,
+        essenceDrawbacks: spend.essenceDrawbacks,
+        spDrawbacks: spend.spDrawbacks,
+        unusedDrawbacks: spend.unused,
+        traditionSP: live ? spend.sp : 0,
+        traditionEssence: live ? spend.essence : 0,
+      };
     });
-    // No tradition until the character casts.
-    const casting = m.castingUnlocked;
-    m.essenceDrawbacks = spend.essenceDrawbacks;
-    m.spDrawbacks = spend.spDrawbacks;
-    m.unusedDrawbacks = spend.unused;
-    m.traditionSP = casting ? spend.sp : 0;
-    m.traditionEssence = casting ? spend.essence : 0;
+    // The first tradition's figures sit on the side, where they always have;
+    // the spell points and essence are every tradition's, added together.
+    // Essence goes into the one pool on the Akashic tab.
+    const first = m.traditionResults[0];
+    for (const key of ['drawbackCount', 'boughtOffCount', 'effectiveDrawbacks', 'castingLevels', 'traditionLevels',
+      'essenceDrawbacksNum', 'essenceDrawbacksError', 'essenceDrawbacks', 'spDrawbacks', 'unusedDrawbacks']) m[key] = first[key];
+    m.traditionSP = m.traditionResults.reduce((n, x) => n + x.traditionSP, 0);
+    m.traditionEssence = m.traditionResults.reduce((n, x) => n + x.traditionEssence, 0);
     for (const old of ['spTier', 'boons', 'traditionPools', 'boonPoints', 'castingClassCount', 'essenceDrawbacksAuto']) delete m[old];
 
     // A class's spell points are its levels so far plus its casting modifier:

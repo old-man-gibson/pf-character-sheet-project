@@ -45,6 +45,7 @@ import { COMPANION_KINDS, COMPANION_LABELS, companionBoxValue, companionInUse } 
 import { fmt, ABILITIES, ABILITY_LABELS, critMultOf, isClassSkill, threatText } from '../rules.js';
 import { rollSpec } from '../roll20.js';
 import { campaignRules, levelProgress, mythicTierGrantOf, specialtyInPlay, trialProgress } from '../model/campaign.js';
+import { castingTraditions } from '../model/traditions.js';
 
 /* ---------------- kinds ---------------- */
 
@@ -619,9 +620,11 @@ function spheres(model, add) {
         }
       }
     }
+    // Every casting tradition in force on the magic side.
+    const traditions = side === 'magic' ? castingTraditions(model.data).map(({ tr }) => tr) : [s.tradition || {}];
     for (const [field, what] of [['drawbacks', 'Tradition drawback'], ['boughtOff', 'Bought off'],
       ['boons', 'Tradition boon']]) {
-      for (const d of s.tradition?.[field] || []) {
+      for (const d of traditions.flatMap((tr) => tr[field] || [])) {
         const title = nameOf(d);
         if (!title) continue;
         add({ kind: 'talent', title: clip(title, 70), sub: bits(what, side), tab, keys: 'tradition drawback boon' });
@@ -1113,7 +1116,7 @@ function commands(model, add) {
   const tp = trialProgress(model.data);
   if (tp?.ready) cmd(`Tier up to ${tp.next}`, 'tier-up', 'The next mythic tier is earned', 'tier up mythic trials');
   cmd('Campaign rules', 'campaign-rules', 'Open this character’s campaign rules.',
-    'settings options campaign rules house table vmc variant multiclass multiclassing archetype packages package swap point buy mythic feats odd even every tiers lowest tier floor traits drawbacks age aging middle-aged old venerable background skills specialty occupations occupation adventuring hero points antihero mythic tier trials rate thresholds abp automatic bonus progression core unchained attunement legendary gifts xp experience milestones levelling highest maximum level gestalt multiclass hit points hp rolled average alternate training currency gold mana colossal size party file');
+    'settings options campaign rules house table vmc variant multiclass multiclassing archetype packages package swap point buy mythic feats odd even every tiers lowest tier floor traits drawbacks age aging middle-aged old venerable background skills specialty occupations occupation adventuring tradition per class casting traditions hero points antihero mythic tier trials rate thresholds abp automatic bonus progression core unchained attunement legendary gifts xp experience milestones levelling highest maximum level gestalt multiclass hit points hp rolled average alternate training currency gold mana colossal size party file');
   if (!model.data.monster) {
     cmd('Setup guide', 'wizard-start', 'Set up this character one step at a time.',
       'setup guide wizard new character steps walkthrough systems start');
