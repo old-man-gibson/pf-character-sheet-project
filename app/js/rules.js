@@ -1180,17 +1180,17 @@ export function traditionLevels({ level, castingLevels, amt }) {
  * `drawbacks` is the weighted count ("x2" counts two) and `boons` the boons
  * bought, at 2 drawbacks each. Of what is left, `essenceDrawbacks` (clamped to
  * 0-5 and to what is left) go to Expanded Essence Pool and the rest give spell
- * points; past the fifth row they give nothing (`unused`).
+ * points, up to the fifth row; any more stay uninvested (`unused`).
  */
 export function traditionSpend({ drawbacks, boons = 0, essenceDrawbacks = 0, spLevels = 0, essenceLevels = 0 }) {
   const left = Math.max(0, (Number(drawbacks) || 0) - DRAWBACKS_PER_BOON * (Number(boons) || 0));
   const essence = Math.max(0, Math.min(TRADITION_ROWS, left, Math.floor(Number(essenceDrawbacks) || 0)));
-  const sp = left - essence;
+  const sp = Math.min(TRADITION_ROWS, left - essence);
   return {
     left,
     essenceDrawbacks: essence,
     spDrawbacks: sp,
-    unused: Math.max(0, sp - TRADITION_ROWS),
+    unused: left - essence - sp,
     sp: traditionBonus(sp, spLevels),
     essence: traditionBonus(essence, essenceLevels),
   };
@@ -2313,7 +2313,7 @@ export function ladderDice(ladder, level) {
  */
 export const RULE_CORRECTIONS = ['attack-size-sign', 'poor-save-thirds', 'monster-crit-range', 'hp-meter-fill', 'load-penalties',
   'nonproficiency-penalty', 'weapon-crit-shift', 'pack-notes', 'bonus-order', 'essence-boon-cell', 'blank-cmd-deflection',
-  'typed-ac-reach', 'ac-penalty-cmd', 'blank-hp-other'];
+  'typed-ac-reach', 'ac-penalty-cmd', 'blank-hp-other', 'tradition-essence-split'];
 
 /**
  * What a new character's hit points once started at for each level, before it

@@ -154,11 +154,14 @@ the Expanded Essence Pool boon, by the tradition table:
 | 4 | +1, +1 per 1.5 levels (2, 3, 5, 6, …) |
 | 5 | +1 per level |
 
-- **Drawbacks on Expanded Essence Pool** is a number or a formula from 0 to 5. Those
-  drawbacks give essence by their row; the rest give spell points by theirs. Each reads
-  its own row, so neither is a share of the other. Blank is up to 5 for a character who
-  weaves veils (a named class on the Akashic tab, or the Veilweaving sphere), otherwise 0.
-- Drawbacks past the fifth row give nothing, and the panel says how many.
+- The drawbacks left are shown in two columns, **As spell points** and **As essence**,
+  with how many go to each, the levels each reads and what each gives.
+- The essence column's box is the drawbacks on Expanded Essence Pool, a number or a
+  formula from 0 to 5. Blank is 0: the boon is not taken. Those drawbacks give essence by
+  their row; the rest give spell points by theirs. Each reads its own row, so neither is
+  a share of the other.
+- Each column takes up to 5 drawbacks. Any more are held as *uninvested boons*, and the
+  panel says how many.
 - **Levels in casting classes** are the character levels at which the character has a
   casting class, each counted once however many gestalt sides have one. Nothing is
   multiplied by the number of casting classes.
@@ -169,8 +172,11 @@ the Expanded Essence Pool boon, by the tradition table:
 - The essence appears on the Akashic tab as the *Essence Boon*. A number or a formula
   typed there stands instead.
 
-A sheet saved with the older split ("so many drawbacks as spell points, the rest as
-essence") opens with the rest, up to 5, as the drawbacks on Expanded Essence Pool.
+A sheet saved while a blank box meant "up to 5 for a character who weaves veils" keeps
+that split: on its first open, up to 5 is written into the box for a veilweaver, so its
+numbers stay where they were. A sheet saved with the older split ("so many drawbacks as
+spell points, the rest as essence") opens with the rest, up to 5, in the box. Both happen
+once (the `tradition-essence-split` correction), and a box cleared after that is 0.
 
 Every tradition cell reads
 `{…}` too: *Expensive Locus ({locus = 22500} mana)* is a drawback and a number the

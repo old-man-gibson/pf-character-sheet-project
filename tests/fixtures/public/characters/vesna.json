@@ -3555,7 +3555,6 @@
     "sp": 0,
     "essence": 0
    },
-   "essenceDrawbacksAuto": 0,
    "essenceDrawbacksNum": null,
    "essenceDrawbacksError": null,
    "essenceDrawbacks": 0,
@@ -6085,7 +6084,8 @@
   "blank-cmd-deflection",
   "typed-ac-reach",
   "ac-penalty-cmd",
-  "blank-hp-other"
+  "blank-hp-other",
+  "tradition-essence-split"
  ],
  "log": [
   {

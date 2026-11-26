@@ -3035,6 +3035,10 @@ td.side-none select { border: 1px dashed var(--cs-bad); border-left: 3px solid v
 .trainhead > label.fld.blendticks { flex: 0 1 auto; }
 .trainhead .blendticks .pair { gap: 4px 10px; }
 .trainhead .blendticks .num { font-variant-numeric: tabular-nums; color: var(--cs-text); }
+/* The tradition's drawbacks left, as spell points and as essence side by
+   side: each row's name takes the room, the two columns what they need. */
+table.build.boonsplit th[scope="row"] { font-weight: 500; text-align: left; }
+table.build.boonsplit th.num, table.build.boonsplit td.num { width: 1%; white-space: nowrap; padding-left: 16px; }
 tr.future td { opacity: 0.55; }
 .subhead {
   margin: 12px 0 6px; font-size: 0.7rem; text-transform: uppercase;

@@ -1927,30 +1927,34 @@ export function recomputeTraining(model) {
     m.castingLevels = castingLevels;
     m.traditionLevels = reads;
 
-    // The split saved before was "so many drawbacks as spell points, the
-    // rest as essence"; it becomes the drawbacks on Expanded Essence Pool,
-    // once, against the count at the time.
-    if (tr.boonSP !== undefined || tr.tierSP !== undefined || tr.boonUses !== undefined || tr.tierUse !== undefined) {
-      if (tr.essenceDrawbacks === undefined) {
-        const legacySP = tr.boonSP ?? tr.tierSP ?? null;
-        tr.essenceDrawbacks = legacySP === null || legacySP === ''
-          ? null : Math.max(0, Math.min(TRADITION_ROWS, m.effectiveDrawbacks - (Math.floor(Number(legacySP)) || 0)));
+    // Blank is 0: the boon is not taken until the player types how many
+    // drawbacks go on it, and the drawbacks left give spell points. A number
+    // or a formula stands; it is clamped on the way in, so a count that dips
+    // while a boon is added keeps what the player wrote.
+    const isBlank = (v) => v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
+    // A sheet saved before keeps the split it showed, written into the box
+    // once, against the count at the time: up to five for a character who
+    // weaves veils, or what was left after a split saved as "so many
+    // drawbacks as spell points" before the box existed.
+    if (model.oldEssenceSplit) {
+      model.oldEssenceSplit = false;
+      const legacySP = tr.boonSP ?? tr.tierSP ?? null;
+      if (!isBlank(legacySP)) {
+        tr.essenceDrawbacks ??= Math.max(0, Math.min(TRADITION_ROWS, m.effectiveDrawbacks - (Math.floor(Number(legacySP)) || 0)));
+      } else if (isBlank(tr.essenceDrawbacks) && weavesVeils(c) && m.effectiveDrawbacks > 0) {
+        tr.essenceDrawbacks = Math.min(TRADITION_ROWS, m.effectiveDrawbacks);
       }
-      for (const old of ['boonSP', 'tierSP', 'boonUses', 'tierUse']) delete tr[old];
     }
-    // Blank is up to five for a character who weaves veils, else none. A
-    // number or a formula stands; it is clamped on the way in, so a count
-    // that dips while a boon is added keeps what the player wrote.
+    for (const old of ['boonSP', 'tierSP', 'boonUses', 'tierUse']) delete tr[old];
     const typed = tr.essenceDrawbacks;
-    const blank = typed === undefined || typed === null || (typeof typed === 'string' && typed.trim() === '');
+    const blank = isBlank(typed);
     const box = blank ? null : evaluateAmount(typed, magicScope);
-    m.essenceDrawbacksAuto = weavesVeils(c) ? Math.min(TRADITION_ROWS, m.effectiveDrawbacks) : 0;
     m.essenceDrawbacksNum = box ? box.value : null;
     m.essenceDrawbacksError = box?.error || null;
     const spend = traditionSpend({
       drawbacks,
       boons: boughtOff,
-      essenceDrawbacks: box ? box.value : m.essenceDrawbacksAuto,
+      essenceDrawbacks: box ? box.value : 0,
       spLevels: reads.sp,
       essenceLevels: reads.essence,
     });
@@ -1961,7 +1965,7 @@ export function recomputeTraining(model) {
     m.unusedDrawbacks = spend.unused;
     m.traditionSP = casting ? spend.sp : 0;
     m.traditionEssence = casting ? spend.essence : 0;
-    for (const old of ['spTier', 'boons', 'traditionPools', 'boonPoints', 'castingClassCount']) delete m[old];
+    for (const old of ['spTier', 'boons', 'traditionPools', 'boonPoints', 'castingClassCount', 'essenceDrawbacksAuto']) delete m[old];
 
     // A class's spell points are its levels so far plus its casting modifier:
     // the levels the character has now, not the ones planned (Wizard 1-5,

@@ -92,8 +92,8 @@ console.log('how the drawbacks are spent');
     traditionSpend({ drawbacks: 8, essenceDrawbacks: 7, spLevels: 10, essenceLevels: 10 }).essenceDrawbacks, 5);
   check('and no more than are left',
     traditionSpend({ drawbacks: 3, boons: 1, essenceDrawbacks: 5 }).essenceDrawbacks, 1);
-  check('drawbacks past the fifth row give nothing',
-    traditionSpend({ drawbacks: 8, spLevels: 10 }), { left: 8, essenceDrawbacks: 0, spDrawbacks: 8, unused: 3, sp: 10, essence: 0 });
+  check('spell points take up to five, and the rest stay uninvested',
+    traditionSpend({ drawbacks: 8, spLevels: 10 }), { left: 8, essenceDrawbacks: 0, spDrawbacks: 5, unused: 3, sp: 10, essence: 0 });
   check('boons cannot take more than there are',
     traditionSpend({ drawbacks: 3, boons: 2, spLevels: 10 }).left, 0);
 }
@@ -109,8 +109,12 @@ console.log('a gestalt with one casting level and Advanced Magic Training');
   const m = () => c.data.training.magic;
   check('one level in a casting class', m().castingLevels, 1);
   check('spell points read every level, essence the Wizard level and half of nine', m().traditionLevels, { sp: 10, essence: 5 });
-  check('seven left: five on Expanded Essence Pool by default for a veilweaver, two as spell points',
-    [m().effectiveDrawbacks, m().essenceDrawbacks, m().spDrawbacks], [7, 5, 2]);
+  check('seven left, blank: five as spell points, two uninvested, none as essence',
+    [m().effectiveDrawbacks, m().spDrawbacks, m().unusedDrawbacks, m().essenceDrawbacks, m().traditionSP, m().traditionEssence],
+    [7, 5, 2, 0, 10, 0]);
+  c.set('training.magic.tradition.essenceDrawbacks', 5);
+  check('five typed on Expanded Essence Pool leave two as spell points', [m().essenceDrawbacks, m().spDrawbacks, m().unusedDrawbacks],
+    [5, 2, 0]);
   check('row 2 at 10 levels is 4 spell points, row 5 at 5 levels is 5 essence',
     [m().traditionSP, m().traditionEssence], [4, 5]);
   check('the spell points are in the total', m().totalSP, m().classSP[0].sp + 4);
@@ -128,7 +132,7 @@ console.log('casting levels are counted per character level, and nothing is mult
   });
   const m = () => c.data.training.magic;
   check('two casting classes on two sides, ten levels', m().castingLevels, 10);
-  check('no veils: nothing goes to essence by default', [m().essenceDrawbacks, m().spDrawbacks], [0, 3]);
+  check('nothing goes to essence by default', [m().essenceDrawbacks, m().spDrawbacks], [0, 3]);
   check('row 3 at 10 levels, once', [m().traditionSP, m().traditionEssence], [5, 0]);
   c.data.progression.levels.forEach((r, i) => { if (i >= 4) r.classes = ['Fighter', 'Incanter']; });
   c.data.classes.push(tableClass('Fighter'));
@@ -147,9 +151,9 @@ console.log('past five, and before the character casts');
     drawbacks: ['A', 'B', 'C', 'D', 'E', 'F x2'],
   });
   const m = () => c.data.training.magic;
-  check('seven as spell points read row 5, two give nothing',
-    [m().spDrawbacks, m().unusedDrawbacks, m().traditionSP], [7, 2, 6]);
-  check('the panel says so', combat.renderMagicPanel(c).includes('2 drawbacks past the fifth give nothing.'), true);
+  check('five of seven as spell points read row 5, two stay uninvested',
+    [m().spDrawbacks, m().unusedDrawbacks, m().traditionSP], [5, 2, 6]);
+  check('the panel says so', /Uninvested boons<\/span>\s*<span class="value ?">2</.test(combat.renderMagicPanel(c)), true);
   const later = build({
     rows: rowsOf(4, (l) => [l < 4 ? 'Fighter' : 'Wizard']), casters: ['Wizard'], drawbacks: ['A', 'B'],
   });
@@ -167,10 +171,10 @@ console.log('the drawbacks on Expanded Essence Pool: blank, a number, a formula'
     drawbacks: ['A', 'B', 'C', 'D', 'E', 'F', 'G'],
   });
   const m = () => c.data.training.magic;
-  check('blank: five for a veilweaver', [m().essenceDrawbacksAuto, m().essenceDrawbacks, m().traditionEssence, m().traditionSP],
-    [5, 5, 10, 4]);
+  check('blank is 0, even for a veilweaver: five as spell points, two uninvested',
+    [m().essenceDrawbacks, m().traditionEssence, m().traditionSP, m().unusedDrawbacks], [0, 0, 10, 2]);
   c.set('training.magic.tradition.essenceDrawbacks', 0);
-  check('0: not taken, all seven as spell points', [m().traditionEssence, m().traditionSP, m().unusedDrawbacks], [0, 10, 2]);
+  check('0 is the same', [m().traditionEssence, m().traditionSP, m().unusedDrawbacks], [0, 10, 2]);
   c.set('training.magic.tradition.essenceDrawbacks', 3);
   check('3: row 3 essence, row 4 spell points', [m().traditionEssence, m().traditionSP], [5, 7]);
   c.set('training.magic.tradition.essenceDrawbacks', 'floor(level / 4)');
@@ -185,10 +189,15 @@ console.log('the drawbacks on Expanded Essence Pool: blank, a number, a formula'
   c.set('training.magic.tradition.essenceDrawbacks', 9);
   check('a number is clamped on the way in and kept as typed',
     [m().essenceDrawbacks, c.data.training.magic.tradition.essenceDrawbacks], [5, 9]);
-  c.set('training.magic.tradition.essenceDrawbacks', null);
-  c.data.akashic.classes = [];
-  c.recompute();
-  check('blank with no veils: none', [m().essenceDrawbacksAuto, m().traditionEssence], [0, 0]);
+  c.set('training.magic.tradition.essenceDrawbacks', 5);
+  const html = combat.renderMagicPanel(c);
+  const split = /<table class="build compact boonsplit">[\s\S]*?<\/table>/.exec(html)?.[0] || '';
+  const cells = (label) => [...(new RegExp(`${label}</th>([\\s\\S]*?)</tr>`).exec(split)?.[1] || '')
+    .matchAll(/<td[^>]*>([^<]*)</g)].map((x) => x[1].trim());
+  check('the panel shows spell points and essence side by side',
+    [cells('Drawbacks')[0], cells('Levels counted'), cells('Gives')], ['2', ['10', '10'], ['4', '10']]);
+  check('with the essence box in the essence column',
+    /As essence[\s\S]*data-set="training\.magic\.tradition\.essenceDrawbacks"/.test(split), true);
 }
 
 console.log('a saved split becomes the drawbacks on Expanded Essence Pool');
@@ -198,6 +207,7 @@ console.log('a saved split becomes the drawbacks on Expanded Essence Pool');
     drawbacks: NINE, boons: ['Deathful Magic'],
   });
   const doc = JSON.parse(JSON.stringify(c.toJSON()));
+  doc.corrections = doc.corrections.filter((x) => x !== 'tradition-essence-split');
   doc.training.magic.tradition.boonSP = 2;
   doc.training.magic.traditionPools = [{ key: 'boons', steps: 7 }];
   doc.training.magic.castingClassCount = 1;
@@ -213,6 +223,36 @@ console.log('a saved split becomes the drawbacks on Expanded Essence Pool');
   doc.training.magic.tradition.boonSP = 7;
   check('all seven as spell points: none on Expanded Essence Pool',
     new Character(doc).data.training.magic.tradition.essenceDrawbacks, 0);
+}
+
+console.log('a sheet saved before a blank box meant 0 keeps the split it showed');
+{
+  const old = (opts) => {
+    const doc = JSON.parse(JSON.stringify(build(opts).toJSON()));
+    doc.corrections = doc.corrections.filter((x) => x !== 'tradition-essence-split');
+    return doc;
+  };
+  const weaver = new Character(old({
+    rows: rowsOf(10, () => ['Wizard']), casters: ['Wizard'], weaver: 'Wizard', drawbacks: NINE, boons: ['Deathful Magic'],
+  }));
+  const wm = weaver.data.training.magic;
+  check('a veilweaver gets up to five written into the box',
+    [wm.tradition.essenceDrawbacks, wm.essenceDrawbacks, wm.spDrawbacks], [5, 5, 2]);
+  check('the sheet is marked, so it happens once', weaver.data.corrections.includes('tradition-essence-split'), true);
+  weaver.set('training.magic.tradition.essenceDrawbacks', null);
+  const reopened = new Character(JSON.parse(JSON.stringify(weaver.toJSON())));
+  check('a box cleared after that stays 0 on reopen',
+    [reopened.data.training.magic.tradition.essenceDrawbacks ?? null, reopened.data.training.magic.essenceDrawbacks], [null, 0]);
+  const other = new Character(old({
+    rows: rowsOf(10, () => ['Wizard']), casters: ['Wizard'], drawbacks: NINE,
+  }));
+  check('a character who weaves no veils keeps a blank box',
+    [other.data.training.magic.tradition.essenceDrawbacks ?? null, other.data.training.magic.essenceDrawbacks], [null, 0]);
+  const fresh = build({
+    rows: rowsOf(10, () => ['Wizard']), casters: ['Wizard'], weaver: 'Wizard', drawbacks: NINE,
+  });
+  check('a new sheet starts at 0, veilweaver or not',
+    [fresh.data.training.magic.tradition.essenceDrawbacks ?? null, fresh.data.training.magic.essenceDrawbacks], [null, 0]);
 }
 
 console.log('Essence Conversion: the Veilweaving sphere only, up to its maximum');

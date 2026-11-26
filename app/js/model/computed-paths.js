@@ -62,7 +62,7 @@ const COMPUTED_PATHS = [
   'training.magic.concentration', 'training.magic.totalSP', 'training.magic.availableSP',
   'training.magic.classSP.*.sp', 'training.magic.traditionEssence', 'training.magic.traditionSP',
   'training.magic.castingLevels', 'training.magic.traditionLevels', 'training.magic.essenceDrawbacks',
-  'training.magic.essenceDrawbacksAuto', 'training.magic.essenceDrawbacksNum', 'training.magic.essenceDrawbacksError',
+  'training.magic.essenceDrawbacksNum', 'training.magic.essenceDrawbacksError',
   'training.magic.spDrawbacks', 'training.magic.unusedDrawbacks',
   ...MAGIC_BONUS_BOXES.flatMap(([key]) => [`training.magic.${key}Num`, `training.magic.${key}Error`]),
 ].map((p) => p.split('.'));

@@ -27,7 +27,7 @@ import {
   TEMPLATE_TYPES, sphereForwardKey, sphereNames, trackSphereNames, trackTalentSide, TRAINING_SIDES, sideSphereNames,
 } from '../../model.js';
 import {
-  COMBAT_SPHERES, MAGIC_BONUS_BOXES, SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRADITION_ROWS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule,
+  COMBAT_SPHERES, MAGIC_BONUS_BOXES, SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule,
 } from '../../rules.js';
 import { check, field, linkField, roField, select, text } from '../fields.js';
 import {
@@ -368,39 +368,51 @@ function magicTraditionPanel(model, m) {
 
       <div class="statline" style="margin-top:8px"><span class="label">Drawbacks left</span>
         <span class="value">${m.drawbackCount ?? 0} − 2×${m.boughtOffCount ?? 0} = ${m.effectiveDrawbacks ?? 0}</span></div>
-      ${traditionSpendLines(m)}
       <div class="statline"><span class="label">Advanced Magic Training</span>
         <span class="value">${check('training.magic.amt', m.amt)}</span></div>
       <div class="statline"><span class="label">Mythic AMT</span>
         <span class="value">${check('training.magic.mythicAmt', m.mythicAmt)}</span></div>
+      ${traditionSplit(m)}
     </section>`;
   }
 
   /**
-   * What the drawbacks left come to: the ones on Expanded Essence Pool as
-   * essence, the rest as spell points, each by its own row of the table.
+   * The drawbacks left, invested side by side. Spell points take what
+   * Expanded Essence Pool does not, each side up to the table's fifth row,
+   * and any more stay uninvested. Each side reads its own row at its own
+   * levels.
    */
-function traditionSpendLines(m) {
+function traditionSplit(m) {
     const tr = m.tradition || {};
     const reads = m.traditionLevels || { sp: 0, essence: 0 };
-    const spRow = Math.min(TRADITION_ROWS, m.spDrawbacks ?? 0);
-    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-    return `${line('Levels in casting classes', m.castingLevels ?? 0)}
-      ${field('Drawbacks on Expanded Essence Pool', exprField('data-set="training.magic.tradition.essenceDrawbacks"',
+    const levelsTip = m.amt || m.mythicAmt
+      ? 'Advanced Magic Training counts every level for spell points and half the other levels for essence.'
+      : 'Levels in casting classes, each character level counted once.';
+    return `<div class="tablewrap" style="margin-top:8px"><table class="build compact boonsplit">
+        <thead><tr><th></th><th scope="col" class="num">As spell points</th><th scope="col" class="num">As essence</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Drawbacks</th>
+            <td class="num">${m.spDrawbacks ?? 0}</td>
+            <td class="num">${exprField('data-set="training.magic.tradition.essenceDrawbacks" aria-label="Drawbacks on Expanded Essence Pool"',
     tr.essenceDrawbacks ?? '', {
       kind: 'expr-or-null',
       width: '4.2rem',
       value: m.essenceDrawbacksNum,
       error: m.essenceDrawbacksError,
-      placeholder: String(m.essenceDrawbacksAuto ?? 0),
-      title: 'Blank is up to 5 for a character who weaves veils, otherwise 0. Or enter a number or a formula.',
-    }))}
-      ${line(`Essence: ${plural(m.essenceDrawbacks ?? 0, 'drawback')} at ${plural(reads.essence, 'level')}`, m.traditionEssence ?? 0, true)}
-      ${line(`Spell points: ${plural(spRow, 'drawback')} at ${plural(reads.sp, 'level')}`, m.traditionSP ?? 0, true)}
-      ${m.unusedDrawbacks ? `<p class="hint warn">${plural(m.unusedDrawbacks, 'drawback')} past the fifth ${m.unusedDrawbacks === 1 ? 'gives' : 'give'} nothing.</p>` : ''}
+      placeholder: '0',
+      title: 'Drawbacks on Expanded Essence Pool, 0 to 5. Enter a number or a formula.',
+    })}</td></tr>
+          <tr><th scope="row" title="${esc(levelsTip)}">Levels counted</th>
+            <td class="num">${reads.sp}</td><td class="num">${reads.essence}</td></tr>
+          <tr><th scope="row">Gives</th>
+            <td class="num total">${m.traditionSP ?? 0}</td><td class="num total">${m.traditionEssence ?? 0}</td></tr>
+        </tbody></table></div>
+      ${m.unusedDrawbacks ? line('Uninvested boons', m.unusedDrawbacks) : ''}
+      <p class="hint">Drawbacks left go to spell points unless some are typed under essence.</p>
       <p class="hint">Drawbacks give spell points, or essence on Expanded Essence Pool, by this table:
         1 → 1 + 1 per 6 levels, 2 → 1 + 1 per 3 levels, 3 → 1 per odd level,
-        4 → 1 + 1 per 1.5 levels, 5 → 1 per level. Levels are levels in casting classes.
+        4 → 1 + 1 per 1.5 levels, 5 → 1 per level. Each side takes up to 5 drawbacks, and the rest
+        stay uninvested. Levels are levels in casting classes.
         With Advanced Magic Training, every level counts for spell points and half the other
         levels count for essence. Essence appears on the Akashic tab as the Essence Boon.</p>`;
   }
