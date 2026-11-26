@@ -628,11 +628,14 @@ The Overview's Readied maneuvers card and the session cards list the readied man
 and the known stances. On a sheet from before the second box, everything known is
 readied until one is unticked.
 
-**How many are allowed.** The table at the top of the tab has a row for each class or
-feat that grants maneuvers, with how many it lets the character know, ready and hold as
-stances. Each count is a number or a formula. The last row holds counts from anywhere
-else, and the totals are what Known, Readied and Stances are measured against. With no
-readied count entered, readying has no limit.
+**How many are allowed.** The table at the top of the tab has a row for each class,
+template or feat that grants maneuvers, with how many it lets the character know, ready
+and hold as stances. The row's name is picked from the character's classes, templates
+and feats. Each count is a number or a formula. A class whose page in a loaded pack has
+Known, Readied and Stances columns fills its blank or 0 counts from that table at the
+class's level; a prestige class table that lists what each level gains is added up. The
+last row holds counts from anywhere else, and the totals are what Known, Readied and
+Stances are measured against. With no readied count entered, readying has no limit.
 
 Every row is three targets, and each does one thing. The **tick box** readies the
 maneuver and is the only thing that does — it used to be the whole row, so reading a

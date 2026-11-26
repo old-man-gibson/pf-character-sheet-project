@@ -426,6 +426,9 @@ function placeOf(model, ref) {
     }
     // A save's or the AC's typed-bonus cell on the Stats tab: `statCell:<path>`.
     case 'statCell': return { tab: 'stats', sel: [set(ref.slice('statCell:'.length))] };
+    // A cell of a column the player added to an ability table:
+    // `abilityCell:<table>:<column>:<ability>`.
+    case 'abilityCell': return { tab: 'stats', sel: [item(`abilityColumns.${a}`, b, c), attr('data-ab', c)] };
     case 'vancianConcentration': return { tab: 'vancian', sel: [set(`vancian.classes.${a}.concentration`)] };
     case 'vancianCasterLevel': return { tab: 'vancian', sel: [set(`vancian.classes.${a}.casterLevelOverride`)] };
     case 'manifesterLevel': return { tab: 'psionics', sel: [set(`psionics.classes.${a}.manifesterLevelOverride`)] };
@@ -434,6 +437,7 @@ function placeOf(model, ref) {
     case 'deckManipulations': return deckPlace(set('cardcasting.manipulationsAvailable'), ['deck-manipulations']);
     case 'essence': return { tab: 'akashic', sel: [set(`akashic.essence.${a}`)] };
     case 'maneuverCount': return { tab: 'maneuvers', sel: [a === 'other' ? set(`maneuvers.${b}`) : item('maneuvers.sources', a, b)] };
+    case 'initiator': return { tab: 'maneuvers', sel: [set(`maneuvers.${a}`)] };
     // A companion's number-or-formula box or a movement row's bonus:
     // `companionCell:<kind>:<index>:<path>`, the index as the audit found it,
     // and a box on a list row as `<list>.<row>.<field>`: a movement row's

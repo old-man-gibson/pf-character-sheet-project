@@ -18,6 +18,7 @@ import {
   ABILITY_LABELS, EXPERTISE_TIERS, OPERATIVE_ABILITIES, EXPERTISE_CUSTOM, fmt, parseLadderRule, ABILITIES, CASTING_TYPES, PRACTITIONER_TYPES, TALENT_RATE_OPTIONS, statMod,
 } from '../../rules.js';
 import { autoNum, select, text, field } from '../fields.js';
+import { classSelect } from '../class-select.js';
 import {
   addButton, itemCheck, itemSelect, itemText, removeButton, rowDrop, rowGrip, rowRemove, rowToolsDragged,
 } from '../rows.js';
@@ -53,7 +54,7 @@ export function guileClassBlock(model, g, cls, ci) {
     return `<div class="trainclass">
         <div class="trainhead">
           <label class="fld classpick"><span>Class</span>
-            ${itemSelect(list, ci, 'name', cls.name, classNames(model))}</label>
+            ${classSelect(model, list, ci, 'name', cls.name)}</label>
           ${poolField(list, ci, cls, 'guile')}
           ${operativeField(model, g)}
           ${classLevelsField(model, list, ci, cls, `${cls.totalTalents ?? 0} any · ${cls.totalUtility ?? 0} utility`)}
@@ -523,19 +524,6 @@ export function blendTicks(systems, home, index, counts = null, named = true) {
   /* ----- training class blocks with per-level talent slots ----- */
 
 
-/**
- * The classes a training block can be: every class the character has --
- * the Classes table and the Planner, as the model lists them -- and any name
- * a training block already holds, so a pick is never dropped from its own
- * select.
- */
-export function classNames(model) {
-    const names = new Set(model.classNames());
-    for (const side of Object.values(model.data.training || {})) {
-      for (const cls of side?.classes || []) if (String(cls.name || '').trim()) names.add(String(cls.name).trim());
-    }
-    return [...names];
-  }
 
 
 /**
@@ -598,7 +586,7 @@ export function blendedPanel(model, pairs) {
     return `<div class="trainclass">
         <div class="trainhead">
           <label class="fld classpick"><span>Class</span>
-            ${itemSelect(list, owner.index, 'name', cls.name, classNames(model))}</label>
+            ${classSelect(model, list, owner.index, 'name', cls.name)}</label>
           ${/* The pool is one, sized the way the base class -- the block the
                 pair was made from -- grants talents, so the rates offered are
                 that side's and not both sides' at once. */''}

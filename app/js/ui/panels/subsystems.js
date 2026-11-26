@@ -52,12 +52,15 @@ const TYPE_ABBREV = {
 import {
   CARD_COLORS, CARD_MODIFICATIONS, CARD_KEYWORDS, DECK_SORTS, LIFEBOUND_PILES, TABLE_DESTINATIONS, cardKeywordPattern, deckOrder, harrowFor,
   hasManipulation, manipulationCount, redrawSize, castingTableNames, blankCastingClass, manipulationEntry, manipulationFoldKey, deckManipulationCatalogue, MANIPULATION_NEEDS,
-  maneuverCatalogue, maneuverDetails, maneuverIsWritten, maneuverOwn, altTrainingLink,
+  maneuverCatalogue, maneuverDc, maneuverDetails, maneuverIsWritten, maneuverOwn, altTrainingLink,
+  SOURCE_COUNTS, countFromTable, initiatorPackClass, normalizeName,
   altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques, psionicCurveTotals, psionicTables,
   spellCatalogue, spellDetails, powerCatalogue, powerDetails, veilsAvailable, veilDetails, veilOwn,
   slug, manifesterForwardKey, vancianForwardKey, poolTracker, essenceCellBlank,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST, nameDatalist, noteCell, packText, portraitHtml } from '../html.js';
+import { classNames, classSelect, classSelectAt } from '../class-select.js';
+import { featNames } from '../../model/feats.js';
 import {
   CARD_CASTING_TIMES, CARD_DAMAGE_TYPES, CARD_DURATIONS, CARD_RANGES, CARD_SAVES, CARD_STAT_FIELDS, CARD_TARGETS,
   TERRAIN_CHOICES, stepCastingTime,
@@ -87,7 +90,6 @@ import {
   itemSelect, itemText, line,
   lineHtml, miniStat, proseList, removeButton, rowRemove, rowTools, working,
 } from '../rows.js';
-import { classNames } from './training.js';
 
 export function markKeywords(html) {
   return String(html).replace(KEYWORD_RE, (m, kw, n) => {
@@ -355,9 +357,7 @@ function akashicClassesPanel(model, a) {
             <th class="num">Ess. cap</th><th class="num">Bonus</th><th class="num">Cap</th><th></th>
           </tr></thead><tbody>
             ${rows.map(({ c, i }) => `<tr>
-              <td>${itemSelect(list, i, 'name', c.name, classNames(model), '—', null, {
-    attrs: 'aria-label="Veilweaving class"',
-  })}</td>
+              <td>${classSelect(model, list, i, 'name', c.name, { attrs: 'aria-label="Veilweaving class"' })}</td>
               <td>${select(`${list}.${i}.mod`, c.mod, ABILITY_LABELS_LIST)}</td>
               <td class="num">${autoNum(`data-item="${list}|${i}|levelOverride"`, c.levelOverride, {
     auto: true, placeholder: c.levelAuto ?? 0, width: '3.2rem', title: levelTitle,
@@ -716,6 +716,35 @@ function akashicReceptaclesPanel(model, a) {
 
   /* ---------------- path of war maneuvers ---------------- */
 
+/**
+ * What else a maneuver source can be after the character's classes: its
+ * templates and its feats, each under a heading.
+ */
+function sourceChoices(model) {
+  const classes = new Set(classNames(model).map(normalizeName));
+  const own = (names) => [...new Set(names.map((n) => String(n || '').trim()).filter((n) => n && !classes.has(normalizeName(n))))];
+  return [
+    { group: 'Templates', options: own((model.data.templates || []).map((t) => t?.name)) },
+    { group: 'Feats', options: own(featNames(model.data)) },
+  ];
+}
+
+/**
+ * One count on a source row. A class with a table in a loaded pack shows the
+ * table's figure as the blank box's placeholder, and a 0 there reads as blank.
+ */
+function sourceCount(s, i, f) {
+  const t = s.tableCounts;
+  const auto = t && countFromTable(s[f]);
+  return itemExpr('maneuvers.sources', i, f, auto ? { ...s, [f]: '' } : s, { width: '4.2rem', placeholder: auto ? String(t[f]) : '' });
+}
+
+/** The class a new source row starts on: the first with a maneuver table and no row yet, else none. */
+function nextSource(model, m) {
+  const named = new Set((m.sources || []).map((s) => normalizeName(s.name)));
+  return model.classNames().find((n) => initiatorPackClass(n)?.table && !named.has(normalizeName(n))) || '';
+}
+
   /**
    * Disciplines as tick lists, side by side.
    *
@@ -744,13 +773,15 @@ export function maneuversPanel(model, ctx) {
           ${miniStat('Readied', `${k.readied ?? 0}/${k.possibleReadied ?? 0}`)}
           ${miniStat('Stances', `${k.stances ?? 0}/${k.possibleStances ?? 0}`)}
           ${miniStat('Disciplines', (m.disciplines || []).length)}
+          ${miniStat('Initiator level', k.initiator?.level ?? 0)}
         </div>
+        ${initiatorRow(model, m)}
         <div class="tablewrap squeeze" style="margin-top:8px"><table class="build msources">
           <thead><tr><th>Allowed from</th><th>Known</th><th>Readied</th><th>Stances</th><th></th></tr></thead>
           <tbody>
             ${(m.sources || []).map((s, i) => `<tr>
-              <td>${itemText('maneuvers.sources', i, 'name', s.name, 'Class or feat')}</td>
-              ${['known', 'readied', 'stances'].map((f) => `<td>${itemExpr('maneuvers.sources', i, f, s, { width: '4.2rem' })}</td>`).join('')}
+              <td>${classSelect(model, 'maneuvers.sources', i, 'name', s.name, { more: sourceChoices(model), attrs: 'aria-label="Allowed from"' })}</td>
+              ${SOURCE_COUNTS.map((f) => `<td>${sourceCount(s, i, f)}</td>`).join('')}
               <td>${removeButton('maneuvers.sources', i, { what: 'source', tiny: true })}</td>
             </tr>`).join('')}
             <tr>
@@ -770,8 +801,8 @@ export function maneuversPanel(model, ctx) {
           </tbody>
         </table></div>
         <div class="pair" style="margin-top:6px">
-          ${addButton('maneuvers.sources', 'Add a source', { name: '', known: 0, readied: 0, stances: 0 })}
-          <span class="hint">One row per class or feat that grants maneuvers. Each count is a number or a formula.</span>
+          ${addButton('maneuvers.sources', 'Add a source', { name: nextSource(model, m), known: '', readied: '', stances: '' })}
+          <span class="hint">One row per class, template or feat that grants maneuvers. Each count is a number or a formula. Blank or 0 uses the class table from a loaded pack.</span>
         </div>
         <div class="pair" style="margin-top:8px">
           <select data-action="add-discipline" aria-label="Add a discipline">
@@ -800,6 +831,47 @@ export function maneuversPanel(model, ctx) {
       ${systemExtrasPanel(model, m, 'maneuvers', 'Maneuvers')}
     </div>`;
   }
+
+/**
+ * The initiator level, the initiation modifier and the DC bonus: the numbers
+ * every maneuver's save DC is built from.
+ */
+function initiatorRow(model, m) {
+  const init = m.calc?.initiator || {};
+  const level = Number(model.data.identity?.level) || 0;
+  const pack = init.statFrom && init.statFrom !== 'picked' ? `${init.stat} (${init.statFrom})` : '';
+  const counted = init.from
+    ? `${init.from} levels count in full and other levels count half.`
+    : 'No class is marked Path of War, so half of the character level counts.';
+  return `<div class="vcast initiator" style="margin-top:8px">
+        <div class="vcast-row">
+          ${field('Initiator level', `${exprField('data-set="maneuvers.initiatorLevelOverride"', m.initiatorLevelOverride ?? '', {
+    kind: 'expr-or-null',
+    width: '4.2rem',
+    value: init.base,
+    error: init.levelError,
+    placeholder: String(init.counted ?? Math.floor(level / 2)),
+    title: `Blank uses ${init.counted ?? 0}: levels in initiator classes plus half of other levels. `
+      + 'Or enter a number or a formula, e.g. initiator.level + 2',
+  })}${forwardedBadge(model, 'initiator.level')}`)}
+          <div class="fld vstat">
+            <span>Initiation modifier</span>
+            <span class="rollpair">${select('maneuvers.initiationStat', m.initiationStat || '', ABILITY_LABELS_LIST, pack || 'None',
+    { attrs: 'aria-label="Initiation modifier" title="The ability modifier added to maneuver save DCs."' })}<span
+              class="vmod" title="Initiation modifier">${fmt(init.mod ?? 0)}</span></span>
+          </div>
+          ${field('DC bonus', `${exprField('data-set="maneuvers.dcBonus"', m.dcBonus ?? '', {
+    kind: 'expr-or-null',
+    width: '4.2rem',
+    value: init.dcBonus?.value,
+    error: init.dcBonus?.error,
+    placeholder: '0',
+    title: 'Added to every maneuver save DC. A number or a formula, e.g. floor(mythic.tier / 2)',
+  })}${forwardedBadge(model, 'initiator.dc')}`)}
+        </div>
+      </div>
+      <p class="hint">${esc(counted)} A maneuver's save DC is ${init.dc ?? 10} + its level.</p>`;
+}
 
   /**
    * One discipline: its readied count, then every maneuver it grants, grouped
@@ -835,6 +907,7 @@ function disciplineColumn(model, ctx, d, i) {
     const entry = maneuverDetails(d, e.name, e);
     const own = maneuverOwn(d, e.name);
     const written = maneuverIsWritten(own);
+    const dc = rowDc(model, e, entry);
     return `
             <div class="mrow${e.known ? ' is-known' : ''}${open ? ' is-open' : ''}">
               <label class="mtick" title="${esc(e.known ? `${e.name} is known. Untick to forget it.` : `Know ${e.name}`)}">
@@ -851,6 +924,7 @@ function disciplineColumn(model, ctx, d, i) {
                 title="${esc(e.name)}${entry.type ? `: ${esc(entry.type)}` : ''}
 
 Click to ${open ? 'close' : 'open'} it.${wiki ? ' Right-click to open its wiki page.' : ''}">${esc(e.name)}</button>
+              ${dc ? `<span class="mdc" title="${esc(dc.title)}">DC ${dc.html}</span>` : ''}
               <span class="mtype ${e.kind === 'stance' ? 'is-stance' : ''}">${esc(shortType(entry.type))}</span>
               <button class="mnote-btn${written ? ' has-note' : ''}" data-medit="${esc(key)}"
                 title="${written ? 'Your description. Click to edit.' : 'Describe what it does. {…} formulas work.'}"
@@ -862,6 +936,30 @@ Click to ${open ? 'close' : 'open'} it.${wiki ? ' Right-click to open its wiki p
       </div>`}
     </div>`;
   }
+
+/**
+ * A known maneuver's save DC as its row shows it: the DC cell where the
+ * player or the catalog wrote one, else 10 + its level + the initiation
+ * modifier + DC bonuses. Null for one not known, or whose level is not known.
+ */
+function rowDc(model, e, entry) {
+  if (!e.known) return null;
+  const typed = String(entry.dc ?? '').trim();
+  if (typed) {
+    return {
+      html: hasTokens(typed) ? renderedProse(model, typed, null, { ...UNREADIED, inactive: !e.readied }) : esc(typed),
+      title: 'From the DC cell.',
+    };
+  }
+  const m = model.data.maneuvers;
+  const dc = maneuverDc(m, e.level);
+  if (dc === null) return null;
+  const init = m.calc?.initiator || {};
+  const bonus = dc - e.level - 10 - (init.mod ?? 0);
+  const parts = [`10 + level ${e.level}`, init.stat ? `${init.stat} ${fmt(init.mod ?? 0)}` : '', bonus ? `DC bonus ${fmt(bonus)}` : '']
+    .filter(Boolean);
+  return { html: esc(dc), title: `Save DC: ${parts.join(' + ')}.` };
+}
 
 /* ------------------------------------------------------------------ *
  * One maneuver, opened.
@@ -893,7 +991,7 @@ function maneuverCard(model, ctx, list, e, entry, own, key, wiki) {
           title="${editing ? 'Stop editing.' : 'Describe what it does.'}">${editing ? 'Done' : 'Edit'}</button>
         <button data-view class="tiny" data-mclose="${esc(key)}" title="Close" aria-label="Close ${esc(e.name)}">×</button>
       </div>
-      ${editing ? maneuverCells(model, list, e, own) : maneuverRead(model, ctx, entry, key, e.readied)}
+      ${editing ? maneuverCells(model, list, e, own) : maneuverRead(model, ctx, entry, key, e.readied, maneuverDc(model.data.maneuvers, e.level))}
     </div>`;
 }
 
@@ -907,9 +1005,10 @@ function maneuverCard(model, ctx, list, e, entry, own, key, wiki) {
 // A bonus written on a maneuver applies only while it is readied.
 const UNREADIED = { inactiveTitle: 'Not readied (or, for a stance, not known), so the bonus is not applying.' };
 
-function maneuverRead(model, ctx, entry, key, readied = true) {
+function maneuverRead(model, ctx, entry, key, readied = true, dc = null) {
+  // A blank DC cell shows the DC worked out for the maneuver.
   const shown = MANEUVER_FIELDS
-    .map((f) => [f, entry[f.key]])
+    .map((f) => [f, f.key === 'dc' && !String(entry.dc).trim() && dc !== null ? String(dc) : entry[f.key]])
     .filter(([, v]) => String(v).trim() !== '');
   const value = (v) => (hasTokens(v) ? renderedProse(model, v, null, { ...UNREADIED, inactive: !readied }) : esc(v));
   const cells = shown.filter(([f]) => f.key !== 'text');
@@ -945,7 +1044,9 @@ function maneuverCells(model, list, e, own) {
     // instead, and the two must not read alike: "Melee attack" is what the
     // cell *will* say if left alone, "e.g. One creature" is only a suggestion.
     const under = String(e?.[f.key] ?? '');
-    const ghost = under || (f.hint ? `e.g. ${f.hint}` : '');
+    // A blank DC cell shows the DC worked out for the maneuver.
+    const worked = f.key === 'dc' && !under ? maneuverDc(model.data.maneuvers, e.level) : null;
+    const ghost = under || (worked !== null ? String(worked) : f.hint ? `e.g. ${f.hint}` : '');
     const control = f.options
       ? maneuverSelect(bind(f), own[f.key], f.options,
         under ? `${under} (from the catalog)` : '—')
@@ -1203,15 +1304,12 @@ function powerDatalist(c) {
 }
 
 /**
- * Which of the character's classes a casting or manifesting block is: a
- * picker of the Classes table and the Planner, as a training block has. A
- * name it already holds that is not a class stays, marked. With no classes
- * yet there is nothing to pick from, so the name is typed.
+ * Which of the character's classes a casting or manifesting block is: the
+ * sheet's class picker, as a training block has. A name it already holds
+ * that is not a class stays, marked.
  */
 function classPick(model, list, i, name, what) {
-  const names = model.classNames();
-  if (!names.length) return itemText(list, i, 'name', name, what);
-  return itemSelect(list, i, 'name', name, names, '—', null,
+  return classSelect(model, list, i, 'name', name,
     { attrs: `aria-label="${what}" title="${what}: one of this character’s classes. Its levels in the Planner set the level here."` });
 }
 
@@ -1760,7 +1858,6 @@ function companionLevelControls(model, cc) {
       return `${field('Master level penalty', num(`${p}.masterLevelPenalty`, b.masterLevelPenalty, 'min="0"'))}
         ${namesProtector(b) ? '' : field('Protector archetype', check(`${p}.protector`, b.protector, 'doubles hit points from 11th'))}`;
     }
-    const classes = model.progressionClasses();
     const source = kind === 'animalCompanion'
       ? field('Level from', select(`${p}.levelSource`, b.levelSource || 'class', COMPANION_LEVEL_SOURCES, null))
       : kind === 'conjured'
@@ -1773,7 +1870,7 @@ function companionLevelControls(model, cc) {
         : kind === 'conjured' && (b.levelSource || 'casterLevel') === 'casterLevel'
           ? 'the Conjuration sphere’s caster level on the Magic Spheres tab' : 'the class’s levels in the Planner';
     return `${source}
-      ${showClass ? field('Master class', select(`${p}.masterClass`, b.masterClass, classes)) : ''}
+      ${showClass ? field('Master class', classSelectAt(model, `${p}.masterClass`, b.masterClass)) : ''}
       ${field('Level override', autoNum(`data-set="${p}.levelOverride"`, b.levelOverride, {
     placeholder: k.rawLevel ?? 0,
     title: `Auto: ${k.rawLevel ?? 0} from ${autoFrom}. Enter a number to override it.`,

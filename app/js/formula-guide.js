@@ -83,6 +83,7 @@ const SYSTEM_HEADS = {
   operative: 'guile',
   vancian: 'vancian',
   manifester: 'psionic', pp: 'psionic',
+  initiator: 'maneuvers',
   essence: 'akashic', bound: 'akashic',
   deck: 'cards',
 };
@@ -111,6 +112,7 @@ export const VALUE_SECTIONS = [
   { key: 'guile', label: 'Spheres of Guile', blurb: 'Operative modifier and pools; per skill sphere: ranks, DC, ranges.' },
   { key: 'vancian', label: 'Vancian magic', blurb: 'Each casting class’s caster level, and vancian.cl for the highest of them.' },
   { key: 'psionic', label: 'Psionics', blurb: 'Power points, and each manifesting class’s manifester level.' },
+  { key: 'maneuvers', label: 'Path of War', blurb: 'Initiator level, initiation modifier, and initiator.dc, the save DC before a maneuver’s level is added.' },
   { key: 'akashic', label: 'Akashic', blurb: 'Essence in the pool and in each receptacle, and whether each veil is bound (1 or 0).' },
   { key: 'cards', label: 'Cardcasting', blurb: 'The deck as it is built, the table in play, and each manipulation taken.' },
   { key: 'companion', label: 'Companions', blurb: 'One heading per companion. The first of a kind is <kind>.* (eidolon.hd); later ones are numbered (eidolon2.hd, eidolon3.hd).' },
@@ -141,6 +143,7 @@ export const TARGET_SECTIONS = [
   { key: 'guile', label: 'Spheres of Guile', blurb: 'Plans and leverage; per skill sphere: ranks, DC.' },
   { key: 'vancian', label: 'Vancian magic', blurb: 'One casting class’s caster level, or all of them.' },
   { key: 'psionic', label: 'Psionics', blurb: 'Power points, and one manifesting class’s manifester level or all of them.' },
+  { key: 'maneuvers', label: 'Path of War', blurb: 'The initiator level, or every maneuver save DC.' },
   { key: 'akashic', label: 'Akashic', blurb: 'Essence per day and the most essence a veil can hold.' },
   { key: 'companion', label: 'Companions', blurb: 'One heading per companion. Later companions of a kind are numbered.' },
   { key: 'other', label: 'Everything else', blurb: '' },

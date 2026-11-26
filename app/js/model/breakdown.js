@@ -23,13 +23,13 @@
 import {
   ABILITIES, ABILITY_LABELS, ABP_DEFENCE_GROUPS, AC_BONUS_TYPES, AC_PENALTY_KEYS, ATTACK_MODE_KEY, BUILD_TEMPORARY,
   CONDITION_CHANNELS, SAVE_BONUS_TYPES,
-  abilityOf, enhancementCapNote, tempEnhancementNote, acParts, acPenaltyToCmd, attackParts, cmdParts, conditionTotals, initiativeParts, recipePart,
-  recipePlain, saveParts,
+  abilityColumnName, abilityColumns, abilityOf, buildColumnsByType, enhancementCapNote, tempEnhancementNote, acParts, acPenaltyToCmd, attackParts, cmdParts,
+  conditionTotals, initiativeParts, recipePart, recipePlain, saveParts, stackAt,
 } from '../rules.js';
 import { forwardedInto, gearItemBonuses } from './scope.js';
 import { abilityMoves, abilitySlots, mythicHp } from './stats/defenses.js';
 import { COMPANION_KINDS, companionBreakdown, companionScopeName } from '../companions.js';
-import { abilityHarm } from './abilities.js';
+import { abilityHarm, ownColumnsOf } from './abilities.js';
 import { campaignRules } from './campaign.js';
 
 // The line makers are the recipes' own (rules.js), so a breakdown's lines
@@ -160,6 +160,26 @@ function hpBreakdown(model) {
   return parts;
 }
 
+/**
+ * The columns the player added to one of an ability's tables, a line each,
+ * for what each adds after stacking with the table's columns by type, as
+ * resolveAbility counts it. A column that adds nothing has no line.
+ */
+function ownColumnParts(model, key, table) {
+  const build = model.data.statsBuild?.[key];
+  const cells = ownColumnsOf(model.data, key)?.[table] || [];
+  if (!build || !cells.length) return [];
+  const s = stackAt(cells, buildColumnsByType(build, build.resolved?.gearItems)[table]);
+  const cols = abilityColumns(model.data, table);
+  return cells.flatMap((e, i) => {
+    if (!s.counts.has(e) || !e.value) return [];
+    const overlap = s.overlaps.get(e)?.overlap || 0;
+    const name = abilityColumnName(cols[i]);
+    const note = overlap ? `The table already gives ${overlap} of this type.` : 'Stats tab, an added column';
+    return [at(part(name, e.value - overlap, note), `abilityCell:${table}:${i}:${key}`)];
+  });
+}
+
 function abilityBreakdown(model, key, which) {
   const build = model.data.statsBuild?.[key];
   const a = model.data.abilities[key] || {};
@@ -186,6 +206,7 @@ function abilityBreakdown(model, key, which) {
     return [
       plain('Score', a.score, 'permanent score'),
       ...BUILD_TEMPORARY.map(([k, , full]) => column(part(full, used(k), why(k)), k)),
+      ...ownColumnParts(model, key, 'temporary'),
       ...forwardedParts(model, `${key}.score`, 'temporary'), ...forwardedParts(model, `${key}.temp`),
       drain,
     ];
@@ -206,6 +227,7 @@ function abilityBreakdown(model, key, which) {
     ...[['attunement', 'attuned'], ['inherent', 'inherent'], ['array', 'array'],
       ['level4', 'level/4'], ['mythic', 'mythic'], ['age', 'age category'], ['size', 'size'], ['untyped', 'untyped']]
       .map(([k, label]) => column(part(label, build[k]), k)),
+    ...ownColumnParts(model, key, 'permanent'),
     ...forwardedParts(model, `${key}.score`, 'permanent'),
   ];
 }

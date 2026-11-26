@@ -10,7 +10,7 @@
  */
 
 import {
-  AC_BONUS_TYPES, BUFF_MOD_KEYS, DERIVED, ESSENCE_SOURCES, FORWARD_BY_DERIVED, SAVE_BONUS_TYPES, bonusColumnName, diceString,
+  ABILITIES, ABILITY_COLUMN_TABLES, ABILITY_LABELS, AC_BONUS_TYPES, BUFF_MOD_KEYS, abilityColumnName, abilityColumns, DERIVED, ESSENCE_SOURCES, FORWARD_BY_DERIVED, SAVE_BONUS_TYPES, bonusColumnName, diceString,
   flatFootedLoss, skillLabel,
 } from '../rules.js';
 import {
@@ -469,6 +469,16 @@ export const FORMULA_FIELDS = [
     },
   },
   {
+    // A cell of a column the player added to one of the ability tables.
+    key: 'abilityCell', source: 'player', where: 'the Stats tab',
+    collect: (model) => ABILITY_COLUMN_TABLES.flatMap((table) => abilityColumns(model.data, table)
+      .flatMap((col, i) => ABILITIES.filter((ab) => stringFormula(col?.[ab])).map((ab) => ({
+        id: `ability-${table}-${i}-${ab}`, place: `abilityCell:${table}:${i}:${ab}`,
+        name: `${ABILITY_LABELS[ab]}: ${abilityColumnName(col)}${table === 'temporary' ? ' (temporary)' : ''}`,
+        formula: col[ab], value: col.resolved?.[ab], error: col.errors?.[ab],
+      })))),
+  },
+  {
     key: 'speed', source: 'player',
     collect: (model) => (model.data.identity?.speeds || []).flatMap((sp, i) => (stringFormula(sp.bonus) ? [{
       id: `speed-${i}`, place: `speed:${i}`, name: `${sp.type || `Speed ${i + 1}`} bonus`,
@@ -621,6 +631,20 @@ export const FORMULA_FIELDS = [
           formula: m[path], value: m.calc?.other?.[f]?.value, error: m.calc?.other?.[f]?.error,
         }));
       return [...rows, ...other];
+    },
+  },
+  {
+    // The initiator level box and the maneuver DC bonus box.
+    key: 'initiator', source: 'player', where: 'the Maneuvers tab',
+    collect: (model) => {
+      const m = model.data.maneuvers;
+      const init = m?.calc?.initiator || {};
+      return [
+        ['initiatorLevelOverride', 'Initiator level', init.base, init.levelError],
+        ['dcBonus', 'Maneuver DC bonus', init.dcBonus?.value, init.dcBonus?.error],
+      ].filter(([field]) => stringFormula(m?.[field])).map(([field, name, value, error]) => ({
+        id: `initiator-${field}`, place: `initiator:${field}`, name, formula: m[field], value, error,
+      }));
     },
   },
   {

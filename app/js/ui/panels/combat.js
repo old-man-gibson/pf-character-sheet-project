@@ -31,8 +31,9 @@ import {
 } from '../../rules.js';
 import { check, field, linkField, roField, select, text } from '../fields.js';
 import {
-  abilityField, blendTicks, blendedSection, bonusTalentTable, classLevelsField, classNames, singleLadderTable, traditionTable,
+  abilityField, blendTicks, blendedSection, bonusTalentTable, classLevelsField, singleLadderTable, traditionTable,
 } from './training.js';
+import { classSelect } from '../class-select.js';
 
 /** What a template feature's type means, on the dropdown that sets it. */
 const TEMPLATE_TYPE_HINTS = {
@@ -133,7 +134,7 @@ function trainingSide(model, sideKey, side) {
         return `<div class="trainclass">
         <div class="trainhead">
           <label class="fld classpick"><span>Class</span>
-            ${itemSelect(list, ci, 'name', cls.name, classNames(model))}</label>
+            ${classSelect(model, list, ci, 'name', cls.name)}</label>
           <label class="fld ratepick"><span>${about.typeLabel}</span>
             ${itemSelect(list, ci, 'type', cls.type, types)}</label>
           <label class="fld ratepick"><span>Talents / level</span>
@@ -212,7 +213,7 @@ function customizationPanel(model, blocks) {
     return `<div class="trainclass">
         <div class="trainhead">
           <label class="fld"><span>Class</span>
-            ${itemSelect('training.combat.customizations', bi, 'className', block.className, classNames(model))}</label>
+            ${classSelect(model, 'training.combat.customizations', bi, 'className', block.className)}</label>
           ${rule('sets', `${Unit}s`)}
           ${rule('talents', 'Talents each')}
           <label class="fld"><span>Spheres</span>

@@ -122,7 +122,7 @@ import { appendDiceText, appendListText } from './model/subsystems/cardcasting.j
 import { castPickArg, followCastPick } from './ui/cast-pick.js';
 import * as combat from './ui/panels/combat.js';
 import * as guile from './ui/panels/guile.js';
-import * as trainingPanels from './ui/panels/training.js';
+import { classNames } from './ui/class-select.js';
 import * as monster from './monster/sheet.js';   // the monster tool's hooks; see docs/monsters.md
 import * as subsystems from './ui/panels/subsystems.js';
 import * as lore from './ui/panels/lore.js';
@@ -386,7 +386,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(campaign|vmc|occupation|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|backgroundSkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|ageCategory|xp|milestones|size|heroPoints|antihero|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(campaign|vmc|occupation|abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|abilityColumns|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|backgroundSkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|ageCategory|xp|milestones|size|heroPoints|antihero|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /**
  * The input types a caret can be put back into after a re-render.
@@ -3955,7 +3955,7 @@ export class CharacterSheetElement extends HTMLElement {
   #templatePanel() { return combat.renderTemplatePanel(this.#model, this.#ctx()); }
 
   /** The class names, which the action dispatcher needs when adding a track. */
-  #classNames(...a) { return trainingPanels.classNames(this.#model, ...a); }
+  #classNames(...a) { return classNames(this.#model, ...a); }
 
   /* ---------------- feats & mythic ---------------- */
 
@@ -6396,6 +6396,17 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-table-targets]').forEach((input) => {
       input.addEventListener('change', () => {
         if (this.#tableAction('targets', input.dataset.tableTargets, input.value)) this.#rerender(input);
+      });
+    });
+
+    // A column added to one of the Stats tab's ability tables, of the bonus
+    // type picked or typed in its search list. The picker goes back to its
+    // prompt with the redraw.
+    root.querySelectorAll('select[data-abcol-add]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        if (!sel.value) return;
+        this.#model.addAbilityColumn(sel.dataset.abcolAdd, sel.value);
+        this.#render();
       });
     });
 
@@ -9008,6 +9019,10 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       case 'remove-template-column':
         this.#model.removeTemplateTableColumn(button?.dataset.path, Number(button?.dataset.col));
+        this.#render();
+        break;
+      case 'remove-ability-column':
+        this.#model.removeAbilityColumn(button?.dataset.table, Number(button?.dataset.col));
         this.#render();
         break;
       case 'add-track':
