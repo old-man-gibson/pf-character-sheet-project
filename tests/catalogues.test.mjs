@@ -68,6 +68,8 @@ A geyser of acid erupts from the ground.
 * **Power level:** Psion 8
 * **Power points:** 15
 * **Discipline:** Telepathy
+* **Subdiscipline:** Charm
+* **Descriptors:** Mind-affecting, Network
 * **Display:** Mental
 * **Source:** Pawns and Powers p. 15
 
@@ -107,6 +109,8 @@ console.log('reading a scraper document');
   const wild = r.powers.find((p) => p.kind === 'wild talent');
   check('a psionic power has a discipline and points',
     [power.name, power.discipline, power.points, power.level], ['Ability as One', 'Telepathy', '15', 8]);
+  check('and keeps its subdiscipline and descriptors',
+    [power.subdiscipline, power.descriptor], ['Charm', 'Mind-affecting, Network']);
   check('a wild talent has an element and burn instead',
     [wild.name, wild.element, wild.burn, wild.type], ['Absentia', 'Void', '0', 'Utility (Sp)']);
 }
@@ -149,6 +153,11 @@ console.log('through a pack and into the catalogues');
     [featTypes(), spellClasses()], [['Combat'], ['Alchemist', 'Wizard']]);
   ok('a spell is found by name', !!spellEntry('Acid Geyser'));
   ok('so is a power', !!powerEntry('Ability as One'));
+  check('a power card shows its subdiscipline and descriptors after its discipline',
+    powerDetails({ name: 'Ability as One' }).fields.slice(0, 4).map(([k]) => k),
+    ['Discipline', 'Subdiscipline', 'Descriptors', 'Power points']);
+  check('and leaves out a field the entry does not have',
+    powerDetails({ name: 'Absentia' }).fields.map(([k]) => k).filter((k) => /discipline|descriptor/i.test(k)), []);
 
   // A catalogue cell's suggestions come from one table (ui/datalist.js).
   check('a feat cell suggests what matches, with its type',

@@ -268,6 +268,8 @@ const POWERS = catalogue({
     classes: classList(p?.classes),
     level: Number.isFinite(Number(p?.level)) ? Number(p.level) : null,
     discipline: str(p?.discipline).trim(),
+    subdiscipline: str(p?.subdiscipline).trim(),
+    descriptor: str(p?.descriptor).trim(),
     points: str(p?.points).trim(),
     display: str(p?.display).trim(),
     type: str(p?.type).trim(),
@@ -285,7 +287,8 @@ const POWERS = catalogue({
     source: str(p?.source).trim(),
   }),
   fields: (p) => row([
-    ['Discipline', p.discipline], ['Power points', p.points], ['Display', p.display],
+    ['Discipline', p.discipline], ['Subdiscipline', p.subdiscipline], ['Descriptors', p.descriptor],
+    ['Power points', p.points], ['Display', p.display],
     ['Element', p.element], ['Type', p.type], ['Burn', p.burn],
     ['Blast type', p.blastType], ['Damage', p.damage],
     ['Manifesting time', p.time], ['Range', p.range], ['Target', p.target],
