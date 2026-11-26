@@ -218,6 +218,24 @@ console.log('a tradition per casting class (campaign rule)');
   check('rule off again: the first tradition covers both pools', [m().traditionResults.length, m().traditionSP], [1, 2 * traditionBonus(1, 10)]);
 }
 
+console.log('two blocks for one class count it once');
+{
+  // A workbook's level 21-40 page names a class again: an extended block
+  // with no rows of its own, beside the class's own block.
+  const c = build({
+    rows: rowsOf(20, () => ['Monk', 'Kineticist', 'Wizard']), casters: ['Monk', 'Wizard'], drawbacks: ['A', 'B', 'C', 'D', 'E'],
+  });
+  c.listAdd('training.magic.classes', { ...castingClass('Wizard'), mod1: null, levels: [], extended: true });
+  const m = () => c.data.training.magic;
+  check('one spell point line per class', m().classSP.map((x) => x.name), ['Monk', 'Wizard']);
+  check('two spell pools, not three', [m().traditionLevels.spPools, m().traditionSP], [[20, 20], 40]);
+  check('the tradition covers each class once', m().traditionResults[0].covers, ['Monk', 'Wizard']);
+  c.set('campaign.traditionPerClass', true);
+  c.listAdd('training.magic.extraTraditions', { ...blankTradition(), className: 'Wizard', drawbacks: ['F', 'G'] });
+  check('a tradition for that class takes both blocks: row 5 and row 2 at 20',
+    [m().traditionResults.map((r) => r.covers), m().traditionResults.map((r) => r.traditionSP)], [[['Monk'], ['Wizard']], [20, 7]]);
+}
+
 console.log('one casting class on each of two sides, in turn');
 {
   // Wizard on one side for 5 levels, then Incanter on the other: one class

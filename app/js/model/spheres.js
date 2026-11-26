@@ -1832,6 +1832,13 @@ export function recomputeTraining(model) {
     // has no casting progression, so it is not a casting class either.
     const casts = (x) => (TYPE_RATES[x.effectiveType] ?? 0) > 0;
     const acquired = casters.filter((x) => (x.classLevelsCurrent ?? 0) > 0 && casts(x));
+    // Two blocks may name one class -- a workbook's level 21-40 page names a
+    // class again -- and they are still that one class: its levels and its
+    // spell points count once. The lead block is the first that is not from
+    // that page.
+    const classKey = (name) => String(name ?? '').trim().toLowerCase();
+    const leadBlock = (x) => x === (casters.find((y) => classKey(y.name) === classKey(x.name) && !y.extended)
+      || casters.find((y) => classKey(y.name) === classKey(x.name)));
     const bestMod = Math.max(0, ...(acquired.length ? acquired : casters).map((x) => mod(x.mod1)));
 
     // Advanced Magic Training grants casting to non-casting classes:
@@ -1949,13 +1956,15 @@ export function recomputeTraining(model) {
     const gestalt = campaignRules(c).gestalt;
     const amt = !!(m.amt || m.mythicAmt);
     const traditions = castingTraditions(c);
-    const sameClass = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+    const sameClass = (a, b) => classKey(a) === classKey(b);
     const ownerOf = (x) => traditions.find((t) => t.extra >= 0 && sameClass(t.tr.className, x.name)) || traditions[0];
     m.traditionResults = traditions.map((t) => {
       const own = acquired.filter((x) => ownerOf(x) === t);
       const perLevel = [];
       for (let l = 1; l <= level; l++) {
-        perLevel.push(own.filter((x) => classGainsAt(model, x.name, l, x.classLevelsOverride ?? null) > 0).length);
+        // Classes, not blocks: two blocks naming one class count it once.
+        perLevel.push(new Set(own.filter((x) => classGainsAt(model, x.name, l, x.classLevelsOverride ?? null) > 0)
+          .map((x) => classKey(x.name))).size);
       }
       const castingLevels = perLevel.filter((n) => n > 0).length;
       const pools = castingPools(perLevel, gestalt);
@@ -1985,7 +1994,7 @@ export function recomputeTraining(model) {
           : acquired.some((x) => sameClass(x.name, named)) ? 'taken' : 'none';
       return {
         extra: t.extra,
-        covers: own.map((x) => x.name),
+        covers: own.filter(leadBlock).map((x) => x.name),
         waiting,
         drawbackCount: drawbacks,
         boughtOffCount: boughtOff,
@@ -2015,8 +2024,9 @@ export function recomputeTraining(model) {
     // the levels the character has now, not the ones planned (Wizard 1-5,
     // Fighter 6-10, Wizard 11-20 is 5 wizard levels at 10th), and nothing at
     // all for a class not taken yet. The same ability in both slots counts
-    // once, as `statMod` reads a slot everywhere else.
-    m.classSP = casters.map((x) => {
+    // once, as `statMod` reads a slot everywhere else. A class with two
+    // blocks is counted once, off its lead block.
+    m.classSP = casters.filter(leadBlock).map((x) => {
       const own = casts(x) ? x.classLevelsCurrent ?? 0 : 0;
       return { name: x.name, sp: own ? own + statMod(c, x.mod1, x.mod2) : 0 };
     });
