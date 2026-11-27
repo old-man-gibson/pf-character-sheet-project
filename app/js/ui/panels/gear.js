@@ -1190,7 +1190,7 @@ export function wealthPanel(model, ctx) {
         ${field(`Current ${money}`, num('wealth.current', v.coin ? v.onHand : v.current, v.coin ? 'step="any" title="The coin purse on Equipment. A change here changes the coins."' : ''))}
         ${field(`${cur} / day`, num('wealth.manaPerDay', v.manaPerDay))}
       </div>
-      <div class="wealthswitches">
+      <div class="switches">
         ${check('wealth.oathOfOfferings', v.oathOfOfferings, 'Oath of Offerings', oathRule)}
         ${check('wealth.materialCasting', v.materialCasting, 'Material casting', castingRule)}
       </div>

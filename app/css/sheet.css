@@ -1114,8 +1114,6 @@ textarea.exportbox { width: 100%; font-family: var(--cs-mono); font-size: 0.76re
 /* A date typed past the box's max -- a picker cannot choose one, a keyboard can. */
 input[type="date"]:out-of-range { border-color: var(--cs-bad); color: var(--cs-bad); }
 .wealthfields { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-.wealthswitches { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 10px 0; padding: 8px 0; border-block: 1px solid var(--cs-line); }
-.wealthswitches label.chk { font-weight: 600; }
 .owedpart { margin-top: 12px; }
 .owedpart > h4.subhead .badge { font-variant-numeric: tabular-nums; }
 .owedpart p.working { margin: 6px 0 0; font-variant-numeric: tabular-nums; }
@@ -2839,6 +2837,12 @@ h3 > .pair.sortby { margin-left: auto; font-weight: normal; }
 .pair.slots select { width: auto; min-width: 4.4rem; max-width: 11rem; }
 label.chk { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
 label.chk input { width: auto; }
+/* A few switches that belong together, on one wrapping line rather than a
+   statline each: the wealth switches, Advanced Magic Training. A select in
+   the row is sized to its options. */
+.switches { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 22px; margin: 10px 0; padding: 8px 0; border-block: 1px solid var(--cs-line); }
+.switches label.chk { font-weight: 600; }
+.switches select { width: auto; }
 /* A checkbox with no words of its own (`rows.itemCheck`) is still in a label:
    the label is what a touch screen hangs its bigger hit area on (the end of
    this file). In a row of controls the label is the checkbox's own size. In a
