@@ -1,0 +1,373 @@
+{
+ "version": 1,
+ "blocks": [
+  {
+   "kind": "class",
+   "name": "Stancer",
+   "text": "",
+   "source": "Book p. 2",
+   "group": "",
+   "hd": 10,
+   "bab": 1,
+   "goodFort": true,
+   "goodRef": false,
+   "goodWill": false,
+   "skillRanks": 4,
+   "classSkills": [
+    "Acrobatics",
+    "Climb",
+    "Knowledge (all)"
+   ],
+   "systems": [],
+   "archetypes": "",
+   "tracks": null,
+   "features": [
+    {
+     "level": 1,
+     "name": "Rooted Stance (Ex)",
+     "text": "She plants her feet."
+    },
+    {
+     "level": 4,
+     "name": "Iron Root (Su)",
+     "text": "At 4th level she cannot be moved."
+    }
+   ]
+  },
+  {
+   "kind": "class",
+   "name": "Stancer (Revised)",
+   "text": "",
+   "source": "Book p. 3",
+   "group": "",
+   "hd": 8,
+   "bab": 0.75,
+   "goodFort": false,
+   "goodRef": false,
+   "goodWill": false,
+   "skillRanks": 2,
+   "classSkills": [
+    "Climb",
+    "Swim"
+   ],
+   "systems": [],
+   "archetypes": "",
+   "tracks": null,
+   "features": [
+    {
+     "level": 4,
+     "name": "Iron Root (Su)",
+     "text": "At 4th level she cannot be moved."
+    }
+   ],
+   "unstated": [
+    "hd",
+    "bab",
+    "goodFort",
+    "goodRef",
+    "goodWill",
+    "skillRanks"
+   ]
+  },
+  {
+   "kind": "class",
+   "name": "Striker",
+   "text": "",
+   "source": "Book p. 8",
+   "group": "",
+   "hd": 10,
+   "bab": 0.75,
+   "goodFort": false,
+   "goodRef": false,
+   "goodWill": false,
+   "skillRanks": 2,
+   "classSkills": [],
+   "systems": [],
+   "archetypes": "",
+   "tracks": null,
+   "features": [
+    {
+     "level": 1,
+     "name": "Qi (Su)",
+     "text": "Strikers gain qi. They regain it in the following ways.\n\n*Killing Blow:* At 10th level, they regain 1 qi when they drop a foe."
+    },
+    {
+     "level": 1,
+     "name": "Qi Techniques",
+     "text": "A striker spends qi on these.\n\n0 qi point(s):\n- *Near Miss (Ex):* At 10th level, a miss deals damage anyway."
+    },
+    {
+     "level": 1,
+     "name": "Unarmed Strike",
+     "text": "At 1st level, a striker gains Improved Unarmed Strike."
+    },
+    {
+     "level": 3,
+     "name": "Combo Strikes",
+     "text": "At 3rd level, a striker can use combo strikes.\n\nOne Hit:\n- *Dual Strike (Ex):* At 8th level, it hits twice.\n\nTable: Combo Strikes\nLevel\tHits\n3rd\t1\n\nNote: The table counts hits.\n\nAt 7th level, the striker gains three hit combo strikes.\n\nTwo Hits:\n- *Leg Sweep (Ex):* The target falls prone."
+    },
+    {
+     "level": 4,
+     "name": "Still Mind (Ex)",
+     "text": "At 4th level, a striker gains a +2 bonus on saves against enchantments."
+    }
+   ],
+   "unstated": [
+    "bab",
+    "goodFort",
+    "goodRef",
+    "goodWill",
+    "skillRanks"
+   ]
+  },
+  {
+   "kind": "class",
+   "name": "Prowler",
+   "text": "",
+   "source": "Book p. 1",
+   "group": "",
+   "hd": 8,
+   "bab": 0.75,
+   "goodFort": false,
+   "goodRef": false,
+   "goodWill": false,
+   "skillRanks": 2,
+   "classSkills": [],
+   "systems": [],
+   "archetypes": "",
+   "tracks": null,
+   "features": [
+    {
+     "level": 1,
+     "name": "Sneak attack +1d6",
+     "text": "The prowler deals extra damage."
+    },
+    {
+     "level": 1,
+     "name": "smite evil 1/day",
+     "text": ""
+    },
+    {
+     "level": 1,
+     "name": "summon monster I",
+     "text": ""
+    },
+    {
+     "level": 1,
+     "name": "1st favored enemy",
+     "text": ""
+    },
+    {
+     "level": 2,
+     "name": "Evasion",
+     "text": ""
+    },
+    {
+     "level": 2,
+     "name": "prowler trick",
+     "text": "Starting at 2nd level, a prowler gains one of the following tricks:\n\nQuiet Step: She moves at full speed.\n\nSnare Sense: She notices snares."
+    },
+    {
+     "level": 3,
+     "name": "Sneak attack +2d6",
+     "text": ""
+    },
+    {
+     "level": 3,
+     "name": "summon monster II",
+     "text": ""
+    },
+    {
+     "level": 3,
+     "name": "weapon training 1",
+     "text": ""
+    },
+    {
+     "level": 4,
+     "name": "Prowler trick",
+     "text": ""
+    },
+    {
+     "level": 4,
+     "name": "smite evil 2/day",
+     "text": ""
+    },
+    {
+     "level": 5,
+     "name": "Weapon training 2",
+     "text": ""
+    },
+    {
+     "level": 5,
+     "name": "2nd favored enemy",
+     "text": ""
+    },
+    {
+     "level": 6,
+     "name": "Prowler trick",
+     "text": ""
+    },
+    {
+     "level": 1,
+     "name": "Weapon and Armor Proficiency",
+     "text": "Light armor."
+    },
+    {
+     "level": 2,
+     "name": "Opportune Dodge (Ex)",
+     "text": "At 2nd level she slips aside."
+    },
+    {
+     "level": 1,
+     "name": "AC Bonus",
+     "text": "She adds her Wisdom to her AC."
+    }
+   ],
+   "unstated": [
+    "bab",
+    "goodFort",
+    "goodRef",
+    "goodWill",
+    "skillRanks"
+   ]
+  },
+  {
+   "kind": "class",
+   "name": "Seeker",
+   "text": "",
+   "source": "Book p. 4",
+   "group": "",
+   "hd": 8,
+   "bab": 0.75,
+   "goodFort": false,
+   "goodRef": false,
+   "goodWill": false,
+   "skillRanks": 2,
+   "classSkills": [],
+   "systems": [],
+   "archetypes": "",
+   "tracks": null,
+   "features": [
+    {
+     "level": 1,
+     "name": "Qi",
+     "text": "A seeker regains qi in the following ways:\n\n*Killing Blow:* She regains 1 qi when she drops a foe.\n\nQi Techniques: She spends qi on these."
+    },
+    {
+     "level": 1,
+     "name": "hunter's focus",
+     "text": "She chooses one of the following:"
+    },
+    {
+     "level": 5,
+     "name": "Relentless (Ex)",
+     "text": "At 5th level, she keeps going."
+    }
+   ],
+   "unstated": [
+    "hd",
+    "bab",
+    "goodFort",
+    "goodRef",
+    "goodWill",
+    "skillRanks"
+   ]
+  },
+  {
+   "kind": "class",
+   "name": "Forger",
+   "text": "",
+   "source": "Book p. 5",
+   "group": "",
+   "hd": 10,
+   "bab": 0.75,
+   "goodFort": false,
+   "goodRef": false,
+   "goodWill": false,
+   "skillRanks": 2,
+   "classSkills": [],
+   "systems": [],
+   "archetypes": "",
+   "tracks": null,
+   "features": [
+    {
+     "level": 1,
+     "name": "Thunderous Blows (Ex)",
+     "text": "At 1st level the forger deals 1d6 extra damage. This damage increases by 1d6 at 3rd level and every two levels thereafter."
+    },
+    {
+     "level": 2,
+     "name": "Forging Insight (Ex)",
+     "text": "At 2nd level and every 2 levels thereafter the forger gains one forging insight."
+    },
+    {
+     "level": 4,
+     "name": "Forging Insight (Ex)",
+     "text": ""
+    },
+    {
+     "level": 6,
+     "name": "Forging Insight (Ex)",
+     "text": ""
+    },
+    {
+     "level": 8,
+     "name": "Forging Insight (Ex)",
+     "text": ""
+    },
+    {
+     "level": 10,
+     "name": "Forging Insight (Ex)",
+     "text": ""
+    },
+    {
+     "level": 12,
+     "name": "Forging Insight (Ex)",
+     "text": ""
+    },
+    {
+     "level": 14,
+     "name": "Forging Insight (Ex)",
+     "text": ""
+    },
+    {
+     "level": 16,
+     "name": "Forging Insight (Ex)",
+     "text": ""
+    },
+    {
+     "level": 18,
+     "name": "Forging Insight (Ex)",
+     "text": ""
+    },
+    {
+     "level": 20,
+     "name": "Forging Insight (Ex)",
+     "text": ""
+    },
+    {
+     "level": 4,
+     "name": "Bonus Feats",
+     "text": "At 4th, 12th, and 20th levels, a forger gains a bonus feat."
+    },
+    {
+     "level": 12,
+     "name": "Bonus Feats",
+     "text": ""
+    },
+    {
+     "level": 20,
+     "name": "Bonus Feats",
+     "text": ""
+    }
+   ],
+   "unstated": [
+    "bab",
+    "goodFort",
+    "goodRef",
+    "goodWill",
+    "skillRanks"
+   ]
+  }
+ ]
+}

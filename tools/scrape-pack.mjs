@@ -42,7 +42,7 @@ import { parsePaste, readStructured } from '../app/js/paste-import.js';
 import { convertPack } from './veils-to-table.mjs';
 // The app's own id rule, so a pack built here and one built in the app from the
 // same name ("Café" -> cafe) replace each other on import.
-import { slugId, TABLES } from '../app/js/extensions.js';
+import { slugId, TABLES, withReadBlocks } from '../app/js/extensions.js';
 import { readArgs } from './lib/cli.mjs';
 
 /* ---------------- arguments ---------------- */
@@ -188,7 +188,8 @@ const write = (doc) => {
    * Akashic tab narrows a slot's picker by.
    */
   const converted = convertPack(doc);
-  const final = converted.moved ? { ...converted.ext, revision: doc.revision } : doc;
+  // The pack's class pages, read into class blocks as the app's save would.
+  const final = withReadBlocks(converted.moved ? { ...converted.ext, revision: doc.revision } : doc);
   const path = join(out, `${final.id}.json`);
   const json = JSON.stringify(final, null, 1);
   if (!dry) writeFileSync(path, json, 'utf8');

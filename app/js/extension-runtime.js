@@ -138,6 +138,13 @@ class ExtensionRuntime extends EventTarget {
         // Kept whatever happens: this promise is cached, and every character
         // the page opens waits on it. A load that failed here would stay failed.
         try { this.refresh({ silent: true }); } catch (err) { console.error('Could not register the packs', err); }
+        // A stored pack whose pages this reader has not read into blocks is
+        // read when the sheet starts. Once the sheet is up it is saved again
+        // with them, so the next start need not read it.
+        if (this.store) {
+          const later = globalThis.requestIdleCallback || ((job) => setTimeout(job, 2000));
+          later(() => { this.store.readPages().catch(() => {}); });
+        }
         return this.active();
       });
     }

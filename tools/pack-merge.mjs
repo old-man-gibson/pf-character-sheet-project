@@ -24,7 +24,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
-import { mergeTables } from '../app/js/extensions.js';
+import { mergeTables, withReadBlocks } from '../app/js/extensions.js';
 import { readArgs } from './lib/cli.mjs';
 
 const { flag, inputs: files } = readArgs();
@@ -60,6 +60,7 @@ for (const sourcePath of sourcePaths) {
     const at = new Map((target.blocks ?? []).map((b, i) => [String(b?.name).toLowerCase(), i]));
     target.blocks = [...(target.blocks ?? [])];
     for (const b of source.blocks) {
+      if (b?.read) continue; // read again from the merged pages
       const i = at.get(String(b?.name).toLowerCase());
       if (i === undefined) target.blocks.push(b); else target.blocks[i] = b;
     }
@@ -74,6 +75,7 @@ target.revision = (Number(target.revision) || 1) + 1;
 target.updatedAt = new Date().toISOString().slice(0, 19);
 if (dry) console.log('(dry run, nothing written)');
 else {
-  writeFileSync(targetPath, JSON.stringify(target, null, 1), 'utf8');
+  // The merged class pages, read into class blocks as the app's save would.
+  writeFileSync(targetPath, JSON.stringify(withReadBlocks(target), null, 1), 'utf8');
   console.log(`wrote ${targetPath} (revision ${target.revision})`);
 }

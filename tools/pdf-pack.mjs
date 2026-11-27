@@ -34,7 +34,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { outlineOf, guessTags, readSections } from '../app/js/pdf-import.js';
 import { parsePaste, readStructured } from '../app/js/paste-import.js';
-import { inspectExtension, normalizeBlock, slugId } from '../app/js/extensions.js';
+import { inspectExtension, normalizeBlock, slugId, withReadBlocks } from '../app/js/extensions.js';
 import { readArgs } from './lib/cli.mjs';
 
 const { opt, flag, inputs: [input] } = readArgs(['out', 'name', 'author', 'tags', 'modules']);
@@ -125,7 +125,8 @@ if (result.catalogue.length) {
   provides.catalogues = { catalogues: [...by].map(([kind, entries]) => ({ kind, entries })) };
 }
 const now = new Date().toISOString().slice(0, 19);
-const pack = {
+// Its class pages, read into class blocks as the app's save would.
+const pack = withReadBlocks({
   format: 'character-sheet-extension',
   formatVersion: 1,
   id: slugId(name),
@@ -139,7 +140,7 @@ const pack = {
   updatedAt: now,
   provides,
   blocks: result.blocks.map((b) => normalizeBlock(b)).filter(Boolean),
-};
+});
 
 const verdict = inspectExtension(pack);
 if (!verdict.ok) { console.error(`The pack did not validate: ${verdict.error}`); process.exit(1); }

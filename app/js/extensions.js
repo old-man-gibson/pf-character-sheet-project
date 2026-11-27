@@ -169,9 +169,13 @@ export function normalizeBlock(block) {
   // supergroup a block belongs to, and the blocks panel folds by it. A note
   // that belongs to a class has no other way to say so -- it carries no class
   // field -- so without this it can only ever sit loose in its pack.
+  // `read` marks a block the reader made from one of the pack's pages
+  // (withReadBlocks): it is made again when the pack is saved. A block
+  // without it was written or edited by somebody and is kept as it is.
   const base = {
     kind, name: str(b.name).trim(), text: str(b.text), source: str(b.source),
     group: str(b.group).trim(),
+    ...(b.read === true ? { read: true } : {}),
   };
   switch (kind) {
     case 'class':
@@ -678,6 +682,8 @@ export function normalizeExtension(doc, { owned = false } = {}) {
     revision: Math.max(1, Math.floor(num(d.revision, 1))),
     createdAt: str(d.createdAt),
     updatedAt: str(d.updatedAt),
+    // The READER_VERSION that wrote the pack's read blocks (withReadBlocks).
+    ...(num(d.reader) > 0 ? { reader: Math.floor(num(d.reader)) } : {}),
     provides,
     blocks: arr(d.blocks).map(normalizeBlock).filter(Boolean),
   };
@@ -810,12 +816,14 @@ export function inspectExtension(doc) {
 export function summarize(ext) {
   const tables = {};
   for (const kind of Object.keys(ext.provides)) tables[kind] = tableCount(kind, ext.provides[kind]);
+  // A block read from a page is counted as the page, among the tables.
+  const own = ext.blocks.filter((b) => !b.read);
   const blocks = {};
-  for (const b of ext.blocks) blocks[b.kind] = (blocks[b.kind] || 0) + 1;
+  for (const b of own) blocks[b.kind] = (blocks[b.kind] || 0) + 1;
   return {
     id: ext.id, name: ext.name, author: ext.author, revision: ext.revision,
     description: ext.description, source: ext.source, license: ext.license,
-    tables, blocks, blockCount: ext.blocks.length, updatedAt: ext.updatedAt,
+    tables, blocks, blockCount: own.length, updatedAt: ext.updatedAt,
   };
 }
 
@@ -960,6 +968,57 @@ export function extensionStore(medium = globalThis.localStorage) {
     revision++;
   };
 
+  /**
+   * Writers take turns, in the order they were called. Each reads the index
+   * and writes it back whole, and `readPages` reads a pack and writes it
+   * back, so two at once could each write over what the other just wrote.
+   */
+  let turn = Promise.resolve();
+  const inTurn = (job) => {
+    const run = turn.then(job);
+    turn = run.catch(() => {});
+    return run;
+  };
+
+  const read = (id) => {
+    const key = extensionKey(id);
+    if (parsed.has(key)) return parsed.get(key);
+    const raw = cache.get(key);
+    if (!raw) return null;
+    let doc = null;
+    try { doc = normalizeExtension(JSON.parse(raw), { owned: true }); } catch { doc = null; }
+    parsed.set(key, doc);
+    // The text is not needed once it is read, and keeping it doubled the
+    // memory a large library takes: 260 MB more with 1,400 book packs.
+    cache.delete(key);
+    return doc;
+  };
+
+  // The pack's pages are read into blocks here, so every way a pack arrives
+  // (an import, a paste, the pack editor) stores them already read.
+  const save = async (doc, { origin = 'import', enabled = null } = {}) => {
+    await open();
+    const ext = withReadBlocks(normalizeExtension(doc));
+    if (!ext.id) throw new Error('An extension needs a name.');
+    ext.updatedAt = new Date().toISOString().slice(0, 19);
+    if (!ext.createdAt) ext.createdAt = ext.updatedAt;
+    const index = readIndex();
+    const prior = index.extensions.find((e) => e.id === ext.id);
+    const row = {
+      ...summarize(ext),
+      origin: prior?.origin || origin,
+      enabled: enabled ?? prior?.enabled ?? true,
+    };
+    index.extensions = prior
+      ? index.extensions.map((e) => (e.id === ext.id ? row : e))
+      : [...index.extensions, row];
+    await write([
+      [extensionKey(ext.id), JSON.stringify(ext)],
+      [EXTENSIONS_KEY, JSON.stringify(index)],
+    ]);
+    return { ...row, local: true, replaced: !!prior, previousRevision: prior ? num(prior.revision, 1) : null };
+  };
+
   return {
     /** Read everything in. Resolves false where there is nowhere to read from. */
     open,
@@ -979,19 +1038,7 @@ export function extensionStore(medium = globalThis.localStorage) {
      * kept until the pack is written again, so every caller gets the same
      * object: copy it before changing it.
      */
-    read(id) {
-      const key = extensionKey(id);
-      if (parsed.has(key)) return parsed.get(key);
-      const raw = cache.get(key);
-      if (!raw) return null;
-      let doc = null;
-      try { doc = normalizeExtension(JSON.parse(raw), { owned: true }); } catch { doc = null; }
-      parsed.set(key, doc);
-      // The text is not needed once it is read, and keeping it doubled the
-      // memory a large library takes: 260 MB more with 1,400 book packs.
-      cache.delete(key);
-      return doc;
-    },
+    read,
 
     /**
      * Store a pack: new, or replacing the one with the same id (which is how
@@ -999,54 +1046,62 @@ export function extensionStore(medium = globalThis.localStorage) {
      * Resolves to the index row. Rejects on a full browser, like a character
      * import, and leaves nothing of the attempt behind when it does.
      */
-    async save(doc, { origin = 'import', enabled = null } = {}) {
+    save(doc, options) { return inTurn(() => save(doc, options)); },
+
+    /**
+     * Save again every stored pack whose pages this reader has not read, so
+     * they are read once here rather than every time the sheet starts.
+     * One pack per turn, so a save somebody makes meanwhile waits for one
+     * pack, not all of them. A pack switched off is left until it is on:
+     * reading it in would hold it in memory for nothing. Resolves to how
+     * many were saved.
+     */
+    async readPages() {
       await open();
-      const ext = normalizeExtension(doc);
-      if (!ext.id) throw new Error('An extension needs a name.');
-      ext.updatedAt = new Date().toISOString().slice(0, 19);
-      if (!ext.createdAt) ext.createdAt = ext.updatedAt;
-      const index = readIndex();
-      const prior = index.extensions.find((e) => e.id === ext.id);
-      const row = {
-        ...summarize(ext),
-        origin: prior?.origin || origin,
-        enabled: enabled ?? prior?.enabled ?? true,
-      };
-      index.extensions = prior
-        ? index.extensions.map((e) => (e.id === ext.id ? row : e))
-        : [...index.extensions, row];
-      await write([
-        [extensionKey(ext.id), JSON.stringify(ext)],
-        [EXTENSIONS_KEY, JSON.stringify(index)],
-      ]);
-      return { ...row, local: true, replaced: !!prior, previousRevision: prior ? num(prior.revision, 1) : null };
+      let saved = 0;
+      for (const { id, enabled } of readIndex().extensions) {
+        if (!enabled) continue;
+        try {
+          saved += await inTurn(async () => {
+            const doc = read(id);
+            if (!doc || !needsReading(doc)) return 0;
+            await save(doc);
+            return 1;
+          });
+        } catch { /* a pack that will not save stays as it was, read when the sheet starts */ }
+      }
+      return saved;
     },
 
     /** Remove a pack, or a list of them as one write (Remove N packs). */
-    async remove(id) {
-      await open();
-      const ids = new Set([id].flat());
-      const index = readIndex();
-      index.extensions = index.extensions.filter((e) => !ids.has(e.id));
-      await write([[EXTENSIONS_KEY, JSON.stringify(index)], ...[...ids].map((one) => [extensionKey(one), null])]);
+    remove(id) {
+      return inTurn(async () => {
+        await open();
+        const ids = new Set([id].flat());
+        const index = readIndex();
+        index.extensions = index.extensions.filter((e) => !ids.has(e.id));
+        await write([[EXTENSIONS_KEY, JSON.stringify(index)], ...[...ids].map((one) => [extensionKey(one), null])]);
+      });
     },
 
     /**
      * Switch a pack on or off, or a list of them as one write (a fold's
      * All on); bundled ones are remembered by id.
      */
-    async setEnabled(id, on, { bundled = false } = {}) {
-      await open();
-      const ids = new Set([id].flat());
-      const index = readIndex();
-      if (bundled) {
-        const set = new Set(index.disabledBundled);
-        for (const one of ids) { if (on) set.delete(one); else set.add(one); }
-        index.disabledBundled = [...set];
-      } else {
-        index.extensions = index.extensions.map((e) => (ids.has(e.id) ? { ...e, enabled: !!on } : e));
-      }
-      await write([[EXTENSIONS_KEY, JSON.stringify(index)]]);
+    setEnabled(id, on, { bundled = false } = {}) {
+      return inTurn(async () => {
+        await open();
+        const ids = new Set([id].flat());
+        const index = readIndex();
+        if (bundled) {
+          const set = new Set(index.disabledBundled);
+          for (const one of ids) { if (on) set.delete(one); else set.add(one); }
+          index.disabledBundled = [...set];
+        } else {
+          index.extensions = index.extensions.map((e) => (ids.has(e.id) ? { ...e, enabled: !!on } : e));
+        }
+        await write([[EXTENSIONS_KEY, JSON.stringify(index)]]);
+      });
     },
 
     disabledBundled() { return new Set(readIndex().disabledBundled); },
@@ -1449,7 +1504,7 @@ export function activeBlocks(extensions) {
   const out = [];
   for (const ext of arr(extensions)) {
     ext.blocks.forEach((block, index) => {
-      out.push({ ...block, extId: ext.id, extName: ext.name, index });
+      if (!block.read) out.push({ ...block, extId: ext.id, extName: ext.name, index });
     });
   }
   // A catalogue pack's classes, archetypes, races and alternate racial traits
@@ -1458,14 +1513,25 @@ export function activeBlocks(extensions) {
   // which is the better of the two. Between two packs deriving the same block,
   // the later one's stands: the packs arrive bundled first and local after,
   // and somebody's own pack overrides a bundled one.
+  //
+  // The kinds a pack has read into blocks already (withReadBlocks) are taken
+  // as it wrote them when this reader wrote them. Read by an older reader,
+  // they are passed over and the pages read here instead, so a pack that has
+  // not been saved since still shows what this reader makes of its pages.
   const written = new Set(out.map(derivedKey));
   const derived = new Map();
   for (const ext of arr(extensions)) {
+    const current = ext.reader === READER_VERSION;
+    ext.blocks.forEach((block, index) => {
+      if (!block.read || !current) return;
+      const key = derivedKey(block);
+      if (!written.has(key)) derived.set(key, { ...block, extId: ext.id, extName: ext.name, index });
+    });
     let index = arr(ext.blocks).length;
     for (const cat of arr(ext.provides?.catalogues?.catalogues)) {
       const kind = lower(cat?.kind);
       const how = DERIVED_BLOCKS.find((d) => d.kinds.includes(kind));
-      if (!how) continue;
+      if (!how || (how.written && current)) continue;
       for (const entry of arr(cat.entries)) {
         for (const block of readEntry(entry, how.reading, () => how.read(entry).filter(Boolean))) {
           const key = derivedKey(block);
@@ -2369,12 +2435,97 @@ export function traitBlockFromEntry(entry) {
  * packs deriving the same block the later pack's stands.
  */
 const DERIVED_BLOCKS = [
-  { kinds: ['class', 'prestige class'], reading: 'class block', read: (e) => [classBlockFromEntry(e)] },
+  // `written`: a pack carries these blocks written into it (withReadBlocks).
+  { kinds: ['class', 'prestige class'], reading: 'class block', read: (e) => [classBlockFromEntry(e)], written: true },
   { kinds: ['archetype'], reading: 'archetype blocks', read: archetypeBlocksFromEntry },
   { kinds: ['race'], reading: 'race block', read: (e) => [raceBlockFromEntry(e)] },
   { kinds: ['alternate racial trait'], reading: 'trait block', read: (e) => [traitBlockFromEntry(e)] },
 ];
 const derivedKey = (b) => `${b.kind}|${lower(b.name)}|${b.kind === 'archetype' ? lower(b.class) : b.kind === 'trait' ? lower(b.race) : ''}`;
+
+/**
+ * The reader's version. Raise it with any change that changes a block the
+ * reader makes of a page: a pack whose blocks an older version wrote has its
+ * pages read again. tests/reader-version.test.mjs fails until it is raised.
+ */
+export const READER_VERSION = 1;
+
+/** A pack's catalogues whose pages it carries read into blocks. */
+const pagesToWrite = (ext) => arr(ext?.provides?.catalogues?.catalogues)
+  .filter((cat) => DERIVED_BLOCKS.some((d) => d.written && d.kinds.includes(lower(cat?.kind))));
+
+/** Has the pack pages this reader has not written its blocks for? */
+export function needsReading(ext) {
+  return ext?.reader !== READER_VERSION && pagesToWrite(ext).length > 0;
+}
+
+/**
+ * The pack with its pages read into blocks and written into it, so the sheet
+ * need not read them every time it starts. For now that is its class pages
+ * (`written` in DERIVED_BLOCKS). Each block it reads carries `read`, and the
+ * pack carries `reader`, the READER_VERSION that read them.
+ *
+ * Blocks read before are read again, so an edited page or a newer reader
+ * shows. A block without `read` is somebody's: it stays as it is, and a page
+ * read as the same block is passed over. Of two pages read as the same
+ * block, the later stands, as between packs.
+ */
+export function withReadBlocks(ext) {
+  const own = arr(ext.blocks).filter((b) => !b.read);
+  const pages = pagesToWrite(ext);
+  if (!pages.length) {
+    if (own.length === arr(ext.blocks).length && ext.reader === undefined) return ext;
+    const { reader, ...rest } = ext;
+    return { ...rest, blocks: own };
+  }
+  const theirs = new Set(own.map(derivedKey));
+  const read = [...readFromPages(pages)].filter(([key]) => !theirs.has(key)).map(([, block]) => ({ ...block, read: true }));
+  return normalizeExtension({ ...ext, reader: READER_VERSION, blocks: [...own, ...read] }, { owned: true });
+}
+
+/** The blocks some pages read into, by key; of two the same, the later. */
+function readFromPages(pages) {
+  const read = new Map();
+  for (const cat of pages) {
+    const how = DERIVED_BLOCKS.find((d) => d.kinds.includes(lower(cat.kind)));
+    for (const entry of arr(cat.entries)) {
+      for (const block of how.read(entry)) if (block) read.set(derivedKey(block), block);
+    }
+  }
+  return read;
+}
+
+/**
+ * A test for which of a pack's own blocks stand where one of its pages would
+ * be read: removing such a block brings the page's back at the next save. The
+ * pages are read the first time it is asked.
+ */
+export function standsForPage(ext) {
+  let keys = null;
+  return (b) => {
+    if (!b || b.read) return false;
+    keys ??= new Set(readFromPages(pagesToWrite(ext)).keys());
+    return keys.has(derivedKey(b));
+  };
+}
+
+/**
+ * `doc` after an edit of `before`: a read block the edit changed is somebody's
+ * now, so it loses `read` and the next save keeps it as it stands. Removing
+ * one brings back what its page reads as.
+ */
+export function claimEditedBlocks(doc, before) {
+  const same = (b) => JSON.stringify(normalizeBlock({ ...b, read: false }));
+  const was = new Map(arr(before?.blocks).filter((b) => b?.read).map((b) => [derivedKey(b), same(b)]));
+  return {
+    ...doc,
+    blocks: arr(doc?.blocks).map((b) => {
+      if (!b?.read || was.get(derivedKey(b)) === same(b)) return b;
+      const { read, ...rest } = b;
+      return rest;
+    }),
+  };
+}
 
 /**
  * The features a class's or an archetype's page describes, by name.
