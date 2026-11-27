@@ -210,6 +210,16 @@ rest of the character can spend.
 
 **Casting numbers**: global CL, DC (10 + CL/2 + best casting mod), MSB, MSD (MSB+11),
 concentration, per-class SP (class levels + casting mod), each with its bonus field.
+
+- **Caster level** adds up across classes, as BAB does: a High-Caster gives 1 a level, a
+  Mid-Caster 3/4 and a Low-Caster 1/2. Without gestalt each class rounds down on its own
+  and they are added; with gestalt the better class counts at each level and the sum
+  rounds down once.
+- **MSB** is the levels in spherecasting classes, each character level counted once.
+- **Advanced Magic Training** treats the other classes on the Planner as Low-Casters for
+  caster level, MSB and MSD, so every level counts for MSB. *Mythic AMT* makes them
+  Mid-Casters for caster level only. With no level in a casting class, AMT's spell pool
+  is the casting modifier, at least 1, and shows as its own line.
 The CL, DC, MSB, MSD and Bonus SP fields each take a number or a formula, and a formula
 is listed on the Formulas tab.
 Concentration carries a **d20** that copies the check for Roll20, as does each

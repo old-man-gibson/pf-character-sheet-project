@@ -7,7 +7,7 @@
 import { blankDocument } from '../app/js/convert.js';
 import { Character } from '../app/js/model.js';
 import {
-  baseEssenceCapacity, castingPools, maxEssenceConversion, traditionBonus, traditionLevels, traditionSpend,
+  baseEssenceCapacity, casterLevelTotal, castingPools, maxEssenceConversion, traditionBonus, traditionLevels, traditionSpend,
 } from '../app/js/rules.js';
 import * as combat from '../app/js/ui/panels/combat.js';
 import * as subsystems from '../app/js/ui/panels/subsystems.js';
@@ -151,12 +151,51 @@ console.log('Advanced Magic Training with no casting class');
   c.set('training.magic.tradition.essenceDrawbacks', 5);
   check('two pools of twenty levels: row 5 is 20 spell points each', [m().traditionLevels.sp, m().traditionSP], [[20, 20], 40]);
   check('essence reads half: row 5 at 10, each', [m().traditionLevels.essence, m().traditionEssence], [[10, 10], 20]);
+  check('Low-Caster levels: caster level 10; every level counts for MSB',
+    [m().castingUnlocked, m().globalCL, m().msb, m().msd], [true, 10, 20, 31]);
+  check('the pool is the casting modifier, at least 1, with no casting class',
+    m().classSP, [{ name: 'Advanced Magic Training', sp: 1 }]);
   c.set('training.magic.mythicAmt', true);
   check('with Mythic AMT, 40 spell points and 40 essence', [m().traditionSP, m().traditionEssence], [40, 40]);
-  check('no class spell points', m().classSP.reduce((n, x) => n + x.sp, 0), 0);
+  check('and Mid-Caster levels for caster level only', [m().globalCL, m().msb], [15, 20]);
   c.set('training.magic.amt', false);
   c.set('training.magic.mythicAmt', false);
-  check('without it, nothing', [m().traditionSP, m().traditionEssence], [0, 0]);
+  check('without it, nothing', [m().traditionSP, m().traditionEssence, m().castingUnlocked, m().globalCL, m().msb, m().classSP],
+    [0, 0, false, 0, 0, []]);
+}
+
+console.log('caster level and MSB add up across classes');
+{
+  check('without gestalt, each class rounds down on its own, then they add',
+    casterLevelTotal([...rowsOf(5, () => [{ key: 'f', rate: 0.5 }]), ...rowsOf(5, () => [{ key: 'r', rate: 0.5 }]),
+      ...rowsOf(10, () => [{ key: 'w', rate: 1 }])]), 2 + 2 + 10);
+  check('with gestalt, the better class at each level, rounded down once',
+    casterLevelTotal(rowsOf(10, (l) => [{ key: 'f', rate: 0.5 }, { key: 'w', rate: l === 2 ? 1 : 0.75 }]), { gestalt: true }),
+    Math.floor(1 + 9 * 0.75));
+  check('a class counting as levels higher adds them at its rate',
+    casterLevelTotal(rowsOf(5, () => [{ key: 'm', rate: 0.75 }]), { extra: [{ key: 'm', rate: 0.75, levels: 2 }] }), 5);
+
+  // Gestalt off: Wizard 1-10, Fighter 11-20.
+  const c = build({
+    rows: rowsOf(20, (l) => [l <= 10 ? 'Wizard' : 'Fighter']), casters: ['Wizard'],
+  });
+  c.set('campaign.gestalt', false);
+  const m = () => c.data.training.magic;
+  check('Wizard 10 / Fighter 10: caster level and MSB are the Wizard levels', [m().globalCL, m().msb, m().msd], [10, 10, 21]);
+  c.set('training.magic.amt', true);
+  check('Advanced Magic Training adds the Fighter levels as a Low-Caster, and all of them to MSB', [m().globalCL, m().msb], [10 + 5, 20]);
+  c.set('training.magic.mythicAmt', true);
+  check('Mythic AMT, as a Mid-Caster', [m().globalCL, m().msb], [10 + 7, 20]);
+  check('a casting class level: no AMT spell pool line', m().classSP.map((x) => x.name), ['Wizard']);
+
+  // Gestalt: Warlord with one Incanter level at 2nd // Kineticist.
+  const g = build({
+    rows: rowsOf(11, (l) => [l === 2 ? 'Incanter' : 'Warlord', 'Kineticist']), casters: ['Incanter'], amt: true,
+  });
+  const n = () => g.data.training.magic;
+  check('gestalt: the Incanter level, then the better Low-Caster side at each other level', [n().globalCL, n().msb], [1 + 5, 11]);
+  g.set('training.magic.amt', false);
+  check('without it, the one Incanter level', [n().globalCL, n().msb], [1, 1]);
 }
 
 console.log('spell pools: each gestalt side that casts gets the spell points');

@@ -12,13 +12,13 @@ import {
   RANKS_PER_TALENT, SPHERE_SKILL_RANKS, TALENTS_TO_TYPE, TALENT_RATES, TRACK_SPHERE_SIDES,
   MAGIC_BONUS_BOXES, PRACTITIONER_TYPES, TRADITION_ROWS, TYPE_RATES, TYPE_TO_TALENTS, drawbackWeight, isBasePick, normalizeTalentTracks,
   expertiseTalents, isGuileSphere, ladderGrants, parseLadderRule, sphereSide, sphereSkillLabel, sphereSkillRequirement, sphereSkillSpheres,
-  castingPools, statMod, tempEssenceCost, trackCount, traditionLevels, traditionSpend, weavesVeils, DEFAULT_TALENT_TRACKS,
+  casterLevelTotal, castingPools, statMod, tempEssenceCost, trackCount, traditionLevels, traditionSpend, weavesVeils, DEFAULT_TALENT_TRACKS,
 } from '../rules.js';
 import { isBackgroundSkill } from '../rules.js';
 import { campaignRules, freeBackgroundSkills } from './campaign.js';
 import { castingTraditions } from './traditions.js';
 import { emit } from './events.js';
-import { classGainsAt, ownLevelCount, tableSpelling } from './progression.js';
+import { classGainsAt, ownLevelCount, plannerSpelling, tableSpelling } from './progression.js';
 import { forwarded, lazyScope } from './scope.js';
 import { recomputeUnarmed } from './stats/attacks.js';
 import { altTrainingFor, altTrainingTalents, grantCount } from './subsystems/alt-training.js';
@@ -1841,10 +1841,30 @@ export function recomputeTraining(model) {
       || casters.find((y) => classKey(y.name) === classKey(x.name)));
     const bestMod = Math.max(0, ...(acquired.length ? acquired : casters).map((x) => mod(x.mod1)));
 
-    // Advanced Magic Training grants casting to non-casting classes:
-    // Low-Caster progression, or Mid-Caster with the mythic version.
-    const amtFloor = m.mythicAmt ? Math.floor(level * 0.75)
-      : m.amt ? Math.floor(level * 0.5) : 0;
+    // The classes at each character level, read once for caster level, MSB
+    // and the tradition: the casting classes there (one block each), and the
+    // other classes the Planner's row names. Advanced Magic Training treats
+    // those others as Low-Casters for caster level, MSB and MSD, and Mythic
+    // AMT as Mid-Casters for caster level. A name not on the Classes table is
+    // no class (a workbook's "Class 4" on a track not taken up), but every
+    // level has one, so a row naming none is one class. Without gestalt
+    // there is one class a level, the Planner's first track.
+    const gestalt = campaignRules(c).gestalt;
+    const amt = !!(m.amt || m.mythicAmt);
+    const amtRate = m.mythicAmt ? TYPE_RATES.Mid : TYPE_RATES.Low;
+    const leads = acquired.filter(leadBlock);
+    const castingSpellings = new Set(leads.map((x) => String(plannerSpelling(model, x.name) ?? '').trim()).filter(Boolean));
+    const plannerRows = c.progression?.levels || [];
+    const atLevel = [];
+    for (let l = 1; l <= level; l++) {
+      const casting = leads.filter((x) => classGainsAt(model, x.name, l, x.classLevelsOverride ?? null) > 0);
+      const names = (plannerRows[l - 1]?.classes || []).slice(0, gestalt ? undefined : 1)
+        .map((x) => String(x ?? '').trim()).filter((x) => x && tableSpelling(model, x));
+      const room = Math.max(0, Math.max(1, names.length) - casting.length);
+      const others = names.filter((x) => !castingSpellings.has(x)).map(classKey).slice(0, room);
+      while (others.length < room) others.push('');
+      atLevel.push({ casting, others });
+    }
     // A class counting as levels higher counts here: caster level and magic
     // skill bonus are read off the class level, so a rule that raises one
     // raises the other. Deliberately not the talent budget or the spell
@@ -1858,12 +1878,15 @@ export function recomputeTraining(model) {
     // Only a class the character has at the current level: a bonus to a class
     // still to come on the Planner waits (`levelWaiting`) until its first
     // level arrives, as `classLevelCount` does for every other system.
-    const effectiveLevels = (x) => {
+    const extraLevels = (x) => {
       const own = x.classLevelsCurrent ?? 0;
       const bonus = forwarded(model, classForwardKey(x.name));
       x.levelWaiting = own ? 0 : bonus;
-      return own + (own ? bonus : 0);
+      return own ? bonus : 0;
     };
+    const extra = casters.map((x) => ({ x, levels: extraLevels(x) }))
+      .filter(({ x, levels }) => levels && leads.includes(x))
+      .map(({ x, levels }) => ({ key: classKey(x.name), rate: TYPE_RATES[x.effectiveType], levels }));
     //
     // A bonus forwarded to `spheres.cl` (and .dc, .msb, .msd) lands beside the
     // typed one in the same line, kept apart so the box goes on saying what was
@@ -1880,10 +1903,17 @@ export function recomputeTraining(model) {
     // Training. Before that, a bonus to caster level -- typed or forwarded --
     // has nothing to raise, so it waits (`clWaiting`) rather than handing a
     // caster level to a character who cannot cast.
-    const baseCL = Math.max(0, amtFloor, ...casters.map(
-      (x) => Math.floor(effectiveLevels(x) * (TYPE_RATES[x.effectiveType] ?? 0)),
-    ));
-    m.castingUnlocked = amtFloor > 0 || acquired.length > 0;
+    //
+    // Caster levels add up across classes, as base attack bonus does
+    // (casterLevelTotal). MSB is the levels in spherecasting classes, each
+    // character level counted once however many gestalt sides have one.
+    const baseCL = casterLevelTotal(atLevel.map((a) => [
+      ...a.casting.map((x) => ({ key: classKey(x.name), rate: TYPE_RATES[x.effectiveType] })),
+      ...(amt ? a.others.map((key) => ({ key: `other:${key}`, rate: amtRate })) : []),
+    ]), { gestalt, extra });
+    const msbLevels = atLevel.filter((a) => a.casting.length || (amt && a.others.length)).length
+      + extra.reduce((t, x) => t + x.levels, 0);
+    m.castingUnlocked = amt || acquired.length > 0;
     // The typed bonuses take a number or a formula (`floor(level / 4)`). A
     // formula's answer and any error sit beside it for the box and the
     // Formulas tab; a number leaves nothing beside it.
@@ -1903,7 +1933,7 @@ export function recomputeTraining(model) {
     m.clWaiting = m.castingUnlocked ? 0 : clPlus;
     m.globalCL = baseCL + (m.castingUnlocked ? clPlus : 0);
     m.globalDC = 10 + Math.floor(m.globalCL / 2) + bestMod + bonus.dcBonus + m.dcForwarded;
-    m.msb = Math.max(0, ...casters.map(effectiveLevels)) + bonus.msbBonus + m.msbForwarded;
+    m.msb = msbLevels + bonus.msbBonus + m.msbForwarded;
     m.msd = m.msb + 11 + bonus.msdBonus + m.msdForwarded;
     m.concentration = m.globalCL + bestMod;
 
@@ -1957,28 +1987,18 @@ export function recomputeTraining(model) {
     //
     // Advanced Magic Training treats the other classes as casting classes
     // for the first tradition: each class on the Planner's row that is not a
-    // casting class counts, so a gestalt Fighter // Barbarian with it has two
-    // spell pools.
-    const gestalt = campaignRules(c).gestalt;
-    const amt = !!(m.amt || m.mythicAmt);
+    // casting class counts (atLevel), so a gestalt Fighter // Barbarian with
+    // it has two spell pools.
     const traditions = castingTraditions(c);
     const sameClass = (a, b) => classKey(a) === classKey(b);
     const ownerOf = (x) => traditions.find((t) => t.extra >= 0 && sameClass(t.tr.className, x.name)) || traditions[0];
-    // Classes, not blocks: two blocks naming one class count it once.
-    const presentAt = (blocks, l) => new Set(blocks
-      .filter((x) => classGainsAt(model, x.name, l, x.classLevelsOverride ?? null) > 0)
-      .map((x) => classKey(x.name))).size;
-    // A name not on the Classes table is no class (a workbook's "Class 4" on
-    // a track not taken up), but every level has one, so a row naming none
-    // is one class.
-    const plannerRows = c.progression?.levels || [];
-    const otherAt = (l) => Math.max(0, Math.max(1, (plannerRows[l - 1]?.classes || [])
-      .filter((x) => String(x ?? '').trim() && tableSpelling(model, x)).length) - presentAt(acquired, l));
     m.traditionResults = traditions.map((t) => {
       const own = acquired.filter((x) => ownerOf(x) === t);
       const withAmt = t.extra < 0 && amt;
-      const perLevel = [];
-      for (let l = 1; l <= level; l++) perLevel.push({ casting: presentAt(own, l), other: withAmt ? otherAt(l) : 0 });
+      const perLevel = atLevel.map((a) => ({
+        casting: a.casting.filter((x) => ownerOf(x) === t).length,
+        other: withAmt ? a.others.length : 0,
+      }));
       const castingLevels = perLevel.filter((n) => n.casting > 0).length;
       const pools = castingPools(perLevel, gestalt).map((p) => traditionLevels({
         castingLevels: p.casting, otherLevels: p.other, mythic: withAmt && !!m.mythicAmt,
@@ -2041,6 +2061,9 @@ export function recomputeTraining(model) {
       const own = casts(x) ? x.classLevelsCurrent ?? 0 : 0;
       return { name: x.name, sp: own ? own + statMod(c, x.mod1, x.mod2) : 0 };
     });
+    // Advanced Magic Training with no level in a casting class: the pool is
+    // the casting modifier, at least 1.
+    if (amt && !acquired.length) m.classSP.push({ name: 'Advanced Magic Training', sp: Math.max(1, bestMod) });
     // A bonus sent to `spheres.sp` lands beside Bonus SP.
     m.totalSP = m.classSP.reduce((s, x) => s + x.sp, 0)
       + bonus.bonusSP + forwarded(model, 'spheres.sp') + m.traditionSP;

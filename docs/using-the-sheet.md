@@ -775,8 +775,9 @@ minimized; all of this persists per character.
 > Magic had them too.) None of those is a grid any more — see *Item crafting*,
 > *Akashic, Maneuvers and Vancian* and *Companions* above — so no raw tab shows an
 > error cell now. The casting-number differences on Nico/Narockro/Saburo come from template
-> revisions, not broken formulas; Saburo's cached CL 4, for instance, is his
-> Advanced Magic Training flag, which the app now reproduces.
+> revisions, not broken formulas. Saburo's cached CL 4, for instance, is half his
+> nine levels from Advanced Magic Training, leaving out his Wizard level. The app counts
+> that level, so it shows 5.
 
 ---
 

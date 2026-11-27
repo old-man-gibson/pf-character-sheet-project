@@ -7828,19 +7828,23 @@ console.log('drawback feats header is not a drawback feat');
 
 console.log('advanced magic training');
 {
-  // Saburo imports with AMT already on — his Wizard dip alone gives CL 1, and
-  // the low-caster floor is what brings him to his sheet's cached CL 4.
+  // Saburo imports with AMT already on. His Wizard dip at 2nd is a
+  // High-Caster level; at his other eight levels the better gestalt side is
+  // a class AMT makes a Low-Caster.
   const s = new Character(load('saburo'));   // level 9
-  check('saburo imports with AMT on', s.data.training.magic.amt, true);
-  check('AMT floors CL at low-caster', s.data.training.magic.globalCL, Math.floor(9 * 0.5));
-  check('which matches his sheet cache', s.data.training.magic.globalCL, s.data.training.magic.sheet.totalCL);
+  const m = () => s.data.training.magic;
+  check('saburo imports with AMT on', m().amt, true);
+  check('the Wizard level and eight Low-Caster levels', m().globalCL, 1 + Math.floor(8 * 0.5));
+  check('his sheet cached 4, half of nine, leaving the Wizard level out', m().sheet.totalCL, 4);
+  check('every level counts for MSB', [m().msb, m().msd], [9, 20]);
   s.set('training.magic.mythicAmt', true);
-  check('mythic AMT upgrades to mid-caster', s.data.training.magic.globalCL, Math.floor(9 * 0.75));
+  check('mythic AMT makes them Mid-Casters', m().globalCL, 1 + Math.floor(8 * 0.75));
+  check('for caster level only', m().msb, 9);
   s.set('training.magic.mythicAmt', false);
   s.set('training.magic.amt', false);
-  check('without AMT only the Wizard dip counts', s.data.training.magic.globalCL, 1);
+  check('without AMT only the Wizard dip counts', [m().globalCL, m().msb], [1, 1]);
   s.set('training.magic.amt', true);
-  check('restored', s.data.training.magic.globalCL, 4);
+  check('restored', m().globalCL, 5);
 }
 
 console.log('mythic tier, HP, tradition and stat picks');
@@ -8995,8 +8999,8 @@ console.log('wealth -- the wallet in mana, the offering owed, and the ledger');
   // Session mana and the month roll over.
   c.set('wealth.sessionMana', 301);
   check('half the session mana is owed, rounded down', c.wealthView(today).expected.oath, 1425 + 150);
-  check('material casting is charged against the caster level, not the character level', [c.casterLevel, c.data.identity.level], [4, 9]);
-  check('a whole month costs 10 a caster level', c.wealthView(new Date(2026, 8, 2)).expected.casting, MATERIAL_CASTING_PER_LEVEL * 4);
+  check('material casting is charged against the caster level, not the character level', [c.casterLevel, c.data.identity.level], [5, 9]);
+  check('a whole month costs 10 a caster level', c.wealthView(new Date(2026, 8, 2)).expected.casting, MATERIAL_CASTING_PER_LEVEL * 5);
   check('and the day before it does not', c.wealthView(new Date(2026, 8, 1)).expected.casting, 0);
   check('the day the next month is counted', [c.wealthView(today).nextMonth, c.wealthView(new Date(2026, 8, 2)).nextMonth], ['2026-09-02', '2026-10-02']);
   c.set('wealth.sessionMana', 0);

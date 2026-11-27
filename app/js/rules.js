@@ -1181,6 +1181,32 @@ export function castingPools(perLevel, gestalt) {
 }
 
 /**
+ * Total caster level, added up from the classes present at each character
+ * level the way base attack bonus is. `perLevel` lists, for each level, the
+ * classes there as `{ key, rate }` (1 for a High-Caster, 3/4 Mid, 1/2 Low).
+ * Without gestalt, each class gives its rate times its levels, rounded down,
+ * and the classes are added together, as the core rules say. With gestalt
+ * the better class counts at each level and the sum is rounded down once,
+ * as the gestalt rules use "the higher" caster level. `extra` adds levels to
+ * a class (`{ key, rate, levels }`): a rule that makes it count as higher.
+ */
+export function casterLevelTotal(perLevel, { gestalt = false, extra = [] } = {}) {
+  if (gestalt) {
+    const sum = (perLevel || []).reduce((t, here) => t + Math.max(0, ...here.map((x) => x.rate)), 0);
+    return Math.floor(sum + extra.reduce((t, x) => t + x.rate * x.levels, 0));
+  }
+  const byClass = new Map();
+  const add = (key, rate, levels) => {
+    const k = byClass.get(key) || { rate, levels: 0 };
+    k.levels += levels;
+    byClass.set(key, k);
+  };
+  for (const here of perLevel || []) for (const x of here) add(x.key, x.rate, 1);
+  for (const x of extra) add(x.key, x.rate, x.levels);
+  return [...byClass.values()].reduce((t, k) => t + Math.floor(k.rate * k.levels), 0);
+}
+
+/**
  * The levels each half of a tradition reads, for one spell pool.
  *
  * `castingLevels` are the pool's levels in casting classes; `otherLevels`
