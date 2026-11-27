@@ -29,7 +29,7 @@ import {
 import {
   COMBAT_SPHERES, MAGIC_BONUS_BOXES, SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule,
 } from '../../rules.js';
-import { check, field, linkField, roField, select, text } from '../fields.js';
+import { abilitySelect, check, field, linkField, roField, select, text } from '../fields.js';
 import {
   abilityField, blendTicks, blendedSection, bonusTalentTable, classLevelsField, singleLadderTable, traditionTable,
 } from './training.js';
@@ -366,6 +366,8 @@ function magicTraditionPanel(model, m) {
         <span class="value">${check('training.magic.amt', m.amt)}</span></div>
       <div class="statline"><span class="label">Mythic AMT</span>
         <span class="value">${check('training.magic.mythicAmt', m.mythicAmt)}</span></div>
+      ${m.amtAlone ? `<div class="statline"><span class="label">Casting ability</span>
+        <span class="value">${abilitySelect('training.magic.amtAbility', m.amtAbility)}</span></div>` : ''}
       ${traditionSplit(r, tr, path, { amt: m.mythicAmt ? 'mythic' : !!m.amt })}
       ${perClass ? `<div style="margin-top:8px">${addButton(EXTRA_TRADITIONS, 'Add tradition', blankTradition())}</div>
       <p class="hint">A casting class may have its own tradition. Its drawbacks give spell points to that class.

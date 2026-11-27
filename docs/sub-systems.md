@@ -220,7 +220,8 @@ with its bonus field.
 - **Advanced Magic Training** treats the other classes on the Planner as Low-Casters for
   caster level, MSB and MSD, so every level counts for MSB. *Mythic AMT* makes them
   Mid-Casters for caster level only. With no level in a casting class, AMT's spell pool
-  is the casting modifier, at least 1, and shows as its own line.
+  is the casting modifier, at least 1, and shows as its own line. The casting ability
+  is picked under the AMT boxes, since no class names one.
 The CL, DC, MSB, MSD and Bonus SP fields each take a number or a formula, and a formula
 is listed on the Formulas tab.
 Concentration carries a **d20** that copies the check for Roll20, as does each

@@ -52,7 +52,7 @@ import { MONSTER_TAB_ORDER } from '../monster/block.js';
 // and what bonuses forwarded to `spheres.*` came to, which is working rather
 // than anything a player typed.
 const MAGIC_DERIVED = ['sphereRows', 'clForwarded', 'dcForwarded', 'msbForwarded', 'msdForwarded',
-  'castingUnlocked', 'clWaiting', { path: 'classes', keys: ['levelWaiting'] }];
+  'castingUnlocked', 'clWaiting', 'amtAlone', { path: 'classes', keys: ['levelWaiting'] }];
 
 // The document shape this build understands: one number for the model and
 // the converter, kept in schema.js.
