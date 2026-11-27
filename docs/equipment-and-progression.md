@@ -485,6 +485,13 @@ Some prestige classes add their levels to a class the character had before them
 ("aligned class"). The aligned class gains those levels for its class features;
 hit dice, BAB, saves and skill ranks stay with the prestige class.
 
+A prestige class that advances only spellcasting or manifesting is not an aligned
+class. Enter a formula in the casting class's **Caster level** box on Vancian, or its
+**Manifester level** box on Psionics, such as
+`class.wizard.level + class.mystic_theurge.level`. The slots, spells known and power
+points follow that box. Both tabs say so under their heading. Leave the box blank for
+an aligned class, whose levels already count.
+
 The **Aligned classes** panel on Progression sets this up per prestige class
 (it shows once the character has two classes):
 
