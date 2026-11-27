@@ -294,3 +294,16 @@ is what the converter's `extraTabs` capture is for.
 | [Monsters](docs/monsters.md) | The GM's side: **+ Monster** reads a pasted stat block into a sheet whose numbers come out exactly as printed and still recalculate, the **Stat Block** tab prints any sheet as a Bestiary would with every figure live, and a monster is given a sub-system the way a character is. |
 | [To do](docs/todo.md) | Agreed but not built: a picker for option menus, reading menu pages, the names still hard-coded in the engine. |
 | [Importing & saving](docs/importing-and-saving.md) | How the converters read a workbook (defined names, label-anchored scans, reconciliation), the four ways a character comes in, Export all, and saving, snapshots, checkpoints and the schema. |
+
+---
+
+## Legal
+
+This project uses trademarks and/or copyrights owned by Paizo Inc., used under Paizo's
+Community Use Policy ([paizo.com/licenses/communityuse](https://paizo.com/licenses/communityuse)).
+We are expressly prohibited from charging you to use or access this content. This project is
+not published, endorsed, or specifically approved by Paizo. For more information about Paizo
+Inc. and Paizo products, visit [paizo.com](https://paizo.com).
+
+Pathfinder is a registered trademark of Paizo Inc. Other product names are trademarks of their
+owners. This project is not affiliated with any game publisher.
