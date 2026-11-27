@@ -3032,7 +3032,7 @@ console.log('caster-level bonuses wait for casting; spell points count classes t
   check('at 7th it has two levels: casting unlocks and every bonus lands',
     [m().castingUnlocked, m().globalCL, m().clWaiting, inc().levelWaiting], [true, 2 + 4 + 2 + 1, 0, 0]);
   check('spell points are the two levels it has, not the five planned, plus Int once though both slots say Int',
-    m().classSP.find((x) => x.name === 'Incanter').sp, 2 + 2);
+    m().classSP.map((x) => [x.name, x.sp]), [['Incanter', 2], ['Casting modifier', 2]]);
 }
 
 console.log('a blended twin: no guessed casting type, one level count, a second score that shows');
@@ -3055,7 +3055,8 @@ console.log('a blended twin: no guessed casting type, one level count, a second 
   c.setItem('training.magic.classes', m().classes.indexOf(twin()), 'classLevelsOverride', 2);
   check('an override typed on the twin gives way to the owner\'s', twin().classLevelsCurrent, 6);
   c.setItem('training.magic.classes', m().classes.indexOf(twin()), 'mod2', 'Cha');
-  check('its second score adds to its spell points', m().classSP.find((x) => x.name === 'Monk').sp, 6 + 2 + 1);
+  check('its second score adds to its casting modifier', m().classSP.map((x) => [x.name, x.sp]),
+    [['Monk', 6], ['Casting modifier', 2 + 1]]);
   const html = combatPanels.renderMagicPanel(c);
   check('and has a field in the blended panel', html.includes(`data-item="training.magic.classes|${m().classes.indexOf(twin())}|mod2"`), true);
 }
@@ -6613,7 +6614,12 @@ console.log('spheres training reproduces the sheet');
   // two spell pools (he casts on both gestalt sides). The workbook's 12 was
   // 4 x 3, counting a Wizard block with no levels.
   check('angou tradition SP (row 1 at 20 casting levels, two pools)', m.traditionSP, 8);
-  check('angou total SP', m.totalSP, 79);
+  // 20 Legendary Monk and 20 Incanter levels, and the casting modifier once
+  // per spell pool: his best, Wis +16, for each of the two. (The workbook
+  // added each class's own, so the Incanter's Con +15.)
+  check('angou class SP lines', m.classSP.map((x) => [x.name, x.sp]),
+    [['Legendary Monk', 20], ['Incanter', 20], ['Wizard', 0], ['Casting modifier × 2', 32]]);
+  check('angou total SP', m.totalSP, 80);
 
   // Bryva: the other internally-consistent workbook.
   const b = new Character(load('bryva'));
@@ -7682,11 +7688,11 @@ console.log('training values reach the formula scope');
   const c = new Character(load('angou'));
   const scope = c.scope();
   check('caster.level', scope.caster.level, 20);
-  check('caster.sp', scope.caster.sp, 79);
+  check('caster.sp', scope.caster.sp, 80);
   check('practitioner.dc', scope.practitioner.dc, 36);
   check('unarmed.talents', scope.unarmed.talents, 19);
   const t = c.addTracker({ name: 'SP Pool', maxFormula: 'caster.sp' });
-  check('tracker can read SP', t.max, 79);
+  check('tracker can read SP', t.max, 80);
 }
 
 console.log('gestalt classes drive save bases');
@@ -11767,7 +11773,7 @@ console.log('blended training -- one class, one pool, two progressions');
   // None of the per-side numbers move: they are still computed off the block
   // sitting on that side, which is why the pair is kept rather than merged.
   check('caster level unmoved', a.data.training.magic.globalCL, 20);
-  check('spell points unmoved', a.data.training.magic.totalSP, 79);
+  check('spell points unmoved', a.data.training.magic.totalSP, 80);
   check('practitioner DC unmoved', a.data.training.combat.practitionerDC, 36);
   check('bryva too', [new Character(load('bryva')).blendedClasses().map((p) => p.name)],
     [['Blacksmith']]);
@@ -12051,7 +12057,7 @@ console.log('tradition essence on the Akashic tab -- the Essence Boon cell');
   check('his tradition: 8 spell points and 40 essence', [m().traditionSP, m().traditionEssence], [8, 40]);
   // His sheet cached 12 and 83: 4 spell points for each of three casting
   // classes, one of them a Wizard block with no levels.
-  check('the workbook counted the spell points three times', [m().totalSP, m().sheet.totalSP], [79, 83]);
+  check('the workbook counted the spell points three times', [m().totalSP, m().sheet.totalSP], [80, 83]);
   check('the essence reaches the akashic tab',
     [c.data.akashic.calc.traditionBoon, c.data.akashic.calc.sources], [40, 40]);
   check('and passes the 20 his typed pool holds',

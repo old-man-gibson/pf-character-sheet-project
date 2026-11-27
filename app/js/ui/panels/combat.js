@@ -529,7 +529,7 @@ function magicGlobalsPanel(model, m) {
     ? `Condensing this much essence costs ${m.spOnEssence} points, but there are only ${m.totalSP} (${m.spShort} short). Change it on the Akashic tab.`
     : `${SP_PER_TEMP_ESSENCE} spell points make 1 temporary essence, set on the Akashic tab.`}
       </p>` : ''}
-      <p class="hint">Class SP = class levels + casting ability modifier.</p>
+      <p class="hint">Each casting class gives its levels. The casting modifier is added once per spell pool.</p>
     </section>`;
   }
 

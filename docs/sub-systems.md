@@ -209,14 +209,17 @@ Every tradition cell reads
 rest of the character can spend.
 
 **Casting numbers**: global CL, DC (10 + CL/2 + best casting mod), MSB, MSD (MSB+11),
-concentration (MSB + best casting mod), per-class SP (class levels + casting mod), each
-with its bonus field.
+concentration (MSB + best casting mod), per-class SP (class levels), each with its bonus
+field.
 
 - **Caster level** adds up across classes, as BAB does: a High-Caster gives 1 a level, a
   Mid-Caster 3/4 and a Low-Caster 1/2. Without gestalt each class rounds down on its own
   and they are added; with gestalt the better class counts at each level and the sum
   rounds down once.
 - **MSB** is the levels in spherecasting classes, each character level counted once.
+- **Spell points**: each casting class gives its levels, and the best casting mod is added
+  once per spell pool, not once per class. A multiclass caster has one pool; a gestalt
+  caster has one per side that casts, counted as the tradition counts them.
 - **Advanced Magic Training** treats the other classes on the Planner as Low-Casters for
   caster level, MSB and MSD, so every level counts for MSB. *Mythic AMT* makes them
   Mid-Casters for caster level only. With no level in a casting class, AMT's spell pool

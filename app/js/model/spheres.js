@@ -2058,16 +2058,23 @@ export function recomputeTraining(model) {
     m.traditionEssence = m.traditionResults.reduce((n, x) => n + x.traditionEssence, 0);
     for (const old of ['spTier', 'boons', 'traditionPools', 'boonPoints', 'castingClassCount', 'essenceDrawbacksAuto']) delete m[old];
 
-    // A class's spell points are its levels so far plus its casting modifier:
-    // the levels the character has now, not the ones planned (Wizard 1-5,
-    // Fighter 6-10, Wizard 11-20 is 5 wizard levels at 10th), and nothing at
-    // all for a class not taken yet. The same ability in both slots counts
-    // once, as `statMod` reads a slot everywhere else. A class with two
-    // blocks is counted once, off its lead block.
-    m.classSP = casters.filter(leadBlock).map((x) => {
-      const own = casts(x) ? x.classLevelsCurrent ?? 0 : 0;
-      return { name: x.name, sp: own ? own + statMod(c, x.mod1, x.mod2) : 0 };
-    });
+    // A class's spell points are its levels so far: the levels the character
+    // has now, not the ones planned (Wizard 1-5, Fighter 6-10, Wizard 11-20 is
+    // 5 wizard levels at 10th), and nothing at all for a class not taken yet.
+    // A class with two blocks is counted once, off its lead block.
+    //
+    // The casting modifier is added once per spell pool, not once per class:
+    // a multiclass caster adds the levels of every casting class to one pool,
+    // and a gestalt caster works out each side's pool with its own modifier
+    // (castingPools, as the tradition counts them). It is the best casting
+    // class's modifier, as the DC's is; the same ability in both slots counts
+    // once, as `statMod` reads a slot everywhere else.
+    m.classSP = casters.filter(leadBlock).map((x) => ({ name: x.name, sp: casts(x) ? x.classLevelsCurrent ?? 0 : 0 }));
+    if (leads.length) {
+      const pools = Math.max(1, castingPools(atLevel.map((a) => a.casting.length), gestalt).length);
+      const cam = Math.max(...leads.map((x) => statMod(c, x.mod1, x.mod2)));
+      m.classSP.push({ name: pools > 1 ? `Casting modifier × ${pools}` : 'Casting modifier', sp: cam * pools });
+    }
     // Advanced Magic Training with no level in a casting class: the pool is
     // the casting modifier, at least 1.
     if (amt && !acquired.length) m.classSP.push({ name: 'Advanced Magic Training', sp: Math.max(1, bestMod) });
