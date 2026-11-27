@@ -192,7 +192,7 @@ crit lines are always shown and simply ignored on a miss.
 | *Overview* → **Attack** | Melee and Ranged copy the whole iterative sequence, one row per attack; CMB copies the maneuver alone. The mode table below them does the same for all six slots, **alternates included**. |
 | *Skills* | The skill's **Total** — ranks, ability, the class-skill bonus, armour check penalty and Misc, already summed. |
 | *Equipment* → **Weapons** | The attack (iteratives included), the damage, the confirmation roll and the critical damage. |
-| *Magic Spheres* → **Casting numbers** | The global **concentration** check, with the caster level behind it. |
+| *Magic Spheres* → **Casting numbers** | The global **concentration** check, with the MSB behind it. |
 | *Vancian* → each casting class | That class's own concentration. |
 | *Familiar*, *Animal Companion*, *Eidolon* | Initiative, the three saves, an ability check off the Mod column, every skill, and every natural attack. |
 
@@ -775,8 +775,9 @@ minimized; all of this persists per character.
 > Magic had them too.) None of those is a grid any more — see *Item crafting*,
 > *Akashic, Maneuvers and Vancian* and *Companions* above — so no raw tab shows an
 > error cell now. The casting-number differences on Nico/Narockro/Saburo come from template
-> revisions, not broken formulas; Saburo's cached CL 4, for instance, is his
-> Advanced Magic Training flag, which the app now reproduces.
+> revisions, not broken formulas. Saburo's cached CL 4, for instance, is half his
+> nine levels from Advanced Magic Training, leaving out his Wizard level. The app counts
+> that level, so it shows 5.
 
 ---
 

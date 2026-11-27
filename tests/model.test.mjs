@@ -7828,19 +7828,23 @@ console.log('drawback feats header is not a drawback feat');
 
 console.log('advanced magic training');
 {
-  // Saburo imports with AMT already on — his Wizard dip alone gives CL 1, and
-  // the low-caster floor is what brings him to his sheet's cached CL 4.
+  // Saburo imports with AMT already on. His Wizard dip at 2nd is a
+  // High-Caster level; at his other eight levels the better gestalt side is
+  // a class AMT makes a Low-Caster.
   const s = new Character(load('saburo'));   // level 9
-  check('saburo imports with AMT on', s.data.training.magic.amt, true);
-  check('AMT floors CL at low-caster', s.data.training.magic.globalCL, Math.floor(9 * 0.5));
-  check('which matches his sheet cache', s.data.training.magic.globalCL, s.data.training.magic.sheet.totalCL);
+  const m = () => s.data.training.magic;
+  check('saburo imports with AMT on', m().amt, true);
+  check('the Wizard level and eight Low-Caster levels', m().globalCL, 1 + Math.floor(8 * 0.5));
+  check('his sheet cached 4, half of nine, leaving the Wizard level out', m().sheet.totalCL, 4);
+  check('every level counts for MSB', [m().msb, m().msd], [9, 20]);
   s.set('training.magic.mythicAmt', true);
-  check('mythic AMT upgrades to mid-caster', s.data.training.magic.globalCL, Math.floor(9 * 0.75));
+  check('mythic AMT makes them Mid-Casters', m().globalCL, 1 + Math.floor(8 * 0.75));
+  check('for caster level only', m().msb, 9);
   s.set('training.magic.mythicAmt', false);
   s.set('training.magic.amt', false);
-  check('without AMT only the Wizard dip counts', s.data.training.magic.globalCL, 1);
+  check('without AMT only the Wizard dip counts', [m().globalCL, m().msb], [1, 1]);
   s.set('training.magic.amt', true);
-  check('restored', s.data.training.magic.globalCL, 4);
+  check('restored', m().globalCL, 5);
 }
 
 console.log('mythic tier, HP, tradition and stat picks');
@@ -8995,8 +8999,8 @@ console.log('wealth -- the wallet in mana, the offering owed, and the ledger');
   // Session mana and the month roll over.
   c.set('wealth.sessionMana', 301);
   check('half the session mana is owed, rounded down', c.wealthView(today).expected.oath, 1425 + 150);
-  check('material casting is charged against the caster level, not the character level', [c.casterLevel, c.data.identity.level], [4, 9]);
-  check('a whole month costs 10 a caster level', c.wealthView(new Date(2026, 8, 2)).expected.casting, MATERIAL_CASTING_PER_LEVEL * 4);
+  check('material casting is charged against the caster level, not the character level', [c.casterLevel, c.data.identity.level], [5, 9]);
+  check('a whole month costs 10 a caster level', c.wealthView(new Date(2026, 8, 2)).expected.casting, MATERIAL_CASTING_PER_LEVEL * 5);
   check('and the day before it does not', c.wealthView(new Date(2026, 8, 1)).expected.casting, 0);
   check('the day the next month is counted', [c.wealthView(today).nextMonth, c.wealthView(new Date(2026, 8, 2)).nextMonth], ['2026-09-02', '2026-10-02']);
   c.set('wealth.sessionMana', 0);
@@ -12040,18 +12044,18 @@ console.log('tradition essence on the Akashic tab -- the Essence Boon cell');
 {
   // The tradition's own rules are in tradition-rules.test.mjs. Angou's six
   // drawbacks left: five on Expanded Essence Pool (row 5 at 20 levels in
-  // casting classes, 20 essence), one as spell points (row 1, 4, for each of
-  // his two spell pools).
+  // casting classes, 20 essence), one as spell points (row 1, 4), each for
+  // both of his spell pools.
   const c = new Character(load('angou'));
   const m = () => c.data.training.magic;
-  check('his tradition: 8 spell points and 20 essence', [m().traditionSP, m().traditionEssence], [8, 20]);
+  check('his tradition: 8 spell points and 40 essence', [m().traditionSP, m().traditionEssence], [8, 40]);
   // His sheet cached 12 and 83: 4 spell points for each of three casting
   // classes, one of them a Wizard block with no levels.
   check('the workbook counted the spell points three times', [m().totalSP, m().sheet.totalSP], [79, 83]);
   check('the essence reaches the akashic tab',
-    [c.data.akashic.calc.traditionBoon, c.data.akashic.calc.sources], [20, 20]);
-  check('and matches his typed pool',
-    c.data.akashic.calc.sourcesShort, 20 - c.data.akashic.calc.pool);
+    [c.data.akashic.calc.traditionBoon, c.data.akashic.calc.sources], [40, 40]);
+  check('and passes the 20 his typed pool holds',
+    [c.data.akashic.calc.sourcesShort, c.data.akashic.calc.pool], [20, 20]);
   {
     // The Essence Boon cell: blank is the tradition's essence, and a number or
     // a formula typed there stands instead. The workbook's own 20 never
@@ -12059,13 +12063,13 @@ console.log('tradition essence on the Akashic tab -- the Essence Boon cell');
     const k = () => c.data.akashic.calc;
     check("the workbook's own figure is cleared", [c.data.akashic.essence.boon, k().boonAuto], [0, true]);
     c.set('akashic.essence.boon', 30);
-    check("a typed boon stands in place of the tradition's", [k().typed.boon.value, k().sources, k().traditionBoon], [30, 30, 20]);
+    check("a typed boon stands in place of the tradition's", [k().typed.boon.value, k().sources, k().traditionBoon], [30, 30, 40]);
     const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
     check('and is kept on reopen', [again.data.akashic.essence.boon, again.data.akashic.calc.sources], [30, 30]);
     c.set('akashic.essence.boon', 'level * 2 + 1');
     check('or a formula', [k().typed.boon.value, k().sources], [c.data.identity.level * 2 + 1, c.data.identity.level * 2 + 1]);
     c.set('akashic.essence.boon', null);
-    check("blank is the tradition's again", [k().typed.boon.value, k().sources], [20, 20]);
+    check("blank is the tradition's again", [k().typed.boon.value, k().sources], [40, 40]);
   }
   {
     // A casting class's caster level takes a formula: a prestige class that
@@ -14629,10 +14633,11 @@ console.log('\ncaster levels -- spheres.*, vancian.* and manifester.* take a bon
   let drop = note('Orange prism {spheres.cl += 2}, and {spheres.msb += 1}.');
   check('a Spheres CL bonus lands beside the typed one',
     [m().clForwarded, m().clBonus, m().globalCL], [2, 1, before.cl + 2]);
-  check('and carries into the DC, concentration and every sphere',
-    [m().globalDC, m().concentration, dark().cl],
-    [before.dc + Math.floor((before.cl + 2) / 2) - Math.floor(before.cl / 2), before.conc + 2, before.dark + 2]);
-  check('MSB takes one too, and MSD follows it', [m().msb, m().msd], [before.msb + 1, before.msd + 1]);
+  check('and carries into the DC and every sphere',
+    [m().globalDC, dark().cl],
+    [before.dc + Math.floor((before.cl + 2) / 2) - Math.floor(before.cl / 2), before.dark + 2]);
+  check('MSB takes one too, and MSD and concentration follow it',
+    [m().msb, m().msd, m().concentration], [before.msb + 1, before.msd + 1, before.conc + 1]);
   check('the scope reads the new number', [c.scope().spheres.cl, c.scope().caster.level],
     [before.cl + 2, before.cl + 2]);
   const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));

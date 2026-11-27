@@ -560,7 +560,7 @@ export function initiativeRollSpec(c, cs = null) {
 /**
  * A concentration check, from either place the sheet keeps one.
  *
- * `magic` is the Spheres side's global figure (caster level + the best casting
+ * `magic` is the Spheres side's global figure (MSB + the best casting
  * modifier); `vancian:<i>` is one prepared-casting class's own, which is a
  * typed number because a class can have any number of things adding to it.
  *
@@ -576,7 +576,7 @@ export function concentrationRollSpec(c, ref) {
     return {
       name: titled(c, 'Concentration'),
       rolls: [{ label: 'Concentration', formula: d20(m.concentration) }],
-      notes: [{ label: 'Caster level', text: `${m.globalCL ?? 0}` }],
+      notes: [{ label: 'MSB', text: `${m.msb ?? 0}` }],
     };
   }
   if (which === 'vancian') {

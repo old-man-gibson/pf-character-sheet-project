@@ -3557,11 +3557,8 @@
      "effectiveDrawbacks": 0,
      "castingLevels": 0,
      "traditionLevels": {
-      "sp": 0,
-      "essence": 0,
-      "spPools": [
-       0
-      ]
+      "sp": [],
+      "essence": []
      },
      "essenceDrawbacksNum": null,
      "essenceDrawbacksError": null,
@@ -3577,11 +3574,8 @@
    "effectiveDrawbacks": 0,
    "castingLevels": 0,
    "traditionLevels": {
-    "sp": 0,
-    "essence": 0,
-    "spPools": [
-     0
-    ]
+    "sp": [],
+    "essence": []
    },
    "essenceDrawbacksNum": null,
    "essenceDrawbacksError": null,

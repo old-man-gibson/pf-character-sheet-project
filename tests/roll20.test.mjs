@@ -232,7 +232,7 @@ console.log('initiative, and the two places a concentration check lives');
   const c = {
     identity: { name: 'Angou' },
     hp: { initiative: 9 },
-    training: { magic: { concentration: 17, globalCL: 14 } },
+    training: { magic: { concentration: 17, globalCL: 14, msb: 15 } },
     vancian: { classes: [{ name: 'Oracle', concentration: 21, casterLevel: 11 }, { concentration: 4 }] },
   };
   check('initiative', rollText(initiativeRollSpec(c), 'plain'), '/roll 1d20+9 Angou: Initiative');
@@ -240,7 +240,7 @@ console.log('initiative, and the two places a concentration check lives');
 
   check('the Spheres side has one global figure',
     rollText(concentrationRollSpec(c, 'magic'), 'template'),
-    '&{template:default} {{name=Angou: Concentration}} {{Concentration=[[1d20+17]]}} {{Caster level=14}}');
+    '&{template:default} {{name=Angou: Concentration}} {{Concentration=[[1d20+17]]}} {{MSB=15}}');
   check('a prepared class has its own',
     rollText(concentrationRollSpec(c, 'vancian:0'), 'plain'),
     '/roll 1d20+21 Angou: Oracle concentration (Caster level: 11)');

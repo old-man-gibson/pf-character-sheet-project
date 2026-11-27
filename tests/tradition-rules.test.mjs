@@ -7,7 +7,7 @@
 import { blankDocument } from '../app/js/convert.js';
 import { Character } from '../app/js/model.js';
 import {
-  baseEssenceCapacity, castingPools, maxEssenceConversion, traditionBonus, traditionLevels, traditionSpend,
+  baseEssenceCapacity, casterLevelTotal, castingPools, maxEssenceConversion, traditionBonus, traditionLevels, traditionSpend,
 } from '../app/js/rules.js';
 import * as combat from '../app/js/ui/panels/combat.js';
 import * as subsystems from '../app/js/ui/panels/subsystems.js';
@@ -75,14 +75,15 @@ console.log('the tradition table');
 console.log('levels each half of the tradition reads');
 {
   check('without Advanced Magic Training both read the casting levels',
-    traditionLevels({ level: 10, castingLevels: 4, amt: false }), { sp: 4, essence: 4 });
+    traditionLevels({ castingLevels: 4 }), { sp: 4, essence: 4 });
   check('with it, every level for spell points and half the others for essence',
-    traditionLevels({ level: 10, castingLevels: 1, amt: true }), { sp: 10, essence: 5 });
-  check('half rounds down', traditionLevels({ level: 10, castingLevels: 3, amt: true }).essence, 3 + 3);
+    traditionLevels({ castingLevels: 1, otherLevels: 9 }), { sp: 10, essence: 5 });
+  check('half rounds down', traditionLevels({ castingLevels: 3, otherLevels: 7 }).essence, 3 + 3);
   check('minimum 1 when there is a non-casting level',
-    traditionLevels({ level: 2, castingLevels: 1, amt: true }), { sp: 2, essence: 2 });
-  check('nothing added when every level casts',
-    traditionLevels({ level: 6, castingLevels: 6, amt: true }), { sp: 6, essence: 6 });
+    traditionLevels({ castingLevels: 1, otherLevels: 1 }), { sp: 2, essence: 2 });
+  check('nothing added when every level casts', traditionLevels({ castingLevels: 6, otherLevels: 0 }), { sp: 6, essence: 6 });
+  check('the mythic feat counts every other level for essence too',
+    traditionLevels({ castingLevels: 1, otherLevels: 9, mythic: true }), { sp: 10, essence: 10 });
 }
 
 console.log('how the drawbacks are spent');
@@ -110,29 +111,109 @@ console.log('a gestalt with one casting level and Advanced Magic Training');
   });
   const m = () => c.data.training.magic;
   check('one level in a casting class', m().castingLevels, 1);
-  check('spell points read every level, essence the Wizard level and half of nine', m().traditionLevels, { sp: 10, essence: 5, spPools: [10] });
+  check('two pools: spell points read every level, essence the Wizard level and half of nine, then half of ten',
+    m().traditionLevels, { sp: [10, 10], essence: [5, 5] });
   check('seven left, blank: five as spell points, two uninvested, none as essence',
     [m().effectiveDrawbacks, m().spDrawbacks, m().unusedDrawbacks, m().essenceDrawbacks, m().traditionSP, m().traditionEssence],
-    [7, 5, 2, 0, 10, 0]);
+    [7, 5, 2, 0, 20, 0]);
   c.set('training.magic.tradition.essenceDrawbacks', 5);
   check('five typed on Expanded Essence Pool leave two as spell points', [m().essenceDrawbacks, m().spDrawbacks, m().unusedDrawbacks],
     [5, 2, 0]);
-  check('row 2 at 10 levels is 4 spell points, row 5 at 5 levels is 5 essence',
-    [m().traditionSP, m().traditionEssence], [4, 5]);
-  check('the spell points are in the total', m().totalSP, m().classSP[0].sp + 4);
-  check('the essence is the Essence Boon on the Akashic tab', c.data.akashic.calc.traditionBoon, 5);
+  check('row 2 at 10 levels is 4 spell points, row 5 at 5 levels is 5 essence, for each pool',
+    [m().traditionSP, m().traditionEssence], [4 + 4, 5 + 5]);
+  check('the spell points are in the total', m().totalSP, m().classSP[0].sp + 8);
+  check('the essence is the Essence Boon on the Akashic tab', c.data.akashic.calc.traditionBoon, 10);
+  c.set('training.magic.mythicAmt', true);
+  check('Mythic AMT counts every level for essence', [m().traditionLevels.essence, m().traditionEssence], [[10, 10], 20]);
+  check('and the panel says so', /Mythic AMT counts every level in other classes/.test(combat.renderMagicPanel(c)), true);
+  c.set('training.magic.mythicAmt', false);
+  c.set('campaign.gestalt', false);
+  check('gestalt off: one pool', [m().traditionLevels, m().traditionSP, m().traditionEssence], [{ sp: [10], essence: [5] }, 4, 5]);
+  c.set('campaign.gestalt', true);
   c.set('training.magic.amt', false);
   check('without Advanced Magic Training both read the one Wizard level',
-    [m().traditionLevels, m().traditionSP, m().traditionEssence], [{ sp: 1, essence: 1, spPools: [1] }, 1, 1]);
+    [m().traditionLevels, m().traditionSP, m().traditionEssence], [{ sp: [1], essence: [1] }, 1, 1]);
+}
+
+console.log('Advanced Magic Training with no casting class');
+{
+  // A gestalt Fighter // Barbarian: each side is a spell pool for the
+  // tradition, with nothing else in it.
+  // A third track still reads a workbook's "Class 3", which is no class:
+  // the converter leaves it off the Classes table.
+  const c = build({
+    rows: rowsOf(20, () => ['Fighter', 'Barbarian', 'Class 3']), amt: true,
+    drawbacks: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'],
+  });
+  c.data.classes = c.data.classes.filter((x) => x.name !== 'Class 3');
+  c.recompute();
+  const m = () => c.data.training.magic;
+  c.set('training.magic.tradition.essenceDrawbacks', 5);
+  check('two pools of twenty levels: row 5 is 20 spell points each', [m().traditionLevels.sp, m().traditionSP], [[20, 20], 40]);
+  check('essence reads half: row 5 at 10, each', [m().traditionLevels.essence, m().traditionEssence], [[10, 10], 20]);
+  check('Low-Caster levels: caster level 10; every level counts for MSB',
+    [m().castingUnlocked, m().globalCL, m().msb, m().msd], [true, 10, 20, 31]);
+  check('the pool is the casting modifier, at least 1, with no casting class',
+    m().classSP, [{ name: 'Advanced Magic Training', sp: 1 }]);
+  c.set('training.magic.mythicAmt', true);
+  check('with Mythic AMT, 40 spell points and 40 essence', [m().traditionSP, m().traditionEssence], [40, 40]);
+  check('and Mid-Caster levels for caster level only', [m().globalCL, m().msb], [15, 20]);
+  c.set('training.magic.amt', false);
+  c.set('training.magic.mythicAmt', false);
+  check('without it, nothing', [m().traditionSP, m().traditionEssence, m().castingUnlocked, m().globalCL, m().msb, m().classSP],
+    [0, 0, false, 0, 0, []]);
+}
+
+console.log('caster level and MSB add up across classes');
+{
+  check('without gestalt, each class rounds down on its own, then they add',
+    casterLevelTotal([...rowsOf(5, () => [{ key: 'f', rate: 0.5 }]), ...rowsOf(5, () => [{ key: 'r', rate: 0.5 }]),
+      ...rowsOf(10, () => [{ key: 'w', rate: 1 }])]), 2 + 2 + 10);
+  check('with gestalt, the better class at each level, rounded down once',
+    casterLevelTotal(rowsOf(10, (l) => [{ key: 'f', rate: 0.5 }, { key: 'w', rate: l === 2 ? 1 : 0.75 }]), { gestalt: true }),
+    Math.floor(1 + 9 * 0.75));
+  check('a class counting as levels higher adds them at its rate',
+    casterLevelTotal(rowsOf(5, () => [{ key: 'm', rate: 0.75 }]), { extra: [{ key: 'm', rate: 0.75, levels: 2 }] }), 5);
+
+  // Gestalt off: Wizard 1-10, Fighter 11-20.
+  const c = build({
+    rows: rowsOf(20, (l) => [l <= 10 ? 'Wizard' : 'Fighter']), casters: ['Wizard'],
+  });
+  c.set('campaign.gestalt', false);
+  const m = () => c.data.training.magic;
+  check('Wizard 10 / Fighter 10: caster level and MSB are the Wizard levels', [m().globalCL, m().msb, m().msd], [10, 10, 21]);
+  c.set('training.magic.amt', true);
+  check('Advanced Magic Training adds the Fighter levels as a Low-Caster, and all of them to MSB', [m().globalCL, m().msb], [10 + 5, 20]);
+  // The DC is 10 + half the caster level + the casting modifier.
+  const castingMod = m().globalDC - 10 - Math.floor(m().globalCL / 2);
+  check('concentration is MSB plus the casting modifier, not caster level', m().concentration, 20 + castingMod);
+  c.set('training.magic.mythicAmt', true);
+  check('Mythic AMT, as a Mid-Caster', [m().globalCL, m().msb], [10 + 7, 20]);
+  check('a casting class level: no AMT spell pool line', m().classSP.map((x) => x.name), ['Wizard']);
+
+  // Gestalt: Warlord with one Incanter level at 2nd // Kineticist.
+  const g = build({
+    rows: rowsOf(11, (l) => [l === 2 ? 'Incanter' : 'Warlord', 'Kineticist']), casters: ['Incanter'], amt: true,
+  });
+  const n = () => g.data.training.magic;
+  check('gestalt: the Incanter level, then the better Low-Caster side at each other level', [n().globalCL, n().msb], [1 + 5, 11]);
+  g.set('training.magic.amt', false);
+  check('without it, the one Incanter level', [n().globalCL, n().msb], [1, 1]);
 }
 
 console.log('spell pools: each gestalt side that casts gets the spell points');
 {
-  check('one pool per casting class present, by level', castingPools([2, 2, 2, 1, 1, 0], true), [5, 3]);
-  check('without gestalt, one pool', castingPools([2, 2, 2, 1, 1, 0], false), [5]);
+  const casting = (...n) => n.map((x) => ({ casting: x, other: 0 }));
+  check('one pool per casting class present, by level', castingPools([2, 2, 2, 1, 1, 0], true), casting(5, 3));
+  check('without gestalt, one pool', castingPools([2, 2, 2, 1, 1, 0], false), casting(5));
   check('no casting class level, no pool', [castingPools([0, 0], true), castingPools([], false)], [[], []]);
-  check('spell points for each pool, at its own levels',
-    traditionSpend({ drawbacks: 3, spLevels: [10, 4] }).sp, 5 + 2);
+  check('other classes fill a pool where casting classes do not',
+    castingPools([{ casting: 1, other: 1 }, { casting: 2, other: 0 }, { casting: 0, other: 2 }], true),
+    [{ casting: 2, other: 1 }, { casting: 1, other: 2 }]);
+  check('spell points and essence for each pool, at its own levels',
+    traditionSpend({ drawbacks: 4, essenceDrawbacks: 1, spLevels: [10, 4], essenceLevels: [10, 4] }), {
+      left: 4, essenceDrawbacks: 1, spDrawbacks: 3, unused: 0, sp: 5 + 2, essence: 2 + 1,
+    });
 
   const c = build({
     rows: rowsOf(10, () => ['Wizard', 'Incanter']), casters: ['Wizard', 'Incanter'],
@@ -140,24 +221,25 @@ console.log('spell pools: each gestalt side that casts gets the spell points');
   });
   const m = () => c.data.training.magic;
   check('two casting classes on two sides, ten levels', m().castingLevels, 10);
-  check('two spell pools of ten levels', m().traditionLevels, { sp: 10, essence: 10, spPools: [10, 10] });
+  check('two spell pools of ten levels', m().traditionLevels, { sp: [10, 10], essence: [10, 10] });
   check('nothing goes to essence by default', [m().essenceDrawbacks, m().spDrawbacks], [0, 3]);
   check('row 3 at 10 levels, for each pool', [m().traditionSP, m().traditionEssence], [10, 0]);
-  check('the panel shows both pools', /Levels counted<\/th>\s*<td class="num">10 \+ 10</.test(combat.renderMagicPanel(c)), true);
+  check('the panel shows both pools on both sides',
+    /Levels counted<\/th>\s*<td class="num">10 \+ 10<\/td><td class="num">10 \+ 10</.test(combat.renderMagicPanel(c)), true);
   c.set('training.magic.tradition.essenceDrawbacks', 1);
-  check('essence is counted once', [m().traditionSP, m().traditionEssence], [2 * 4, 2]);
+  check('essence is counted for each pool too', [m().traditionSP, m().traditionEssence], [2 * 4, 2 * 2]);
   c.set('training.magic.tradition.essenceDrawbacks', '');
   c.data.progression.levels.forEach((r, i) => { if (i >= 4) r.classes = ['Fighter', 'Incanter']; });
   c.data.classes.push(tableClass('Fighter'));
   c.recompute();
   check('the levels where either side casts', m().castingLevels, 10);
-  check('the second pool has the four levels both sides cast', [m().traditionLevels.spPools, m().traditionSP], [[10, 4], 5 + 2]);
+  check('the second pool has the four levels both sides cast', [m().traditionLevels.sp, m().traditionSP], [[10, 4], 5 + 2]);
   c.data.progression.levels.forEach((r, i) => { if (i >= 4) r.classes = ['Fighter', 'Rogue']; });
   c.data.classes.push(tableClass('Rogue'));
   c.recompute();
   check('four once neither side casts past 4th', [m().castingLevels, m().traditionSP], [4, 2 + 2]);
   c.set('campaign.gestalt', false);
-  check('gestalt off: one pool', [m().traditionLevels.spPools, m().traditionSP], [[4], 2]);
+  check('gestalt off: one pool', [m().traditionLevels.sp, m().traditionSP], [[4], 2]);
 }
 
 console.log('a tradition per casting class (campaign rule)');
@@ -177,7 +259,7 @@ console.log('a tradition per casting class (campaign rule)');
   check('rule on: each tradition reads its own class', m().traditionResults.map((r) => r.covers), [['Wizard'], ['Incanter']]);
   check('each gives its own class spell points: row 3 at 10, row 2 at 10', sp(), [5, 4]);
   check('the total adds them', [m().traditionSP, m().totalSP], [9, m().classSP.reduce((n, x) => n + x.sp, 0) + 9]);
-  check('the first tradition\'s figures stay on the side', [m().spDrawbacks, m().traditionLevels.spPools], [3, [10]]);
+  check('the first tradition\'s figures stay on the side', [m().spDrawbacks, m().traditionLevels.sp], [3, [10]]);
   const html = combat.renderMagicPanel(c);
   check('a panel for the extra, with its class picker and its own essence box',
     ['Casting tradition 2', 'data-set="training.magic.extraTraditions.0.className"',
@@ -206,8 +288,8 @@ console.log('a tradition per casting class (campaign rule)');
   check('and its boons count as feats', deckFeatNames(c.data), ['Card Shark [Deck]']);
 
   c.set('training.magic.amt', true);
-  check('Advanced Magic Training is read by the first tradition only',
-    m().traditionResults.map((r) => r.traditionLevels.sp), [10, 10]);
+  check('Advanced Magic Training is read by the first tradition only, and adds no level another tradition has',
+    m().traditionResults.map((r) => r.traditionLevels.sp), [[10], [10]]);
   c.set('training.magic.amt', false);
 
   const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
@@ -228,8 +310,11 @@ console.log('two blocks for one class count it once');
   c.listAdd('training.magic.classes', { ...castingClass('Wizard'), mod1: null, levels: [], extended: true });
   const m = () => c.data.training.magic;
   check('one spell point line per class', m().classSP.map((x) => x.name), ['Monk', 'Wizard']);
-  check('two spell pools, not three', [m().traditionLevels.spPools, m().traditionSP], [[20, 20], 40]);
+  check('two spell pools, not three', [m().traditionLevels.sp, m().traditionSP], [[20, 20], 40]);
   check('the tradition covers each class once', m().traditionResults[0].covers, ['Monk', 'Wizard']);
+  c.set('training.magic.amt', true);
+  check('Advanced Magic Training makes the Kineticist side a third pool', [m().traditionLevels.sp, m().traditionSP], [[20, 20, 20], 60]);
+  c.set('training.magic.amt', false);
   c.set('campaign.traditionPerClass', true);
   c.listAdd('training.magic.extraTraditions', { ...blankTradition(), className: 'Wizard', drawbacks: ['F', 'G'] });
   check('a tradition for that class takes both blocks: row 5 and row 2 at 20',
@@ -245,7 +330,7 @@ console.log('one casting class on each of two sides, in turn');
     casters: ['Wizard', 'Incanter'], drawbacks: ['A', 'B', 'C'],
   });
   const m = () => c.data.training.magic;
-  check('one pool', [m().traditionLevels.spPools, m().traditionSP], [[10], 5]);
+  check('one pool', [m().traditionLevels.sp, m().traditionSP], [[10], 5]);
 }
 
 console.log('past five, and before the character casts');

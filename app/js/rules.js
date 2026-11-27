@@ -1157,36 +1157,70 @@ export function traditionBonus(drawbacks, levels) {
 }
 
 /**
- * The levels in casting classes of each spell pool.
+ * The levels of each spell pool.
  *
  * `perLevel` lists, for each character level, how many casting classes the
- * character has at it. A gestalt character with a casting class on two sides
- * has two spell pools, and the gestalt rules give each the tradition's spell
- * points: pool n holds the levels at which at least n casting classes are
- * present. Without gestalt there is one pool, the levels at which any is.
- * A character with no casting class level has none.
+ * character has at it and how many other classes Advanced Magic Training
+ * lets count: `{ casting, other }`, or a number for casting classes alone.
+ * A gestalt character with two such classes has two spell pools, and the
+ * gestalt rules give each the tradition's spell points and essence: pool n
+ * holds the levels at which at least n are present, as casting levels where
+ * n casting classes are, else as other levels. Without gestalt there is one
+ * pool. A character with neither has none.
  */
 export function castingPools(perLevel, gestalt) {
-  const counts = (perLevel || []).map((n) => Math.max(0, Math.floor(Number(n) || 0)));
-  const most = gestalt ? Math.max(0, ...counts) : Math.min(1, Math.max(0, ...counts));
-  return Array.from({ length: most }, (_, i) => counts.filter((n) => n > i).length);
+  const whole = (n) => Math.max(0, Math.floor(Number(n) || 0));
+  const rows = (perLevel || []).map((n) => (n && typeof n === 'object'
+    ? { casting: whole(n.casting), other: whole(n.other) }
+    : { casting: whole(n), other: 0 }));
+  const most = Math.max(0, ...rows.map((r) => r.casting + r.other));
+  return Array.from({ length: gestalt ? most : Math.min(1, most) }, (_, i) => ({
+    casting: rows.filter((r) => r.casting > i).length,
+    other: rows.filter((r) => r.casting <= i && r.casting + r.other > i).length,
+  }));
 }
 
 /**
- * The levels each half of a tradition reads.
- *
- * `castingLevels` are the character levels at which the character has a
- * casting class, each counted once however many gestalt sides have one.
- * Advanced Magic Training treats every other level as a casting class level
- * for spell points from drawbacks, and half of them (rounded down, minimum 1)
- * for Expanded Essence Pool.
+ * Total caster level, added up from the classes present at each character
+ * level the way base attack bonus is. `perLevel` lists, for each level, the
+ * classes there as `{ key, rate }` (1 for a High-Caster, 3/4 Mid, 1/2 Low).
+ * Without gestalt, each class gives its rate times its levels, rounded down,
+ * and the classes are added together, as the core rules say. With gestalt
+ * the better class counts at each level and the sum is rounded down once,
+ * as the gestalt rules use "the higher" caster level. `extra` adds levels to
+ * a class (`{ key, rate, levels }`): a rule that makes it count as higher.
  */
-export function traditionLevels({ level, castingLevels, amt }) {
+export function casterLevelTotal(perLevel, { gestalt = false, extra = [] } = {}) {
+  if (gestalt) {
+    const sum = (perLevel || []).reduce((t, here) => t + Math.max(0, ...here.map((x) => x.rate)), 0);
+    return Math.floor(sum + extra.reduce((t, x) => t + x.rate * x.levels, 0));
+  }
+  const byClass = new Map();
+  const add = (key, rate, levels) => {
+    const k = byClass.get(key) || { rate, levels: 0 };
+    k.levels += levels;
+    byClass.set(key, k);
+  };
+  for (const here of perLevel || []) for (const x of here) add(x.key, x.rate, 1);
+  for (const x of extra) add(x.key, x.rate, x.levels);
+  return [...byClass.values()].reduce((t, k) => t + Math.floor(k.rate * k.levels), 0);
+}
+
+/**
+ * The levels each half of a tradition reads, for one spell pool.
+ *
+ * `castingLevels` are the pool's levels in casting classes; `otherLevels`
+ * the levels in other classes that Advanced Magic Training lets count (0
+ * without it). Spell points read both. Expanded Essence Pool reads half the
+ * other levels (rounded down, minimum 1), or all of them with the mythic
+ * feat (the campaign's ruling).
+ */
+export function traditionLevels({ castingLevels, otherLevels = 0, mythic = false }) {
   const casting = Math.max(0, Math.floor(Number(castingLevels) || 0));
-  const other = Math.max(0, Math.floor(Number(level) || 0) - casting);
+  const other = Math.max(0, Math.floor(Number(otherLevels) || 0));
   return {
-    sp: amt ? casting + other : casting,
-    essence: casting + (amt && other > 0 ? Math.max(1, Math.floor(other / 2)) : 0),
+    sp: casting + other,
+    essence: casting + (mythic ? other : other > 0 ? Math.max(1, Math.floor(other / 2)) : 0),
   };
 }
 
@@ -1197,8 +1231,9 @@ export function traditionLevels({ level, castingLevels, amt }) {
  * bought, at 2 drawbacks each. Of what is left, `essenceDrawbacks` (clamped to
  * 0-5 and to what is left) go to Expanded Essence Pool and the rest give spell
  * points, up to the fifth row; any more stay uninvested (`unused`).
- * `spLevels` is one spell pool's levels or a list of them, one per pool, and
- * each pool gets the spell points at its own levels.
+ * `spLevels` and `essenceLevels` are one spell pool's levels or a list of
+ * them, one per pool, and each pool gets its spell points and essence at its
+ * own levels.
  */
 export function traditionSpend({ drawbacks, boons = 0, essenceDrawbacks = 0, spLevels = 0, essenceLevels = 0 }) {
   const left = Math.max(0, (Number(drawbacks) || 0) - DRAWBACKS_PER_BOON * (Number(boons) || 0));
@@ -1210,7 +1245,7 @@ export function traditionSpend({ drawbacks, boons = 0, essenceDrawbacks = 0, spL
     spDrawbacks: sp,
     unused: left - essence - sp,
     sp: [].concat(spLevels).reduce((total, levels) => total + traditionBonus(sp, levels), 0),
-    essence: traditionBonus(essence, essenceLevels),
+    essence: [].concat(essenceLevels).reduce((total, levels) => total + traditionBonus(essence, levels), 0),
   };
 }
 
