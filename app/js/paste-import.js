@@ -1299,6 +1299,8 @@ function structuredPower(e) {
     classes,
     level: levels.length ? Math.min(...levels) : null,
     discipline: pick(e.fields, 'discipline'),
+    subdiscipline: pick(e.fields, 'subdiscipline', 'subdisciplines'),
+    descriptor: pick(e.fields, 'descriptors', 'descriptor'),
     points: pick(e.fields, 'power points'),
     display: pick(e.fields, 'display'),
     time: pick(e.fields, 'manifesting time', 'time'),

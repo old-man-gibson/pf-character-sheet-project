@@ -296,13 +296,25 @@ const COMPOSE = {
     lines: [['Wild talent type', (f.get('type') || []).join(', ') || 'Wild talent']],
     used: ['type'],
   }),
-  power: (f) => ({
-    lines: [
-      ['Power level', (f.get('class') || []).join(', ') || 'Unlisted'],
-      ['Power points', (f.get('powerpoints') || [])[0] || '—'],
-    ],
-    used: ['class', 'powerpoints'],
-  }),
+  power: (f) => {
+    // The infobox names a discipline's subdisciplines `subdisciplinea`,
+    // `subdisciplineb`, then `subdiscipline2a` for the second discipline. The
+    // letter keeps them out of the numbered families, so they are joined here
+    // into the one line a book prints, in discipline order.
+    const subs = [...f.keys()]
+      .map((k) => [k, k.match(/^subdiscipline(\d*)([a-z]?)$/)])
+      .filter(([, m]) => m)
+      .sort(([, a], [, b]) => (Number(a[1] || 1) - Number(b[1] || 1)) || a[2].localeCompare(b[2]))
+      .map(([k]) => k);
+    return {
+      lines: [
+        ['Power level', (f.get('class') || []).join(', ') || 'Unlisted'],
+        ['Power points', (f.get('powerpoints') || [])[0] || '—'],
+        ['Subdiscipline', subs.flatMap((k) => f.get(k)).join(', ')],
+      ],
+      used: ['class', 'powerpoints', ...subs],
+    };
+  },
 };
 
 /**
