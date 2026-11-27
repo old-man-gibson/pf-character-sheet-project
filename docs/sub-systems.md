@@ -209,7 +209,8 @@ Every tradition cell reads
 rest of the character can spend.
 
 **Casting numbers**: global CL, DC (10 + CL/2 + best casting mod), MSB, MSD (MSB+11),
-concentration, per-class SP (class levels + casting mod), each with its bonus field.
+concentration (MSB + best casting mod), per-class SP (class levels + casting mod), each
+with its bonus field.
 
 - **Caster level** adds up across classes, as BAB does: a High-Caster gives 1 a level, a
   Mid-Caster 3/4 and a Low-Caster 1/2. Without gestalt each class rounds down on its own

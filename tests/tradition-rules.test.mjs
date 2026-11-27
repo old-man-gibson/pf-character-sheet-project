@@ -184,6 +184,9 @@ console.log('caster level and MSB add up across classes');
   check('Wizard 10 / Fighter 10: caster level and MSB are the Wizard levels', [m().globalCL, m().msb, m().msd], [10, 10, 21]);
   c.set('training.magic.amt', true);
   check('Advanced Magic Training adds the Fighter levels as a Low-Caster, and all of them to MSB', [m().globalCL, m().msb], [10 + 5, 20]);
+  // The DC is 10 + half the caster level + the casting modifier.
+  const castingMod = m().globalDC - 10 - Math.floor(m().globalCL / 2);
+  check('concentration is MSB plus the casting modifier, not caster level', m().concentration, 20 + castingMod);
   c.set('training.magic.mythicAmt', true);
   check('Mythic AMT, as a Mid-Caster', [m().globalCL, m().msb], [10 + 7, 20]);
   check('a casting class level: no AMT spell pool line', m().classSP.map((x) => x.name), ['Wizard']);

@@ -1935,7 +1935,9 @@ export function recomputeTraining(model) {
     m.globalDC = 10 + Math.floor(m.globalCL / 2) + bestMod + bonus.dcBonus + m.dcForwarded;
     m.msb = msbLevels + bonus.msbBonus + m.msbForwarded;
     m.msd = m.msb + 11 + bonus.msdBonus + m.msdForwarded;
-    m.concentration = m.globalCL + bestMod;
+    // A spherecaster's concentration check adds MSB, not caster level, to the
+    // casting modifier.
+    m.concentration = m.msb + bestMod;
 
     // Tradition drawbacks -> boons, spell points and essence.
     //

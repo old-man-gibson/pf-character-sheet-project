@@ -14633,10 +14633,11 @@ console.log('\ncaster levels -- spheres.*, vancian.* and manifester.* take a bon
   let drop = note('Orange prism {spheres.cl += 2}, and {spheres.msb += 1}.');
   check('a Spheres CL bonus lands beside the typed one',
     [m().clForwarded, m().clBonus, m().globalCL], [2, 1, before.cl + 2]);
-  check('and carries into the DC, concentration and every sphere',
-    [m().globalDC, m().concentration, dark().cl],
-    [before.dc + Math.floor((before.cl + 2) / 2) - Math.floor(before.cl / 2), before.conc + 2, before.dark + 2]);
-  check('MSB takes one too, and MSD follows it', [m().msb, m().msd], [before.msb + 1, before.msd + 1]);
+  check('and carries into the DC and every sphere',
+    [m().globalDC, dark().cl],
+    [before.dc + Math.floor((before.cl + 2) / 2) - Math.floor(before.cl / 2), before.dark + 2]);
+  check('MSB takes one too, and MSD and concentration follow it',
+    [m().msb, m().msd, m().concentration], [before.msb + 1, before.msd + 1, before.conc + 1]);
   check('the scope reads the new number', [c.scope().spheres.cl, c.scope().caster.level],
     [before.cl + 2, before.cl + 2]);
   const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));

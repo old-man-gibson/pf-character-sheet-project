@@ -192,7 +192,7 @@ crit lines are always shown and simply ignored on a miss.
 | *Overview* → **Attack** | Melee and Ranged copy the whole iterative sequence, one row per attack; CMB copies the maneuver alone. The mode table below them does the same for all six slots, **alternates included**. |
 | *Skills* | The skill's **Total** — ranks, ability, the class-skill bonus, armour check penalty and Misc, already summed. |
 | *Equipment* → **Weapons** | The attack (iteratives included), the damage, the confirmation roll and the critical damage. |
-| *Magic Spheres* → **Casting numbers** | The global **concentration** check, with the caster level behind it. |
+| *Magic Spheres* → **Casting numbers** | The global **concentration** check, with the MSB behind it. |
 | *Vancian* → each casting class | That class's own concentration. |
 | *Familiar*, *Animal Companion*, *Eidolon* | Initiative, the three saves, an ability check off the Mod column, every skill, and every natural attack. |
 
