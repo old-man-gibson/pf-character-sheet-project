@@ -155,6 +155,11 @@ console.log('Advanced Magic Training with no casting class');
     [m().castingUnlocked, m().globalCL, m().msb, m().msd], [true, 10, 20, 31]);
   check('the pool is the casting modifier, at least 1, with no casting class',
     m().classSP, [{ name: 'Advanced Magic Training', sp: 1 }]);
+  check('the panel asks for the casting ability', /Casting ability/.test(combat.renderMagicPanel(c)), true);
+  c.set('statsBuild.cha.pointBuy', 18);
+  c.set('training.magic.amtAbility', 'Cha');
+  check('the casting ability picked sets the pool, DC and concentration',
+    [m().classSP, m().globalDC, m().concentration], [[{ name: 'Advanced Magic Training', sp: 4 }], 10 + 5 + 4, 20 + 4]);
   c.set('training.magic.mythicAmt', true);
   check('with Mythic AMT, 40 spell points and 40 essence', [m().traditionSP, m().traditionEssence], [40, 40]);
   check('and Mid-Caster levels for caster level only', [m().globalCL, m().msb], [15, 20]);
@@ -162,6 +167,7 @@ console.log('Advanced Magic Training with no casting class');
   c.set('training.magic.mythicAmt', false);
   check('without it, nothing', [m().traditionSP, m().traditionEssence, m().castingUnlocked, m().globalCL, m().msb, m().classSP],
     [0, 0, false, 0, 0, []]);
+  check('and no casting ability to pick', /Casting ability/.test(combat.renderMagicPanel(c)), false);
 }
 
 console.log('caster level and MSB add up across classes');

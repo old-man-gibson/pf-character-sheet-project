@@ -1826,8 +1826,8 @@ export function recomputeTraining(model) {
     // A class still to come on the Planner is not a casting class yet: it
     // lends no casting modifier, no spell points, and does not count toward
     // the tradition's spell points per casting class. With none taken (casting
-    // from Advanced Magic Training alone) the modifier falls back to the
-    // classes named, since that is the only casting ability written down.
+    // from Advanced Magic Training alone) the modifier is the ability picked
+    // for it, else the classes named, the only casting ability written down.
     // A class with no casting type picked -- a blended half not yet set --
     // has no casting progression, so it is not a casting class either.
     const casts = (x) => (TYPE_RATES[x.effectiveType] ?? 0) > 0;
@@ -1839,7 +1839,13 @@ export function recomputeTraining(model) {
     const classKey = (name) => String(name ?? '').trim().toLowerCase();
     const leadBlock = (x) => x === (casters.find((y) => classKey(y.name) === classKey(x.name) && !y.extended)
       || casters.find((y) => classKey(y.name) === classKey(x.name)));
-    const bestMod = Math.max(0, ...(acquired.length ? acquired : casters).map((x) => mod(x.mod1)));
+    // Casting from Advanced Magic Training with no casting class: no class
+    // names the casting ability, so the player picks it (`amtAbility`).
+    const amt = !!(m.amt || m.mythicAmt);
+    m.amtAlone = amt && !acquired.length;
+    const bestMod = m.amtAlone && m.amtAbility
+      ? Math.max(0, mod(m.amtAbility))
+      : Math.max(0, ...(acquired.length ? acquired : casters).map((x) => mod(x.mod1)));
 
     // The classes at each character level, read once for caster level, MSB
     // and the tradition: the casting classes there (one block each), and the
@@ -1850,7 +1856,6 @@ export function recomputeTraining(model) {
     // level has one, so a row naming none is one class. Without gestalt
     // there is one class a level, the Planner's first track.
     const gestalt = campaignRules(c).gestalt;
-    const amt = !!(m.amt || m.mythicAmt);
     const amtRate = m.mythicAmt ? TYPE_RATES.Mid : TYPE_RATES.Low;
     const leads = acquired.filter(leadBlock);
     const castingSpellings = new Set(leads.map((x) => String(plannerSpelling(model, x.name) ?? '').trim()).filter(Boolean));
