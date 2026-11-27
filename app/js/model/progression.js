@@ -540,17 +540,15 @@ export function ownLevelCount(model, className) {
   const planned = plannerSpelling(model, className);
   const cap = Number(model.data.identity?.level) || 20;
   // A class on the Classes table is counted the way its saves, hit points and
-  // BAB are (classPresence): its Levels box when one is set, the Planner's
-  // rows when the Planner names it, and every level when neither says. Only
-  // the Planner used to count here, so a Wizard 12 with an empty Planner had
-  // 12th-level saves and cast as nobody at all.
-  const table = (model.data.classes || []).filter((x) => x?.name);
+  // BAB are (classPresentAt): its Levels box when one is set, the Planner's
+  // rows when the Planner names it, and the levels no other class takes when
+  // neither says. Only the Planner used to count here, so a Wizard 12 with an
+  // empty Planner had 12th-level saves and cast as nobody at all.
   const listed = tableSpelling(model, className);
   let own = 0;
   if (listed) {
-    const row = table.find((x) => x.name === listed);
     const level = Math.min(cap, Number(model.data.identity?.level) || 0);
-    own = classPresence(model, [row], level).get(row).filter(Boolean).length;
+    own = presentRows(model, listed).slice(0, level).filter(Boolean).length;
   } else if (planned) {
     own = takenLevelsIn(model, planned).filter((lvl) => lvl <= cap).length;
   }
@@ -1606,7 +1604,41 @@ export function applyHitPoints(model, summary, hdPerLevel = []) {
  */
 export function classGainsAt(model, className, lvl, override = null) {
   if (isPinned(override)) return lvl <= Math.floor(Number(override) || 0) ? 1 : 0;
-  return (plannerHasClass(model, className, lvl) ? 1 : 0) + alignedGainsAt(model, className, lvl);
+  return (classPresentAt(model, className, lvl) ? 1 : 0) + alignedGainsAt(model, className, lvl);
+}
+
+/**
+ * Does the character take a level of `className` at character level `lvl`?
+ * Read as hit dice, BAB and saves read it (classPresence): a class on the
+ * Classes table by its Levels box, the Planner's rows, or the levels neither
+ * gives to another class, so a Wizard with an empty Planner is a Wizard at
+ * every level. A class only the Planner names is read off its rows.
+ */
+export function classPresentAt(model, className, lvl) {
+  return presentRows(model, className)[lvl - 1] ?? false;
+}
+
+/**
+ * One entry per character level up to the Planner's last row (20 at least):
+ * whether the class is there. The Classes table is read whole, so a class
+ * with no levels of its own gets only the levels the others leave; kept on
+ * the Planner's index until the gestalt rule, a Levels box or the level moves.
+ */
+function presentRows(model, className) {
+  const listed = tableSpelling(model, className);
+  if (!listed) return plannerRows(model, className);
+  const index = plannerIndex(model);
+  const d = model.data;
+  const table = (d.classes || []).filter((x) => x?.name);
+  const top = Math.max(index.named.length, Number(d.identity?.level) || 0, 20);
+  const key = `${campaignRules(d).gestalt}\u0001${top}\u0001${table.map((x) => x.levelsOverride ?? '').join('\u0001')}`;
+  if (index.presence?.key !== key) {
+    const presence = classPresence(model, table, top);
+    const byName = new Map();
+    for (const row of table) if (!byName.has(row.name)) byName.set(row.name, presence.get(row));
+    index.presence = { key, byName };
+  }
+  return index.presence.byName.get(listed) || [];
 }
 
 /**
@@ -1658,7 +1690,7 @@ function readPlanner(model, known) {
   const named = lists.map((names) => [...names]);
   const classes = [];
   for (const names of named) for (const n of names) if (n && !classes.includes(n)) classes.push(n);
-  const index = { text, named, table, classes, rows: new Map(), planned: new Map(), listed: new Map() };
+  const index = { text, named, table, classes, rows: new Map(), planned: new Map(), listed: new Map(), tracks: new Map() };
   PLANNER_INDEX.set(model, index);
   return index;
 }
@@ -1701,6 +1733,25 @@ export function tableSpelling(model, className) {
  */
 export function plannerHasClass(model, className, lvl) {
   return plannerRows(model, className)[lvl - 1] ?? false;
+}
+
+/**
+ * The Planner track a class is on, which is its gestalt side: the track whose
+ * rows name it most often (the first of a tie), or -1 when no row names it.
+ */
+export function plannerTrack(model, className) {
+  const index = plannerIndex(model);
+  return remembered(index.tracks, className, () => {
+    const counts = [];
+    for (const names of index.named) {
+      const hit = names.includes(className) ? className : closestName(className, names);
+      const track = hit ? names.indexOf(hit) : -1;
+      if (track >= 0) counts[track] = (counts[track] || 0) + 1;
+    }
+    let best = -1;
+    counts.forEach((n, track) => { if (n && (best < 0 || n > counts[best])) best = track; });
+    return best;
+  });
 }
 
 /** One entry per Planner row: whether the row names this class. */
