@@ -29,7 +29,7 @@ import {
 import {
   COMBAT_SPHERES, MAGIC_BONUS_BOXES, SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule,
 } from '../../rules.js';
-import { check, field, linkField, roField, select, text } from '../fields.js';
+import { abilitySelect, check, field, linkField, roField, select, text } from '../fields.js';
 import {
   abilityField, blendTicks, blendedSection, bonusTalentTable, classLevelsField, singleLadderTable, traditionTable,
 } from './training.js';
@@ -362,10 +362,11 @@ function magicTraditionPanel(model, m) {
         one casting-time step, or blights your square and the eight around it (dead magic for you for about a year).
         The card table charges it on each cast; elsewhere, apply it yourself.
         Drawback Freedom (Terrain Casting), as a mythic path ability or a feat, turns it off.</p>`) : ''}
-      <div class="statline"><span class="label">Advanced Magic Training</span>
-        <span class="value">${check('training.magic.amt', m.amt)}</span></div>
-      <div class="statline"><span class="label">Mythic AMT</span>
-        <span class="value">${check('training.magic.mythicAmt', m.mythicAmt)}</span></div>
+      <div class="switches">
+        ${check('training.magic.amt', m.amt, 'Advanced Magic Training')}
+        ${check('training.magic.mythicAmt', m.mythicAmt, 'Mythic AMT')}
+        ${m.amtAlone ? `<label class="chk"><span>Casting ability</span>${abilitySelect('training.magic.amtAbility', m.amtAbility)}</label>` : ''}
+      </div>
       ${traditionSplit(r, tr, path, { amt: m.mythicAmt ? 'mythic' : !!m.amt })}
       ${perClass ? `<div style="margin-top:8px">${addButton(EXTRA_TRADITIONS, 'Add tradition', blankTradition())}</div>
       <p class="hint">A casting class may have its own tradition. Its drawbacks give spell points to that class.
@@ -528,7 +529,7 @@ function magicGlobalsPanel(model, m) {
     ? `Condensing this much essence costs ${m.spOnEssence} points, but there are only ${m.totalSP} (${m.spShort} short). Change it on the Akashic tab.`
     : `${SP_PER_TEMP_ESSENCE} spell points make 1 temporary essence, set on the Akashic tab.`}
       </p>` : ''}
-      <p class="hint">Class SP = class levels + casting ability modifier.</p>
+      <p class="hint">Each casting class gives its levels. The casting modifier is added once per spell pool.</p>
     </section>`;
   }
 

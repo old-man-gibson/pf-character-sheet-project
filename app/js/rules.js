@@ -1159,25 +1159,29 @@ export function traditionBonus(drawbacks, levels) {
 /**
  * The levels of each spell pool.
  *
- * `perLevel` lists, for each character level, how many casting classes the
- * character has at it and how many other classes Advanced Magic Training
- * lets count: `{ casting, other }`, or a number for casting classes alone.
- * A gestalt character with two such classes has two spell pools, and the
- * gestalt rules give each the tradition's spell points and essence: pool n
- * holds the levels at which at least n are present, as casting levels where
- * n casting classes are, else as other levels. Without gestalt there is one
- * pool. A character with neither has none.
+ * `perLevel` lists, for each character level, the sides that have a class
+ * there: a Map (or entries) of side to 'casting' for a casting class, or to
+ * 'other' for a class Advanced Magic Training lets count. Each side is one
+ * spell pool, as the gestalt rules count them: a side's classes add their
+ * levels into its pool, and each pool gets the tradition's spell points and
+ * essence at its own levels. Without gestalt every class is on one side.
+ * Pools come in side order (tracks, then sides named otherwise); a side with
+ * no level in either has none.
  */
-export function castingPools(perLevel, gestalt) {
-  const whole = (n) => Math.max(0, Math.floor(Number(n) || 0));
-  const rows = (perLevel || []).map((n) => (n && typeof n === 'object'
-    ? { casting: whole(n.casting), other: whole(n.other) }
-    : { casting: whole(n), other: 0 }));
-  const most = Math.max(0, ...rows.map((r) => r.casting + r.other));
-  return Array.from({ length: gestalt ? most : Math.min(1, most) }, (_, i) => ({
-    casting: rows.filter((r) => r.casting > i).length,
-    other: rows.filter((r) => r.casting <= i && r.casting + r.other > i).length,
-  }));
+export function spellPools(perLevel) {
+  const pools = new Map();
+  for (const here of perLevel || []) {
+    for (const [side, kind] of here instanceof Map ? here : Object.entries(here || {})) {
+      if (kind !== 'casting' && kind !== 'other') continue;
+      const pool = pools.get(side) || { casting: 0, other: 0 };
+      pool[kind] += 1;
+      pools.set(side, pool);
+    }
+  }
+  const rank = (side) => (typeof side === 'number' ? 0 : 1);
+  return [...pools.keys()]
+    .sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0))
+    .map((side) => pools.get(side));
 }
 
 /**

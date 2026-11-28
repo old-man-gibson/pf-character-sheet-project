@@ -12,13 +12,13 @@ import {
   RANKS_PER_TALENT, SPHERE_SKILL_RANKS, TALENTS_TO_TYPE, TALENT_RATES, TRACK_SPHERE_SIDES,
   MAGIC_BONUS_BOXES, PRACTITIONER_TYPES, TRADITION_ROWS, TYPE_RATES, TYPE_TO_TALENTS, drawbackWeight, isBasePick, normalizeTalentTracks,
   expertiseTalents, isGuileSphere, ladderGrants, parseLadderRule, sphereSide, sphereSkillLabel, sphereSkillRequirement, sphereSkillSpheres,
-  casterLevelTotal, castingPools, statMod, tempEssenceCost, trackCount, traditionLevels, traditionSpend, weavesVeils, DEFAULT_TALENT_TRACKS,
+  casterLevelTotal, spellPools, statMod, tempEssenceCost, trackCount, traditionLevels, traditionSpend, weavesVeils, DEFAULT_TALENT_TRACKS,
 } from '../rules.js';
 import { isBackgroundSkill } from '../rules.js';
 import { campaignRules, freeBackgroundSkills } from './campaign.js';
 import { castingTraditions } from './traditions.js';
 import { emit } from './events.js';
-import { classGainsAt, ownLevelCount, plannerSpelling, tableSpelling } from './progression.js';
+import { classGainsAt, classPresentAt, ownLevelCount, plannerTrack, tableSpelling } from './progression.js';
 import { forwarded, lazyScope } from './scope.js';
 import { recomputeUnarmed } from './stats/attacks.js';
 import { altTrainingFor, altTrainingTalents, grantCount } from './subsystems/alt-training.js';
@@ -1826,8 +1826,8 @@ export function recomputeTraining(model) {
     // A class still to come on the Planner is not a casting class yet: it
     // lends no casting modifier, no spell points, and does not count toward
     // the tradition's spell points per casting class. With none taken (casting
-    // from Advanced Magic Training alone) the modifier falls back to the
-    // classes named, since that is the only casting ability written down.
+    // from Advanced Magic Training alone) the modifier is the ability picked
+    // for it, else the classes named, the only casting ability written down.
     // A class with no casting type picked -- a blended half not yet set --
     // has no casting progression, so it is not a casting class either.
     const casts = (x) => (TYPE_RATES[x.effectiveType] ?? 0) > 0;
@@ -1839,31 +1839,53 @@ export function recomputeTraining(model) {
     const classKey = (name) => String(name ?? '').trim().toLowerCase();
     const leadBlock = (x) => x === (casters.find((y) => classKey(y.name) === classKey(x.name) && !y.extended)
       || casters.find((y) => classKey(y.name) === classKey(x.name)));
-    const bestMod = Math.max(0, ...(acquired.length ? acquired : casters).map((x) => mod(x.mod1)));
-
-    // The classes at each character level, read once for caster level, MSB
-    // and the tradition: the casting classes there (one block each), and the
-    // other classes the Planner's row names. Advanced Magic Training treats
-    // those others as Low-Casters for caster level, MSB and MSD, and Mythic
-    // AMT as Mid-Casters for caster level. A name not on the Classes table is
-    // no class (a workbook's "Class 4" on a track not taken up), but every
-    // level has one, so a row naming none is one class. Without gestalt
-    // there is one class a level, the Planner's first track.
-    const gestalt = campaignRules(c).gestalt;
+    // Casting from Advanced Magic Training with no casting class: no class
+    // names the casting ability, so the player picks it (`amtAbility`).
     const amt = !!(m.amt || m.mythicAmt);
+    m.amtAlone = amt && !acquired.length;
+    const bestMod = m.amtAlone && m.amtAbility
+      ? Math.max(0, mod(m.amtAbility))
+      : Math.max(0, ...(acquired.length ? acquired : casters).map((x) => mod(x.mod1)));
+
+    // The classes at each character level, read once for caster level, MSB,
+    // the spell pools and the tradition: the casting classes there (one block
+    // each), the other classes on the Classes table there (classPresentAt,
+    // which reads an empty Planner as hit dice and BAB do), and the side each
+    // is on. Advanced Magic Training treats those others as Low-Casters for
+    // caster level, MSB and MSD, and Mythic AMT as Mid-Casters for caster
+    // level. A name not on the Classes table is no class (a workbook's "Class
+    // 4" on a track not taken up), but every level has one, so a level with
+    // none is one class.
+    //
+    // A side is a gestalt track (plannerTrack), and holds one class a level;
+    // a class no Planner row names is a side of its own. Without gestalt
+    // every class is on one side, one class a level.
+    const gestalt = campaignRules(c).gestalt;
     const amtRate = m.mythicAmt ? TYPE_RATES.Mid : TYPE_RATES.Low;
     const leads = acquired.filter(leadBlock);
-    const castingSpellings = new Set(leads.map((x) => String(plannerSpelling(model, x.name) ?? '').trim()).filter(Boolean));
-    const plannerRows = c.progression?.levels || [];
+    const sideOf = (name) => {
+      if (!gestalt) return 0;
+      const track = plannerTrack(model, name);
+      return track >= 0 ? track : `own:${classKey(name)}`;
+    };
+    const castingRows = new Set(leads.map((x) => tableSpelling(model, x.name)).filter(Boolean));
+    const otherRows = [...new Set((c.classes || []).map((x) => x?.name).filter((x) => x && !castingRows.has(x)))];
     const atLevel = [];
     for (let l = 1; l <= level; l++) {
       const casting = leads.filter((x) => classGainsAt(model, x.name, l, x.classLevelsOverride ?? null) > 0);
-      const names = (plannerRows[l - 1]?.classes || []).slice(0, gestalt ? undefined : 1)
-        .map((x) => String(x ?? '').trim()).filter((x) => x && tableSpelling(model, x));
-      const room = Math.max(0, Math.max(1, names.length) - casting.length);
-      const others = names.filter((x) => !castingSpellings.has(x)).map(classKey).slice(0, room);
-      while (others.length < room) others.push('');
-      atLevel.push({ casting, others });
+      const sides = new Map(casting.map((x) => [sideOf(x.name), 'casting']));
+      const others = [];
+      for (const name of otherRows) {
+        const side = sideOf(name);
+        if (sides.has(side) || !classPresentAt(model, name, l)) continue;
+        sides.set(side, 'other');
+        others.push(classKey(name));
+      }
+      if (!sides.size) {
+        sides.set(0, 'other');
+        others.push('');
+      }
+      atLevel.push({ casting, others, sides });
     }
     // A class counting as levels higher counts here: caster level and magic
     // skill bonus are read off the class level, so a rule that raises one
@@ -1982,14 +2004,15 @@ export function recomputeTraining(model) {
     // Levels in casting classes are the character levels at which one of
     // those classes is present, each counted once however many gestalt sides
     // have one -- as the veilweaving level is counted. Spell points and
-    // essence are counted per spell pool, though: a gestalt character with a
-    // casting class on two sides has two, and the gestalt rules give each the
-    // tradition's spell points at its own levels (castingPools); the campaign
-    // rules essence the same way.
+    // essence are counted per spell pool, though: each gestalt side with a
+    // casting class is a pool, and the gestalt rules give each the
+    // tradition's spell points at its own levels (spellPools); the campaign
+    // rules essence the same way. Sides that take turns casting are still
+    // two pools.
     //
     // Advanced Magic Training treats the other classes as casting classes
-    // for the first tradition: each class on the Planner's row that is not a
-    // casting class counts (atLevel), so a gestalt Fighter // Barbarian with
+    // for the first tradition: a side with no casting class at a level counts
+    // its other class there (atLevel), so a gestalt Fighter // Barbarian with
     // it has two spell pools.
     const traditions = castingTraditions(c);
     const sameClass = (a, b) => classKey(a) === classKey(b);
@@ -1997,12 +2020,14 @@ export function recomputeTraining(model) {
     m.traditionResults = traditions.map((t) => {
       const own = acquired.filter((x) => ownerOf(x) === t);
       const withAmt = t.extra < 0 && amt;
-      const perLevel = atLevel.map((a) => ({
-        casting: a.casting.filter((x) => ownerOf(x) === t).length,
-        other: withAmt ? a.others.length : 0,
-      }));
-      const castingLevels = perLevel.filter((n) => n.casting > 0).length;
-      const pools = castingPools(perLevel, gestalt).map((p) => traditionLevels({
+      const perLevel = atLevel.map((a) => {
+        const here = new Map();
+        for (const x of a.casting) if (ownerOf(x) === t) here.set(sideOf(x.name), 'casting');
+        if (withAmt) for (const [side, kind] of a.sides) if (kind === 'other') here.set(side, 'other');
+        return here;
+      });
+      const castingLevels = perLevel.filter((here) => [...here.values()].includes('casting')).length;
+      const pools = spellPools(perLevel).map((p) => traditionLevels({
         castingLevels: p.casting, otherLevels: p.other, mythic: withAmt && !!m.mythicAmt,
       }));
       const reads = { sp: pools.map((p) => p.sp), essence: pools.map((p) => p.essence) };
@@ -2053,18 +2078,31 @@ export function recomputeTraining(model) {
     m.traditionEssence = m.traditionResults.reduce((n, x) => n + x.traditionEssence, 0);
     for (const old of ['spTier', 'boons', 'traditionPools', 'boonPoints', 'castingClassCount', 'essenceDrawbacksAuto']) delete m[old];
 
-    // A class's spell points are its levels so far plus its casting modifier:
-    // the levels the character has now, not the ones planned (Wizard 1-5,
-    // Fighter 6-10, Wizard 11-20 is 5 wizard levels at 10th), and nothing at
-    // all for a class not taken yet. The same ability in both slots counts
-    // once, as `statMod` reads a slot everywhere else. A class with two
-    // blocks is counted once, off its lead block.
-    m.classSP = casters.filter(leadBlock).map((x) => {
-      const own = casts(x) ? x.classLevelsCurrent ?? 0 : 0;
-      return { name: x.name, sp: own ? own + statMod(c, x.mod1, x.mod2) : 0 };
-    });
+    // A class's spell points are its levels so far: the levels the character
+    // has now, not the ones planned (Wizard 1-5, Fighter 6-10, Wizard 11-20 is
+    // 5 wizard levels at 10th), and nothing at all for a class not taken yet.
+    // A class with two blocks is counted once, off its lead block.
+    //
+    // The casting modifier is added once per spell pool, not once per class:
+    // a multiclass caster adds the levels of every casting class to one pool,
+    // and a gestalt caster works out each side's pool with its own modifier
+    // (sideOf, as the tradition counts them). It is the best casting class's
+    // modifier, as the DC's is; the same ability in both slots counts once,
+    // as `statMod` reads a slot everywhere else. Each pool is at least 1, as
+    // every casting class says, so a low modifier takes a pool no lower.
+    m.classSP = casters.filter(leadBlock).map((x) => ({ name: x.name, sp: casts(x) ? x.classLevelsCurrent ?? 0 : 0 }));
+    if (leads.length) {
+      const cam = Math.max(...leads.map((x) => statMod(c, x.mod1, x.mod2)));
+      const poolLevels = new Map();
+      for (const x of leads) poolLevels.set(sideOf(x.name), (poolLevels.get(sideOf(x.name)) || 0) + (x.classLevelsCurrent ?? 0));
+      const pools = poolLevels.size;
+      const sp = [...poolLevels.values()].reduce((n, levels) => n + Math.max(1, levels + cam) - levels, 0);
+      m.classSP.push({ name: pools > 1 ? `Casting modifier × ${pools}` : 'Casting modifier', sp });
+    }
     // Advanced Magic Training with no level in a casting class: the pool is
-    // the casting modifier, at least 1.
+    // the casting modifier, at least 1, added once however many gestalt sides
+    // it counts for the tradition. With a casting class, AMT adds no casting
+    // modifier of its own.
     if (amt && !acquired.length) m.classSP.push({ name: 'Advanced Magic Training', sp: Math.max(1, bestMod) });
     // A bonus sent to `spheres.sp` lands beside Bonus SP.
     m.totalSP = m.classSP.reduce((s, x) => s + x.sp, 0)
