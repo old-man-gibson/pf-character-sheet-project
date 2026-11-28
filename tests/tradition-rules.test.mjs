@@ -153,16 +153,13 @@ console.log('Advanced Magic Training with no casting class');
   check('essence reads half: row 5 at 10, each', [m().traditionLevels.essence, m().traditionEssence], [[10, 10], 20]);
   check('Low-Caster levels: caster level 10; every level counts for MSB',
     [m().castingUnlocked, m().globalCL, m().msb, m().msd], [true, 10, 20, 31]);
-  check('each side\'s pool is the casting modifier, at least 1, with no casting class',
-    m().classSP, [{ name: 'Advanced Magic Training × 2', sp: 2 }]);
+  check('the pool is the casting modifier, at least 1, with no casting class, once for both sides',
+    m().classSP, [{ name: 'Advanced Magic Training', sp: 1 }]);
   check('the panel asks for the casting ability', /Casting ability/.test(combat.renderMagicPanel(c)), true);
   c.set('statsBuild.cha.pointBuy', 18);
   c.set('training.magic.amtAbility', 'Cha');
-  check('the casting ability picked sets the pools, DC and concentration',
-    [m().classSP, m().globalDC, m().concentration], [[{ name: 'Advanced Magic Training × 2', sp: 8 }], 10 + 5 + 4, 20 + 4]);
-  c.set('campaign.gestalt', false);
-  check('gestalt off: one pool', [m().classSP, m().traditionLevels.sp], [[{ name: 'Advanced Magic Training', sp: 4 }], [20]]);
-  c.set('campaign.gestalt', true);
+  check('the casting ability picked sets the pool, DC and concentration',
+    [m().classSP, m().globalDC, m().concentration], [[{ name: 'Advanced Magic Training', sp: 4 }], 10 + 5 + 4, 20 + 4]);
   c.set('training.magic.mythicAmt', true);
   check('with Mythic AMT, 40 spell points and 40 essence', [m().traditionSP, m().traditionEssence], [40, 40]);
   check('and Mid-Caster levels for caster level only', [m().globalCL, m().msb], [15, 20]);
@@ -335,6 +332,14 @@ console.log('class spell points: one class, multiclass and gestalt');
     [turns.data.training.magic.traditionLevels.sp, turns.data.training.magic.castingLevels], [[5, 5], 10]);
   turns.set('campaign.gestalt', false);
   check('gestalt off: the first track, one pool', sp(turns), [[['Incanter', 5], ['Elementalist', 0], ['Casting modifier', 4]], 9 + traditionBonus(3, 5)]);
+
+  // Incanter // Fighter with Advanced Magic Training: the Fighter side counts
+  // for the tradition, but the casting modifier is added once.
+  const amtSide = build({ rows: rowsOf(10, () => ['Incanter', 'Fighter']), casters: ['Incanter'], amt: true, drawbacks: ['A', 'B', 'C'] });
+  amtSide.set('statsBuild.int.pointBuy', 18);
+  check('AMT beside a casting class: the casting modifier once', sp(amtSide),
+    [[['Incanter', 10], ['Casting modifier', 4]], 14 + 2 * traditionBonus(3, 10)]);
+  check('and the tradition counts both sides', amtSide.data.training.magic.traditionLevels.sp, [10, 10]);
 
   const weak = build({ rows: [['Incanter']], casters: ['Incanter'] });
   weak.set('statsBuild.int.pointBuy', 6);

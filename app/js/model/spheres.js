@@ -2099,13 +2099,11 @@ export function recomputeTraining(model) {
       const sp = [...poolLevels.values()].reduce((n, levels) => n + Math.max(1, levels + cam) - levels, 0);
       m.classSP.push({ name: pools > 1 ? `Casting modifier × ${pools}` : 'Casting modifier', sp });
     }
-    // Advanced Magic Training with no level in a casting class: each pool is
-    // the casting modifier, at least 1. A gestalt character has one pool per
-    // side, as the tradition counts them.
-    if (amt && !acquired.length) {
-      const pools = Math.max(1, spellPools(atLevel.map((a) => a.sides)).length);
-      m.classSP.push({ name: pools > 1 ? `Advanced Magic Training × ${pools}` : 'Advanced Magic Training', sp: Math.max(1, bestMod) * pools });
-    }
+    // Advanced Magic Training with no level in a casting class: the pool is
+    // the casting modifier, at least 1, added once however many gestalt sides
+    // it counts for the tradition. With a casting class, AMT adds no casting
+    // modifier of its own.
+    if (amt && !acquired.length) m.classSP.push({ name: 'Advanced Magic Training', sp: Math.max(1, bestMod) });
     // A bonus sent to `spheres.sp` lands beside Bonus SP.
     m.totalSP = m.classSP.reduce((s, x) => s + x.sp, 0)
       + bonus.bonusSP + forwarded(model, 'spheres.sp') + m.traditionSP;
